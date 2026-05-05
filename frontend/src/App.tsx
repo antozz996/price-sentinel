@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
 import ManualUpload from './components/ManualUpload'
+import FattureList from './components/FattureList'
+import SettingsPage from './components/SettingsPage'
 import { API_BASE } from './api'
 
 export default function App() {
@@ -43,9 +45,11 @@ export default function App() {
     
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
+      case 'upload': return <ManualUpload />;
+      case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
-      case 'upload': return <ManualUpload />;
+      case 'settings': return <SettingsPage />;
       default: return <Dashboard />;
     }
   }
@@ -53,9 +57,11 @@ export default function App() {
   const getHeaderInfo = () => {
     switch (activeTab) {
       case 'dashboard': return { title: 'Intelligence Overview', sub: 'Business Insights & KPI del Gruppo' };
+      case 'upload': return { title: 'Carica Fatture', sub: 'Ingestione manuale file XML e archivi ZIP' };
+      case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Stanza di Validazione', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
-      case 'upload': return { title: 'Carica Fatture', sub: 'Ingestione manuale file XML e archivi ZIP' };
+      case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
       default: return { title: 'Price Sentinel', sub: 'Audit System' };
     }
   }
@@ -91,6 +97,14 @@ export default function App() {
           </button>
 
           <button 
+            className={`btn ${activeTab === 'fatture' ? 'btn-primary' : ''}`}
+            onClick={() => setActiveTab('fatture')}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'fatture' ? '' : 'transparent', border: 'none' }}
+          >
+            <FileText size={18} /> Registro Fatture
+          </button>
+
+          <button 
             className={`btn ${activeTab === 'validation' ? 'btn-primary' : ''}`}
             onClick={() => setActiveTab('validation')}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'validation' ? '' : 'transparent', border: 'none' }}
@@ -109,7 +123,11 @@ export default function App() {
         </nav>
         
         <div style={{ marginTop: 'auto' }}>
-          <button className="btn" style={{ width: '100%', justifyContent: 'flex-start', background: 'transparent', border: 'none', color: 'var(--text-secondary)' }}>
+          <button 
+            className={`btn ${activeTab === 'settings' ? 'btn-primary' : ''}`}
+            onClick={() => setActiveTab('settings')}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'settings' ? '' : 'transparent', border: 'none', color: activeTab === 'settings' ? 'white' : 'var(--text-secondary)' }}
+          >
             <Settings size={18} /> Settings
           </button>
         </div>
@@ -146,4 +164,3 @@ export default function App() {
     </div>
   )
 }
-

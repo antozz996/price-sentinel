@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/components/Dashboard.tsx","./src/components/ManualUpload.tsx","./src/components/PriceListManager.tsx","./src/components/ValidationRoom.tsx"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/components/Dashboard.tsx","./src/components/FattureList.tsx","./src/components/ManualUpload.tsx","./src/components/PriceListManager.tsx","./src/components/SettingsPage.tsx","./src/components/ValidationRoom.tsx"],"version":"5.9.3"}
