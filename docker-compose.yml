@@ -19,9 +19,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-price_sentinel}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    networks:
-      - ps_internal
-    # NESSUNA porta esposta all'host — solo rete interna Docker (Spec §1.2)
+    ports:
+      - "5432:5432"
+    # Esposta per permettere a Vercel di connettersi (Spec §1.2 override per cloud migration)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sentinel"]
       interval: 10s
