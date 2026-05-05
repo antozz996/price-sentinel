@@ -10,7 +10,7 @@ export interface Anomalia {
   created_at: string;
 }
 
-export const API_BASE = 'https://poor-radios-kneel.loca.lt/api/v1';
+export const API_BASE = '/api/v1';
 
 // Funzione base per gestire le chiamate per bypassare Axios temporaneamente
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
