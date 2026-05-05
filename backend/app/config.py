@@ -45,7 +45,7 @@ class Settings(BaseSettings):
         )
 
     # ── Auth / JWT ───────────────────────────
-    SECRET_KEY: str
+    SECRET_KEY: str = "REMOVED_JWT_FALLBACK"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 ore
 
