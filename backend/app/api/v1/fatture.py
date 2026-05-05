@@ -8,7 +8,6 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.database import get_db
@@ -52,7 +51,7 @@ async def list_fatture(
             Fattura.fornitore_id,
             Fattura.location_id,
             Fornitore.nome_azienda.label("fornitore_nome"),
-            Location.nome.label("location_nome"),
+            Location.nome_struttura.label("location_nome"),
             func.count(func.distinct(RigaFattura.id)).label("n_righe"),
             func.count(func.distinct(Anomalia.id)).label("n_anomalie"),
         )
@@ -61,7 +60,7 @@ async def list_fatture(
         .outerjoin(RigaFattura, RigaFattura.fattura_id == Fattura.id)
         .outerjoin(Anomalia, Anomalia.riga_fattura_id == RigaFattura.id)
         .group_by(
-            Fattura.id, Fornitore.nome_azienda, Location.nome
+            Fattura.id, Fornitore.nome_azienda, Location.nome_struttura
         )
         .order_by(Fattura.data_documento.desc())
     )
