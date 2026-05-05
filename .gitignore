@@ -36,3 +36,10 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Dependencies
+node_modules/
+dist/
+.next/
+out/
+build/
