@@ -124,10 +124,10 @@ class UploadBatch(Base):
     __tablename__ = "upload_batches"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    location_id: Mapped[int] = mapped_column(
+    location_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("location.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     user_id: Mapped[int] = mapped_column(
         Integer,
