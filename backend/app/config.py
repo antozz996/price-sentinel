@@ -1,0 +1,62 @@
+"""
+Price Sentinel — Configurazione centralizzata.
+Legge variabili d'ambiente dal file .env via pydantic-settings.
+"""
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Configurazione globale dell'applicazione."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    # ── Database ─────────────────────────────
+    POSTGRES_USER: str = "sentinel"
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str = "price_sentinel"
+    POSTGRES_HOST: str = "db"
+    POSTGRES_PORT: int = 5432
+
+    @property
+    def database_url(self) -> str:
+        """Stringa di connessione asyncpg per SQLAlchemy."""
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    @property
+    def database_url_sync(self) -> str:
+        """Stringa di connessione sincrona per Alembic."""
+        return (
+            f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    # ── Auth / JWT ───────────────────────────
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 ore
+
+    # ── Aruba Webhook ────────────────────────
+    ARUBA_WEBHOOK_API_KEY: str = ""
+
+    # ── Notifiche (Sprint 3) ─────────────────
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_ADMIN_CHAT_ID: str = ""
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+
+    # ── Ambiente ─────────────────────────────
+    ENVIRONMENT: str = "development"
+    DEBUG: bool = True
+
+
+settings = Settings()
