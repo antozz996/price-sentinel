@@ -1,0 +1,1 @@
+"""Price Sentinel — Schemas package."""

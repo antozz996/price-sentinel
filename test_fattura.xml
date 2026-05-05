@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<p:FatturaElettronica xmlns:p="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2">
+  <FatturaElettronicaHeader>
+    <DatiTrasmissione>
+      <ProgressivoInvio>12345</ProgressivoInvio>
+    </DatiTrasmissione>
+    <CessionarioCommittente>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdCodice>01234567890</IdCodice>
+        </IdFiscaleIVA>
+      </DatiAnagrafici>
+    </CessionarioCommittente>
+    <CedentePrestatore>
+      <DatiAnagrafici>
+        <IdFiscaleIVA>
+          <IdCodice>12345678901</IdCodice>
+        </IdFiscaleIVA>
+        <Anagrafica>
+          <Denominazione>Drinks &amp; Spirits Srl</Denominazione>
+        </Anagrafica>
+      </DatiAnagrafici>
+    </CedentePrestatore>
+  </FatturaElettronicaHeader>
+  <FatturaElettronicaBody>
+    <DatiGenerali>
+      <DatiGeneraliDocumento>
+        <TipoDocumento>TD01</TipoDocumento>
+        <Data>2026-04-18</Data>
+        <Numero>FPR-2026-002</Numero>
+      </DatiGeneraliDocumento>
+    </DatiGenerali>
+    <DatiBeniServizi>
+      <DettaglioLinee>
+        <NumeroLinea>1</NumeroLinea>
+        <CodiceArticolo>
+          <CodiceTipo>FORN</CodiceTipo>
+          <CodiceValore>GIN-HENDRICKS-70CL</CodiceValore>
+        </CodiceArticolo>
+        <Descrizione>Gin Hendrick's 70cl</Descrizione>
+        <Quantita>10.00</Quantita>
+        <PrezzoUnitario>28.00</PrezzoUnitario> <!-- Prezzo listino è 22.5, qui mettiamo 28.0 per creare anomalia -->
+      </DettaglioLinee>
+    </DatiBeniServizi>
+  </FatturaElettronicaBody>
+</p:FatturaElettronica>

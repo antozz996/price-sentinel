@@ -1,0 +1,79 @@
+version: "2.4"
+
+# ─────────────────────────────────────────────────────────
+# PRICE SENTINEL — Docker Compose
+# VPS Hetzner CX21 dedicata — PostgreSQL NON esposto
+# docker-compose v2.4 per compatibilità depends_on + healthcheck
+# ─────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL 15 ──────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: ps_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sentinel_dev_2025}
+      POSTGRES_DB: ${POSTGRES_DB:-price_sentinel}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - ps_internal
+    # NESSUNA porta esposta all'host — solo rete interna Docker (Spec §1.2)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Backend ────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ps_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    networks:
+      - ps_internal
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Nginx Reverse Proxy ────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: ps_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - ps_internal
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  ps_internal:
+    driver: bridge
