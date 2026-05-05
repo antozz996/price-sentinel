@@ -21,6 +21,8 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - ps_internal
     # Esposta per permettere a Vercel di connettersi (Spec §1.2 override per cloud migration)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sentinel"]

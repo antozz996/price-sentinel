@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class FornitoreBase(BaseModel):
-    partita_iva: str = Field(..., min_length=11, max_length=11)
+    partita_iva: str = Field(..., min_length=2, max_length=20)
     nome_azienda: str = Field(..., max_length=255)
     attivo_whitelist: bool = True
     email_contatto: EmailStr | None = None
