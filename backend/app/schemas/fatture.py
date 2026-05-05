@@ -33,6 +33,7 @@ class FatturaResponse(BaseModel):
     data_ricezione_sdi: date
     tipo_documento: str
     totale_imponibile: Decimal
+    marker: str = "nessuno"
 
     model_config = {"from_attributes": True}
 

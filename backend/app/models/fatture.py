@@ -49,6 +49,16 @@ class SourceIngestion(str, enum.Enum):
     upload_manuale = "upload_manuale"
 
 
+class MarkerFattura(str, enum.Enum):
+    """Marker visuale per le fatture."""
+    nessuno = "nessuno"
+    da_verificare = "da_verificare"
+    verificata = "verificata"
+    contestata = "contestata"
+    approvata = "approvata"
+    sospesa = "sospesa"
+
+
 class StatoBatch(str, enum.Enum):
     """Stato di elaborazione di un batch di upload."""
     in_elaborazione = "in_elaborazione"
@@ -192,6 +202,12 @@ class Fattura(Base):
     totale_imponibile: Mapped[float] = mapped_column(
         Numeric(12, 4),
         nullable=False,
+    )
+    marker: Mapped[MarkerFattura] = mapped_column(
+        Enum(MarkerFattura, name="marker_fattura", native_enum=True, create_type=False),
+        nullable=False,
+        default=MarkerFattura.nessuno,
+        server_default="nessuno",
     )
 
     # ── Relationships ────────────────────────
