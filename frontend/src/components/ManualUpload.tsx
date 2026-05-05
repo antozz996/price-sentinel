@@ -34,9 +34,14 @@ export default function ManualUpload() {
   async function loadHistory() {
     try {
       const data = await fetchWithAuth('/ingestion/uploads');
-      setHistory(data);
+      if (Array.isArray(data)) {
+        setHistory(data);
+      } else {
+        setHistory([]);
+      }
     } catch (err) {
       console.error("Errore caricamento storico", err);
+      setHistory([]);
     }
   }
 

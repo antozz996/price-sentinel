@@ -17,13 +17,23 @@ export default function PriceListManager() {
   useEffect(() => {
     async function loadFornitori() {
       try {
+        const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/fornitori/`, {
-          headers: { 'bypass-tunnel-reminder': 'true' }
+          headers: { 
+            'bypass-tunnel-reminder': 'true',
+            'Authorization': `Bearer ${token}`
+          }
         });
         const data = await res.json();
-        setFornitori(data);
+        if (Array.isArray(data)) {
+          setFornitori(data);
+        } else {
+          console.error("Risposta API non valida", data);
+          setFornitori([]);
+        }
       } catch (err) {
         console.error("Errore caricamento fornitori", err);
+        setFornitori([]);
       }
     }
     loadFornitori();
@@ -42,9 +52,13 @@ export default function PriceListManager() {
     formData.append('file', file);
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/listino/import-excel/${selectedFornitore}`, {
         method: 'POST',
-        headers: { 'bypass-tunnel-reminder': 'true' },
+        headers: { 
+          'bypass-tunnel-reminder': 'true',
+          'Authorization': `Bearer ${token}`
+        },
         body: formData,
       });
 
