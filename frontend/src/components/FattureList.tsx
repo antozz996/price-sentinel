@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, Tag, FileText, Calendar, Building2, Truck, Package, X } from 'lucide-react';
+import { Search, Filter, ChevronDown, ChevronUp, Tag, FileText, Calendar, Building2, Truck, Package, X, AlertCircle } from 'lucide-react';
 import { API_BASE } from '../api';
 
 interface FatturaItem {
@@ -32,7 +32,7 @@ interface RigaFattura {
 }
 
 interface Fornitore { id: number; nome_azienda: string; }
-interface Location { id: number; nome: string; }
+interface Location { id: number; nome_struttura: string; }
 
 const MARKERS = [
   { value: 'nessuno', label: 'Nessuno', color: '#6b7280', bg: 'rgba(107,114,128,0.15)' },
@@ -52,6 +52,7 @@ export default function FattureList() {
   const [fornitori, setFornitori] = useState<Fornitore[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [righe, setRighe] = useState<RigaFattura[]>([]);
   const [loadingRighe, setLoadingRighe] = useState(false);
@@ -96,6 +97,7 @@ export default function FattureList() {
 
   async function loadFatture() {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (filterFornitore) params.set('fornitore_id', filterFornitore);
@@ -107,11 +109,17 @@ export default function FattureList() {
       params.set('limit', '100');
 
       const res = await fetch(`${API_BASE}/fatture/?${params}`, { headers });
+      
+      if (!res.ok) {
+        throw new Error(`Errore API: ${res.status}`);
+      }
+      
       const data = await res.json();
       if (Array.isArray(data)) setFatture(data);
       else setFatture([]);
     } catch (e) {
       console.error(e);
+      setError("Impossibile caricare le fatture. Verifica la connessione o riprova più tardi.");
       setFatture([]);
     } finally {
       setLoading(false);
@@ -213,7 +221,7 @@ export default function FattureList() {
               <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><Building2 size={12} /> Azienda</label>
               <select value={filterLocation} onChange={e => setFilterLocation(e.target.value)} style={selectStyle}>
                 <option value="">Tutte</option>
-                {locations.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+                {locations.map(l => <option key={l.id} value={l.id}>{l.nome_struttura}</option>)}
               </select>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '150px' }}>
@@ -255,6 +263,12 @@ export default function FattureList() {
       <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
         {loading ? (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Caricamento fatture...</div>
+        ) : error ? (
+          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--status-red)' }}>
+            <AlertCircle size={48} style={{ marginBottom: '16px', opacity: 0.4 }} />
+            <div>{error}</div>
+            <button className="btn btn-primary" onClick={loadFatture} style={{ marginTop: '16px' }}>Riprova</button>
+          </div>
         ) : fatture.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
             <FileText size={48} style={{ marginBottom: '16px', opacity: 0.4 }} />
