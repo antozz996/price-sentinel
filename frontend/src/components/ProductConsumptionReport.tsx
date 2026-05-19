@@ -52,6 +52,7 @@ export default function ProductConsumptionReport() {
   
   // Detail Drawer States
   const [selectedSku, setSelectedSku] = useState<string | null>(null);
+  const [selectedDesc, setSelectedDesc] = useState<string | null>(null);
   const [skuDetail, setSkuDetail] = useState<SKUDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   
@@ -284,7 +285,7 @@ export default function ProductConsumptionReport() {
               <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
               <input
                 type="text"
-                placeholder="Cerca SKU o descrizione..."
+                placeholder="Cerca per prodotto..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 style={{
@@ -316,7 +317,6 @@ export default function ProductConsumptionReport() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
-                    <th style={{ padding: '12px' }}>SKU Interno</th>
                     <th style={{ padding: '12px' }}>Prodotto</th>
                     <th style={{ padding: '12px', textAlign: 'right' }}>Quantità</th>
                     <th style={{ padding: '12px', textAlign: 'center' }}>U.M.</th>
@@ -327,7 +327,7 @@ export default function ProductConsumptionReport() {
                 <tbody>
                   {filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                         Nessun dato di consumo trovato con i filtri correnti.
                       </td>
                     </tr>
@@ -337,6 +337,7 @@ export default function ProductConsumptionReport() {
                         key={item.sku_interno}
                         onClick={() => {
                           setSelectedSku(item.sku_interno);
+                          setSelectedDesc(item.descrizione);
                           loadSkuDetail(item.sku_interno);
                         }}
                         style={{
@@ -348,8 +349,7 @@ export default function ProductConsumptionReport() {
                         }}
                         className="table-row-hover"
                       >
-                        <td style={{ padding: '14px 12px', fontWeight: 600, color: 'var(--accent-blue)' }}>{item.sku_interno}</td>
-                        <td style={{ padding: '14px 12px', color: 'var(--text-primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.descrizione}</td>
+                        <td style={{ padding: '14px 12px', color: 'var(--text-primary)', fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.descrizione}</td>
                         <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600 }}>{item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
                         <td style={{ padding: '14px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{item.unita_misura}</td>
                         <td style={{ padding: '14px 12px', textAlign: 'right', color: '#10b981' }}>€ {item.prezzo_medio.toFixed(2)}</td>
@@ -383,7 +383,7 @@ export default function ProductConsumptionReport() {
           ) : skuDetail ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div>
-                <h3 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', color: 'white' }}>{skuDetail.sku_interno}</h3>
+                <h3 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', color: 'white', lineHeight: '1.4' }}>{selectedDesc}</h3>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Distribuzione analitica dei volumi</p>
               </div>
 

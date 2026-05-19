@@ -268,11 +268,19 @@ def parse_fattura_xml(xml_string: str) -> FatturaParsata:
                 net_factor *= (Decimal("1") + (perc / Decimal("100")))
         riga.sconto_percentuale = (Decimal("1") - net_factor) * Decimal("100")
 
-        # Estratto PrezzoTotale per robustezza omaggi
-        prezzo_totale = _decimal(linea, "PrezzoTotale")
-
         # ── Rilevamento Omaggi — Spec §3.3 ──
-        if riga.prezzo_unitario == Decimal("0") or prezzo_totale == Decimal("0") or riga.sconto_percentuale >= Decimal("100"):
+        # Controlliamo il PrezzoTotale solo se il tag è effettivamente presente nell'XML per evitare falsi positivi
+        prezzo_totale_el = _find(linea, "PrezzoTotale")
+        has_prezzo_totale_zero = False
+        if prezzo_totale_el is not None:
+            try:
+                pt_val = _decimal(linea, "PrezzoTotale")
+                if pt_val == Decimal("0"):
+                    has_prezzo_totale_zero = True
+            except Exception:
+                pass
+
+        if riga.prezzo_unitario == Decimal("0") or has_prezzo_totale_zero or riga.sconto_percentuale >= Decimal("100"):
             riga.is_omaggio = True
 
         result.righe.append(riga)
