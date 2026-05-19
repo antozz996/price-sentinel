@@ -10,8 +10,8 @@
 |-------|-------|
 | **Project Name** | Price Sentinel |
 | **Objective** | Automated purchase audit system for a Ho.Re.Ca. multi-location group. Matches Electronic Invoices (FatturaPA / Aruba Webhook) against Master Price Lists to detect anomalies and track "Recovered Funds" via Credit Notes. |
-| **Last Updated** | 2026-05-15 |
-| **Current Milestone** | **Sprint 3 COMPLETE** — Full-stack dashboard deployed, Fatture module live, Intelligence API active. |
+| **Last Updated** | 2026-05-19 |
+| **Current Milestone** | **Sprint 4 COMPLETE** — Advanced pricing optimization & automation engines fully active. |
 
 ---
 
@@ -157,12 +157,17 @@
 - **`ingestion.py` API** ⭐: `POST /ingestion/manual` — multipart XML/ZIP upload endpoint
 - **`vercel.json`** ⭐: Vercel build config — `cd frontend && npm install && npm run build`, output `frontend/dist`, `/api/*` → `http://46.225.81.66/api/*`
 
-### 🚧 Sprint 4: Pending
+### ✅ Sprint 4: Advanced Optimizations & Automation (COMPLETE)
+- **Custom Conversion Scale Factors (`coefficiente_conversione`)**: Integrated direct custom alias scaling factor into schema, DB migration, L1 matching engine, and Validation Room trigger.
+- **Automated TD04 Credit Note stornos (`_process_td04`)**: Automated XML ingestion routing to auto-match Credit Notes against active anomalies, resolve them, and insert `NotaDiCredito` records.
+- **Database GIN Trigram Search Indexing**: Added `pg_trgm` GIN index on `listino_master` for high-performance fuzzy matches.
+- **Automatic Catalog Updates**: Wired price approvals (`APPROVATO`/`ACCETTATO`) to automatically close current contract baseline prices and append new prices to the append-only `ListinoMaster`.
+- **Chronological Price Trend Visualizer**: Implemented chronological timeline analytics endpoint and a premium HTML/CSS timeline chart inside the Validation Room.
+
+### 🚧 Future Backlog & Roadmap
 - **Telegram Notifications**: Alert on anomaly creation (bot + chat_id in `.env`)
-- **Admin Dashboard**: Cross-location comparison table, Vendor Passport PDF generation
-- **Anomalie Workflow UI**: Full state machine transitions in `ValidationRoom.tsx` (currently read-only)
+- **Admin Dashboard Extensions**: Cross-location comparison table, Vendor Passport PDF generation
 - **Real Login Page**: Proper login form replacing the hardcoded auto-login (for multi-user deployment)
-- **Credit Note Auto-Matching**: TD04 documents automatically linked to original TD01 `Fattura`
 
 ---
 
@@ -236,6 +241,28 @@ vercel --prod  # uses vercel.json config
 ---
 
 ## 📝 Change Log
+
+### [2026-05-19] Sprint 4: Advanced Optimizations & Automation ✅
+- **Custom Conversion Scale Factors (`coefficiente_conversione`)**: Enabled full-stack custom scale factor numerical input inside Validation Room. Integrated division logic inside Level 1 matching pipeline to normalize CASE/BOX prices to contract base unit.
+- **Automated TD04 Credit Note stornos (`_process_td04`)**: Re-engineered credit note pipeline to automatically storno-match pending anomalies (by supplier code or description) and insert `NotaDiCredito` database records, transitioning anomaly status to `risolta`.
+- **Database GIN Trigram Search Indexing**: Created and applied database migration adding `pg_trgm` extension and high-performance GIN index `idx_listino_master_trgm` on `listino_master` description.
+- **Automatic Append-Only Catalog Updates**: Wired price approvals (`APPROVATO`/`ACCETTATO`) to automatically close current contract baseline prices with today's expiry and append newly approved baseline price records.
+- **Chronological Price Trend Visualizer**: Built chronological timeline analytics endpoint `GET /api/v1/intelligence/price-trend/{sku_interno}` and designed a premium visual HTML/CSS timeline chart with hover detail tooltips inside Validation Room.
+
+### [2026-05-18] System Audit & Core Backend Optimizations ✅
+- **ListinoMaster Expiring protocols crash resolved**: Fixed `ListinoMaster.is_active` crash in `intelligence.py` by removing the fittizia column reference.
+- **Anomalie Security Location Isolation**: Secured manager endpoints in `anomalie.py` (`list_anomalie`, `get_anomalia`, `azione_manager`) using active joins to enforce `location_id` isolation.
+- **XML Ingestion & Parsing Robustness**:
+  - Implemented `utf-8-sig` encoding in `xml_parser.py` and `ingestion.py` to prevent crashes from UTF-8 BOM characters.
+  - Corrected discount calculation to use multiplicative cascaded formulas rather than simple additive sums.
+  - Integrated `<PrezzoTotale>` checks to identify zero-value omaggi lines.
+  - Enhanced `_to_local_xpath` to fully support XPath brackets and segment predicates.
+  - Skip nested macOS artifacts/folders in ZIP manual uploads.
+  - Prevented concurrent upload crashes (HTTP 500) via explicit `IntegrityError` idempotency catch.
+- **Matching Engine Enhancements**:
+  - Added unicode/accent and punctuation normalization for fuzzy description checks in `matching.py`.
+  - Refactored alias matching lookup to apply database-side lower/trim operations (`func.lower(func.trim(...))`).
+- **Database unique constraint**: Added `unique=True` constraints to `riga_fattura_id` in `Anomalia` model to guarantee database integrity.
 
 ### [2026-05-15] Bug Fix: Registry Invoices & Location Naming ✅
 - Corretto mismatch di naming tra Backend (`nome_struttura`) e Frontend (`nome`) che impediva il corretto funzionamento dei filtri e delle etichette nel Registro Fatture.
