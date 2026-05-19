@@ -541,6 +541,60 @@ async def get_efficiency_leaderboard(
     return leaderboard
 
 
+@router.get("/variance-loss", summary="Analisi Sprechi per Mancata Ottimizzazione")
+async def get_variance_loss(
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Calcola lo spreco finanziario (variance loss) causato dagli acquisti effettuati a un prezzo 
+    superiore al prezzo minimo storico registrato per ciascun articolo standard (SKU).
+    """
+    sql = """
+    WITH min_prices AS (
+        SELECT 
+            sku_interno, 
+            MIN(prezzo_netto_normalizzato) AS min_price
+        FROM righe_fattura
+        WHERE stato_matching = 'matched' AND sku_interno IS NOT NULL
+        GROUP BY sku_interno
+    )
+    SELECT 
+        r.sku_interno,
+        COALESCE(MAX(lm.descrizione), MAX(r.descrizione_fornitore_raw), r.sku_interno) AS prodotto_nome,
+        COALESCE(MAX(f.nome_azienda), 'ND') AS fornitore_nome,
+        COUNT(r.id) AS numero_acquisti,
+        SUM(r.quantita) AS quantita_totale,
+        mp.min_price AS prezzo_minimo,
+        AVG(r.prezzo_netto_normalizzato) AS prezzo_medio,
+        SUM(GREATEST(0, r.prezzo_netto_normalizzato - mp.min_price) * r.quantita) AS spreco_totale
+    FROM righe_fattura r
+    JOIN min_prices mp ON r.sku_interno = mp.sku_interno
+    LEFT JOIN listino_master lm ON lm.sku_interno = r.sku_interno AND lm.data_scadenza IS NULL
+    LEFT JOIN fornitori f ON f.id = lm.fornitore_id
+    WHERE r.stato_matching = 'matched'
+    GROUP BY r.sku_interno, mp.min_price
+    HAVING SUM(GREATEST(0, r.prezzo_netto_normalizzato - mp.min_price) * r.quantita) > 0
+    ORDER BY spreco_totale DESC
+    LIMIT 10;
+    """
+    res = await db.execute(text(sql))
+    
+    results = []
+    for r in res.all():
+        results.append({
+            "sku_interno": r.sku_interno,
+            "prodotto_nome": r.prodotto_nome,
+            "fornitore_nome": r.fornitore_nome,
+            "numero_acquisti": int(r.numero_acquisti or 0),
+            "quantita_totale": float(r.quantita_totale or 0),
+            "prezzo_minimo": float(r.prezzo_minimo or 0),
+            "prezzo_medio": float(r.prezzo_medio or 0),
+            "spreco_totale": float(r.spreco_totale or 0)
+        })
+    return results
+
+
 # ─────────────────────────────────────────────
 # 4. Esporta Excel di Contestazione (openpyxl)
 # ─────────────────────────────────────────────

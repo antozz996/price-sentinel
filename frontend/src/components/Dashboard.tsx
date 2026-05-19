@@ -19,22 +19,38 @@ interface LeaderboardItem {
   score: number;
 }
 
+interface VarianceLossItem {
+  sku_interno: string;
+  prodotto_nome: string;
+  fornitore_nome: string;
+  numero_acquisti: number;
+  quantita_totale: number;
+  prezzo_minimo: number;
+  prezzo_medio: number;
+  spreco_totale: number;
+}
+
 export default function Dashboard() {
   const [kpi, setKpi] = useState<KPI | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
+  const [varianceLoss, setVarianceLoss] = useState<VarianceLossItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
     async function loadData() {
       try {
-        const [kpiData, leaderboardData] = await Promise.all([
+        const [kpiData, leaderboardData, varianceData] = await Promise.all([
           fetchWithAuth('/intelligence/kpi', { signal: controller.signal }),
-          fetchWithAuth('/intelligence/efficiency-leaderboard', { signal: controller.signal })
+          fetchWithAuth('/intelligence/efficiency-leaderboard', { signal: controller.signal }),
+          fetchWithAuth('/intelligence/variance-loss', { signal: controller.signal })
         ]);
         setKpi(kpiData);
         if (Array.isArray(leaderboardData)) {
           setLeaderboard(leaderboardData);
+        }
+        if (Array.isArray(varianceData)) {
+          setVarianceLoss(varianceData);
         }
       } catch (error: any) {
         if (error.name !== 'AbortError') {
@@ -208,6 +224,77 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* Analisi Sprechi & Varianza Section */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <TrendingUp color="#ef4444" size={20} />
+            <h4 style={{ margin: 0, fontWeight: 600 }}>Analisi Varianza & Sprechi (Perdite per Mancata Ottimizzazione)</h4>
+          </div>
+          <span style={{ fontSize: '0.75rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '4px 12px', borderRadius: '12px', fontWeight: 600 }}>
+            Top Prodotti Fuori-Prezzo
+          </span>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
+                <th style={{ padding: '12px' }}>Prodotto</th>
+                <th style={{ padding: '12px' }}>Fornitore</th>
+                <th style={{ padding: '12px', textAlign: 'center' }}>N. Acquisti</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Prezzo Minimo</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Prezzo Medio</th>
+                <th style={{ padding: '12px', textAlign: 'right' }}>Spreco Totale (YTD)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {varianceLoss.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                    Nessuna perdita per varianza rilevata sui prodotti mappati. Ottimo lavoro!
+                  </td>
+                </tr>
+              ) : (
+                varianceLoss.map((item) => (
+                  <tr key={item.sku_interno} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.9rem' }}>
+                    <td style={{ padding: '14px 12px', fontWeight: 500 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span>{item.prodotto_nome}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.sku_interno}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '14px 12px', color: 'var(--text-secondary)' }}>{item.fornitore_nome}</td>
+                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>{item.numero_acquisti}</td>
+                    <td style={{ padding: '14px 12px', textAlign: 'right', color: '#10b981', fontWeight: 500 }}>
+                      € {item.prezzo_minimo.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '14px 12px', textAlign: 'right', color: '#ef4444' }}>
+                      € {item.prezzo_medio.toFixed(2)}
+                    </td>
+                    <td style={{ padding: '14px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span style={{ fontWeight: 'bold', color: '#ef4444' }}>
+                          -€ {item.spreco_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                        <div style={{ width: '120px', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                          <div style={{ 
+                            width: `${Math.min(100, (item.spreco_totale / Math.max(...varianceLoss.map(v => v.spreco_totale))) * 100)}%`, 
+                            height: '100%', 
+                            background: '#ef4444'
+                          }}/>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 }
