@@ -17,7 +17,8 @@ from app.models.fatture import (
     UploadBatch, 
     StatoBatch, 
     SourceIngestion, 
-    StatoIngestion
+    StatoIngestion,
+    Fattura
 )
 from app.schemas.ingestion import (
     BatchResponse, 
@@ -123,7 +124,12 @@ async def upload_fatture(
             )
             xml_raw_existing = existing.scalar_one_or_none()
             if xml_raw_existing:
-                if xml_raw_existing.stato_ingestion == StatoIngestion.elaborato:
+                # Check if a Fattura is linked to this XMLRaw
+                res_fattura = await db.execute(
+                    select(Fattura).where(Fattura.xml_raw_id == xml_raw_existing.id)
+                )
+                existing_fattura = res_fattura.scalar_one_or_none()
+                if existing_fattura is not None:
                     batch.gia_presenti += 1
                     batch.file_elaborati += 1
                     continue
@@ -244,3 +250,86 @@ async def get_uploads_history(
     query = query.limit(limit).offset(offset)
     res = await db.execute(query)
     return res.scalars().all()
+
+
+@router.post(
+    "/reprocess-parked",
+    response_model=BatchResponse,
+    summary="Rielabora fatture in stato parsato o errore"
+)
+async def reprocess_parked(
+    current_user: Utente = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Trova tutte le XMLRaw non elaborate
+    res = await db.execute(
+        select(XMLRaw).outerjoin(Fattura).where(Fattura.id == None)
+    )
+    xml_raws = res.scalars().all()
+    
+    batch_id = str(uuid.uuid4())
+    batch = UploadBatch(
+        id=batch_id,
+        location_id=current_user.location_id,
+        user_id=current_user.id,
+        stato=StatoBatch.in_elaborazione,
+        note="Rielaborazione manuale sospese",
+        file_totali=len(xml_raws),
+        file_elaborati=0,
+        gia_presenti=0,
+        errori_formato=0,
+        anomalie_generate=0
+    )
+    db.add(batch)
+    await db.flush()
+
+    non_whitelistati_fornitori = []
+    non_registrate_location = []
+
+    for xml_raw in xml_raws:
+        try:
+            parsed = parse_fattura_xml(xml_raw.payload)
+            if not parsed.is_valid:
+                batch.errori_formato += 1
+                batch.file_elaborati += 1
+                continue
+
+            report = await process_xml_raw(db, xml_raw.id, parsed)
+            
+            status_report = report.get("status")
+            if status_report == "fornitore_non_whitelistato":
+                piva = parsed.piva_cedente
+                nome = parsed.denominazione_cedente or "Fornitore Sconosciuto"
+                if not any(f["partita_iva"] == piva for f in non_whitelistati_fornitori):
+                    non_whitelistati_fornitori.append({"partita_iva": piva, "nome_azienda": nome})
+            
+            elif status_report == "location_sconosciuta":
+                piva = parsed.piva_cessionario
+                nome = f"Sede Gruppo P.IVA {piva}"
+                if not any(l["partita_iva"] == piva for l in non_registrate_location):
+                    non_registrate_location.append({"partita_iva": piva, "nome_struttura": nome})
+
+            batch.file_elaborati += 1
+            batch.anomalie_generate += report.get("anomalie_generate", 0)
+        except Exception as e:
+            logger.error(f"Errore rielaborazione {xml_raw.id}: {e}")
+            batch.errori_formato += 1
+            batch.file_elaborati += 1
+
+    batch.stato = StatoBatch.completato if batch.errori_formato == 0 else StatoBatch.completato_con_errori
+    batch.completed_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return BatchResponse(
+        batch_id=batch_id,
+        stato=batch.stato.value,
+        riepilogo=BatchSummary(
+            totale_file=batch.file_totali,
+            elaborati=batch.file_elaborati,
+            gia_presenti=batch.gia_presenti,
+            errori_formato=batch.errori_formato,
+            anomalie_generate=batch.anomalie_generate
+        ),
+        non_whitelistati_fornitori=non_whitelistati_fornitori,
+        non_registrate_location=non_registrate_location
+    )
