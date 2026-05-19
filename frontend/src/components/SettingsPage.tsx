@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin } from 'lucide-react';
+import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2 } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface UserInfo {
@@ -120,6 +120,29 @@ export default function SettingsPage() {
       setMessage({ text: err.message || 'Errore durante la creazione.', type: 'error' });
     } finally {
       setSubmittingLoc(false);
+    }
+  };
+
+  const handleDeleteLocation = async (locationId: number) => {
+    if (!window.confirm("Sei sicuro di voler eliminare questa sede? Questa azione è irreversibile.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/location/${locationId}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Impossibile eliminare la sede.');
+      }
+
+      setMessage({ text: 'Sede Ricevente eliminata con successo!', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Errore durante l\'eliminazione.', type: 'error' });
     }
   };
 
@@ -262,9 +285,20 @@ export default function SettingsPage() {
                   <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{loc.nome_struttura}</div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>P.IVA: {loc.piva_riferimento}</div>
                 </div>
-                <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
-                  {loc.tipologia}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
+                    {loc.tipologia}
+                  </span>
+                  <button 
+                    onClick={() => handleDeleteLocation(loc.id)}
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
+                    title="Elimina sede"
+                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
