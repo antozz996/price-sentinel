@@ -37,6 +37,32 @@ def create_app() -> FastAPI:
         redirect_slashes=False,
     )
 
+    # ── Trailing Slash Middleware ─────────────
+    class TrailingSlashMiddleware:
+        def __init__(self, app):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            if scope["type"] == "http":
+                path = scope["path"]
+                base_routes = {
+                    "/api/v1/location",
+                    "/api/v1/fornitori",
+                    "/api/v1/listino",
+                    "/api/v1/fatture",
+                    "/api/v1/anomalie",
+                    "/api/v1/alias",
+                    "/api/v1/utenti",
+                    "/api/v1/webhook",
+                    "/api/v1/ingestion",
+                    "/api/v1/intelligence",
+                }
+                if path in base_routes:
+                    scope["path"] = path + "/"
+            await self.app(scope, receive, send)
+
+    application.add_middleware(TrailingSlashMiddleware)
+
     # ── CORS ─────────────────────────────────
     application.add_middleware(
         CORSMiddleware,
