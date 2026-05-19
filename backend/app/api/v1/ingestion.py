@@ -121,10 +121,30 @@ async def upload_fatture(
             existing = await db.execute(
                 select(XMLRaw).where(XMLRaw.hash_idempotenza == hash_id)
             )
-            if existing.scalar_one_or_none():
-                batch.gia_presenti += 1
-                batch.file_elaborati += 1
-                continue
+            xml_raw_existing = existing.scalar_one_or_none()
+            if xml_raw_existing:
+                if xml_raw_existing.stato_ingestion == StatoIngestion.elaborato:
+                    batch.gia_presenti += 1
+                    batch.file_elaborati += 1
+                    continue
+                else:
+                    # Parked or error - re-process existing XML record to catch unregistered entities
+                    report = await process_xml_raw(db, xml_raw_existing.id, parsed)
+                    status_report = report.get("status")
+                    if status_report == "fornitore_non_whitelistato":
+                        piva = parsed.piva_cedente
+                        nome = parsed.denominazione_cedente or "Fornitore Sconosciuto"
+                        if not any(f["partita_iva"] == piva for f in non_whitelistati_fornitori):
+                            non_whitelistati_fornitori.append({"partita_iva": piva, "nome_azienda": nome})
+                    elif status_report == "location_sconosciuta":
+                        piva = parsed.piva_cessionario
+                        nome = f"Sede Gruppo P.IVA {piva}"
+                        if not any(l["partita_iva"] == piva for l in non_registrate_location):
+                            non_registrate_location.append({"partita_iva": piva, "nome_struttura": nome})
+
+                    batch.file_elaborati += 1
+                    batch.anomalie_generate += report.get("anomalie_generate", 0)
+                    continue
 
             from sqlalchemy.exc import IntegrityError
             try:
