@@ -15,7 +15,7 @@ interface FornitoreItem {
 }
 
 export default function CrossLocationMatrix() {
-  const [matrix, setMatrix] = useState<Record<string, Record<string, number>> | null>(null);
+  const [matrix, setMatrix] = useState<Record<string, Record<string, { prezzo: number; fattura_id: number }>> | null>(null);
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [fornitori, setFornitori] = useState<FornitoreItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -233,7 +233,7 @@ export default function CrossLocationMatrix() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
-                <th style={{ padding: '12px' }}>Codice SKU Prodotto</th>
+                <th style={{ padding: '12px' }}>Nome Prodotto</th>
                 {locations.map(loc => (
                   <th key={loc.id} style={{ padding: '12px', textAlign: 'right' }}>
                     {loc.nome_struttura}
@@ -252,16 +252,17 @@ export default function CrossLocationMatrix() {
                 filteredSkus.map(sku => {
                   const locationPrices = matrix ? matrix[sku] : {};
                   const pricesList = Object.values(locationPrices).filter(p => p !== undefined && p !== null);
-                  const minPrice = pricesList.length > 0 ? Math.min(...pricesList) : null;
+                  const numericPricesList = pricesList.map((p: any) => p.prezzo);
+                  const minPrice = numericPricesList.length > 0 ? Math.min(...numericPricesList) : null;
 
                   return (
                     <tr key={sku} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.9rem' }}>
                       <td style={{ padding: '16px 12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {sku}
+                        {sku.split(' (')[0]}
                       </td>
                       {locations.map(loc => {
-                        const price = locationPrices[loc.id];
-                        if (price === undefined || price === null) {
+                        const cellData = locationPrices[loc.id];
+                        if (cellData === undefined || cellData === null) {
                           return (
                             <td key={loc.id} style={{ padding: '16px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.2)' }}>
                               -
@@ -269,11 +270,33 @@ export default function CrossLocationMatrix() {
                           );
                         }
 
+                        const price = cellData.prezzo;
+                        const fatturaId = cellData.fattura_id;
                         const isMin = minPrice !== null && price === minPrice;
                         const delta = minPrice !== null && minPrice > 0 ? ((price - minPrice) / minPrice) * 100 : 0;
 
                         return (
-                          <td key={loc.id} style={{ padding: '16px 12px', textAlign: 'right' }}>
+                          <td 
+                            key={loc.id} 
+                            style={{ 
+                              padding: '16px 12px', 
+                              textAlign: 'right',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.2s',
+                              position: 'relative'
+                            }}
+                            title="Visualizza fattura originale"
+                            onClick={() => {
+                              const token = localStorage.getItem('token');
+                              window.open(`${API_BASE}/fatture/${fatturaId}/html?token=${token}`, '_blank');
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                               <span style={{ 
                                 fontWeight: 600,

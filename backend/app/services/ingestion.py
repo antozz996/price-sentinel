@@ -327,6 +327,13 @@ async def _process_td04(
         if matched_anomalia:
             importo_recuperato = min(credito_valore, Decimal(str(matched_anomalia.delta_totale)))
             
+            # Trova l'id di un admin esistente nel database (evitando fk crash se seq > 1)
+            from app.models.utenti import Utente, RuoloUtente
+            admin_res = await db.execute(
+                select(Utente.id).where(Utente.ruolo == RuoloUtente.admin).limit(1)
+            )
+            admin_id = admin_res.scalar() or 1
+
             # Crea il record NotaDiCredito nel DB
             nc_record = NotaDiCredito(
                 anomalia_id=matched_anomalia.id,
@@ -334,7 +341,7 @@ async def _process_td04(
                 data_emissione_nc=fattura.data_documento,
                 data_registrazione=date_type.today(),
                 numero_nc=fattura.numero_documento,
-                registrato_da_admin_id=1,  # Default system admin
+                registrato_da_admin_id=admin_id,
             )
             db.add(nc_record)
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2 } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -10,6 +10,7 @@ import CrossLocationMatrix from './components/CrossLocationMatrix'
 import OrderOptimizer from './components/OrderOptimizer'
 import SkuManager from './components/SkuManager'
 import SentinelCopilot from './components/SentinelCopilot'
+import ProductConsumptionReport from './components/ProductConsumptionReport'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -226,6 +227,7 @@ export default function App() {
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
       case 'crosslocation': return <CrossLocationMatrix />;
+      case 'productconsumption': return <ProductConsumptionReport />;
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
       case 'settings': return <SettingsPage />;
@@ -241,6 +243,7 @@ export default function App() {
       case 'validation': return { title: 'Stanza di Validazione', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
       case 'crosslocation': return { title: 'Analisi Comparativa Sedi', sub: 'Matrice comparativa prezzi d\'acquisto e Vendor Passport' };
+      case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
@@ -309,6 +312,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'crosslocation' ? '' : 'transparent', border: 'none' }}
           >
             <Grid size={18} /> Analisi Incrociata
+          </button>
+
+          <button 
+            className={`btn ${activeTab === 'productconsumption' ? 'btn-primary' : ''}`}
+            onClick={() => setActiveTab('productconsumption')}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'productconsumption' ? '' : 'transparent', border: 'none' }}
+          >
+            <BarChart2 size={18} /> Analisi Consumi
           </button>
 
           <button 

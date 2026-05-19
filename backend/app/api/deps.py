@@ -3,7 +3,7 @@ Price Sentinel — Dependency Injection.
 Autenticazione JWT, controllo ruoli, validazione API Key Aruba.
 """
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status, Query
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +36,38 @@ async def get_current_user(
         raise credentials_exception
 
     token = authorization.removeprefix("Bearer ").strip()
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id: int | None = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    # Cerca l'utente nel DB
+    result = await db.execute(select(Utente).where(Utente.id == int(user_id)))
+    user = result.scalar_one_or_none()
+
+    if user is None or not user.attivo:
+        raise credentials_exception
+
+    return user
+
+
+async def get_current_user_from_query(
+    token: str = Query(..., description="JWT token passato come query parameter"),
+    db: AsyncSession = Depends(get_db),
+) -> Utente:
+    """
+    Decodifica il JWT dal query parameter token.
+    Restituisce l'utente attivo corrispondente.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Credenziali non valide",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

@@ -117,6 +117,13 @@ async def delete_location(
     if not location:
         raise HTTPException(status_code=404, detail="Location non trovata")
     
-    # Check if there are dependent records or just delete
-    await db.delete(location)
-    await db.commit()
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await db.delete(location)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Impossibile eliminare la location: sono presenti fatture o altri dati storici associati ad essa. Riassegna o elimina prima i dati dipendenti."
+        )

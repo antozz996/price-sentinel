@@ -141,5 +141,13 @@ async def delete_fornitore(
     if not fornitore:
         raise HTTPException(status_code=404, detail="Fornitore non trovato")
     
-    await db.delete(fornitore)
-    await db.commit()
+    from sqlalchemy.exc import IntegrityError
+    try:
+        await db.delete(fornitore)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Impossibile eliminare il fornitore: sono presenti listini, fatture o alias associati ad esso. Riassegna o elimina prima i dati dipendenti."
+        )

@@ -144,7 +144,7 @@ async def upload_fatture(
                             non_whitelistati_fornitori.append({"partita_iva": piva, "nome_azienda": nome})
                     elif status_report == "location_sconosciuta":
                         piva = parsed.piva_cessionario
-                        nome = f"Sede Gruppo P.IVA {piva}"
+                        nome = getattr(parsed, "denominazione_cessionario", None) or f"Sede Gruppo P.IVA {piva}"
                         if not any(l["partita_iva"] == piva for l in non_registrate_location):
                             non_registrate_location.append({"partita_iva": piva, "nome_struttura": nome})
 
@@ -180,7 +180,7 @@ async def upload_fatture(
                 
                 elif status_report == "location_sconosciuta":
                     piva = parsed.piva_cessionario
-                    nome = f"Sede Gruppo P.IVA {piva}"
+                    nome = getattr(parsed, "denominazione_cessionario", None) or f"Sede Gruppo P.IVA {piva}"
                     if not any(l["partita_iva"] == piva for l in non_registrate_location):
                         non_registrate_location.append({"partita_iva": piva, "nome_struttura": nome})
 
@@ -305,7 +305,7 @@ async def reprocess_parked(
             
             elif status_report == "location_sconosciuta":
                 piva = parsed.piva_cessionario
-                nome = f"Sede Gruppo P.IVA {piva}"
+                nome = getattr(parsed, "denominazione_cessionario", None) or f"Sede Gruppo P.IVA {piva}"
                 if not any(l["partita_iva"] == piva for l in non_registrate_location):
                     non_registrate_location.append({"partita_iva": piva, "nome_struttura": nome})
 

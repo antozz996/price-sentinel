@@ -68,6 +68,16 @@ class CreaOrdineInput(BaseModel):
 
 # ── Endpoints ────────────────────────────────────────
 
+def extract_sku(sku_input: str) -> str:
+    """
+    Estrae lo SKU effettivo da una stringa nel formato 'Nome Prodotto (SKU)'.
+    Se non sono presenti parentesi tonde, restituisce la stringa originale.
+    """
+    if sku_input and ")" in sku_input and "(" in sku_input:
+        return sku_input.split("(")[-1].replace(")", "").strip()
+    return sku_input
+
+
 @router.post(
     "/ottimizza",
     response_model=OttimizzaOrdineResponse,
@@ -91,17 +101,20 @@ async def ottimizza_ordine(
     numero_anomalie = 0
 
     for item in items:
+        # Estraiamo lo SKU pulito normalizzato
+        clean_sku = extract_sku(item.sku_interno)
+
         # 1. Recupero anagrafica o descrizione base del prodotto dagli alias o listino
         # Cerca descrizione nel listino master
-        listino_stmt = select(ListinoMaster).where(ListinoMaster.sku_interno == item.sku_interno).limit(1)
+        listino_stmt = select(ListinoMaster).where(ListinoMaster.sku_interno == clean_sku).limit(1)
         listino_res = await db.execute(listino_stmt)
         listino_item = listino_res.scalar_one_or_none()
-        descrizione = listino_item.descrizione if listino_item else f"Prodotto {item.sku_interno}"
+        descrizione = listino_item.descrizione if listino_item else f"Prodotto {clean_sku}"
 
         # 2. REGOLA A: Verifica se c'è un contratto a prezzo fisso attivo (data_scadenza IS NULL)
         contract_stmt = select(ListinoMaster).where(
             and_(
-                ListinoMaster.sku_interno == item.sku_interno,
+                ListinoMaster.sku_interno == clean_sku,
                 ListinoMaster.data_scadenza.is_(None)
             )
         ).limit(1)
@@ -125,13 +138,13 @@ async def ottimizza_ordine(
                     f"Prezzo inserito (€ {prezzo_inserito:.2f}) differisce "
                     f"dal prezzo blindato a contratto (€ {prezzo_ottimale:.2f})"
                 )
-                avvisi_preventivi.append(f"Anomalia {item.sku_interno}: {dettaglio_anomalia}")
+                avvisi_preventivi.append(f"Anomalia {clean_sku}: {dettaglio_anomalia}")
 
             spesa_totale_blindata += prezzo_inserito * item.quantita
 
             righe_ottimizzate.append(
                 RigaOttimizzataResponse(
-                    sku_interno=item.sku_interno,
+                    sku_interno=clean_sku,
                     descrizione=descrizione,
                     quantita=item.quantita,
                     prezzo_inserito=prezzo_inserito,
@@ -163,7 +176,7 @@ async def ottimizza_ordine(
                 )
                 .join(Fattura, RigaFattura.fattura_id == Fattura.id)
                 .join(Fornitore, Fattura.fornitore_id == Fornitore.id)
-                .where(RigaFattura.sku_interno == item.sku_interno)
+                .where(RigaFattura.sku_interno == clean_sku)
                 .group_by(Fornitore.id, Fornitore.nome_azienda)
                 .order_by("prezzo_min")
             )
@@ -184,7 +197,7 @@ async def ottimizza_ordine(
                         f"Prezzo inserito (€ {prezzo_inserito:.2f}) superiore "
                         f"al miglior prezzo spot disponibile (€ {prezzo_ottimale:.2f})"
                     )
-                    avvisi_preventivi.append(f"Avviso Spot {item.sku_interno}: {dettaglio_anomalia}")
+                    avvisi_preventivi.append(f"Avviso Spot {clean_sku}: {dettaglio_anomalia}")
 
                 # Calcola il risparmio teorico rispetto all'opzione più costosa
                 max_price = float(max(o.prezzo_min for o in spot_options))
@@ -203,7 +216,7 @@ async def ottimizza_ordine(
 
                 righe_ottimizzate.append(
                     RigaOttimizzataResponse(
-                        sku_interno=item.sku_interno,
+                        sku_interno=clean_sku,
                         descrizione=descrizione,
                         quantita=item.quantita,
                         prezzo_inserito=prezzo_inserito,
@@ -221,7 +234,7 @@ async def ottimizza_ordine(
                 prezzo_inserito = item.prezzo_inserito if item.prezzo_inserito is not None else 0.0
                 righe_ottimizzate.append(
                     RigaOttimizzataResponse(
-                        sku_interno=item.sku_interno,
+                        sku_interno=clean_sku,
                         descrizione=descrizione,
                         quantita=item.quantita,
                         prezzo_inserito=prezzo_inserito,
