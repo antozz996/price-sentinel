@@ -104,14 +104,15 @@ export default function Dashboard() {
       {/* KPI Cards Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
         {cards.map((card, i) => (
-          <div key={i} className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', transition: 'all 0.3s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>{card.title}</span>
-              <div style={{ padding: '8px', borderRadius: '10px', background: card.bg }}>{card.icon}</div>
+          <div key={i} className="glass-panel hover-glow" style={{ position: 'relative', overflow: 'hidden', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'default' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: card.bg.replace('0.1', '1').replace('bg', 'color') }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{card.title}</span>
+              <div style={{ padding: '10px', borderRadius: '12px', background: card.bg, backdropFilter: 'blur(10px)' }}>{card.icon}</div>
             </div>
             <div>
-              <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{card.value}</div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{card.subtitle}</span>
+              <div style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.5px', marginBottom: '4px' }}>{card.value}</div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>{card.subtitle}</span>
             </div>
           </div>
         ))}
@@ -161,14 +162,16 @@ export default function Dashboard() {
                       </td>
                       <td style={{ padding: '14px 12px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          <span style={{ fontWeight: 'bold', color: item.score >= 80 ? '#10b981' : (item.score >= 50 ? '#f59e0b' : '#ef4444') }}>
+                          <span style={{ fontWeight: 700, fontSize: '1rem', color: item.score >= 80 ? '#10b981' : (item.score >= 50 ? '#f59e0b' : '#ef4444') }}>
                             {item.score.toFixed(1)}%
                           </span>
-                          <div style={{ width: '80px', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                          <div style={{ width: '100px', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
                             <div style={{ 
                               width: `${item.score}%`, 
                               height: '100%', 
-                              background: item.score >= 80 ? '#10b981' : (item.score >= 50 ? '#f59e0b' : '#ef4444') 
+                              background: item.score >= 80 ? 'linear-gradient(90deg, #059669, #10b981)' : (item.score >= 50 ? 'linear-gradient(90deg, #d97706, #f59e0b)' : 'linear-gradient(90deg, #dc2626, #ef4444)'),
+                              boxShadow: item.score >= 80 ? '0 0 10px rgba(16, 185, 129, 0.5)' : 'none',
+                              borderRadius: '3px'
                             }}/>
                           </div>
                         </div>
@@ -190,15 +193,19 @@ export default function Dashboard() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)', padding: '16px', borderRadius: '12px' }}>
-                <div style={{ fontSize: '0.85rem', color: 'rgba(239, 68, 68, 0.8)', fontWeight: 500, marginBottom: '6px' }}>
+              <div style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.02))', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '24px', borderRadius: '16px', position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 0 20px rgba(239, 68, 68, 0.05)' }}>
+                <div style={{ position: 'absolute', right: '-20px', top: '-20px', opacity: 0.05, transform: 'scale(2)' }}>
+                  <AlertCircle size={100} color="#ef4444" />
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'rgba(239, 68, 68, 0.9)', fontWeight: 700, letterSpacing: '1px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 10px #ef4444' }}></span>
                   PERDITA ECONOMICA ANNUALE PROIETTATA
                 </div>
-                <div style={{ fontSize: '2.2rem', fontWeight: 800, color: '#ef4444', letterSpacing: '-0.5px' }}>
+                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#ef4444', letterSpacing: '-1px', textShadow: '0 0 20px rgba(239, 68, 68, 0.3)' }}>
                   € {Number(annualLoss).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
-                  Calcolata come proiezione YTD su base 12 mesi dei rincari attivi non giustificati da listino.
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: 1.5 }}>
+                  Calcolata come proiezione YTD su base 12 mesi dei rincari attivi non giustificati dai listini pattuiti.
                 </div>
               </div>
 
@@ -274,15 +281,17 @@ export default function Dashboard() {
                       € {item.prezzo_medio.toFixed(2)}
                     </td>
                     <td style={{ padding: '14px 12px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                        <span style={{ fontWeight: 'bold', color: '#ef4444' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#ef4444', textShadow: '0 0 10px rgba(239,68,68,0.2)' }}>
                           -€ {item.spreco_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
-                        <div style={{ width: '120px', height: '4px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ width: '120px', height: '6px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
                           <div style={{ 
-                            width: `${Math.min(100, (item.spreco_totale / Math.max(...varianceLoss.map(v => v.spreco_totale))) * 100)}%`, 
+                            width: `${Math.min(100, (item.spreco_totale / (Math.max(...varianceLoss.map(v => v.spreco_totale)) || 1)) * 100)}%`, 
                             height: '100%', 
-                            background: '#ef4444'
+                            background: 'linear-gradient(90deg, #dc2626, #ef4444)',
+                            boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)',
+                            borderRadius: '3px'
                           }}/>
                         </div>
                       </div>
