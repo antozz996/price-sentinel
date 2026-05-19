@@ -17,7 +17,7 @@ from decimal import Decimal
 from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.anomalie import Anomalia, StatoValidazione
+from app.models.anomalie import Anomalia, StatoValidazione, NotaDiCredito
 from app.models.fatture import (
     Fattura,
     RigaFattura,
@@ -249,6 +249,10 @@ async def _process_td04(
     Nota di credito da fornitore — cerca anomalie aperte
     e le propone per chiusura automatica.
     """
+    from app.models.anomalie import Anomalia, StatoValidazione, NotaDiCredito
+    from app.models.fatture import RigaFattura
+    from datetime import date as date_type
+
     fattura = Fattura(
         xml_raw_id=xml_raw_id,
         fornitore_id=fornitore.id,
@@ -267,7 +271,87 @@ async def _process_td04(
         riga_db = _create_riga_fattura(fattura.id, riga_parsed, StatoMatching.matched, None)
         db.add(riga_db)
 
-    return {"status": "td04_registrata", "fattura_id": fattura.id}
+    # ── Caricamento Anomalie Aperte dello stesso Fornitore e Location ──
+    from sqlalchemy.orm import selectinload
+    anomalie_query = (
+        select(Anomalia)
+        .options(selectinload(Anomalia.riga_fattura))
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+        .where(
+            and_(
+                Fattura.fornitore_id == fornitore.id,
+                Fattura.location_id == location.id,
+                Anomalia.stato_validazione.in_([
+                    StatoValidazione.da_verificare,
+                    StatoValidazione.in_parking,
+                    StatoValidazione.contestata,
+                    StatoValidazione.in_reclamo,
+                ])
+            )
+        )
+    )
+    res = await db.execute(anomalie_query)
+    pending_anomalies = list(res.scalars().all())
+
+    reconciled_count = 0
+    total_reconciled_amount = Decimal("0")
+
+    # ── Reconciliation Algorithm ──
+    for riga_parsed in parsed.righe:
+        # Importo totale del credito per questa riga
+        credito_valore = abs(riga_parsed.prezzo_netto_normalizzato * riga_parsed.quantita)
+        if credito_valore == Decimal("0"):
+            continue
+
+        matched_anomalia = None
+
+        # 1. Trova anomalia per codice articolo
+        if riga_parsed.codice_articolo:
+            for anom in pending_anomalies:
+                if anom.riga_fattura and anom.riga_fattura.codice_fornitore_raw == riga_parsed.codice_articolo:
+                    matched_anomalia = anom
+                    break
+
+        # 2. Fallback su descrizione simile
+        if not matched_anomalia and riga_parsed.descrizione:
+            desc_clean = riga_parsed.descrizione.strip().lower()
+            for anom in pending_anomalies:
+                if anom.riga_fattura and anom.riga_fattura.descrizione_fornitore_raw:
+                    anom_desc = anom.riga_fattura.descrizione_fornitore_raw.strip().lower()
+                    if desc_clean in anom_desc or anom_desc in desc_clean:
+                        matched_anomalia = anom
+                        break
+
+        # Se troviamo un match, effettuiamo lo storno e segniamo l'anomalia come risolta
+        if matched_anomalia:
+            importo_recuperato = min(credito_valore, Decimal(str(matched_anomalia.delta_totale)))
+            
+            # Crea il record NotaDiCredito nel DB
+            nc_record = NotaDiCredito(
+                anomalia_id=matched_anomalia.id,
+                importo_recuperato=float(importo_recuperato),
+                data_emissione_nc=fattura.data_documento,
+                data_registrazione=date_type.today(),
+                numero_nc=fattura.numero_documento,
+                registrato_da_admin_id=1,  # Default system admin
+            )
+            db.add(nc_record)
+
+            # Transizione dello stato a risolta
+            matched_anomalia.stato_validazione = StatoValidazione.risolta
+            
+            # Rimuovi dalla lista dei pendenti per evitare doppi matching
+            pending_anomalies.remove(matched_anomalia)
+            reconciled_count += 1
+            total_reconciled_amount += importo_recuperato
+
+    return {
+        "status": "td04_registrata",
+        "fattura_id": fattura.id,
+        "anomalie_riconciliate": reconciled_count,
+        "totale_recuperato": float(total_reconciled_amount)
+    }
 
 
 # ─────────────────────────────────────────────

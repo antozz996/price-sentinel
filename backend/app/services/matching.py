@@ -91,7 +91,7 @@ async def match_riga(
                 result.listino_id = listino.id
                 result.prezzo_listino = listino.prezzo_pattuito
                 await _applica_uom_e_calcola_delta(
-                    db, result, listino, prezzo_netto_normalizzato, quantita, unita_misura_fattura
+                    db, result, listino, prezzo_netto_normalizzato, quantita, unita_misura_fattura, alias
                 )
                 return result
 
@@ -108,7 +108,7 @@ async def match_riga(
                 result.listino_id = listino.id
                 result.prezzo_listino = listino.prezzo_pattuito
                 await _applica_uom_e_calcola_delta(
-                    db, result, listino, prezzo_netto_normalizzato, quantita, unita_misura_fattura
+                    db, result, listino, prezzo_netto_normalizzato, quantita, unita_misura_fattura, ean_alias
                 )
                 return result
 
@@ -128,7 +128,7 @@ async def match_riga(
                 result.listino_id = listino.id
                 result.sku_interno = listino.sku_interno
                 await _applica_uom_e_calcola_delta(
-                    db, result, listino, prezzo_netto_normalizzato, quantita, unita_misura_fattura
+                    db, result, listino, prezzo_netto_normalizzato, quantita, unita_misura_fattura, None
                 )
                 return result
 
@@ -257,6 +257,7 @@ async def _applica_uom_e_calcola_delta(
     prezzo_netto: Decimal,
     quantita: Decimal,
     uom_fattura: str | None,
+    alias: Optional[AliasProdotto] = None,
 ) -> None:
     """
     Spec §3.2: Applica conversione UoM e calcola Delta.
@@ -268,8 +269,14 @@ async def _applica_uom_e_calcola_delta(
     """
     prezzo_confronto = prezzo_netto
 
-    # ── Conversione UoM se necessaria ──
-    if uom_fattura and listino.unita_misura and uom_fattura.lower() != listino.unita_misura.lower():
+    # ── Conversione UoM da Alias (Precedenza Massima) ──
+    if alias and alias.coefficiente_conversione and alias.coefficiente_conversione != Decimal("1.0") and alias.coefficiente_conversione != Decimal("0"):
+        result.coefficiente_uom = Decimal(str(alias.coefficiente_conversione))
+        prezzo_confronto = (prezzo_netto / result.coefficiente_uom).quantize(
+            Decimal("0.0001"), rounding=ROUND_HALF_UP
+        )
+    # ── Conversione UoM se necessaria da Tabella UoM ──
+    elif uom_fattura and listino.unita_misura and uom_fattura.lower() != listino.unita_misura.lower():
         conv_result = await db.execute(
             select(UoMConversione).where(
                 and_(
