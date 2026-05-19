@@ -8,7 +8,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import Response
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
@@ -39,8 +39,11 @@ router = APIRouter()
     summary="Lista listino (record attivi)",
 )
 async def list_listino(
+    response: Response,
     fornitore_id: int | None = Query(None),
     include_scaduti: bool = Query(False, description="Includi record scaduti"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -52,6 +55,14 @@ async def list_listino(
     if not include_scaduti:
         query = query.where(ListinoMaster.data_scadenza.is_(None))
 
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    response.headers["X-Total-Count"] = str(total)
+
+    # Slice results
+    query = query.limit(limit).offset(offset)
     result = await db.execute(query)
     return result.scalars().all()
 

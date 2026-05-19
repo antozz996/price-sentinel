@@ -87,20 +87,28 @@ def calcola_hash_idempotenza(piva: str, numero: str, data: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+import re
+
+
 def decode_xml_base64(xml_b64: str) -> str:
     """Decodifica il payload Base64 ricevuto dal webhook Aruba."""
-    return base64.b64decode(xml_b64).decode("utf-8")
+    return base64.b64decode(xml_b64).decode("utf-8-sig")
 
 
 def _to_local_xpath(xpath: str) -> str:
-    """Modifica l'xpath ignorando del tutto i namespaces."""
+    """Modifica l'xpath ignorando del tutto i namespaces, supportando anche i predicati in parentesi quadre."""
     parts = xpath.replace("p:", "").split("/")
     new_parts = []
     for p in parts:
         if p in ("", "."):
             new_parts.append(p)
         else:
-            new_parts.append(f"*[local-name()='{p}']")
+            match = re.match(r'^([^\[]+)(.*)$', p)
+            if match:
+                node_name, predicate = match.groups()
+                new_parts.append(f"*[local-name()='{node_name}']{predicate}")
+            else:
+                new_parts.append(f"*[local-name()='{p}']")
     return "/".join(new_parts)
 
 
@@ -240,18 +248,21 @@ def parse_fattura_xml(xml_string: str) -> FatturaParsata:
 
         # ── ScontoMaggiorazione (può essere multiplo — Spec §2.3) ──
         sconti = _findall(linea, "ScontoMaggiorazione")
-        sconto_totale = Decimal("0")
+        net_factor = Decimal("1")
         for sconto_el in sconti:
             tipo_sm = _text(sconto_el, "Tipo")  # SC = Sconto, MG = Maggiorazione
             perc = _decimal(sconto_el, "Percentuale")
             if tipo_sm == "SC":
-                sconto_totale += perc
+                net_factor *= (Decimal("1") - (perc / Decimal("100")))
             elif tipo_sm == "MG":
-                sconto_totale -= perc  # Maggiorazione riduce lo sconto effettivo
-        riga.sconto_percentuale = sconto_totale
+                net_factor *= (Decimal("1") + (perc / Decimal("100")))
+        riga.sconto_percentuale = (Decimal("1") - net_factor) * Decimal("100")
+
+        # Estratto PrezzoTotale per robustezza omaggi
+        prezzo_totale = _decimal(linea, "PrezzoTotale")
 
         # ── Rilevamento Omaggi — Spec §3.3 ──
-        if riga.prezzo_unitario == Decimal("0") or riga.sconto_percentuale >= Decimal("100"):
+        if riga.prezzo_unitario == Decimal("0") or prezzo_totale == Decimal("0") or riga.sconto_percentuale >= Decimal("100"):
             riga.is_omaggio = True
 
         result.righe.append(riga)

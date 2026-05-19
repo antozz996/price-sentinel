@@ -23,6 +23,12 @@ class AnomaliaResponse(BaseModel):
     validato_at: datetime | None
     gestito_da_admin_id: int | None
     gestito_at: datetime | None
+    
+    # Campi calcolati relazionali
+    descrizione_orig: str | None = None
+    fornitore_nome: str | None = None
+    quantita: Decimal | None = None
+    codice_fornitore: str | None = None
 
     model_config = {"from_attributes": True}
 

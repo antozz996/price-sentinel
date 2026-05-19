@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FileSpreadsheet, Download, CheckCircle2, AlertCircle } from 'lucide-react';
-import { API_BASE } from '../api';
+import { API_BASE, getHeaders } from '../api';
 
 interface Fornitore {
   id: number;
@@ -15,14 +15,12 @@ export default function PriceListManager() {
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadFornitori() {
       try {
-        const token = localStorage.getItem('token');
         const res = await fetch(`${API_BASE}/fornitori/`, {
-          headers: { 
-            'bypass-tunnel-reminder': 'true',
-            'Authorization': `Bearer ${token}`
-          }
+          headers: getHeaders(),
+          signal: controller.signal
         });
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -31,12 +29,15 @@ export default function PriceListManager() {
           console.error("Risposta API non valida", data);
           setFornitori([]);
         }
-      } catch (err) {
-        console.error("Errore caricamento fornitori", err);
-        setFornitori([]);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error("Errore caricamento fornitori", err);
+          setFornitori([]);
+        }
       }
     }
     loadFornitori();
+    return () => controller.abort();
   }, []);
 
   const handleUpload = async () => {
@@ -52,13 +53,9 @@ export default function PriceListManager() {
     formData.append('file', file);
 
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(`${API_BASE}/listino/import-excel/${selectedFornitore}`, {
         method: 'POST',
-        headers: { 
-          'bypass-tunnel-reminder': 'true',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: getHeaders(),
         body: formData,
       });
 

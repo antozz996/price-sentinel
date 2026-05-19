@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
         lifespan=lifespan,
+        redirect_slashes=False,
     )
 
     # ── CORS ─────────────────────────────────

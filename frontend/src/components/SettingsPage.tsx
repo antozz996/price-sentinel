@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
-import { API_BASE } from '../api';
+import { API_BASE, getHeaders } from '../api';
 
 interface UserInfo {
   id: number;
@@ -14,28 +14,33 @@ export default function SettingsPage() {
   const [dbStats, setDbStats] = useState<any>(null);
   const [message] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const token = localStorage.getItem('token');
-  const headers: Record<string, string> = { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true' };
+  const headers = getHeaders();
 
   useEffect(() => {
-    loadUsers();
-    loadDbStats();
+    const controller = new AbortController();
+    loadUsers(controller.signal);
+    loadDbStats(controller.signal);
+    return () => controller.abort();
   }, []);
 
-  async function loadUsers() {
+  async function loadUsers(signal?: AbortSignal) {
     try {
-      const res = await fetch(`${API_BASE}/utenti/`, { headers });
+      const res = await fetch(`${API_BASE}/utenti/`, { headers, signal });
       const data = await res.json();
       if (Array.isArray(data)) setUsers(data);
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
   }
 
-  async function loadDbStats() {
+  async function loadDbStats(signal?: AbortSignal) {
     try {
-      const res = await fetch(`${API_BASE}/health`, { headers: { 'bypass-tunnel-reminder': 'true' } });
+      const res = await fetch(`${API_BASE}/health`, { headers, signal });
       const data = await res.json();
       setDbStats(data);
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
   }
 
   function handleLogout() {
@@ -83,7 +88,7 @@ export default function SettingsPage() {
             <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{dbStats?.environment || '—'}</div>
           </div>
         </div>
-        <button className="btn" onClick={loadDbStats} style={{ marginTop: '16px', gap: '8px', background: 'transparent', border: '1px solid var(--border-glass)' }}>
+        <button className="btn" onClick={() => loadDbStats()} style={{ marginTop: '16px', gap: '8px', background: 'transparent', border: '1px solid var(--border-glass)' }}>
           <RefreshCw size={14} /> Aggiorna Stato
         </button>
       </div>

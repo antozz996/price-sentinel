@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # ── Auth / JWT ───────────────────────────
     SECRET_KEY: str = "fallback_secret_key_if_missing_in_vercel_123"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 ore
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minuti
 
     # ── Aruba Webhook ────────────────────────
     ARUBA_WEBHOOK_API_KEY: str = ""

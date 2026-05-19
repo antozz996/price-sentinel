@@ -20,7 +20,7 @@ from app.api.v1 import (
     ingestion,
 )
 
-api_router = APIRouter()
+api_router = APIRouter(redirect_slashes=False)
 
 api_router.include_router(auth.router, prefix="/auth", tags=["Autenticazione"])
 api_router.include_router(utenti.router, prefix="/utenti", tags=["Utenti"])

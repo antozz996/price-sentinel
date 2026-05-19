@@ -462,7 +462,7 @@ export default function ValidationRoom() {
         limit={limit}
         offset={offset}
         total={total}
-        onChange={(l, o) => {
+        onChange={(l: number, o: number) => {
           setLimit(l);
           setOffset(o);
         }}

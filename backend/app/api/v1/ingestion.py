@@ -74,17 +74,17 @@ async def upload_fatture(
         if upload_file.filename.lower().endswith('.zip'):
             try:
                 with zipfile.ZipFile(io.BytesIO(content)) as z:
-                    for name in z.namelist():
-                        if name.lower().endswith('.xml') and not name.startswith('__MACOSX'):
-                            xml_content = z.read(name).decode('utf-8', errors='ignore')
-                            xml_files_to_process.append((name, xml_content))
+                    for info in z.infolist():
+                        if not info.is_dir() and info.filename.lower().endswith('.xml') and not info.filename.startswith('__MACOSX'):
+                            xml_content = z.read(info.filename).decode('utf-8-sig', errors='ignore')
+                            xml_files_to_process.append((info.filename, xml_content))
             except zipfile.BadZipFile:
                 batch.errori_formato += 1
                 logger.warning(f"File {upload_file.filename} non è uno ZIP valido")
         
         elif upload_file.filename.lower().endswith('.xml'):
             try:
-                xml_content = content.decode('utf-8', errors='ignore')
+                xml_content = content.decode('utf-8-sig', errors='ignore')
                 xml_files_to_process.append((upload_file.filename, xml_content))
             except Exception:
                 batch.errori_formato += 1
@@ -123,25 +123,33 @@ async def upload_fatture(
                 batch.file_elaborati += 1
                 continue
 
-            # Salvataggio XMLRaw
-            xml_raw = XMLRaw(
-                payload=xml_payload,
-                nome_file=filename,
-                hash_idempotenza=hash_id,
-                source=SourceIngestion.upload_manuale,
-                upload_batch_id=batch_id,
-                uploaded_by_user_id=current_user.id,
-                stato_ingestion=StatoIngestion.ricevuto,
-                data_ricezione=datetime.now(timezone.utc)
-            )
-            db.add(xml_raw)
-            await db.flush()
+            from sqlalchemy.exc import IntegrityError
+            try:
+                # Salvataggio XMLRaw
+                xml_raw = XMLRaw(
+                    payload=xml_payload,
+                    nome_file=filename,
+                    hash_idempotenza=hash_id,
+                    source=SourceIngestion.upload_manuale,
+                    upload_batch_id=batch_id,
+                    uploaded_by_user_id=current_user.id,
+                    stato_ingestion=StatoIngestion.ricevuto,
+                    data_ricezione=datetime.now(timezone.utc)
+                )
+                db.add(xml_raw)
+                await db.flush()
 
-            # Pipeline Matching
-            report = await process_xml_raw(db, xml_raw.id, parsed)
-            
-            batch.file_elaborati += 1
-            batch.anomalie_generate += report.get("anomalie_generate", 0)
+                # Pipeline Matching
+                report = await process_xml_raw(db, xml_raw.id, parsed)
+                
+                batch.file_elaborati += 1
+                batch.anomalie_generate += report.get("anomalie_generate", 0)
+            except IntegrityError:
+                await db.rollback()
+                batch.gia_presenti += 1
+                batch.file_elaborati += 1
+                logger.info(f"File {filename} già presente (concorrenza rilevata via IntegrityError)")
+                continue
             
         except Exception as e:
             logger.error(f"Errore durante processamento {filename}: {e}")

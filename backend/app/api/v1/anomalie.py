@@ -5,8 +5,9 @@ Workflow a stati completo — Spec §4.1, §4.2, §4.3.
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
+from sqlalchemy import select, and_, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin, require_manager
@@ -35,18 +36,38 @@ router = APIRouter()
     summary="Lista anomalie",
 )
 async def list_anomalie(
+    response: Response,
     stato: str | None = Query(None, description="Filtra per stato validazione"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Anomalia).order_by(Anomalia.id.desc())
+    from app.models.fatture import RigaFattura, Fattura
+    from app.models.fornitori import Fornitore
+
+    query = select(Anomalia).options(
+        selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore)
+    ).order_by(Anomalia.id.desc())
 
     if stato:
         query = query.where(Anomalia.stato_validazione == StatoValidazione(stato))
 
-    # Admin: vede solo 'contestata' e successive per default
-    # Manager: filtro implicito su location (via join — implementazione Sprint 3)
+    if current_user.ruolo.value == "manager":
+        query = (
+            query.join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+            .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+            .where(Fattura.location_id == current_user.location_id)
+        )
 
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    response.headers["X-Total-Count"] = str(total)
+
+    # Slice results
+    query = query.limit(limit).offset(offset)
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -61,7 +82,20 @@ async def get_anomalia(
     _user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Anomalia).where(Anomalia.id == anomalia_id))
+    from app.models.fatture import RigaFattura, Fattura
+    from app.models.fornitori import Fornitore
+
+    query = select(Anomalia).options(
+        selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore)
+    ).where(Anomalia.id == anomalia_id)
+
+    if _user.ruolo.value == "manager":
+        query = (
+            query.join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+            .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+            .where(Fattura.location_id == _user.location_id)
+        )
+    result = await db.execute(query)
     anomalia = result.scalar_one_or_none()
     if not anomalia:
         raise HTTPException(status_code=404, detail="Anomalia non trovata")
@@ -84,7 +118,14 @@ async def azione_manager(
     manager: Utente = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Anomalia).where(Anomalia.id == anomalia_id))
+    from app.models.fatture import RigaFattura, Fattura
+    query = (
+        select(Anomalia)
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+        .where(and_(Anomalia.id == anomalia_id, Fattura.location_id == manager.location_id))
+    )
+    result = await db.execute(query)
     anomalia = result.scalar_one_or_none()
     if not anomalia:
         raise HTTPException(status_code=404, detail="Anomalia non trovata")

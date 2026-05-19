@@ -6,7 +6,7 @@ Tabella dinamica che migliora nel tempo con le conferme degli operatori.
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -36,6 +36,13 @@ class AliasProdotto(Base):
         String(100),
         nullable=False,
         index=True,
+    )
+    coefficiente_conversione: Mapped[float] = mapped_column(
+        Numeric(10, 4),
+        nullable=False,
+        default=1.0,
+        server_default="1.0",
+        comment="Fattore conversione quantita/prezzo (es. 6 se cassa da 6pz)",
     )
     confermato_da_user_id: Mapped[int | None] = mapped_column(
         Integer,
