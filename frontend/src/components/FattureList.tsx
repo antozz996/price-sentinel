@@ -285,7 +285,7 @@ export default function FattureList() {
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anomalie</div>
         </div>
         <div className="glass-panel" style={{ padding: '16px 24px', flex: 1, minWidth: '120px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)' }}>€{fatture.reduce((s, f) => s + f.totale_imponibile, 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)' }}>€{fatture.reduce((s, f) => s + (f.tipo_documento === 'TD04' ? -f.totale_imponibile : f.totale_imponibile), 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Totale</div>
         </div>
       </div>
