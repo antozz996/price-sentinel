@@ -100,3 +100,23 @@ async def update_location(
     await db.flush()
     await db.refresh(location)
     return location
+
+
+@router.delete(
+    "/{location_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Elimina location",
+)
+async def delete_location(
+    location_id: int,
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Location).where(Location.id == location_id))
+    location = result.scalar_one_or_none()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location non trovata")
+    
+    # Check if there are dependent records or just delete
+    await db.delete(location)
+    await db.commit()
