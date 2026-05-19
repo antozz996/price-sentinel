@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -8,6 +8,8 @@ import FattureList from './components/FattureList'
 import SettingsPage from './components/SettingsPage'
 import CrossLocationMatrix from './components/CrossLocationMatrix'
 import OrderOptimizer from './components/OrderOptimizer'
+import SkuManager from './components/SkuManager'
+import SentinelCopilot from './components/SentinelCopilot'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -225,6 +227,7 @@ export default function App() {
       case 'listini': return <PriceListManager />;
       case 'crosslocation': return <CrossLocationMatrix />;
       case 'ordini': return <OrderOptimizer />;
+      case 'skumanager': return <SkuManager />;
       case 'settings': return <SettingsPage />;
       default: return <Dashboard />;
     }
@@ -239,6 +242,7 @@ export default function App() {
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
       case 'crosslocation': return { title: 'Analisi Comparativa Sedi', sub: 'Matrice comparativa prezzi d\'acquisto e Vendor Passport' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
+      case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
       default: return { title: 'Price Sentinel', sub: 'Audit System' };
     }
@@ -314,6 +318,14 @@ export default function App() {
           >
             <ShoppingCart size={18} /> Ottimizzatore Ordini
           </button>
+
+          <button 
+            className={`btn ${activeTab === 'skumanager' ? 'btn-primary' : ''}`}
+            onClick={() => setActiveTab('skumanager')}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'skumanager' ? '' : 'transparent', border: 'none' }}
+          >
+            <Tag size={18} /> Gestione SKU
+          </button>
         </nav>
         
         <div style={{ marginTop: 'auto' }}>
@@ -355,6 +367,9 @@ export default function App() {
           {renderContent()}
         </div>
       </main>
+
+      {/* Global AI Copilot */}
+      <SentinelCopilot />
     </div>
   )
 }
