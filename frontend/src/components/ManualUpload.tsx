@@ -33,6 +33,7 @@ export default function ManualUpload() {
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const [summary, setSummary] = useState<BatchSummary | null>(null);
   const [history, setHistory] = useState<BatchHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +138,63 @@ export default function ManualUpload() {
       setError("Si è verificato un errore durante l'elaborazione dei file.");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleReprocessParked = async () => {
+    setReprocessing(true);
+    setError(null);
+    setSummary(null);
+    setRegSuccessMessage(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/ingestion/reprocess-parked`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'bypass-tunnel-reminder': 'true'
+        }
+      });
+
+      if (!res.ok) throw new Error("Errore durante la rielaborazione");
+
+      const result = await res.json();
+      setSummary(result.riepilogo);
+      loadHistory();
+
+      // Trigger modal if unregistered entities are returned
+      const newForn = result.non_whitelistati_fornitori || [];
+      const newLoc = result.non_registrate_location || [];
+
+      if (newForn.length > 0 || newLoc.length > 0) {
+        setUnregisteredFornitori(newForn);
+        setUnregisteredLocations(newLoc);
+        
+        // Initialize names mapping
+        const initialFornNames: Record<string, string> = {};
+        newForn.forEach((f: UnregisteredSupplier) => {
+          initialFornNames[f.partita_iva] = f.nome_azienda;
+        });
+        setEditSupplierNames(initialFornNames);
+
+        const initialLocNames: Record<string, string> = {};
+        const initialLocTypes: Record<string, string> = {};
+        newLoc.forEach((l: UnregisteredLocation) => {
+          initialLocNames[l.partita_iva] = l.nome_struttura;
+          initialLocTypes[l.partita_iva] = 'balneare';
+        });
+        setEditLocationNames(initialLocNames);
+        setLocationTypes(initialLocTypes);
+
+        setShowModal(true);
+      } else {
+        alert("Ottimo! Non è stata rilevata alcuna fattura sospesa o con soggetti da censire!");
+      }
+    } catch (err) {
+      setError("Si è verificato un errore durante la scansione delle fatture sospese.");
+    } finally {
+      setReprocessing(false);
     }
   };
 
@@ -299,7 +357,7 @@ export default function ManualUpload() {
 
           <button 
             className="btn btn-primary" 
-            disabled={uploading || files.length === 0}
+            disabled={uploading || reprocessing || files.length === 0}
             onClick={handleUpload}
             style={{ padding: '16px', fontSize: '1rem', display: 'flex', justifyContent: 'center', gap: '12px' }}
           >
@@ -310,8 +368,33 @@ export default function ManualUpload() {
         </div>
       </div>
 
-      {/* Colonna Destra: Storico */}
+      {/* Colonna Destra: Storico & Scansione manuale */}
       <div className="glass-panel" style={{ padding: '24px' }}>
+        
+        {/* Scansione manuale delle sospese */}
+        <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+          <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <ShieldAlert size={20} color="#f59e0b" /> Fatture in Sospeso
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
+            Hai caricato file in passato prima di censire i fornitori? Rielaborali subito per sbloccarli.
+          </p>
+          <button 
+            className="btn" 
+            disabled={uploading || reprocessing}
+            onClick={handleReprocessParked}
+            style={{ 
+              width: '100%', gap: '8px', 
+              background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)',
+              color: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center',
+              fontWeight: 600, fontSize: '0.85rem', padding: '10px 0', cursor: 'pointer', transition: 'all 0.2s'
+            }}
+          >
+            {reprocessing ? <Loader2 className="spinner" size={14} /> : <ShieldAlert size={14} />}
+            {reprocessing ? 'Analisi in corso...' : 'Scansiona Fatture Sospese'}
+          </button>
+        </div>
+
         <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <History size={20} /> Storico Upload
         </h3>
