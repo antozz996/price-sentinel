@@ -18,6 +18,7 @@ from app.api.v1 import (
     utenti,
     webhook,
     ingestion,
+    ordini,
 )
 
 api_router = APIRouter(redirect_slashes=False)
@@ -33,3 +34,4 @@ api_router.include_router(alias.router, prefix="/alias", tags=["Alias Prodotti"]
 api_router.include_router(webhook.router, prefix="/webhook", tags=["Webhook Ingestion"])
 api_router.include_router(ingestion.router, prefix="/ingestion", tags=["Ingestion Manuale"])
 api_router.include_router(intelligence.router, prefix="/intelligence", tags=["Intelligence & Admin"])
+api_router.include_router(ordini.router, prefix="/ordini", tags=["Ottimizzazione Ordini"])
