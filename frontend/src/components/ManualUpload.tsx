@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileUp, FileArchive, CheckCircle2, AlertCircle, Loader2, History, Info } from 'lucide-react';
+import { FileUp, FileArchive, CheckCircle2, AlertCircle, Loader2, History, Info, X, ShieldAlert, Building2, MapPin } from 'lucide-react';
 import { API_BASE, fetchWithAuth } from '../api';
 
 interface BatchSummary {
@@ -19,6 +19,16 @@ interface BatchHistoryItem {
   note: string | null;
 }
 
+interface UnregisteredSupplier {
+  partita_iva: string;
+  nome_azienda: string;
+}
+
+interface UnregisteredLocation {
+  partita_iva: string;
+  nome_struttura: string;
+}
+
 export default function ManualUpload() {
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState('');
@@ -26,6 +36,19 @@ export default function ManualUpload() {
   const [summary, setSummary] = useState<BatchSummary | null>(null);
   const [history, setHistory] = useState<BatchHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Unregistered entities modal state
+  const [showModal, setShowModal] = useState(false);
+  const [unregisteredFornitori, setUnregisteredFornitori] = useState<UnregisteredSupplier[]>([]);
+  const [unregisteredLocations, setUnregisteredLocations] = useState<UnregisteredLocation[]>([]);
+  
+  // Custom edits in modal
+  const [editSupplierNames, setEditSupplierNames] = useState<Record<string, string>>({});
+  const [editLocationNames, setEditLocationNames] = useState<Record<string, string>>({});
+  const [locationTypes, setLocationTypes] = useState<Record<string, string>>({});
+
+  const [regSuccessMessage, setRegSuccessMessage] = useState<string | null>(null);
+  const [registeringKey, setRegisteringKey] = useState<string | null>(null);
 
   useEffect(() => {
     loadHistory();
@@ -59,6 +82,7 @@ export default function ManualUpload() {
     setUploading(true);
     setError(null);
     setSummary(null);
+    setRegSuccessMessage(null);
 
     const formData = new FormData();
     files.forEach(f => formData.append('files', f));
@@ -82,6 +106,33 @@ export default function ManualUpload() {
       setFiles([]);
       setNote('');
       loadHistory();
+
+      // Trigger modal if unregistered entities are returned
+      const newForn = result.non_whitelistati_fornitori || [];
+      const newLoc = result.non_registrate_location || [];
+
+      if (newForn.length > 0 || newLoc.length > 0) {
+        setUnregisteredFornitori(newForn);
+        setUnregisteredLocations(newLoc);
+        
+        // Initialize names mapping
+        const initialFornNames: Record<string, string> = {};
+        newForn.forEach((f: UnregisteredSupplier) => {
+          initialFornNames[f.partita_iva] = f.nome_azienda;
+        });
+        setEditSupplierNames(initialFornNames);
+
+        const initialLocNames: Record<string, string> = {};
+        const initialLocTypes: Record<string, string> = {};
+        newLoc.forEach((l: UnregisteredLocation) => {
+          initialLocNames[l.partita_iva] = l.nome_struttura;
+          initialLocTypes[l.partita_iva] = 'balneare';
+        });
+        setEditLocationNames(initialLocNames);
+        setLocationTypes(initialLocTypes);
+
+        setShowModal(true);
+      }
     } catch (err) {
       setError("Si è verificato un errore durante l'elaborazione dei file.");
     } finally {
@@ -89,8 +140,79 @@ export default function ManualUpload() {
     }
   };
 
+  const handleRegisterSupplier = async (piva: string) => {
+    const nome = editSupplierNames[piva] || 'Fornitore Sconosciuto';
+    setRegisteringKey(piva);
+    setRegSuccessMessage(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/fornitori/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          nome_azienda: nome,
+          partita_iva: piva,
+          attivo_whitelist: true
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Impossibile registrare il fornitore.');
+      }
+
+      setRegSuccessMessage(`Fornitore "${nome}" registrato e abilitato in Whitelist!`);
+      // Remove from list
+      setUnregisteredFornitori(prev => prev.filter(f => f.partita_iva !== piva));
+    } catch (err: any) {
+      alert(err.message || 'Errore durante la registrazione.');
+    } finally {
+      setRegisteringKey(null);
+    }
+  };
+
+  const handleRegisterLocation = async (piva: string) => {
+    const nome = editLocationNames[piva] || `Sede P.IVA ${piva}`;
+    const tipo = locationTypes[piva] || 'balneare';
+    setRegisteringKey(piva);
+    setRegSuccessMessage(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/location/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          nome_struttura: nome,
+          piva_riferimento: piva,
+          tipologia: tipo
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Impossibile registrare la sede.');
+      }
+
+      setRegSuccessMessage(`Sede "${nome}" registrata correttamente!`);
+      // Remove from list
+      setUnregisteredLocations(prev => prev.filter(l => l.partita_iva !== piva));
+    } catch (err: any) {
+      alert(err.message || 'Errore durante la registrazione.');
+    } finally {
+      setRegisteringKey(null);
+    }
+  };
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '24px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '24px', position: 'relative' }}>
       
       {/* Colonna Sinistra: Upload */}
       <div className="glass-panel" style={{ padding: '32px' }}>
@@ -221,6 +343,158 @@ export default function ManualUpload() {
           </p>
         </div>
       </div>
+
+      {/* POPUP WIZARD MODAL FOR UNREGISTERED PIECE OF INFOS */}
+      {showModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+          background: 'rgba(5, 5, 10, 0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          padding: '20px', boxSizing: 'border-box'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%', maxWidth: '650px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.08)', position: 'relative'
+          }}>
+            
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <ShieldAlert size={26} color="#f59e0b" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Rilevate Nuove Intestazioni!</h3>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Alcune fatture caricate appartengono a soggetti non registrati in anagrafica.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowModal(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Success notification inside modal */}
+            {regSuccessMessage && (
+              <div style={{ padding: '10px 14px', borderRadius: '6px', background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <CheckCircle2 size={14} />
+                <span>{regSuccessMessage}</span>
+              </div>
+            )}
+
+            {/* Content Lists */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px' }}>
+              
+              {unregisteredFornitori.length === 0 && unregisteredLocations.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px', color: '#10b981', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle2 size={36} />
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Tutti i soggetti sono stati registrati con successo!</span>
+                </div>
+              )}
+
+              {/* Unregistered Suppliers list */}
+              {unregisteredFornitori.map(forn => (
+                <div key={forn.partita_iva} style={{
+                  padding: '16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+                  display: 'flex', flexDirection: 'column', gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary-color)' }}>
+                    <Building2 size={16} /> Nuova P.IVA Fornitore (Mittente)
+                  </div>
+                  
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Ragione Sociale rilevata (puoi modificarla):</span>
+                      <input
+                        type="text"
+                        value={editSupplierNames[forn.partita_iva] || ''}
+                        onChange={e => setEditSupplierNames({ ...editSupplierNames, [forn.partita_iva]: e.target.value })}
+                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div style={{ width: '140px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Partita IVA:</span>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, padding: '8px 0' }}>{forn.partita_iva}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => handleRegisterSupplier(forn.partita_iva)}
+                      disabled={registeringKey === forn.partita_iva}
+                      className="btn btn-primary"
+                      style={{ padding: '6px 16px', fontSize: '0.8rem', height: '32px' }}
+                    >
+                      {registeringKey === forn.partita_iva ? 'Registrazione...' : 'Abilita e Whitelista'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Unregistered Locations list */}
+              {unregisteredLocations.map(loc => (
+                <div key={loc.partita_iva} style={{
+                  padding: '16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+                  display: 'flex', flexDirection: 'column', gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-blue)' }}>
+                    <MapPin size={16} /> Nuova P.IVA Gruppo (Sede Ricevente)
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Assegna Nome Sede:</span>
+                      <input
+                        type="text"
+                        value={editLocationNames[loc.partita_iva] || ''}
+                        onChange={e => setEditLocationNames({ ...editLocationNames, [loc.partita_iva]: e.target.value })}
+                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Tipologia Struttura:</span>
+                      <select
+                        value={locationTypes[loc.partita_iva] || 'balneare'}
+                        onChange={e => setLocationTypes({ ...locationTypes, [loc.partita_iva]: e.target.value })}
+                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem', width: '100%' }}
+                      >
+                        <option value="balneare" style={{ background: '#13131c' }}>Balneare / Eventi</option>
+                        <option value="ristorante" style={{ background: '#13131c' }}>Ristorante / Food</option>
+                        <option value="discoteca" style={{ background: '#13131c' }}>Discoteca / Club</option>
+                        <option value="evento" style={{ background: '#13131c' }}>Evento / Altro</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Partita IVA Ricevente: <strong>{loc.partita_iva}</strong></span>
+                    <button
+                      onClick={() => handleRegisterLocation(loc.partita_iva)}
+                      disabled={registeringKey === loc.partita_iva}
+                      className="btn btn-primary"
+                      style={{ padding: '6px 16px', fontSize: '0.8rem', height: '32px', background: 'var(--accent-blue)', borderColor: 'var(--accent-blue)' }}
+                    >
+                      {registeringKey === loc.partita_iva ? 'Registrazione...' : 'Crea e Associa Sede'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+            </div>
+
+            {/* Footer Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px', marginTop: '4px' }}>
+              <button
+                onClick={() => setShowModal(false)}
+                className="btn"
+                style={{ padding: '8px 20px', fontSize: '0.85rem', background: 'transparent', border: '1px solid var(--border-glass)' }}
+              >
+                Chiudi Procedura Wizard
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -14,6 +14,8 @@ class BatchResponse(BaseModel):
     batch_id: str
     stato: str
     riepilogo: BatchSummary
+    non_whitelistati_fornitori: list[dict] = []
+    non_registrate_location: list[dict] = []
 
 
 class BatchFileError(BaseModel):

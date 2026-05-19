@@ -97,6 +97,9 @@ async def upload_fatture(
     batch.file_totali = len(xml_files_to_process) + batch.errori_formato
     await db.flush()
 
+    non_whitelistati_fornitori = []
+    non_registrate_location = []
+
     # 3. Processa XML
     for filename, xml_payload in xml_files_to_process:
         try:
@@ -142,6 +145,19 @@ async def upload_fatture(
                 # Pipeline Matching
                 report = await process_xml_raw(db, xml_raw.id, parsed)
                 
+                status_report = report.get("status")
+                if status_report == "fornitore_non_whitelistato":
+                    piva = parsed.piva_cedente
+                    nome = parsed.denominazione_cedente or "Fornitore Sconosciuto"
+                    if not any(f["partita_iva"] == piva for f in non_whitelistati_fornitori):
+                        non_whitelistati_fornitori.append({"partita_iva": piva, "nome_azienda": nome})
+                
+                elif status_report == "location_sconosciuta":
+                    piva = parsed.piva_cessionario
+                    nome = f"Sede Gruppo P.IVA {piva}"
+                    if not any(l["partita_iva"] == piva for l in non_registrate_location):
+                        non_registrate_location.append({"partita_iva": piva, "nome_struttura": nome})
+
                 batch.file_elaborati += 1
                 batch.anomalie_generate += report.get("anomalie_generate", 0)
             except IntegrityError:
@@ -170,7 +186,9 @@ async def upload_fatture(
             gia_presenti=batch.gia_presenti,
             errori_formato=batch.errori_formato,
             anomalie_generate=batch.anomalie_generate
-        )
+        ),
+        non_whitelistati_fornitori=non_whitelistati_fornitori,
+        non_registrate_location=non_registrate_location
     )
 
 
