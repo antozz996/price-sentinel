@@ -41,7 +41,7 @@ export default function ProductConsumptionReport() {
   const [fornitori, setFornitori] = useState<FornitoreItem[]>([]);
   
   // Filters
-  const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const [selectedLocations, setSelectedLocations] = useState<number[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<string>('');
   const [dataDa, setDataDa] = useState<string>('');
   const [dataA, setDataA] = useState<string>('');
@@ -51,10 +51,10 @@ export default function ProductConsumptionReport() {
   const [error, setError] = useState<string | null>(null);
   
   // Detail Drawer States
-  const [selectedSku, setSelectedSku] = useState<string | null>(null);
-  const [selectedDesc, setSelectedDesc] = useState<string | null>(null);
+  const [selectedSkus, setSelectedSkus] = useState<string[]>([]);
   const [skuDetail, setSkuDetail] = useState<SKUDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [activeRowY, setActiveRowY] = useState<number | null>(null);
   
   // Download State
   const [exporting, setExporting] = useState(false);
@@ -81,7 +81,9 @@ export default function ProductConsumptionReport() {
     setError(null);
     try {
       const params = new URLSearchParams();
-      if (selectedLocation) params.append('location_id', selectedLocation);
+      if (selectedLocations.length > 0) {
+        params.append('location_ids', selectedLocations.join(','));
+      }
       if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
       if (dataDa) params.append('data_da', dataDa);
       if (dataA) params.append('data_a', dataA);
@@ -97,15 +99,38 @@ export default function ProductConsumptionReport() {
     }
   };
 
-  // Load SKU detailed splits
-  const loadSkuDetail = async (sku: string) => {
+  // Load and aggregate SKU detailed splits
+  const loadSkusDetail = async (skus: string[]) => {
+    if (skus.length === 0) {
+      setSkuDetail(null);
+      return;
+    }
     setLoadingDetail(true);
-    setSkuDetail(null);
     try {
-      const res = await fetch(`${API_BASE}/intelligence/product-consumption/${sku}`, { headers });
-      if (!res.ok) throw new Error("Impossibile caricare il dettaglio dello SKU.");
-      const data = await res.json();
-      setSkuDetail(data);
+      const params = new URLSearchParams();
+      if (selectedLocations.length > 0) {
+        params.append('location_ids', selectedLocations.join(','));
+      }
+      if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
+      if (dataDa) params.append('data_da', dataDa);
+      if (dataA) params.append('data_a', dataA);
+
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      const skuParam = encodeURIComponent(skus.join(','));
+
+      const res = await fetch(`${API_BASE}/intelligence/product-consumption/${skuParam}${queryString}`, { headers });
+      if (!res.ok) throw new Error("Errore caricamento dettagli dei consumi consolidati.");
+      const data: SKUDetail = await res.json();
+
+      // Ordina gli output per spesa decrescente e andamento mensile decrescente
+      const byLocation = [...data.consumo_per_location].sort((a, b) => b.spesa_totale - a.spesa_totale);
+      const byMonth = [...data.consumo_per_mese].sort((a, b) => b.mese.localeCompare(a.mese));
+
+      setSkuDetail({
+        sku_interno: skus.length === 1 ? skus[0] : `${skus.length} Articoli`,
+        consumo_per_location: byLocation,
+        consumo_per_mese: byMonth
+      });
     } catch (err) {
       console.error(err);
     } finally {
@@ -118,14 +143,24 @@ export default function ProductConsumptionReport() {
   }, []);
 
   useEffect(() => {
+    setActiveRowY(null);
     loadConsumption();
-  }, [selectedLocation, selectedSupplier, dataDa, dataA]);
+  }, [selectedLocations, selectedSupplier, dataDa, dataA]);
+
+  useEffect(() => {
+    if (selectedSkus.length === 0) {
+      setActiveRowY(null);
+    }
+    loadSkusDetail(selectedSkus);
+  }, [selectedSkus, selectedLocations, selectedSupplier, dataDa, dataA]);
 
   const handleExcelExport = async () => {
     setExporting(true);
     try {
       const params = new URLSearchParams();
-      if (selectedLocation) params.append('location_id', selectedLocation);
+      if (selectedLocations.length > 0) {
+        params.append('location_ids', selectedLocations.join(','));
+      }
       if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
       if (dataDa) params.append('data_da', dataDa);
       if (dataA) params.append('data_a', dataA);
@@ -153,6 +188,12 @@ export default function ProductConsumptionReport() {
     item.descrizione.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const detailTitle = selectedSkus.length === 0
+    ? ''
+    : selectedSkus.length === 1
+      ? (consumption.find(item => item.sku_interno === selectedSkus[0])?.descrizione || selectedSkus[0])
+      : `Consumo Consolidato (${selectedSkus.length} Prodotti)`;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
@@ -175,30 +216,71 @@ export default function ProductConsumptionReport() {
         </div>
 
         {/* Filters Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-          {/* Location filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', alignItems: 'end' }}>
+          {/* Location filter (Multi-select Glass pills) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <MapPin size={12} /> Punto Vendita (Sede)
+              <MapPin size={12} /> Punto Vendita (Sedi Multiple)
             </label>
-            <select
-              value={selectedLocation}
-              onChange={e => setSelectedLocation(e.target.value)}
-              style={{
-                padding: '10px',
-                borderRadius: '8px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid var(--border-glass)',
-                color: 'white',
-                outline: 'none',
-                fontSize: '0.85rem'
-              }}
-            >
-              <option value="" style={{ background: '#13131c' }}>Tutte le sedi</option>
-              {locations.map(l => (
-                <option key={l.id} value={l.id} style={{ background: '#13131c' }}>{l.nome_struttura}</option>
-              ))}
-            </select>
+            <div style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: '6px', 
+              padding: '6px 10px', 
+              borderRadius: '8px', 
+              border: '1px solid var(--border-glass)', 
+              background: 'rgba(255,255,255,0.01)', 
+              minHeight: '38px', 
+              alignItems: 'center',
+              boxSizing: 'border-box'
+            }}>
+              <button
+                onClick={() => setSelectedLocations([])}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '16px',
+                  fontSize: '0.75rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  border: '1px solid ' + (selectedLocations.length === 0 ? 'var(--accent-blue)' : 'transparent'),
+                  background: selectedLocations.length === 0 ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
+                  color: selectedLocations.length === 0 ? 'white' : 'var(--text-secondary)',
+                  transition: 'all 0.2s ease-in-out',
+                  outline: 'none'
+                }}
+              >
+                Tutte
+              </button>
+              {locations.map(l => {
+                const isSelected = selectedLocations.includes(l.id);
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedLocations(selectedLocations.filter(id => id !== l.id));
+                      } else {
+                        setSelectedLocations([...selectedLocations, l.id]);
+                      }
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      fontSize: '0.75rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      border: '1px solid ' + (isSelected ? 'var(--accent-blue)' : 'transparent'),
+                      background: isSelected ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
+                      color: isSelected ? 'white' : 'var(--text-secondary)',
+                      transition: 'all 0.2s ease-in-out',
+                      outline: 'none'
+                    }}
+                  >
+                    {l.nome_struttura}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Supplier filter */}
@@ -216,7 +298,9 @@ export default function ProductConsumptionReport() {
                 border: '1px solid var(--border-glass)',
                 color: 'white',
                 outline: 'none',
-                fontSize: '0.85rem'
+                fontSize: '0.85rem',
+                height: '38px',
+                boxSizing: 'border-box'
               }}
             >
               <option value="" style={{ background: '#13131c' }}>Tutti i fornitori</option>
@@ -242,7 +326,9 @@ export default function ProductConsumptionReport() {
                 border: '1px solid var(--border-glass)',
                 color: 'white',
                 outline: 'none',
-                fontSize: '0.85rem'
+                fontSize: '0.85rem',
+                height: '38px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -263,7 +349,9 @@ export default function ProductConsumptionReport() {
                 border: '1px solid var(--border-glass)',
                 color: 'white',
                 outline: 'none',
-                fontSize: '0.85rem'
+                fontSize: '0.85rem',
+                height: '38px',
+                boxSizing: 'border-box'
               }}
             />
           </div>
@@ -271,10 +359,30 @@ export default function ProductConsumptionReport() {
       </div>
 
       {/* Main Content Pane */}
-      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap-reverse', alignItems: 'flex-start' }}>
+      <div 
+        id="consumption-report-container" 
+        style={{ 
+          display: 'flex', 
+          position: 'relative', 
+          alignItems: 'flex-start',
+          width: '100%'
+        }}
+      >
         
         {/* Table list of products */}
-        <div className="glass-panel" style={{ flex: '2', minWidth: '450px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div 
+          className="glass-panel" 
+          style={{ 
+            flex: '1', 
+            minWidth: '450px', 
+            padding: '24px', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '20px',
+            marginRight: selectedSkus.length > 0 ? '400px' : '0px',
+            transition: 'margin-right 0.3s ease-in-out'
+          }}
+        >
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -317,6 +425,21 @@ export default function ProductConsumptionReport() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
+                    <th style={{ padding: '12px', width: '40px', textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={filteredItems.length > 0 && selectedSkus.length === filteredItems.length}
+                        onChange={(e) => {
+                          setActiveRowY(null);
+                          if (e.target.checked) {
+                            setSelectedSkus(filteredItems.map(item => item.sku_interno));
+                          } else {
+                            setSelectedSkus([]);
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </th>
                     <th style={{ padding: '12px' }}>Prodotto</th>
                     <th style={{ padding: '12px', textAlign: 'right' }}>Quantità</th>
                     <th style={{ padding: '12px', textAlign: 'center' }}>U.M.</th>
@@ -327,35 +450,77 @@ export default function ProductConsumptionReport() {
                 <tbody>
                   {filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                         Nessun dato di consumo trovato con i filtri correnti.
                       </td>
                     </tr>
                   ) : (
-                    filteredItems.map(item => (
-                      <tr
-                        key={item.sku_interno}
-                        onClick={() => {
-                          setSelectedSku(item.sku_interno);
-                          setSelectedDesc(item.descrizione);
-                          loadSkuDetail(item.sku_interno);
-                        }}
-                        style={{
-                          borderBottom: '1px solid rgba(255,255,255,0.03)',
-                          fontSize: '0.85rem',
-                          cursor: 'pointer',
-                          background: selectedSku === item.sku_interno ? 'rgba(59,130,246,0.08)' : 'transparent',
-                          transition: 'var(--transition-smooth)'
-                        }}
-                        className="table-row-hover"
-                      >
-                        <td style={{ padding: '14px 12px', color: 'var(--text-primary)', fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.descrizione}</td>
-                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600 }}>{item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
-                        <td style={{ padding: '14px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{item.unita_misura}</td>
-                        <td style={{ padding: '14px 12px', textAlign: 'right', color: '#10b981' }}>€ {item.prezzo_medio.toFixed(2)}</td>
-                        <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600, color: 'white' }}>€ {item.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))
+                    filteredItems.map(item => {
+                      const isSelected = selectedSkus.includes(item.sku_interno);
+                      return (
+                        <tr
+                          key={item.sku_interno}
+                          onClick={(e) => {
+                            const sku = item.sku_interno;
+                            
+                            // Calculate position relative to container
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const container = document.getElementById('consumption-report-container');
+                            if (container) {
+                              const containerRect = container.getBoundingClientRect();
+                              setActiveRowY(rect.top - containerRect.top);
+                            }
+
+                            if (isSelected) {
+                              setSelectedSkus(selectedSkus.filter(s => s !== sku));
+                            } else {
+                              setSelectedSkus([...selectedSkus, sku]);
+                            }
+                          }}
+                          style={{
+                            borderBottom: '1px solid rgba(255,255,255,0.03)',
+                            fontSize: '0.85rem',
+                            cursor: 'pointer',
+                            background: isSelected ? 'rgba(59,130,246,0.08)' : 'transparent',
+                            transition: 'var(--transition-smooth)'
+                          }}
+                          className="table-row-hover"
+                        >
+                          <td style={{ padding: '14px 12px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const sku = item.sku_interno;
+                                
+                                // Calculate position from parent row
+                                const row = e.target.closest('tr');
+                                if (row) {
+                                  const rect = row.getBoundingClientRect();
+                                  const container = document.getElementById('consumption-report-container');
+                                  if (container) {
+                                    const containerRect = container.getBoundingClientRect();
+                                    setActiveRowY(rect.top - containerRect.top);
+                                  }
+                                }
+
+                                if (e.target.checked) {
+                                  setSelectedSkus([...selectedSkus, sku]);
+                                } else {
+                                  setSelectedSkus(selectedSkus.filter(s => s !== sku));
+                                }
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </td>
+                          <td style={{ padding: '14px 12px', color: 'var(--text-primary)', fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.descrizione}</td>
+                          <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600 }}>{item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                          <td style={{ padding: '14px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{item.unita_misura}</td>
+                          <td style={{ padding: '14px 12px', textAlign: 'right', color: '#10b981' }}>€ {item.prezzo_medio.toFixed(2)}</td>
+                          <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600, color: 'white' }}>€ {item.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -364,89 +529,108 @@ export default function ProductConsumptionReport() {
         </div>
 
         {/* Detailed Side Panel / Split view */}
-        <div className="glass-panel" style={{ flex: '1', minWidth: '320px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <BarChart2 size={18} color="var(--status-red)" />
-            <h4 style={{ margin: 0, fontWeight: 600 }}>Dettaglio Split Articolo</h4>
+        {selectedSkus.length > 0 && (
+          <div 
+            className="glass-panel" 
+            style={{ 
+              position: 'absolute',
+              right: 0,
+              top: activeRowY !== null ? `${activeRowY}px` : '20px',
+              width: '380px',
+              padding: '24px', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '20px',
+              transition: 'top 0.3s ease-in-out',
+              zIndex: 100
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <BarChart2 size={18} color="var(--status-red)" />
+              <h4 style={{ margin: 0, fontWeight: 600 }}>Dettaglio Consumo</h4>
+            </div>
+
+            {loadingDetail ? (
+              <div style={{ color: 'var(--text-secondary)', padding: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                <RefreshCw className="animate-spin" size={18} />
+                <span>Calcolo aggregato dettagli...</span>
+              </div>
+            ) : skuDetail ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', color: 'white', lineHeight: '1.4' }}>{detailTitle}</h3>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Analisi dei volumi e spesa consolidata</p>
+                </div>
+
+                {/* Location split */}
+                <div>
+                  <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Consumi per Sede (Punto Vendita)</h5>
+                  {skuDetail.consumo_per_location.length === 0 ? (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun dato per punto vendita</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {skuDetail.consumo_per_location.map((loc, i) => (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{loc.location_nome}</span>
+                            <span style={{ fontWeight: 600 }}>{loc.quantita_totale.toLocaleString()} unità</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            <span>Spesa Complessiva:</span>
+                            <span style={{ color: '#10b981', fontWeight: 500 }}>€ {loc.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          {/* Progress bar effect */}
+                          <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
+                            <div style={{
+                              height: '100%',
+                              background: 'linear-gradient(90deg, var(--accent-blue) 0%, #60a5fa 100%)',
+                              width: `${Math.min(100, (loc.spesa_totale / (skuDetail.consumo_per_location[0]?.spesa_totale || 1)) * 100)}%`
+                            }}></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Monthly series split */}
+                <div>
+                  <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Andamento Storico Mensile</h5>
+                  {skuDetail.consumo_per_mese.length === 0 ? (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun dato storico</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {skuDetail.consumo_per_mese.map((mon, i) => (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                            <span style={{ fontWeight: 600, color: 'white' }}>{mon.mese}</span>
+                            <span>{mon.quantita_totale.toLocaleString()} unità</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            <span>Valore Speso:</span>
+                            <span style={{ color: '#10b981', fontWeight: 500 }}>€ {mon.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                          <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
+                            <div style={{
+                              height: '100%',
+                              background: 'linear-gradient(90deg, var(--status-red) 0%, #f472b6 100%)',
+                              width: `${Math.min(100, (mon.spesa_totale / (Math.max(...skuDetail.consumo_per_mese.map(m => m.spesa_totale)) || 1)) * 100)}%`
+                            }}></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            ) : (
+              <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
+                Nessun dettaglio disponibile.
+              </div>
+            )}
           </div>
-
-          {!selectedSku ? (
-            <div style={{ padding: '40px 10px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <BarChart2 style={{ margin: '0 auto', opacity: 0.3 }} size={32} />
-              <span>Seleziona un prodotto dalla lista a sinistra per visualizzare lo spaccato dei consumi mensili e per sede.</span>
-            </div>
-          ) : loadingDetail ? (
-            <div style={{ color: 'var(--text-secondary)', padding: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-              <RefreshCw className="animate-spin" size={18} />
-              <span>Caricamento dettagli...</span>
-            </div>
-          ) : skuDetail ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', color: 'white', lineHeight: '1.4' }}>{selectedDesc}</h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Distribuzione analitica dei volumi</p>
-              </div>
-
-              {/* Location split */}
-              <div>
-                <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Consumi per Sede (Punto Vendita)</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {skuDetail.consumo_per_location.map((loc, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                        <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{loc.location_nome}</span>
-                        <span style={{ fontWeight: 600 }}>{loc.quantita_totale.toLocaleString()} unità</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        <span>Spesa Complessiva:</span>
-                        <span style={{ color: '#10b981', fontWeight: 500 }}>€ {loc.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                      {/* Progress bar effect */}
-                      <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
-                        <div style={{
-                          height: '100%',
-                          background: 'linear-gradient(90deg, var(--accent-blue) 0%, #60a5fa 100%)',
-                          width: `${Math.min(100, (loc.spesa_totale / (skuDetail.consumo_per_location[0]?.spesa_totale || 1)) * 100)}%`
-                        }}></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Monthly series split */}
-              <div>
-                <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Andamento Storico Mensile</h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {skuDetail.consumo_per_mese.map((mon, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                        <span style={{ fontWeight: 600, color: 'white' }}>{mon.mese}</span>
-                        <span>{mon.quantita_totale.toLocaleString()} unità</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        <span>Valore Speso:</span>
-                        <span style={{ color: '#10b981', fontWeight: 500 }}>€ {mon.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-                      <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
-                        <div style={{
-                          height: '100%',
-                          background: 'linear-gradient(90deg, var(--status-red) 0%, #f472b6 100%)',
-                          width: `${Math.min(100, (mon.spesa_totale / (Math.max(...skuDetail.consumo_per_mese.map(m => m.spesa_totale)) || 1)) * 100)}%`
-                        }}></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-          ) : (
-            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
-              Nessun dettaglio disponibile.
-            </div>
-          )}
-        </div>
+        )}
 
       </div>
 

@@ -20,7 +20,7 @@ async def run_verification():
         # 1. Test standard GET /product-consumption aggregation endpoint
         print("\n📊 1. Testing GET /api/v1/intelligence/product-consumption...")
         consumption_list = await get_product_consumption(
-            location_id=None,
+            location_ids=None,
             fornitore_id=None,
             data_da=None,
             data_a=None,
@@ -41,6 +41,10 @@ async def run_verification():
             print(f"\n🔍 2. Testing GET /api/v1/intelligence/product-consumption/{test_sku}...")
             detail = await get_product_consumption_detail(
                 sku_interno=test_sku,
+                location_ids=None,
+                fornitore_id=None,
+                data_da=None,
+                data_a=None,
                 _admin=True,
                 db=session
             )
@@ -59,7 +63,7 @@ async def run_verification():
         # 3. Test GET /export-product-consumption-excel Excel export endpoint
         print("\nexcel 3. Testing GET /api/v1/intelligence/export-product-consumption-excel...")
         excel_response = await export_product_consumption_excel(
-            location_id=None,
+            location_ids=None,
             fornitore_id=None,
             data_da=None,
             data_a=None,

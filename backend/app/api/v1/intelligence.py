@@ -770,7 +770,7 @@ async def export_dispute_excel(
 
 @router.get("/product-consumption", summary="Report Consumo per Prodotto")
 async def get_product_consumption(
-    location_id: int | None = Query(None),
+    location_ids: str | None = Query(None),
     fornitore_id: int | None = Query(None),
     data_da: date | None = Query(None),
     data_a: date | None = Query(None),
@@ -780,7 +780,26 @@ async def get_product_consumption(
     """
     Ritorna il report aggregato di consumo per ciascun SKU.
     """
-    sql = """
+    loc_ids = []
+    if location_ids:
+        try:
+            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
+        except ValueError:
+            pass
+
+    location_filter = ""
+    params = {
+        "fornitore_id": fornitore_id,
+        "data_da": data_da,
+        "data_a": data_a
+    }
+    if loc_ids:
+        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
+        location_filter = f"AND f.location_id IN ({id_placeholders})"
+        for i, val in enumerate(loc_ids):
+            params[f"loc_id_{i}"] = val
+
+    sql = f"""
     SELECT 
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
@@ -794,19 +813,13 @@ async def get_product_consumption(
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
     WHERE rf.sku_interno IS NOT NULL
-      AND (cast(:location_id as integer) IS NULL OR f.location_id = cast(:location_id as integer))
+      {location_filter}
       AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
       AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
       AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
     GROUP BY rf.sku_interno
     ORDER BY spesa_totale DESC
     """
-    params = {
-        "location_id": location_id,
-        "fornitore_id": fornitore_id,
-        "data_da": data_da,
-        "data_a": data_a
-    }
     
     res = await db.execute(text(sql), params)
     
@@ -826,14 +839,59 @@ async def get_product_consumption(
 @router.get("/product-consumption/{sku_interno}", summary="Dettaglio Consumo SKU per Location e Mese")
 async def get_product_consumption_detail(
     sku_interno: str,
+    location_ids: str | None = Query(None),
+    fornitore_id: int | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Ritorna la suddivisione del consumo di un singolo SKU per Location e per Mese.
-    """
+    # Normalizza i parametri in caso di chiamata diretta in Python (es. unit tests)
+    if not isinstance(location_ids, str):
+        location_ids = None
+    if not isinstance(fornitore_id, int):
+        fornitore_id = None
+    if not isinstance(data_da, date):
+        data_da = None
+    if not isinstance(data_a, date):
+        data_a = None
+
+    skus = [x.strip() for x in sku_interno.split(",") if x.strip()]
+    if not skus:
+        return {
+            "sku_interno": sku_interno,
+            "consumo_per_location": [],
+            "consumo_per_mese": []
+        }
+
+    loc_ids = []
+    if location_ids:
+        try:
+            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
+        except ValueError:
+            pass
+
+    location_filter = ""
+    params = {
+        "fornitore_id": fornitore_id,
+        "data_da": data_da,
+        "data_a": data_a
+    }
+    
+    # Costruiamo il filtro SKU dinamico con bind variables
+    sku_placeholders = ",".join(f":sku_{i}" for i in range(len(skus)))
+    sku_filter = f"rf.sku_interno IN ({sku_placeholders})"
+    for i, s in enumerate(skus):
+        params[f"sku_{i}"] = s
+
+    if loc_ids:
+        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
+        location_filter = f"AND f.location_id IN ({id_placeholders})"
+        for i, val in enumerate(loc_ids):
+            params[f"loc_id_{i}"] = val
+
     # 1. Split by Location
-    sql_loc = """
+    sql_loc = f"""
     SELECT 
         l.nome_struttura as location_nome,
         SUM(rf.quantita) as quantita_totale,
@@ -841,11 +899,15 @@ async def get_product_consumption_detail(
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
     JOIN location l ON f.location_id = l.id
-    WHERE rf.sku_interno = :sku
+    WHERE {sku_filter}
+      {location_filter}
+      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
+      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
     GROUP BY l.nome_struttura
     ORDER BY spesa_totale DESC
     """
-    res_loc = await db.execute(text(sql_loc), {"sku": sku_interno})
+    res_loc = await db.execute(text(sql_loc), params)
     by_location = []
     for r in res_loc.all():
         by_location.append({
@@ -855,18 +917,22 @@ async def get_product_consumption_detail(
         })
 
     # 2. Split by Month
-    sql_month = """
+    sql_month = f"""
     SELECT 
         to_char(f.data_documento, 'YYYY-MM') as mese,
         SUM(rf.quantita) as quantita_totale,
         SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
-    WHERE rf.sku_interno = :sku
+    WHERE {sku_filter}
+      {location_filter}
+      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
+      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
     GROUP BY to_char(f.data_documento, 'YYYY-MM')
     ORDER BY mese DESC
     """
-    res_month = await db.execute(text(sql_month), {"sku": sku_interno})
+    res_month = await db.execute(text(sql_month), params)
     by_month = []
     for r in res_month.all():
         by_month.append({
@@ -884,7 +950,7 @@ async def get_product_consumption_detail(
 
 @router.get("/export-product-consumption-excel", summary="Esporta Excel Consumo per Prodotto")
 async def export_product_consumption_excel(
-    location_id: int | None = Query(None),
+    location_ids: str | None = Query(None),
     fornitore_id: int | None = Query(None),
     data_da: date | None = Query(None),
     data_a: date | None = Query(None),
@@ -894,7 +960,26 @@ async def export_product_consumption_excel(
     """
     Genera ed esporta un report Excel (.xlsx) dei consumi per prodotto.
     """
-    sql = """
+    loc_ids = []
+    if location_ids:
+        try:
+            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
+        except ValueError:
+            pass
+
+    location_filter = ""
+    params = {
+        "fornitore_id": fornitore_id,
+        "data_da": data_da,
+        "data_a": data_a
+    }
+    if loc_ids:
+        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
+        location_filter = f"AND f.location_id IN ({id_placeholders})"
+        for i, val in enumerate(loc_ids):
+            params[f"loc_id_{i}"] = val
+
+    sql = f"""
     SELECT 
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
@@ -908,19 +993,13 @@ async def export_product_consumption_excel(
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
     WHERE rf.sku_interno IS NOT NULL
-      AND (cast(:location_id as integer) IS NULL OR f.location_id = cast(:location_id as integer))
+      {location_filter}
       AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
       AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
       AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
     GROUP BY rf.sku_interno
     ORDER BY spesa_totale DESC
     """
-    params = {
-        "location_id": location_id,
-        "fornitore_id": fornitore_id,
-        "data_da": data_da,
-        "data_a": data_a
-    }
     
     res = await db.execute(text(sql), params)
     
