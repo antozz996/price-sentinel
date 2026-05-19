@@ -74,7 +74,7 @@ class SentinelAI:
     async def _execute_get_kpi_economici(self, db: AsyncSession) -> str:
         sql = """
         SELECT 
-            (SELECT COALESCE(SUM(importo_recuperato), 0) FROM note_credito) as recuperati,
+            (SELECT COALESCE(SUM(importo_recuperato), 0) FROM note_di_credito) as recuperati,
             (SELECT COALESCE(SUM(delta_totale), 0) FROM anomalie WHERE stato_validazione = 'in_reclamo') as in_contestazione,
             (SELECT COALESCE(SUM(delta_totale), 0) FROM anomalie WHERE stato_validazione IN ('da_verificare', 'contestata')) as a_rischio
         """

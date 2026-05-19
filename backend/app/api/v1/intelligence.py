@@ -125,7 +125,13 @@ async def get_cross_location_matrix(
     )
     
     stmt = (
-        select(RigaFattura.sku_interno, Fattura.location_id, RigaFattura.prezzo_netto_normalizzato)
+        select(
+            RigaFattura.sku_interno, 
+            Fattura.location_id, 
+            RigaFattura.prezzo_netto_normalizzato,
+            RigaFattura.descrizione_fornitore_raw,
+            Fattura.id.label("fattura_id")
+        )
         .join(subquery, RigaFattura.id == subquery.c.max_riga_id)
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
     )
@@ -133,15 +139,29 @@ async def get_cross_location_matrix(
     res = await db.execute(stmt)
     records = res.all()
     
-    
     # Costruiamo la risposta JSON formattata per la griglia UI
     matrix = {}
-    for sku, loc_id, price in records:
-        if sku not in matrix:
-            matrix[sku] = {}
-        matrix[sku][loc_id] = float(price)
+    for sku, loc_id, price, desc, fattura_id in records:
+        display_name = f"{desc or 'Prodotto Senza Nome'} ({sku})"
+        if display_name not in matrix:
+            matrix[display_name] = {}
+        # Arrotonda a 2 decimali per allinearsi perfettamente alla griglia UI ed evitare falsi positivi
+        matrix[display_name][loc_id] = {
+            "prezzo": round(float(price), 2),
+            "fattura_id": int(fattura_id)
+        }
         
-    return matrix
+    # Filtriamo per restituire solo gli SKU con reale delta prezzi tra le sedi (delta > 0)
+    filtered_matrix = {}
+    for display_name, loc_prices in matrix.items():
+        unique_prices = {item["prezzo"] for item in loc_prices.values()}
+        if len(unique_prices) > 1:
+            filtered_matrix[display_name] = loc_prices
+            
+    # Ordiniamo alfabeticamente per nome del prodotto
+    sorted_matrix = {k: filtered_matrix[k] for k in sorted(filtered_matrix.keys())}
+            
+    return sorted_matrix
 
 
 @router.get("/export-vendor-passport/{fornitore_id}", summary="Download Vendor Passport PDF")
@@ -728,15 +748,6 @@ async def export_dispute_excel(
                 
         row_num += 1
         
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            val_str = str(cell.value or '')
-            if cell.column in (5, 6, 8, 9) and type(cell.value) in (int, float):
-                val_str = f"€ {cell.value:.2f}"
-            if len(val_str) > max_len:
-                max_len = len(val_str)
         ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
     stream = BytesIO()
@@ -751,4 +762,260 @@ async def export_dispute_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=headers
     )
+
+
+# ─────────────────────────────────────────────
+# Report Consumi per Prodotto (Product Consumption)
+# ─────────────────────────────────────────────
+
+@router.get("/product-consumption", summary="Report Consumo per Prodotto")
+async def get_product_consumption(
+    location_id: int | None = Query(None),
+    fornitore_id: int | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ritorna il report aggregato di consumo per ciascun SKU.
+    """
+    sql = """
+    SELECT 
+        rf.sku_interno, 
+        MAX(rf.descrizione_fornitore_raw) as descrizione,
+        SUM(rf.quantita) as quantita_totale,
+        MAX(rf.unita_misura_fattura) as unita_misura,
+        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        CASE 
+            WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
+            ELSE 0 
+        END as prezzo_medio
+    FROM righe_fattura rf
+    JOIN fatture f ON rf.fattura_id = f.id
+    WHERE rf.sku_interno IS NOT NULL
+      AND (cast(:location_id as integer) IS NULL OR f.location_id = cast(:location_id as integer))
+      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
+      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
+    GROUP BY rf.sku_interno
+    ORDER BY spesa_totale DESC
+    """
+    params = {
+        "location_id": location_id,
+        "fornitore_id": fornitore_id,
+        "data_da": data_da,
+        "data_a": data_a
+    }
+    
+    res = await db.execute(text(sql), params)
+    
+    results = []
+    for r in res.all():
+        results.append({
+            "sku_interno": r.sku_interno,
+            "descrizione": r.descrizione,
+            "quantita_totale": float(r.quantita_totale or 0),
+            "unita_misura": r.unita_misura or "Pz",
+            "spesa_totale": float(r.spesa_totale or 0),
+            "prezzo_medio": float(r.prezzo_medio or 0)
+        })
+    return results
+
+
+@router.get("/product-consumption/{sku_interno}", summary="Dettaglio Consumo SKU per Location e Mese")
+async def get_product_consumption_detail(
+    sku_interno: str,
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ritorna la suddivisione del consumo di un singolo SKU per Location e per Mese.
+    """
+    # 1. Split by Location
+    sql_loc = """
+    SELECT 
+        l.nome_struttura as location_nome,
+        SUM(rf.quantita) as quantita_totale,
+        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale
+    FROM righe_fattura rf
+    JOIN fatture f ON rf.fattura_id = f.id
+    JOIN location l ON f.location_id = l.id
+    WHERE rf.sku_interno = :sku
+    GROUP BY l.nome_struttura
+    ORDER BY spesa_totale DESC
+    """
+    res_loc = await db.execute(text(sql_loc), {"sku": sku_interno})
+    by_location = []
+    for r in res_loc.all():
+        by_location.append({
+            "location_nome": r.location_nome,
+            "quantita_totale": float(r.quantita_totale or 0),
+            "spesa_totale": float(r.spesa_totale or 0)
+        })
+
+    # 2. Split by Month
+    sql_month = """
+    SELECT 
+        to_char(f.data_documento, 'YYYY-MM') as mese,
+        SUM(rf.quantita) as quantita_totale,
+        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale
+    FROM righe_fattura rf
+    JOIN fatture f ON rf.fattura_id = f.id
+    WHERE rf.sku_interno = :sku
+    GROUP BY to_char(f.data_documento, 'YYYY-MM')
+    ORDER BY mese DESC
+    """
+    res_month = await db.execute(text(sql_month), {"sku": sku_interno})
+    by_month = []
+    for r in res_month.all():
+        by_month.append({
+            "mese": r.mese,
+            "quantita_totale": float(r.quantita_totale or 0),
+            "spesa_totale": float(r.spesa_totale or 0)
+        })
+
+    return {
+        "sku_interno": sku_interno,
+        "consumo_per_location": by_location,
+        "consumo_per_mese": by_month
+    }
+
+
+@router.get("/export-product-consumption-excel", summary="Esporta Excel Consumo per Prodotto")
+async def export_product_consumption_excel(
+    location_id: int | None = Query(None),
+    fornitore_id: int | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Genera ed esporta un report Excel (.xlsx) dei consumi per prodotto.
+    """
+    sql = """
+    SELECT 
+        rf.sku_interno, 
+        MAX(rf.descrizione_fornitore_raw) as descrizione,
+        SUM(rf.quantita) as quantita_totale,
+        MAX(rf.unita_misura_fattura) as unita_misura,
+        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        CASE 
+            WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
+            ELSE 0 
+        END as prezzo_medio
+    FROM righe_fattura rf
+    JOIN fatture f ON rf.fattura_id = f.id
+    WHERE rf.sku_interno IS NOT NULL
+      AND (cast(:location_id as integer) IS NULL OR f.location_id = cast(:location_id as integer))
+      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
+      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
+    GROUP BY rf.sku_interno
+    ORDER BY spesa_totale DESC
+    """
+    params = {
+        "location_id": location_id,
+        "fornitore_id": fornitore_id,
+        "data_da": data_da,
+        "data_a": data_a
+    }
+    
+    res = await db.execute(text(sql), params)
+    
+    # Crea Workbook excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Consumi per Prodotto"
+    
+    # Mostra griglia
+    ws.views.sheetView[0].showGridLines = True
+    
+    headers = [
+        "SKU Interno", "Prodotto", "Quantità Totale", 
+        "Unità di Misura", "Prezzo Medio (€)", "Spesa Totale (€)"
+    ]
+    
+    ws.append(headers)
+    
+    # Stile intestazione elegante (Tonalità Navy coordinata a Price Sentinel)
+    header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    
+    thin_border = Border(
+        left=Side(style='thin', color='DDDDDD'),
+        right=Side(style='thin', color='DDDDDD'),
+        top=Side(style='thin', color='DDDDDD'),
+        bottom=Side(style='thin', color='DDDDDD')
+    )
+    
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_align
+        cell.border = thin_border
+    
+    # Aggiungi i dati
+    row_num = 2
+    for r in res.all():
+        quantita = float(r.quantita_totale or 0)
+        prezzo_medio = float(r.prezzo_medio or 0)
+        spesa_totale = float(r.spesa_totale or 0)
+        
+        row_data = [
+            r.sku_interno,
+            r.descrizione,
+            quantita,
+            r.unita_misura or "Pz",
+            prezzo_medio,
+            spesa_totale
+        ]
+        ws.append(row_data)
+        
+        for col_idx in range(1, len(row_data) + 1):
+            cell = ws.cell(row=row_num, column=col_idx)
+            cell.border = thin_border
+            cell.font = Font(name="Calibri", size=11)
+            
+            if col_idx in (5, 6):
+                cell.number_format = '€ #,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+            elif col_idx == 3:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+            elif col_idx in (1, 4):
+                cell.alignment = Alignment(horizontal="center")
+            else:
+                cell.alignment = Alignment(horizontal="left")
+                
+        row_num += 1
+        
+    # Auto-fit colonne
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val_str = str(cell.value or '')
+            if cell.column in (5, 6) and type(cell.value) in (int, float):
+                val_str = f"€ {cell.value:.2f}"
+            if len(val_str) > max_len:
+                max_len = len(val_str)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    
+    headers = {
+        'Content-Disposition': 'attachment; filename="report_consumo_prodotti.xlsx"'
+    }
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers
+    )
+
 

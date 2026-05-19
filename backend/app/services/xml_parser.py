@@ -64,6 +64,7 @@ class FatturaParsata:
     piva_cedente: str = ""          # P.IVA del fornitore
     denominazione_cedente: str = "" # Nome del fornitore
     piva_cessionario: str = ""      # P.IVA della location
+    denominazione_cessionario: str = "" # Nome della sede ricevente
     numero_documento: str = ""
     data_documento: str = ""        # YYYY-MM-DD
     data_ricezione_sdi: str = ""    # Data SDI
@@ -193,6 +194,15 @@ def parse_fattura_xml(xml_string: str) -> FatturaParsata:
         result.piva_cessionario = _text(
             header, ".//CessionarioCommittente/DatiAnagrafici/CodiceFiscale"
         )
+    
+    # Estrazione Ragione Sociale / Nome + Cognome del Cessionario (Sede)
+    denom_cess = _text(header, ".//CessionarioCommittente/DatiAnagrafici/Anagrafica/Denominazione")
+    if not denom_cess:
+        nome_cess = _text(header, ".//CessionarioCommittente/DatiAnagrafici/Anagrafica/Nome")
+        cognome_cess = _text(header, ".//CessionarioCommittente/DatiAnagrafici/Anagrafica/Cognome")
+        if nome_cess or cognome_cess:
+            denom_cess = f"{nome_cess} {cognome_cess}".strip()
+    result.denominazione_cessionario = denom_cess or f"Sede Gruppo P.IVA {result.piva_cessionario}"
 
     if not result.piva_cedente:
         result.errori.append("P.IVA cedente non trovata nell'XML")
