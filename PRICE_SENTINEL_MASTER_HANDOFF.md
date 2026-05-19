@@ -59,7 +59,7 @@
 │   │   │       ├── router.py         # Aggregates all routers under /api/v1
 │   │   │       ├── auth.py           # POST /auth/login → JWT
 │   │   │       ├── utenti.py         # User management
-│   │   │       ├── location.py       # GET/POST /location/
+│   │   │       ├── location.py       # GET/POST/DELETE /location/
 │   │   │       ├── fornitori.py      # GET/POST /fornitori/
 │   │   │       ├── listino.py        # Excel import + versioning
 │   │   │       ├── fatture.py        # ⭐ Fatture list + marker PATCH + righe
@@ -189,7 +189,11 @@
 | GET | `/api/v1/intelligence/` | Bearer | KPI aggregates + cross-location stats |
 | GET | `/api/v1/intelligence/variance-loss` | Bearer (Admin) | Calculate financial waste pro-rated to minimum historical price paid |
 | GET | `/api/v1/location/` | Bearer | List locations |
+| POST | `/api/v1/location/` | Bearer (Admin) | Create location |
+| PATCH | `/api/v1/location/{location_id}` | Bearer (Admin) | Update location |
+| DELETE | `/api/v1/location/{location_id}` | Bearer (Admin) | Delete location |
 | GET | `/api/v1/fornitori/` | Bearer | List fornitori |
+| POST | `/api/v1/ingestion/reprocess-parked` | Bearer | Reprocess manual uploaded/parked invoices |
 
 ---
 
