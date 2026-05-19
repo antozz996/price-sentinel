@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2 } from 'lucide-react';
+import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface UserInfo {
@@ -42,6 +42,10 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [submittingLoc, setSubmittingLoc] = useState(false);
   const [submittingForn, setSubmittingForn] = useState(false);
+
+  const [editingLocId, setEditingLocId] = useState<number | null>(null);
+  const [editLocNome, setEditLocNome] = useState('');
+  const [editLocTipo, setEditLocTipo] = useState('');
 
   const headers = getHeaders();
 
@@ -143,6 +147,38 @@ export default function SettingsPage() {
       loadData();
     } catch (err: any) {
       setMessage({ text: err.message || 'Errore durante l\'eliminazione.', type: 'error' });
+    }
+  };
+
+  const handleUpdateLocation = async (locationId: number) => {
+    if (!editLocNome) {
+      setMessage({ text: 'Il nome della struttura non può essere vuoto.', type: 'error' });
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/location/${locationId}`, {
+        method: 'PATCH',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          nome_struttura: editLocNome,
+          tipologia: editLocTipo
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Impossibile aggiornare la sede.');
+      }
+
+      setMessage({ text: 'Sede aggiornata con successo!', type: 'success' });
+      setEditingLocId(null);
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Errore durante l\'aggiornamento.', type: 'error' });
     }
   };
 
@@ -280,26 +316,83 @@ export default function SettingsPage() {
           {/* List Sedi */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
             {locations.map(loc => (
-              <div key={loc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{loc.nome_struttura}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>P.IVA: {loc.piva_riferimento}</div>
+              editingLocId === loc.id ? (
+                <div key={loc.id} style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                    <input 
+                      type="text"
+                      value={editLocNome}
+                      onChange={e => setEditLocNome(e.target.value)}
+                      style={{ flex: 2, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '4px', color: 'white', fontSize: '0.8rem' }}
+                    />
+                    <select 
+                      value={editLocTipo}
+                      onChange={e => setEditLocTipo(e.target.value)}
+                      style={{ flex: 1, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '4px', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                    >
+                      <option value="balneare" style={{ background: '#13131c' }}>Balneare</option>
+                      <option value="ristorante" style={{ background: '#13131c' }}>Ristorante</option>
+                      <option value="discoteca" style={{ background: '#13131c' }}>Discoteca</option>
+                      <option value="evento" style={{ background: '#13131c' }}>Evento</option>
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>P.IVA: {loc.piva_riferimento}</span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button 
+                        onClick={() => setEditingLocId(null)}
+                        className="btn"
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--border-glass)' }}
+                      >
+                        Annulla
+                      </button>
+                      <button 
+                        onClick={() => handleUpdateLocation(loc.id)}
+                        className="btn btn-primary"
+                        style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                      >
+                        Salva
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
-                    {loc.tipologia}
-                  </span>
-                  <button 
-                    onClick={() => handleDeleteLocation(loc.id)}
-                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
-                    title="Elimina sede"
-                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                    onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+              ) : (
+                <div key={loc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{loc.nome_struttura}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>P.IVA: {loc.piva_riferimento}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
+                      {loc.tipologia}
+                    </span>
+                    
+                    <button 
+                      onClick={() => {
+                        setEditingLocId(loc.id);
+                        setEditLocNome(loc.nome_struttura);
+                        setEditLocTipo(loc.tipologia);
+                      }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
+                      title="Modifica nome o tipologia"
+                      onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                      onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
+                    >
+                      <Pencil size={14} />
+                    </button>
+
+                    <button 
+                      onClick={() => handleDeleteLocation(loc.id)}
+                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
+                      title="Elimina sede"
+                      onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                      onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )
             ))}
           </div>
         </div>
