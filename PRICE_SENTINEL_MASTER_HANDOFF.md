@@ -11,7 +11,7 @@
 | **Project Name** | Price Sentinel |
 | **Objective** | Automated purchase audit system for a Ho.Re.Ca. multi-location group. Matches Electronic Invoices (FatturaPA / Aruba Webhook) against Master Price Lists to detect anomalies and track "Recovered Funds" via Credit Notes. |
 | **Last Updated** | 2026-05-19 |
-| **Current Milestone** | **Sprint 4 COMPLETE** — Advanced pricing optimization & automation engines fully active. |
+| **Current Milestone** | **Sprint 5 COMPLETE** — Advanced pricing optimization, credit note stornos & variance analytics active. |
 
 ---
 
@@ -187,6 +187,7 @@
 | GET | `/api/v1/listino/template-excel` | Bearer | Download .xlsx template |
 | POST | `/api/v1/listino/import-excel/{fornitore_id}` | Bearer | Bulk import listino from .xlsx |
 | GET | `/api/v1/intelligence/` | Bearer | KPI aggregates + cross-location stats |
+| GET | `/api/v1/intelligence/variance-loss` | Bearer (Admin) | Calculate financial waste pro-rated to minimum historical price paid |
 | GET | `/api/v1/location/` | Bearer | List locations |
 | GET | `/api/v1/fornitori/` | Bearer | List fornitori |
 
@@ -241,6 +242,11 @@ vercel --prod  # uses vercel.json config
 ---
 
 ## 📝 Change Log
+
+### [2026-05-19] Sprint 5: Variance & Loss (Sprechi) Analytics ✅
+- **PostgreSQL CTE Variance Pipeline (`GET /api/v1/intelligence/variance-loss`)**: Developed a highly optimized Common Table Expression (CTE) query calculation pro-rating purchase costs against the lowest historical price recorded inside the group.
+- **Visual Variance Widget (`Dashboard.tsx`)**: Rendered a premium dark glassmorphism tabular widget showcasing top leaked items with high-precision metrics (acquisitions, min vs avg price, total waste) and proportional visual red sparkbars showing leakage severity.
+- **E2E REST API Verification & Seeding**: Automated seeding top raw products mapping to standard SKUs for active BI visualization, and successfully ran REST integration tests with programmatically generated JWT tokens.
 
 ### [2026-05-19] Sprint 4: Advanced Optimizations & Automation ✅
 - **Custom Conversion Scale Factors (`coefficiente_conversione`)**: Enabled full-stack custom scale factor numerical input inside Validation Room. Integrated division logic inside Level 1 matching pipeline to normalize CASE/BOX prices to contract base unit.
