@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from app.api.deps import get_current_user
+from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.utenti import Utente
 from app.services.ai_engine import ai_engine
 
@@ -22,7 +24,8 @@ class ChatResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse, summary="Invia un messaggio a Sentinel Copilot")
 async def chat_with_copilot(
     req: ChatRequest,
-    current_user: Utente = Depends(get_current_user)
+    current_user: Utente = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Riceve un messaggio testuale dall'utente e lo inoltra al motore AI,
@@ -32,5 +35,5 @@ async def chat_with_copilot(
     if req.history:
         history_dicts = [{"role": msg.role, "content": msg.content} for msg in req.history]
         
-    reply = await ai_engine.chat(req.message, chat_history=history_dicts)
+    reply = await ai_engine.chat(req.message, chat_history=history_dicts, db=db)
     return ChatResponse(reply=reply)
