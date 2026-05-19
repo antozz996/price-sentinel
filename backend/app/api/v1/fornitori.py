@@ -124,3 +124,22 @@ async def toggle_whitelist(
     await db.flush()
     await db.refresh(fornitore)
     return fornitore
+
+
+@router.delete(
+    "/{fornitore_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Elimina fornitore",
+)
+async def delete_fornitore(
+    fornitore_id: int,
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Fornitore).where(Fornitore.id == fornitore_id))
+    fornitore = result.scalar_one_or_none()
+    if not fornitore:
+        raise HTTPException(status_code=404, detail="Fornitore non trovato")
+    
+    await db.delete(fornitore)
+    await db.commit()

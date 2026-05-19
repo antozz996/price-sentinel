@@ -237,6 +237,29 @@ export default function SettingsPage() {
     }
   };
 
+  const handleDeleteFornitore = async (fornitoreId: number) => {
+    if (!window.confirm("Sei sicuro di voler eliminare questo fornitore? Questa azione è irreversibile.")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/fornitori/${fornitoreId}`, {
+        method: 'DELETE',
+        headers
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Impossibile eliminare il fornitore.');
+      }
+
+      setMessage({ text: 'Fornitore eliminato correttamente!', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Errore durante l\'eliminazione.', type: 'error' });
+    }
+  };
+
   function handleLogout() {
     localStorage.removeItem('token');
     window.location.reload();
@@ -450,16 +473,28 @@ export default function SettingsPage() {
                   <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{f.nome_azienda}</div>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>P.IVA: {f.partita_iva} {f.email_contatto ? `| ${f.email_contatto}` : ''}</div>
                 </div>
-                <button
-                  onClick={() => handleToggleWhitelist(f.id)}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
-                >
-                  {f.attivo_whitelist ? (
-                    <ToggleRight size={26} color="#10b981" />
-                  ) : (
-                    <ToggleLeft size={26} color="#6b7280" />
-                  )}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={() => handleToggleWhitelist(f.id)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                    title={f.attivo_whitelist ? "Disattiva whitelist" : "Attiva whitelist"}
+                  >
+                    {f.attivo_whitelist ? (
+                      <ToggleRight size={26} color="#10b981" />
+                    ) : (
+                      <ToggleLeft size={26} color="#6b7280" />
+                    )}
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteFornitore(f.id)}
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
+                    title="Elimina fornitore"
+                    onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                    onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
