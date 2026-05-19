@@ -5,7 +5,7 @@ Spec §5.2: Anomalie con snapshot prezzi, NoteDiCredito con importo recuperato.
 """
 
 import enum
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Date,
@@ -49,6 +49,7 @@ class Anomalia(Base):
         Integer,
         ForeignKey("righe_fattura.id", ondelete="RESTRICT"),
         nullable=False,
+        unique=True,
         index=True,
     )
     delta_prezzo: Mapped[float] = mapped_column(
@@ -107,6 +108,24 @@ class Anomalia(Base):
     gestito_da = relationship("Utente", foreign_keys=[gestito_da_admin_id], lazy="selectin")
     note_di_credito = relationship("NotaDiCredito", back_populates="anomalia", lazy="selectin")
 
+    @property
+    def descrizione_orig(self) -> str | None:
+        return self.riga_fattura.descrizione_fornitore_raw if self.riga_fattura else None
+
+    @property
+    def fornitore_nome(self) -> str | None:
+        if self.riga_fattura and self.riga_fattura.fattura and self.riga_fattura.fattura.fornitore:
+            return self.riga_fattura.fattura.fornitore.nome_azienda
+        return None
+
+    @property
+    def quantita(self) -> float | None:
+        return self.riga_fattura.quantita if self.riga_fattura else None
+
+    @property
+    def codice_fornitore(self) -> str | None:
+        return self.riga_fattura.codice_fornitore_raw if self.riga_fattura else None
+
     def __repr__(self) -> str:
         return f"<Anomalia Δ{self.delta_prezzo} ({self.stato_validazione.value})>"
 
@@ -157,3 +176,45 @@ class NotaDiCredito(Base):
 
     def __repr__(self) -> str:
         return f"<NotaDiCredito €{self.importo_recuperato}>"
+
+
+class ApprovazionePrezzo(Base):
+    """
+    Consente di archiviare gli aumenti di prezzo che l'amministratore 
+    ha deciso di approvare manualmente per un dato mese.
+    """
+    __tablename__ = "approvazioni_prezzo"
+
+    sku_interno: Mapped[str] = mapped_column(
+        String(100),
+        primary_key=True,
+        index=True,
+    )
+    descrizione_orig: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+    )
+    mese: Mapped[str] = mapped_column(
+        String(7),
+        primary_key=True,
+        comment="Formato YYYY-MM",
+    )
+    prezzo_approvato: Mapped[float] = mapped_column(
+        Numeric(12, 4),
+        nullable=False,
+    )
+    stato: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="APPROVATO",
+        server_default="APPROVATO",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ApprovazionePrezzo {self.sku_interno} - {self.mese} @ {self.prezzo_approvato}>"
+

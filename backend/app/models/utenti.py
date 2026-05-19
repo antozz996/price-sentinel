@@ -38,6 +38,13 @@ class Utente(Base):
         nullable=True, 
         comment="Chat ID per le notifiche Telegram dello Sprint 3"
     )
+    refresh_token_version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        nullable=False,
+        server_default="1",
+        comment="Versione per la rotazione del refresh token"
+    )
     attivo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # ── Relationships ────────────────────────

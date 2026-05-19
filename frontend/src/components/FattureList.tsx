@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, ChevronDown, ChevronUp, Tag, FileText, Calendar, Building2, Truck, Package, X, AlertCircle } from 'lucide-react';
-import { API_BASE } from '../api';
+import { API_BASE, getHeaders } from '../api';
+import Pagination from './Pagination';
 
 interface FatturaItem {
   id: number;
@@ -67,35 +68,52 @@ export default function FattureList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
-  const token = localStorage.getItem('token');
-  const headers = { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true' };
+  // Pagination states
+  const [limit, setLimit] = useState(25);
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
+
+  const headers = getHeaders();
 
   useEffect(() => {
-    loadFornitori();
-    loadLocations();
+    const controller = new AbortController();
+    loadFornitori(controller.signal);
+    loadLocations(controller.signal);
+    return () => controller.abort();
   }, []);
 
+  // Reset offset to 0 when filters or page size changes
   useEffect(() => {
-    loadFatture();
-  }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, searchQuery]);
+    setOffset(0);
+  }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, searchQuery, limit]);
 
-  async function loadFornitori() {
+  useEffect(() => {
+    const controller = new AbortController();
+    loadFatture(controller.signal);
+    return () => controller.abort();
+  }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, searchQuery, limit, offset]);
+
+  async function loadFornitori(signal?: AbortSignal) {
     try {
-      const res = await fetch(`${API_BASE}/fornitori/`, { headers });
+      const res = await fetch(`${API_BASE}/fornitori/`, { headers, signal });
       const data = await res.json();
       if (Array.isArray(data)) setFornitori(data);
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
   }
 
-  async function loadLocations() {
+  async function loadLocations(signal?: AbortSignal) {
     try {
-      const res = await fetch(`${API_BASE}/location/`, { headers });
+      const res = await fetch(`${API_BASE}/location/`, { headers, signal });
       const data = await res.json();
       if (Array.isArray(data)) setLocations(data);
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
   }
 
-  async function loadFatture() {
+  async function loadFatture(signal?: AbortSignal) {
     setLoading(true);
     setError(null);
     try {
@@ -106,23 +124,36 @@ export default function FattureList() {
       if (filterDataDa) params.set('data_da', filterDataDa);
       if (filterDataA) params.set('data_a', filterDataA);
       if (searchQuery) params.set('search', searchQuery);
-      params.set('limit', '100');
+      params.set('limit', limit.toString());
+      params.set('offset', offset.toString());
 
-      const res = await fetch(`${API_BASE}/fatture/?${params}`, { headers });
+      const res = await fetch(`${API_BASE}/fatture/?${params}`, { headers, signal });
       
       if (!res.ok) {
         throw new Error(`Errore API: ${res.status}`);
+      }
+
+      // Read X-Total-Count header
+      const totalHeader = res.headers.get('X-Total-Count');
+      if (totalHeader) {
+        setTotal(parseInt(totalHeader, 10));
+      } else {
+        setTotal(0);
       }
       
       const data = await res.json();
       if (Array.isArray(data)) setFatture(data);
       else setFatture([]);
-    } catch (e) {
-      console.error(e);
-      setError("Impossibile caricare le fatture. Verifica la connessione o riprova più tardi.");
-      setFatture([]);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+        console.error(e);
+        setError("Impossibile caricare le fatture. Verifica la connessione o riprova più tardi.");
+        setFatture([]);
+      }
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }
 
@@ -267,7 +298,7 @@ export default function FattureList() {
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--status-red)' }}>
             <AlertCircle size={48} style={{ marginBottom: '16px', opacity: 0.4 }} />
             <div>{error}</div>
-            <button className="btn btn-primary" onClick={loadFatture} style={{ marginTop: '16px' }}>Riprova</button>
+            <button className="btn btn-primary" onClick={() => loadFatture()} style={{ marginTop: '16px' }}>Riprova</button>
           </div>
         ) : fatture.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -276,7 +307,8 @@ export default function FattureList() {
             <div style={{ fontSize: '0.85rem', marginTop: '8px' }}>Carica fatture XML dalla sezione "Carica Fatture" o modifica i filtri.</div>
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <>
+            <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.02)' }}>
@@ -423,6 +455,18 @@ export default function FattureList() {
               </tbody>
             </table>
           </div>
+          <div style={{ padding: '0 24px 24px 24px' }}>
+            <Pagination
+              limit={limit}
+              offset={offset}
+              total={total}
+              onChange={(l: number, o: number) => {
+                setLimit(l);
+                setOffset(o);
+              }}
+            />
+          </div>
+          </>
         )}
       </div>
     </div>

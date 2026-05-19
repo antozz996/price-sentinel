@@ -4,6 +4,7 @@ Price Sentinel — Schemas AliasProdotti.
 
 from datetime import datetime
 
+from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +12,7 @@ class AliasBase(BaseModel):
     fornitore_id: int
     codice_fornitore_originale: str = Field(..., max_length=100)
     sku_interno: str = Field(..., max_length=100)
+    coefficiente_conversione: Decimal = Field(default=Decimal("1.0"))
 
 
 class AliasCreate(AliasBase):

@@ -5,7 +5,7 @@ Read-only con filtri per location/fornitore/tipo + marker management.
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ router = APIRouter()
     summary="Lista fatture con filtri avanzati",
 )
 async def list_fatture(
+    response: Response,
     location_id: int | None = Query(None),
     fornitore_id: int | None = Query(None),
     tipo_documento: str | None = Query(None),
@@ -85,6 +86,12 @@ async def list_fatture(
         query = query.where(
             Fattura.numero_documento.ilike(f"%{search}%")
         )
+
+    # Count total from the subquery of the filtered base query
+    count_query = select(func.count()).select_from(query.subquery())
+    total_res = await db.execute(count_query)
+    total = total_res.scalar() or 0
+    response.headers["X-Total-Count"] = str(total)
 
     query = query.limit(limit).offset(offset)
     result = await db.execute(query)

@@ -30,7 +30,7 @@ export function getHeaders(customHeaders: Record<string, string> = {}): Record<s
   }
 
   // bypass-tunnel-reminder strictly in DEV mode
-  if (import.meta.env.DEV) {
+  if ((import.meta as any).env?.DEV) {
     headers['bypass-tunnel-reminder'] = 'true';
   }
 

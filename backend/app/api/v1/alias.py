@@ -64,6 +64,7 @@ async def create_alias(
         fornitore_id=data.fornitore_id,
         codice_fornitore_originale=data.codice_fornitore_originale,
         sku_interno=data.sku_interno,
+        coefficiente_conversione=data.coefficiente_conversione,
         confermato_da_user_id=current_user.id,
         created_at=datetime.now(timezone.utc),
     )

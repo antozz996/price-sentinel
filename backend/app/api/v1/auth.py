@@ -54,3 +54,27 @@ async def login(
         ruolo=user.ruolo.value,
         location_id=user.location_id,
     )
+
+
+from app.api.deps import get_current_user
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Refresh del token JWT",
+    description="Genera un nuovo token JWT a partire dal token esistente (se valido e l'utente è attivo).",
+)
+async def refresh_token(
+    current_user: Utente = Depends(get_current_user),
+) -> TokenResponse:
+    """Rigenera il JWT per l'utente corrente."""
+    token = create_access_token(
+        user_id=current_user.id,
+        ruolo=current_user.ruolo.value,
+        location_id=current_user.location_id,
+    )
+    return TokenResponse(
+        access_token=token,
+        ruolo=current_user.ruolo.value,
+        location_id=current_user.location_id,
+    )
