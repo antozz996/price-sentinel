@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
 import ManualUpload from './components/ManualUpload'
 import FattureList from './components/FattureList'
 import SettingsPage from './components/SettingsPage'
+import CrossLocationMatrix from './components/CrossLocationMatrix'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -221,6 +222,7 @@ export default function App() {
       case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
+      case 'crosslocation': return <CrossLocationMatrix />;
       case 'settings': return <SettingsPage />;
       default: return <Dashboard />;
     }
@@ -233,6 +235,7 @@ export default function App() {
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Stanza di Validazione', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
+      case 'crosslocation': return { title: 'Analisi Comparativa Sedi', sub: 'Matrice comparativa prezzi d\'acquisto e Vendor Passport' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
       default: return { title: 'Price Sentinel', sub: 'Audit System' };
     }
@@ -291,6 +294,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'listini' ? '' : 'transparent', border: 'none' }}
           >
             <FileSpreadsheet size={18} /> Listini Master
+          </button>
+
+          <button 
+            className={`btn ${activeTab === 'crosslocation' ? 'btn-primary' : ''}`}
+            onClick={() => setActiveTab('crosslocation')}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'crosslocation' ? '' : 'transparent', border: 'none' }}
+          >
+            <Grid size={18} /> Analisi Incrociata
           </button>
         </nav>
         
