@@ -113,80 +113,127 @@ export default function PriceListManager() {
     }
   };
 
-  return (
-    <div className="glass-panel" style={{ padding: '32px', maxWidth: '800px', margin: '0 auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-        <h2 style={{ marginBottom: '12px' }}>Gestione Listini Master</h2>
-        <p style={{ color: 'var(--text-secondary)' }}>Carica il listino concordato in formato Excel per attivare l'audit automatico.</p>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        {/* Step 1: Scarica Template */}
-        <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h4 style={{ marginBottom: '4px' }}>1. Utilizza il Template</h4>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Assicurati che le colonne corrispondano allo standard di Price Sentinel.</p>
-            </div>
-            <button onClick={handleDownloadTemplate} className="btn" style={{ textDecoration: 'none' }}>
-              <Download size={18} /> Scarica Template
-            </button>
-          </div>
+  return (    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '32px', maxWidth: '1200px', margin: '0 auto' }}>
+      
+      {/* Colonna Sinistra: Importazione */}
+      <div className="glass-panel" style={{ padding: '32px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <h2 style={{ marginBottom: '12px' }}>Importa Listino Master</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>Carica il listino concordato in formato Excel per attivare l'audit automatico.</p>
         </div>
 
-        {/* Step 2: Seleziona Fornitore */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 600 }}>2. Seleziona Fornitore</label>
-          <select 
-            value={selectedFornitore} 
-            onChange={(e) => setSelectedFornitore(e.target.value)}
-            style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)', color: 'white', outline: 'none' }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Step 1: Scarica Template */}
+          <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h4 style={{ marginBottom: '4px' }}>1. Utilizza il Template</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Assicurati che le colonne corrispondano allo standard di Price Sentinel.</p>
+              </div>
+              <button onClick={handleDownloadTemplate} className="btn" style={{ textDecoration: 'none' }}>
+                <Download size={18} /> Scarica Template
+              </button>
+            </div>
+          </div>
+
+          {/* Step 2: Seleziona Fornitore */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 600 }}>2. Seleziona Fornitore</label>
+            <select 
+              value={selectedFornitore} 
+              onChange={(e) => setSelectedFornitore(e.target.value)}
+              style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)', color: 'white', outline: 'none' }}
+            >
+              <option value="">-- Seleziona un fornitore --</option>
+              {fornitori.map(f => <option key={f.id} value={f.id}>{f.nome_azienda}</option>)}
+            </select>
+          </div>
+
+          {/* Step 3: Upload */}
+          <div style={{ border: '2px dashed var(--border-glass)', padding: '40px', textAlign: 'center', borderRadius: 'var(--border-radius-md)', transition: 'var(--transition-smooth)' }}>
+            <input 
+              type="file" 
+              id="fileInput" 
+              accept=".xlsx" 
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              style={{ display: 'none' }}
+            />
+            <label htmlFor="fileInput" style={{ cursor: 'pointer' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                <FileSpreadsheet size={48} color={file ? 'var(--status-green)' : 'var(--text-secondary)'} />
+                <div style={{ fontWeight: 500 }}>{file ? file.name : 'Trascina o clicca per caricare il listino Excel'}</div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Solo file .xlsx supportati</p>
+              </div>
+            </label>
+          </div>
+
+          {message && (
+            <div style={{ 
+              padding: '12px', 
+              borderRadius: 'var(--border-radius-md)', 
+              background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
+              color: message.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
+              display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem'
+            }}>
+              {message.type === 'success' ? <CheckCircle2 size={18}/> : <AlertCircle size={18}/>}
+              {message.text}
+            </div>
+          )}
+
+          <button 
+            className="btn btn-primary" 
+            disabled={uploading || !file || !selectedFornitore}
+            onClick={handleUpload}
+            style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '12px', opacity: (uploading || !file || !selectedFornitore) ? 0.6 : 1 }}
           >
-            <option value="">-- Seleziona un fornitore --</option>
-            {fornitori.map(f => <option key={f.id} value={f.id}>{f.nome_azienda}</option>)}
-          </select>
+            {uploading ? 'Caricamento in corso...' : 'Importa Listino'}
+          </button>
         </div>
-
-        {/* Step 3: Upload */}
-        <div style={{ border: '2px dashed var(--border-glass)', padding: '40px', textAlign: 'center', borderRadius: 'var(--border-radius-md)', transition: 'var(--transition-smooth)' }}>
-          <input 
-            type="file" 
-            id="fileInput" 
-            accept=".xlsx" 
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            style={{ display: 'none' }}
-          />
-          <label htmlFor="fileInput" style={{ cursor: 'pointer' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-              <FileSpreadsheet size={48} color={file ? 'var(--status-green)' : 'var(--text-secondary)'} />
-              <div style={{ fontWeight: 500 }}>{file ? file.name : 'Trascina o clicca per caricare il listino Excel'}</div>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Solo file .xlsx supportati</p>
-            </div>
-          </label>
-        </div>
-
-        {message && (
-          <div style={{ 
-            padding: '12px', 
-            borderRadius: 'var(--border-radius-md)', 
-            background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
-            color: message.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
-            display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem'
-          }}>
-            {message.type === 'success' ? <CheckCircle2 size={18}/> : <AlertCircle size={18}/>}
-            {message.text}
-          </div>
-        )}
-
-        <button 
-          className="btn btn-primary" 
-          disabled={uploading || !file || !selectedFornitore}
-          onClick={handleUpload}
-          style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '12px', opacity: (uploading || !file || !selectedFornitore) ? 0.6 : 1 }}
-        >
-          {uploading ? 'Caricamento in corso...' : 'Importa Listino'}
-        </button>
       </div>
+
+      {/* Colonna Destra: Gestione Listini Attivi */}
+      <div className="glass-panel" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ marginBottom: '24px' }}>
+          <h2 style={{ marginBottom: '12px' }}>Gestione Listini Caricati</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>Svuota i listini dei fornitori per eliminare i dati caricati per errore o vecchi test.</p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '600px' }}>
+          {fornitori.map(f => (
+            <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{f.nome_azienda}</div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ID Fornitore: {f.id}</div>
+              </div>
+              <button 
+                className="btn"
+                onClick={async () => {
+                  if (!window.confirm(`Sei sicuro di voler eliminare TUTTI i prodotti a listino per il fornitore ${f.nome_azienda}? L'operazione è irreversibile.`)) return;
+                  
+                  try {
+                    const res = await fetch(`${API_BASE}/listino/fornitore/${f.id}`, {
+                      method: 'DELETE',
+                      headers: getHeaders()
+                    });
+                    if (res.ok) {
+                      alert(`Listino di ${f.nome_azienda} svuotato con successo.`);
+                    } else {
+                      const data = await res.json();
+                      alert(`Errore: ${data.detail || 'Impossibile svuotare il listino'}`);
+                    }
+                  } catch (err) {
+                    alert('Errore di rete');
+                  }
+                }}
+                style={{ padding: '8px 12px', background: 'var(--status-red-bg)', color: 'var(--status-red)', borderColor: 'rgba(239, 68, 68, 0.3)', fontSize: '0.85rem' }}
+              >
+                Svuota Listino
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }

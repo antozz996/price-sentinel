@@ -223,6 +223,32 @@ async def import_listino_excel(
     }
 
 
+@router.delete(
+    "/fornitore/{fornitore_id}",
+    summary="Elimina Listino Fornitore",
+    description="Elimina tutti gli articoli a listino associati a un fornitore.",
+)
+async def delete_listino_fornitore(
+    fornitore_id: int,
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verifica fornitore esiste
+    from app.models.fornitori import Fornitore
+    forn_result = await db.execute(select(Fornitore).where(Fornitore.id == fornitore_id))
+    fornitore = forn_result.scalar_one_or_none()
+    if not fornitore:
+        raise HTTPException(status_code=404, detail="Fornitore non trovato")
+        
+    # Elimina tutti gli articoli in listino per questo fornitore
+    await db.execute(
+        ListinoMaster.__table__.delete().where(ListinoMaster.fornitore_id == fornitore_id)
+    )
+    await db.commit()
+    return {"detail": f"Listino del fornitore {fornitore.nome_azienda} eliminato con successo."}
+
+
+
 @router.post(
     "/{listino_id}/aggiorna-prezzo",
     response_model=ListinoResponse,
