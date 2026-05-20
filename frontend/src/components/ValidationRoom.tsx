@@ -23,7 +23,7 @@ export default function ValidationRoom() {
   // Load all master list SKUs to allow manual override mapping
   const fetchSKUs = async () => {
     try {
-      const res = await fetch(`${API_BASE}/listino/`, { headers: getHeaders() });
+      const res = await fetch(`${API_BASE}/listino/?limit=5000`, { headers: getHeaders() });
       if (res.ok) {
         const data = await res.json();
         setSkus(data);
