@@ -1239,13 +1239,13 @@ async def export_product_consumption_excel(
             cell.border = thin_border
             cell.font = Font(name="Calibri", size=11)
             
-            if col_idx in (5, 6):
+            if col_idx in (6, 7):
                 cell.number_format = '€ #,##0.00'
                 cell.alignment = Alignment(horizontal="right")
-            elif col_idx == 3:
+            elif col_idx in (3, 4):
                 cell.number_format = '#,##0.00'
                 cell.alignment = Alignment(horizontal="right")
-            elif col_idx in (1, 4):
+            elif col_idx in (1, 5):
                 cell.alignment = Alignment(horizontal="center")
             else:
                 cell.alignment = Alignment(horizontal="left")
@@ -1258,7 +1258,7 @@ async def export_product_consumption_excel(
         col_letter = get_column_letter(col[0].column)
         for cell in col:
             val_str = str(cell.value or '')
-            if cell.column in (5, 6) and type(cell.value) in (int, float):
+            if cell.column in (6, 7) and type(cell.value) in (int, float):
                 val_str = f"€ {cell.value:.2f}"
             if len(val_str) > max_len:
                 max_len = len(val_str)
