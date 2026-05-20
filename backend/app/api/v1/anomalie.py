@@ -119,11 +119,15 @@ async def azione_manager(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.fatture import RigaFattura, Fattura
+    conditions = [Anomalia.id == anomalia_id]
+    if manager.ruolo.value != "admin":
+        conditions.append(Fattura.location_id == manager.location_id)
+
     query = (
         select(Anomalia)
         .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(and_(Anomalia.id == anomalia_id, Fattura.location_id == manager.location_id))
+        .where(and_(*conditions))
     )
     result = await db.execute(query)
     anomalia = result.scalar_one_or_none()
