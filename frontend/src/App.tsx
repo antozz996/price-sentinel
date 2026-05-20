@@ -295,7 +295,6 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'validation' ? '' : 'transparent', border: 'none' }}
           >
             <AlertTriangle size={18} /> Validazione
-            <span className="badge badge-red" style={{ marginLeft: 'auto' }}>!</span>
           </button>
           
           <button 
