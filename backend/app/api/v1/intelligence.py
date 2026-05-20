@@ -1095,8 +1095,7 @@ async def get_product_consumption_invoices_pdf(
     if location_ids:
         loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
         if loc_ids:
-            sql_locs = "SELECT nome_struttura FROM location WHERE id IN :ids"
-            res_locs = await db.execute(text("SELECT nome_struttura FROM location WHERE id IN :ids"), {"ids": tuple(loc_ids)})
+            res_locs = await db.execute(text("SELECT nome_struttura FROM location WHERE id = ANY(:ids)"), {"ids": list(loc_ids)})
             names = [r[0] for r in res_locs.all()]
             filters_parts.append(f"Sedi: {', '.join(names)}")
     if fornitore_id:
