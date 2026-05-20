@@ -19,7 +19,7 @@ from app.models.location import Location
 from app.models.listino import ListinoMaster
 from app.models.fornitori import Fornitore
 from fastapi.responses import Response, StreamingResponse
-from app.services.pdf_generator import generate_vendor_passport_pdf
+from app.services.pdf_generator import generate_vendor_passport_pdf, generate_consumption_invoices_pdf
 from app.schemas.approvazioni import ApprovazionePrezzoCreate, ApprovazionePrezzoResponse
 
 import openpyxl
@@ -946,6 +946,171 @@ async def get_product_consumption_detail(
         "consumo_per_location": by_location,
         "consumo_per_mese": by_month
     }
+
+
+@router.get("/product-consumption/{sku_interno}/invoices", summary="Dettaglio Fatture che generano il Consumo dello SKU")
+async def get_product_consumption_invoices(
+    sku_interno: str,
+    location_ids: str | None = Query(None),
+    fornitore_id: int | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    if not isinstance(location_ids, str):
+        location_ids = None
+    if not isinstance(fornitore_id, int):
+        fornitore_id = None
+    if not isinstance(data_da, date):
+        data_da = None
+    if not isinstance(data_a, date):
+        data_a = None
+
+    skus = [x.strip() for x in sku_interno.split(",") if x.strip()]
+    if not skus:
+        return []
+
+    loc_ids = []
+    if location_ids:
+        try:
+            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
+        except ValueError:
+            pass
+
+    location_filter = ""
+    params = {
+        "fornitore_id": fornitore_id,
+        "data_da": data_da,
+        "data_a": data_a
+    }
+    
+    sku_placeholders = ",".join(f":sku_{i}" for i in range(len(skus)))
+    sku_filter = f"rf.sku_interno IN ({sku_placeholders})"
+    for i, s in enumerate(skus):
+        params[f"sku_{i}"] = s
+
+    if loc_ids:
+        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
+        location_filter = f"AND f.location_id IN ({id_placeholders})"
+        for i, val in enumerate(loc_ids):
+            params[f"loc_id_{i}"] = val
+
+    sql = f"""
+    SELECT 
+        f.id as fattura_id,
+        f.numero_documento,
+        f.data_documento,
+        l.nome_struttura as location_nome,
+        fo.nome_azienda as fornitore_nome,
+        rf.descrizione_fornitore_raw as prodotto_descrizione,
+        rf.quantita as quantita,
+        rf.unita_misura_fattura as unita_misura,
+        rf.prezzo_netto_normalizzato as prezzo_unitario,
+        (rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale
+    FROM righe_fattura rf
+    JOIN fatture f ON rf.fattura_id = f.id
+    JOIN location l ON f.location_id = l.id
+    JOIN fornitori fo ON f.fornitore_id = fo.id
+    WHERE {sku_filter}
+      {location_filter}
+      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
+      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
+    ORDER BY f.data_documento DESC, f.numero_documento DESC
+    """
+    
+    res = await db.execute(text(sql), params)
+    results = []
+    for r in res.all():
+        results.append({
+            "fattura_id": r.fattura_id,
+            "numero_documento": r.numero_documento,
+            "data_documento": r.data_documento.isoformat() if r.data_documento else None,
+            "location_nome": r.location_nome,
+            "fornitore_nome": r.fornitore_nome,
+            "prodotto_descrizione": r.prodotto_descrizione,
+            "quantita": float(r.quantita or 0),
+            "unita_misura": r.unita_misura or "Pz",
+            "prezzo_unitario": float(r.prezzo_unitario or 0),
+            "spesa_totale": float(r.spesa_totale or 0)
+        })
+    return results
+
+
+@router.get("/product-consumption/{sku_interno}/invoices-pdf", summary="Genera PDF del Riepilogo Fatture di Consumo dello/degli SKU")
+async def get_product_consumption_invoices_pdf(
+    sku_interno: str,
+    location_ids: str | None = Query(None),
+    fornitore_id: int | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    if not isinstance(location_ids, str):
+        location_ids = None
+    if not isinstance(fornitore_id, int):
+        fornitore_id = None
+    if not isinstance(data_da, date):
+        data_da = None
+    if not isinstance(data_a, date):
+        data_a = None
+
+    # Recupera i dati delle fatture
+    invoices = await get_product_consumption_invoices(
+        sku_interno=sku_interno,
+        location_ids=location_ids,
+        fornitore_id=fornitore_id,
+        data_da=data_da,
+        data_a=data_a,
+        _admin=_admin,
+        db=db
+    )
+
+    # Determina il titolo del report
+    skus = [x.strip() for x in sku_interno.split(",") if x.strip()]
+    
+    title = sku_interno
+    if len(skus) == 1:
+        sql_desc = "SELECT descrizione_fornitore_raw FROM righe_fattura WHERE sku_interno = :sku LIMIT 1"
+        res_desc = await db.execute(text(sql_desc), {"sku": skus[0]})
+        row_desc = res_desc.first()
+        if row_desc and row_desc[0]:
+            title = f"{skus[0]} - {row_desc[0]}"
+    else:
+        title = f"Consolidato di {len(skus)} articoli ({', '.join(skus[:3])}{'...' if len(skus) > 3 else ''})"
+
+    # Costruiamo una descrizione dei filtri
+    filters_parts = []
+    if location_ids:
+        loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
+        if loc_ids:
+            sql_locs = "SELECT nome_struttura FROM location WHERE id IN :ids"
+            res_locs = await db.execute(text("SELECT nome_struttura FROM location WHERE id IN :ids"), {"ids": tuple(loc_ids)})
+            names = [r[0] for r in res_locs.all()]
+            filters_parts.append(f"Sedi: {', '.join(names)}")
+    if fornitore_id:
+        res_forn = await db.execute(text("SELECT nome_azienda FROM fornitori WHERE id = :fid"), {"fid": fornitore_id})
+        row_forn = res_forn.first()
+        if row_forn:
+            filters_parts.append(f"Fornitore: {row_forn[0]}")
+    if data_da:
+        filters_parts.append(f"Da: {data_da.strftime('%d/%m/%Y')}")
+    if data_a:
+        filters_parts.append(f"A: {data_a.strftime('%d/%m/%Y')}")
+
+    filter_desc = " | ".join(filters_parts) if filters_parts else "Nessuno"
+
+    pdf_bytes = generate_consumption_invoices_pdf(title, invoices, filter_desc)
+    
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=Riepilogo_Fatture_Consumo.pdf"
+        }
+    )
 
 
 @router.get("/export-product-consumption-excel", summary="Esporta Excel Consumo per Prodotto")
