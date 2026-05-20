@@ -804,7 +804,11 @@ async def get_product_consumption(
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
         SUM(rf.quantita) as quantita_totale,
-        MAX(rf.unita_misura_fattura) as unita_misura,
+        SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
+        COALESCE(
+            MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
+            MAX(rf.unita_misura_fattura)
+        ) as unita_misura,
         SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
         CASE 
             WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
@@ -829,6 +833,7 @@ async def get_product_consumption(
             "sku_interno": r.sku_interno,
             "descrizione": r.descrizione,
             "quantita_totale": float(r.quantita_totale or 0),
+            "quantita_omaggio": float(r.quantita_omaggio or 0),
             "unita_misura": r.unita_misura or "Pz",
             "spesa_totale": float(r.spesa_totale or 0),
             "prezzo_medio": float(r.prezzo_medio or 0)
@@ -1007,7 +1012,9 @@ async def get_product_consumption_invoices(
         rf.quantita as quantita,
         rf.unita_misura_fattura as unita_misura,
         rf.prezzo_netto_normalizzato as prezzo_unitario,
-        (rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale
+        (rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        rf.is_omaggio as is_omaggio,
+        rf.sku_interno as sku_interno
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
     JOIN location l ON f.location_id = l.id
@@ -1033,7 +1040,9 @@ async def get_product_consumption_invoices(
             "quantita": float(r.quantita or 0),
             "unita_misura": r.unita_misura or "Pz",
             "prezzo_unitario": float(r.prezzo_unitario or 0),
-            "spesa_totale": float(r.spesa_totale or 0)
+            "spesa_totale": float(r.spesa_totale or 0),
+            "is_omaggio": bool(r.is_omaggio or False),
+            "sku_interno": r.sku_interno
         })
     return results
 
@@ -1149,7 +1158,11 @@ async def export_product_consumption_excel(
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
         SUM(rf.quantita) as quantita_totale,
-        MAX(rf.unita_misura_fattura) as unita_misura,
+        SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
+        COALESCE(
+            MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
+            MAX(rf.unita_misura_fattura)
+        ) as unita_misura,
         SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
         CASE 
             WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
@@ -1177,7 +1190,7 @@ async def export_product_consumption_excel(
     ws.views.sheetView[0].showGridLines = True
     
     headers = [
-        "SKU Interno", "Prodotto", "Quantità Totale", 
+        "SKU Interno", "Prodotto", "Quantità Totale", "di cui Omaggi",
         "Unità di Misura", "Prezzo Medio (€)", "Spesa Totale (€)"
     ]
     
@@ -1206,6 +1219,7 @@ async def export_product_consumption_excel(
     row_num = 2
     for r in res.all():
         quantita = float(r.quantita_totale or 0)
+        quantita_omaggio = float(r.quantita_omaggio or 0)
         prezzo_medio = float(r.prezzo_medio or 0)
         spesa_totale = float(r.spesa_totale or 0)
         
@@ -1213,6 +1227,7 @@ async def export_product_consumption_excel(
             r.sku_interno,
             r.descrizione,
             quantita,
+            quantita_omaggio,
             r.unita_misura or "Pz",
             prezzo_medio,
             spesa_totale

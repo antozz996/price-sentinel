@@ -6,6 +6,7 @@ interface ConsumptionItem {
   sku_interno: string;
   descrizione: string;
   quantita_totale: number;
+  quantita_omaggio: number;
   unita_misura: string;
   spesa_totale: number;
   prezzo_medio: number;
@@ -577,7 +578,30 @@ export default function ProductConsumptionReport() {
                             />
                           </td>
                           <td style={{ padding: '14px 12px', color: 'var(--text-primary)', fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.descrizione}</td>
-                          <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600 }}>{item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })}</td>
+                          <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600 }}>
+                            {item.quantita_omaggio > 0 ? (
+                              <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                <span>{item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
+                                <span 
+                                  style={{ 
+                                    fontSize: '0.73rem', 
+                                    color: '#6ee7b7', 
+                                    whiteSpace: 'nowrap',
+                                    background: 'rgba(52, 211, 153, 0.1)',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    border: '1px solid rgba(52, 211, 153, 0.15)',
+                                    fontWeight: 500
+                                  }} 
+                                  title={`${item.quantita_omaggio.toLocaleString(undefined, { minimumFractionDigits: 1 })} unità in omaggio`}
+                                >
+                                  di cui {item.quantita_omaggio.toLocaleString(undefined, { minimumFractionDigits: 1 })} omaggi
+                                </span>
+                              </span>
+                            ) : (
+                              item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })
+                            )}
+                          </td>
                           <td style={{ padding: '14px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{item.unita_misura}</td>
                           <td style={{ padding: '14px 12px', textAlign: 'right', color: '#10b981' }}>€ {item.prezzo_medio.toFixed(2)}</td>
                           <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600, color: 'white' }}>€ {item.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -900,7 +924,32 @@ export default function ProductConsumptionReport() {
                           {inv.prodotto_descrizione}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 600 }}>
-                          {inv.quantita.toLocaleString(undefined, { minimumFractionDigits: 1 })} {inv.unita_misura}
+                          {inv.is_omaggio || inv.unita_misura === 'OMAGGIO' ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <span>
+                                {inv.quantita.toLocaleString(undefined, { minimumFractionDigits: 1 })}{' '}
+                                {inv.unita_misura === 'OMAGGIO' 
+                                  ? (consumption.find(c => c.sku_interno === inv.sku_interno)?.unita_misura || 'Pz') 
+                                  : inv.unita_misura
+                                }
+                              </span>
+                              <span 
+                                style={{ 
+                                  fontSize: '0.7rem', 
+                                  color: '#34d399', 
+                                  fontWeight: 700,
+                                  background: 'rgba(52, 211, 153, 0.15)',
+                                  padding: '1px 5px',
+                                  borderRadius: '3px',
+                                  border: '1px solid rgba(52, 211, 153, 0.2)'
+                                }}
+                              >
+                                OMAGGIO
+                              </span>
+                            </span>
+                          ) : (
+                            `${inv.quantita.toLocaleString(undefined, { minimumFractionDigits: 1 })} ${inv.unita_misura}`
+                          )}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right', color: '#10b981' }}>
                           € {inv.prezzo_unitario.toFixed(2)}
