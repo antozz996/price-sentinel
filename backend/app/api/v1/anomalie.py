@@ -125,6 +125,7 @@ async def azione_manager(
 
     query = (
         select(Anomalia)
+        .options(selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore))
         .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
         .where(and_(*conditions))
@@ -233,7 +234,12 @@ async def escalation_admin(
     admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Anomalia).where(Anomalia.id == anomalia_id))
+    from app.models.fatture import RigaFattura, Fattura
+    result = await db.execute(
+        select(Anomalia)
+        .options(selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore))
+        .where(Anomalia.id == anomalia_id)
+    )
     anomalia = result.scalar_one_or_none()
     if not anomalia:
         raise HTTPException(status_code=404, detail="Anomalia non trovata")
