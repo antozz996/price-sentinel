@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileSpreadsheet, Search, RefreshCw, Download, BarChart2, Calendar, MapPin, Tag } from 'lucide-react';
+import { FileSpreadsheet, Search, RefreshCw, Download, BarChart2, Calendar, MapPin, Tag, FileText, X } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface ConsumptionItem {
@@ -54,12 +54,104 @@ export default function ProductConsumptionReport() {
   const [selectedSkus, setSelectedSkus] = useState<string[]>([]);
   const [skuDetail, setSkuDetail] = useState<SKUDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [activeRowY, setActiveRowY] = useState<number | null>(null);
   
   // Download State
   const [exporting, setExporting] = useState(false);
 
+  // Invoices Modal States
+  const [showInvoicesModal, setShowInvoicesModal] = useState(false);
+  const [invoicesList, setInvoicesList] = useState<any[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+
   const headers = getHeaders();
+
+  const formatMese = (meseStr: string) => {
+    if (!meseStr || !meseStr.includes('-')) return meseStr;
+    const [year, month] = meseStr.split('-');
+    const monthsMap: { [key: string]: string } = {
+      '01': 'Gen',
+      '02': 'Feb',
+      '03': 'Mar',
+      '04': 'Apr',
+      '05': 'Mag',
+      '06': 'Giu',
+      '07': 'Lug',
+      '08': 'Ago',
+      '09': 'Set',
+      '10': 'Ott',
+      '11': 'Nov',
+      '12': 'Dic'
+    };
+    const monAbbr = monthsMap[month];
+    return monAbbr ? `${monAbbr}-${year}` : meseStr;
+  };
+
+  const formatData = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`; // YYYY-MM-DD -> DD/MM/YYYY
+    }
+    return dateStr;
+  };
+
+  const handleOpenInvoices = async () => {
+    setShowInvoicesModal(true);
+    setLoadingInvoices(true);
+    try {
+      const params = new URLSearchParams();
+      if (selectedLocations.length > 0) {
+        params.append('location_ids', selectedLocations.join(','));
+      }
+      if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
+      if (dataDa) params.append('data_da', dataDa);
+      if (dataA) params.append('data_a', dataA);
+
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      const skuParam = encodeURIComponent(selectedSkus.join(','));
+
+      const res = await fetch(`${API_BASE}/intelligence/product-consumption/${skuParam}/invoices${queryString}`, { headers });
+      if (!res.ok) throw new Error("Errore caricamento fatture.");
+      const data = await res.json();
+      setInvoicesList(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
+  const handlePDFExport = async () => {
+    setLoadingInvoices(true);
+    try {
+      const params = new URLSearchParams();
+      if (selectedLocations.length > 0) {
+        params.append('location_ids', selectedLocations.join(','));
+      }
+      if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
+      if (dataDa) params.append('data_da', dataDa);
+      if (dataA) params.append('data_a', dataA);
+
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      const skuParam = encodeURIComponent(selectedSkus.join(','));
+
+      const res = await fetch(`${API_BASE}/intelligence/product-consumption/${skuParam}/invoices-pdf${queryString}`, { headers });
+      if (!res.ok) throw new Error("Esportazione PDF fallita");
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Riepilogo_Fatture_Consumo.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      alert("Errore durante il download del report PDF");
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
 
   // Load auxiliary lists (Locations and Suppliers)
   const loadFilters = async () => {
@@ -143,14 +235,10 @@ export default function ProductConsumptionReport() {
   }, []);
 
   useEffect(() => {
-    setActiveRowY(null);
     loadConsumption();
   }, [selectedLocations, selectedSupplier, dataDa, dataA]);
 
   useEffect(() => {
-    if (selectedSkus.length === 0) {
-      setActiveRowY(null);
-    }
     loadSkusDetail(selectedSkus);
   }, [selectedSkus, selectedLocations, selectedSupplier, dataDa, dataA]);
 
@@ -363,8 +451,8 @@ export default function ProductConsumptionReport() {
         id="consumption-report-container" 
         style={{ 
           display: 'flex', 
-          position: 'relative', 
-          alignItems: 'flex-start',
+          flexDirection: 'column',
+          gap: '24px',
           width: '100%'
         }}
       >
@@ -373,14 +461,11 @@ export default function ProductConsumptionReport() {
         <div 
           className="glass-panel" 
           style={{ 
-            flex: '1', 
-            minWidth: '450px', 
+            width: '100%', 
             padding: '24px', 
             display: 'flex', 
             flexDirection: 'column', 
-            gap: '20px',
-            marginRight: selectedSkus.length > 0 ? '400px' : '0px',
-            transition: 'margin-right 0.3s ease-in-out'
+            gap: '20px'
           }}
         >
           
@@ -430,7 +515,6 @@ export default function ProductConsumptionReport() {
                         type="checkbox" 
                         checked={filteredItems.length > 0 && selectedSkus.length === filteredItems.length}
                         onChange={(e) => {
-                          setActiveRowY(null);
                           if (e.target.checked) {
                             setSelectedSkus(filteredItems.map(item => item.sku_interno));
                           } else {
@@ -460,17 +544,8 @@ export default function ProductConsumptionReport() {
                       return (
                         <tr
                           key={item.sku_interno}
-                          onClick={(e) => {
+                          onClick={() => {
                             const sku = item.sku_interno;
-                            
-                            // Calculate position relative to container
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const container = document.getElementById('consumption-report-container');
-                            if (container) {
-                              const containerRect = container.getBoundingClientRect();
-                              setActiveRowY(rect.top - containerRect.top);
-                            }
-
                             if (isSelected) {
                               setSelectedSkus(selectedSkus.filter(s => s !== sku));
                             } else {
@@ -492,18 +567,6 @@ export default function ProductConsumptionReport() {
                               checked={isSelected}
                               onChange={(e) => {
                                 const sku = item.sku_interno;
-                                
-                                // Calculate position from parent row
-                                const row = e.target.closest('tr');
-                                if (row) {
-                                  const rect = row.getBoundingClientRect();
-                                  const container = document.getElementById('consumption-report-container');
-                                  if (container) {
-                                    const containerRect = container.getBoundingClientRect();
-                                    setActiveRowY(rect.top - containerRect.top);
-                                  }
-                                }
-
                                 if (e.target.checked) {
                                   setSelectedSkus([...selectedSkus, sku]);
                                 } else {
@@ -533,21 +596,64 @@ export default function ProductConsumptionReport() {
           <div 
             className="glass-panel" 
             style={{ 
-              position: 'absolute',
-              right: 0,
-              top: activeRowY !== null ? `${activeRowY}px` : '20px',
-              width: '380px',
+              width: '100%',
               padding: '24px', 
               display: 'flex', 
               flexDirection: 'column', 
-              gap: '20px',
-              transition: 'top 0.3s ease-in-out',
-              zIndex: 100
+              gap: '20px'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <BarChart2 size={18} color="var(--status-red)" />
-              <h4 style={{ margin: 0, fontWeight: 600 }}>Dettaglio Consumo</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BarChart2 size={18} color="var(--status-red)" />
+                <h4 style={{ margin: 0, fontWeight: 600 }}>Dettaglio Consumo</h4>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={handleOpenInvoices}
+                  className="btn"
+                  style={{
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    color: 'white',
+                    border: '1px solid var(--border-glass)',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+                >
+                  <FileText size={14} color="var(--accent-blue)" />
+                  Riepilogo Fatture
+                </button>
+                <button
+                  onClick={handlePDFExport}
+                  className="btn"
+                  style={{
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    color: 'var(--status-red)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                >
+                  <Download size={14} />
+                  Scarica PDF
+                </button>
+              </div>
             </div>
 
             {loadingDetail ? (
@@ -562,65 +668,72 @@ export default function ProductConsumptionReport() {
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Analisi dei volumi e spesa consolidata</p>
                 </div>
 
-                {/* Location split */}
-                <div>
-                  <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Consumi per Sede (Punto Vendita)</h5>
-                  {skuDetail.consumo_per_location.length === 0 ? (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun dato per punto vendita</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {skuDetail.consumo_per_location.map((loc, i) => (
-                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                            <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{loc.location_nome}</span>
-                            <span style={{ fontWeight: 600 }}>{loc.quantita_totale.toLocaleString()} unità</span>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: '32px',
+                  alignItems: 'start'
+                }}>
+                  {/* Location split */}
+                  <div>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Consumi per Sede (Punto Vendita)</h5>
+                    {skuDetail.consumo_per_location.length === 0 ? (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun dato per punto vendita</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {skuDetail.consumo_per_location.map((loc, i) => (
+                          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{loc.location_nome}</span>
+                              <span style={{ fontWeight: 600 }}>{loc.quantita_totale.toLocaleString()} unità</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                              <span>Spesa Complessiva:</span>
+                              <span style={{ color: '#10b981', fontWeight: 500 }}>€ {loc.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            {/* Progress bar effect */}
+                            <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
+                              <div style={{
+                                height: '100%',
+                                background: 'linear-gradient(90deg, var(--accent-blue) 0%, #60a5fa 100%)',
+                                width: `${Math.min(100, (loc.spesa_totale / (skuDetail.consumo_per_location[0]?.spesa_totale || 1)) * 100)}%`
+                              }}></div>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            <span>Spesa Complessiva:</span>
-                            <span style={{ color: '#10b981', fontWeight: 500 }}>€ {loc.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                          {/* Progress bar effect */}
-                          <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
-                            <div style={{
-                              height: '100%',
-                              background: 'linear-gradient(90deg, var(--accent-blue) 0%, #60a5fa 100%)',
-                              width: `${Math.min(100, (loc.spesa_totale / (skuDetail.consumo_per_location[0]?.spesa_totale || 1)) * 100)}%`
-                            }}></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                {/* Monthly series split */}
-                <div>
-                  <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Andamento Storico Mensile</h5>
-                  {skuDetail.consumo_per_mese.length === 0 ? (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun dato storico</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {skuDetail.consumo_per_mese.map((mon, i) => (
-                        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                            <span style={{ fontWeight: 600, color: 'white' }}>{mon.mese}</span>
-                            <span>{mon.quantita_totale.toLocaleString()} unità</span>
+                  {/* Monthly series split */}
+                  <div>
+                    <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-primary)', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>Andamento Storico Mensile</h5>
+                    {skuDetail.consumo_per_mese.length === 0 ? (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Nessun dato storico</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {skuDetail.consumo_per_mese.map((mon, i) => (
+                          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                              <span style={{ fontWeight: 600, color: 'white' }}>{formatMese(mon.mese)}</span>
+                              <span>{mon.quantita_totale.toLocaleString()} unità</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                              <span>Valore Speso:</span>
+                              <span style={{ color: '#10b981', fontWeight: 500 }}>€ {mon.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
+                              <div style={{
+                                height: '100%',
+                                background: 'linear-gradient(90deg, var(--status-red) 0%, #f472b6 100%)',
+                                width: `${Math.min(100, (mon.spesa_totale / (Math.max(...skuDetail.consumo_per_mese.map(m => m.spesa_totale)) || 1)) * 100)}%`
+                              }}></div>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            <span>Valore Speso:</span>
-                            <span style={{ color: '#10b981', fontWeight: 500 }}>€ {mon.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          </div>
-                          <div style={{ height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.03)', overflow: 'hidden', marginTop: '2px' }}>
-                            <div style={{
-                              height: '100%',
-                              background: 'linear-gradient(90deg, var(--status-red) 0%, #f472b6 100%)',
-                              width: `${Math.min(100, (mon.spesa_totale / (Math.max(...skuDetail.consumo_per_mese.map(m => m.spesa_totale)) || 1)) * 100)}%`
-                            }}></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
               </div>
@@ -633,6 +746,178 @@ export default function ProductConsumptionReport() {
         )}
 
       </div>
+
+      {/* Riepilogo Fatture Modal */}
+      {showInvoicesModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(10, 10, 15, 0.85)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px',
+          boxSizing: 'border-box'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '1000px',
+            maxHeight: '85vh',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '24px',
+            background: 'rgba(20, 20, 30, 0.95)',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '16px',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '16px', marginBottom: '20px' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileText size={20} color="var(--accent-blue)" />
+                  Riepilogo Fatture di Consumo
+                </h4>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  {detailTitle}
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  onClick={handlePDFExport}
+                  className="btn"
+                  style={{
+                    fontSize: '0.8rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: 'var(--status-red)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 500,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+                >
+                  <Download size={14} />
+                  Esporta PDF
+                </button>
+                <button
+                  onClick={() => setShowInvoicesModal(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+                  onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Table / Content */}
+            {loadingInvoices ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '60px 0', color: 'var(--text-secondary)' }}>
+                <RefreshCw className="animate-spin" size={24} color="var(--accent-blue)" />
+                <span>Caricamento riepilogo fatture...</span>
+              </div>
+            ) : invoicesList.length === 0 ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 0', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                Nessuna fattura trovata per i criteri selezionati.
+              </div>
+            ) : (
+              <div style={{ flex: 1, overflowY: 'auto', marginRight: '-8px', paddingRight: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--text-secondary)', textAlign: 'left' }}>
+                      <th style={{ padding: '10px' }}>Data</th>
+                      <th style={{ padding: '10px' }}>N. Documento</th>
+                      <th style={{ padding: '10px' }}>Sede</th>
+                      <th style={{ padding: '10px' }}>Fornitore</th>
+                      <th style={{ padding: '10px' }}>Descrizione XML</th>
+                      <th style={{ padding: '10px', textAlign: 'right' }}>Quantità</th>
+                      <th style={{ padding: '10px', textAlign: 'right' }}>Prezzo Unit.</th>
+                      <th style={{ padding: '10px', textAlign: 'right' }}>Spesa Totale</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoicesList.map((inv, idx) => (
+                      <tr 
+                        key={idx} 
+                        style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.03)', transition: 'background 0.2s' }}
+                        className="table-row-hover"
+                      >
+                        <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>{formatData(inv.data_documento)}</td>
+                        <td style={{ padding: '12px 10px', fontWeight: 500, color: 'white' }}>{inv.numero_documento}</td>
+                        <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{inv.location_nome}</td>
+                        <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{inv.fornitore_nome}</td>
+                        <td style={{ padding: '12px 10px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={inv.prodotto_descrizione}>
+                          {inv.prodotto_descrizione}
+                        </td>
+                        <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 600 }}>
+                          {inv.quantita.toLocaleString(undefined, { minimumFractionDigits: 1 })} {inv.unita_misura}
+                        </td>
+                        <td style={{ padding: '12px 10px', textAlign: 'right', color: '#10b981' }}>
+                          € {inv.prezzo_unitario.toFixed(2)}
+                        </td>
+                        <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 600, color: 'white' }}>
+                          € {inv.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Footer Summary / Stats */}
+            {!loadingInvoices && invoicesList.length > 0 && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '40px',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                paddingTop: '16px',
+                marginTop: '16px',
+                fontSize: '0.9rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Quantità Totale:</span>
+                  <span style={{ fontWeight: 700, color: 'white' }}>
+                    {invoicesList.reduce((acc, curr) => acc + curr.quantita, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} unità
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Spesa Totale:</span>
+                  <span style={{ fontWeight: 700, color: '#10b981' }}>
+                    € {invoicesList.reduce((acc, curr) => acc + curr.spesa_totale, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );
