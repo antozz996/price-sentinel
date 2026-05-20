@@ -73,6 +73,30 @@ export default function PriceListManager() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const nomeFornitore = fornitori.find(f => f.id === Number(selectedFornitore))?.nome_azienda || 'Generico';
+      const res = await fetch(`${API_BASE}/listino/template-excel?NomeFornitore=${encodeURIComponent(nomeFornitore)}`, {
+        headers: getHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error('Errore durante il download del template');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `template_listino_${nomeFornitore.replace(/ /g, '_').toLowerCase()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert('Impossibile scaricare il template');
+    }
+  };
+
   return (
     <div className="glass-panel" style={{ padding: '32px', maxWidth: '800px', margin: '0 auto' }}>
       <div style={{ textAlign: 'center', marginBottom: '40px' }}>
@@ -88,9 +112,9 @@ export default function PriceListManager() {
               <h4 style={{ marginBottom: '4px' }}>1. Utilizza il Template</h4>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Assicurati che le colonne corrispondano allo standard di Price Sentinel.</p>
             </div>
-            <a href={`${API_BASE}/listino/template-excel`} target="_blank" className="btn" style={{ textDecoration: 'none' }}>
+            <button onClick={handleDownloadTemplate} className="btn" style={{ textDecoration: 'none' }}>
               <Download size={18} /> Scarica Template
-            </a>
+            </button>
           </div>
         </div>
 
