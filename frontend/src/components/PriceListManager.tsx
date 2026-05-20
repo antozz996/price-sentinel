@@ -53,18 +53,29 @@ export default function PriceListManager() {
     formData.append('file', file);
 
     try {
+      const headers = getHeaders();
+      delete headers['Content-Type'];
+
       const res = await fetch(`${API_BASE}/listino/import-excel/${selectedFornitore}`, {
         method: 'POST',
-        headers: getHeaders(),
+        headers,
         body: formData,
       });
 
       const result = await res.json();
       if (res.ok) {
+        if (result.mode === 'validation_failed') {
+          setMessage({ text: `Validazione fallita. Errori: ${result.errors?.length || 0}`, type: 'error' });
+          return;
+        }
         setMessage({ text: `Importato con successo: ${result.inserted} prodotti aggiunti.`, type: 'success' });
         setFile(null);
       } else {
-        setMessage({ text: `Errore: ${result.detail || 'Impossibile caricare il listino'}`, type: 'error' });
+        let errorMsg = result.detail || 'Impossibile caricare il listino';
+        if (typeof errorMsg === 'object') {
+           errorMsg = Array.isArray(errorMsg) ? errorMsg.map((e:any) => e.msg).join(', ') : JSON.stringify(errorMsg);
+        }
+        setMessage({ text: `Errore: ${errorMsg}`, type: 'error' });
       }
     } catch (err) {
       setMessage({ text: 'Errore di rete o server non raggiungibile', type: 'error' });
