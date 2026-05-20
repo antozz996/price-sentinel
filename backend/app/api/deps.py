@@ -102,11 +102,11 @@ async def require_admin(
 async def require_manager(
     current_user: Utente = Depends(get_current_user),
 ) -> Utente:
-    """Verifica che l'utente corrente sia Manager."""
-    if current_user.ruolo.value != "manager":
+    """Verifica che l'utente corrente sia Manager o Admin."""
+    if current_user.ruolo.value not in ["manager", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Accesso riservato ai manager",
+            detail="Accesso riservato ai manager o amministratori",
         )
     return current_user
 
