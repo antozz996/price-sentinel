@@ -68,7 +68,12 @@ export default function PriceListManager() {
           setMessage({ text: `Validazione fallita. Errori: ${result.errors?.length || 0}`, type: 'error' });
           return;
         }
-        setMessage({ text: `Importato con successo: ${result.inserted} prodotti aggiunti.`, type: 'success' });
+        
+        let msg = `Importato con successo! Aggiunti: ${result.inserted}.`;
+        if (result.updated > 0) msg += ` Aggiornati: ${result.updated}.`;
+        if (result.skipped_duplicates > 0) msg += ` Saltati (già presenti e invariati): ${result.skipped_duplicates}.`;
+        
+        setMessage({ text: msg, type: 'success' });
         setFile(null);
       } else {
         let errorMsg = result.detail || 'Impossibile caricare il listino';
