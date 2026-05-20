@@ -576,7 +576,7 @@ async def get_variance_loss(
             sku_interno, 
             MIN(prezzo_netto_normalizzato) AS min_price
         FROM righe_fattura
-        WHERE stato_matching = 'matched' AND sku_interno IS NOT NULL
+        WHERE stato_matching = 'matched' AND sku_interno IS NOT NULL AND prezzo_netto_normalizzato > 0
         GROUP BY sku_interno
     )
     SELECT 
