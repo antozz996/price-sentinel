@@ -159,9 +159,11 @@ async def import_listino_excel(
             **parse_result.to_dict(),
         }
 
-    # Insert effettivo
     inserted = 0
     skipped = 0
+    updated = 0
+    from datetime import date
+
     for record in parse_result.records:
         # Check duplicato SKU attivo per lo stesso fornitore
         existing = await db.execute(
@@ -173,9 +175,27 @@ async def import_listino_excel(
                 )
             )
         )
-        if existing.scalar_one_or_none():
-            skipped += 1
-            continue
+        existing_listino = existing.scalar_one_or_none()
+        
+        new_pfa_tipo = PFATipo(record["pfa_tipo"].lower()) if record.get("pfa_tipo") else None
+        
+        if existing_listino:
+            # Check se i valori sono identici (nessun aggiornamento necessario)
+            old_pfa_tipo = existing_listino.pfa_tipo
+            old_pfa_valore = existing_listino.pfa_valore
+            
+            if (float(existing_listino.prezzo_pattuito) == float(record["prezzo_pattuito"]) and
+                existing_listino.unita_misura == record["unita_misura"] and
+                old_pfa_tipo == new_pfa_tipo and
+                old_pfa_valore == record.get("pfa_valore")):
+                skipped += 1
+                continue
+            
+            # Valori cambiati: storicizza il vecchio
+            existing_listino.data_scadenza = date.today()
+            updated += 1
+        else:
+            inserted += 1
 
         listino = ListinoMaster(
             fornitore_id=record["fornitore_id"],
@@ -185,11 +205,10 @@ async def import_listino_excel(
             unita_misura=record["unita_misura"],
             data_inizio_validita=record["data_inizio_validita"],
             data_scadenza=None,
-            pfa_tipo=PFATipo(record["pfa_tipo"].lower()) if record.get("pfa_tipo") else None,
+            pfa_tipo=new_pfa_tipo,
             pfa_valore=record.get("pfa_valore"),
         )
         db.add(listino)
-        inserted += 1
 
     await db.flush()
 
@@ -198,6 +217,7 @@ async def import_listino_excel(
         "fornitore": fornitore.nome_azienda,
         "total_rows": parse_result.total_rows,
         "inserted": inserted,
+        "updated": updated,
         "skipped_duplicates": skipped,
         "errors_count": 0,
     }
