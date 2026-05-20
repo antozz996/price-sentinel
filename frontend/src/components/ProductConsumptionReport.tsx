@@ -868,7 +868,32 @@ export default function ProductConsumptionReport() {
                         className="table-row-hover"
                       >
                         <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>{formatData(inv.data_documento)}</td>
-                        <td style={{ padding: '12px 10px', fontWeight: 500, color: 'white' }}>{inv.numero_documento}</td>
+                        <td style={{ padding: '12px 10px' }}>
+                          <span
+                            onClick={() => {
+                              const token = localStorage.getItem('token');
+                              window.open(`${API_BASE}/fatture/${inv.fattura_id}/html?token=${token}`, '_blank');
+                            }}
+                            style={{
+                              fontWeight: 600,
+                              color: '#60a5fa',
+                              cursor: 'pointer',
+                              textDecoration: 'none',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseOver={(e) => {
+                              e.currentTarget.style.color = '#93c5fd';
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseOut={(e) => {
+                              e.currentTarget.style.color = '#60a5fa';
+                              e.currentTarget.style.textDecoration = 'none';
+                            }}
+                            title="Visualizza anteprima fattura originale"
+                          >
+                            {inv.numero_documento}
+                          </span>
+                        </td>
                         <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{inv.location_nome}</td>
                         <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{inv.fornitore_nome}</td>
                         <td style={{ padding: '12px 10px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={inv.prodotto_descrizione}>
