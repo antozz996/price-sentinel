@@ -211,10 +211,12 @@ async def get_fattura_html(
     db: AsyncSession = Depends(get_db),
 ):
     import html
+    from sqlalchemy.orm import selectinload
 
     # Recupera la fattura con join su Fornitore e Location
     query = (
         select(Fattura)
+        .options(selectinload(Fattura.fornitore), selectinload(Fattura.location))
         .where(Fattura.id == fattura_id)
     )
     if current_user.ruolo.value == "manager" and current_user.location_id:
