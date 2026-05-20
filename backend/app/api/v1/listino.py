@@ -42,7 +42,7 @@ async def list_listino(
     response: Response,
     fornitore_id: int | None = Query(None),
     include_scaduti: bool = Query(False, description="Includi record scaduti"),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
