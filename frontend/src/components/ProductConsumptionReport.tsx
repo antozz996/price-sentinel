@@ -34,6 +34,9 @@ interface SKUDetail {
     quantita_totale: number;
     spesa_totale: number;
   }>;
+  prezzo_minimo?: number;
+  prezzo_massimo?: number;
+  prezzo_medio?: number;
 }
 
 const cleanText = (str: string) => {
@@ -237,7 +240,10 @@ export default function ProductConsumptionReport() {
       setSkuDetail({
         sku_interno: skus.length === 1 ? skus[0] : `${skus.length} Articoli`,
         consumo_per_location: byLocation,
-        consumo_per_mese: byMonth
+        consumo_per_mese: byMonth,
+        prezzo_minimo: data.prezzo_minimo,
+        prezzo_massimo: data.prezzo_massimo,
+        prezzo_medio: data.prezzo_medio
       });
     } catch (err) {
       console.error(err);
@@ -304,6 +310,9 @@ export default function ProductConsumptionReport() {
   const totalSpend = skuDetail
     ? skuDetail.consumo_per_location.reduce((sum, loc) => sum + loc.spesa_totale, 0)
     : 0;
+  const prezzoMinimo = skuDetail?.prezzo_minimo || 0;
+  const prezzoMassimo = skuDetail?.prezzo_massimo || 0;
+  const prezzoMedio = skuDetail?.prezzo_medio || 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -675,7 +684,7 @@ export default function ProductConsumptionReport() {
                   onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
                 >
                   <FileText size={14} color="var(--accent-blue)" />
-                  Riepilogo Fatture
+                  Vedi Storico
                 </button>
                 <button
                   onClick={handlePDFExport}
@@ -715,48 +724,112 @@ export default function ProductConsumptionReport() {
                 </div>
 
                 {/* Grand Total Summary Box */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '12px'
-                }}>
-                  {/* Volume Card */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Row 1: Volume & Spesa */}
                   <div style={{
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    border: '1px solid rgba(255, 255, 255, 0.04)',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '12px'
                   }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 500 }}>
-                      Volume Totale Consolidato
-                    </span>
-                    <span style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                      {totalUnits.toLocaleString()}
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400 }}>unità</span>
-                    </span>
+                    {/* Volume Card */}
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px solid rgba(255, 255, 255, 0.04)',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 500 }}>
+                        Volume Totale Consolidato
+                      </span>
+                      <span style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                        {totalUnits.toLocaleString()}
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400 }}>unità</span>
+                      </span>
+                    </div>
+
+                    {/* Spend Card */}
+                    <div style={{
+                      background: 'rgba(16, 185, 129, 0.04)',
+                      border: '1px solid rgba(16, 185, 129, 0.1)',
+                      borderRadius: '12px',
+                      padding: '14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                    }}>
+                      <span style={{ fontSize: '0.7rem', color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+                        Spesa Totale Consolidata
+                      </span>
+                      <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#34d399' }}>
+                        € {totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Spend Card */}
+                  {/* Row 2: Min, Medio, Max Prices */}
                   <div style={{
-                    background: 'rgba(16, 185, 129, 0.04)',
-                    border: '1px solid rgba(16, 185, 129, 0.1)',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px',
-                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                    gap: '12px'
                   }}>
-                    <span style={{ fontSize: '0.7rem', color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
-                      Spesa Totale Consolidata
-                    </span>
-                    <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#34d399' }}>
-                      € {totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                    {/* Min Price Card */}
+                    <div style={{
+                      background: 'rgba(59, 130, 246, 0.03)',
+                      border: '1px solid rgba(59, 130, 246, 0.08)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <span style={{ fontSize: '0.65rem', color: '#93c5fd', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+                        Prezzo Minimo
+                      </span>
+                      <span style={{ fontSize: '1.15rem', fontWeight: 700, color: '#60a5fa' }}>
+                        € {prezzoMinimo.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Avg Price Card */}
+                    <div style={{
+                      background: 'rgba(139, 92, 246, 0.03)',
+                      border: '1px solid rgba(139, 92, 246, 0.08)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <span style={{ fontSize: '0.65rem', color: '#c084fc', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+                        Prezzo Medio
+                      </span>
+                      <span style={{ fontSize: '1.15rem', fontWeight: 700, color: '#a78bfa' }}>
+                        € {prezzoMedio.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+
+                    {/* Max Price Card */}
+                    <div style={{
+                      background: 'rgba(245, 158, 11, 0.03)',
+                      border: '1px solid rgba(245, 158, 11, 0.08)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <span style={{ fontSize: '0.65rem', color: '#fcd34d', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+                        Prezzo Massimo
+                      </span>
+                      <span style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fbbf24' }}>
+                        € {prezzoMassimo.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -875,7 +948,7 @@ export default function ProductConsumptionReport() {
               <div>
                 <h4 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FileText size={20} color="var(--accent-blue)" />
-                  Riepilogo Fatture di Consumo
+                  Storico Fatture di Consumo
                 </h4>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   {detailTitle}

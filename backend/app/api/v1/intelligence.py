@@ -946,10 +946,36 @@ async def get_product_consumption_detail(
             "spesa_totale": float(r.spesa_totale or 0)
         })
 
+    # 3. Aggregated Prices (Min, Max, Avg)
+    sql_prices = f"""
+    SELECT 
+        MIN(CASE WHEN rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato END) as prezzo_minimo,
+        MAX(CASE WHEN rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato END) as prezzo_massimo,
+        CASE 
+            WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
+            ELSE 0 
+        END as prezzo_medio
+    FROM righe_fattura rf
+    JOIN fatture f ON rf.fattura_id = f.id
+    WHERE {sku_filter}
+      {location_filter}
+      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
+      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
+    """
+    res_prices = await db.execute(text(sql_prices), params)
+    row_prices = res_prices.one_or_none()
+    prezzo_minimo = float(row_prices.prezzo_minimo or 0) if row_prices and row_prices.prezzo_minimo else 0.0
+    prezzo_massimo = float(row_prices.prezzo_massimo or 0) if row_prices and row_prices.prezzo_massimo else 0.0
+    prezzo_medio = float(row_prices.prezzo_medio or 0) if row_prices and row_prices.prezzo_medio else 0.0
+
     return {
         "sku_interno": sku_interno,
         "consumo_per_location": by_location,
-        "consumo_per_mese": by_month
+        "consumo_per_mese": by_month,
+        "prezzo_minimo": prezzo_minimo,
+        "prezzo_massimo": prezzo_massimo,
+        "prezzo_medio": prezzo_medio
     }
 
 
