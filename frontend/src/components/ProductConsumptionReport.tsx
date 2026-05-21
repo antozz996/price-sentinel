@@ -36,6 +36,17 @@ interface SKUDetail {
   }>;
 }
 
+const cleanText = (str: string) => {
+  if (!str) return '';
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'");
+};
+
 export default function ProductConsumptionReport() {
   const [consumption, setConsumption] = useState<ConsumptionItem[]>([]);
   const [locations, setLocations] = useState<LocationItem[]>([]);
@@ -184,7 +195,11 @@ export default function ProductConsumptionReport() {
       const res = await fetch(`${API_BASE}/intelligence/product-consumption?${params.toString()}`, { headers });
       if (!res.ok) throw new Error("Impossibile recuperare l'analisi dei consumi.");
       const data = await res.json();
-      setConsumption(data);
+      const sanitizedData = data.map((item: ConsumptionItem) => ({
+        ...item,
+        descrizione: cleanText(item.descrizione)
+      }));
+      setConsumption(sanitizedData);
     } catch (err: any) {
       setError(err.message || 'Errore di connessione al server.');
     } finally {
@@ -282,6 +297,13 @@ export default function ProductConsumptionReport() {
     : selectedSkus.length === 1
       ? (consumption.find(item => item.sku_interno === selectedSkus[0])?.descrizione || selectedSkus[0])
       : `Consumo Consolidato (${selectedSkus.length} Prodotti)`;
+
+  const totalUnits = skuDetail 
+    ? skuDetail.consumo_per_location.reduce((sum, loc) => sum + loc.quantita_totale, 0)
+    : 0;
+  const totalSpend = skuDetail
+    ? skuDetail.consumo_per_location.reduce((sum, loc) => sum + loc.spesa_totale, 0)
+    : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -690,6 +712,52 @@ export default function ProductConsumptionReport() {
                 <div>
                   <h3 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', color: 'white', lineHeight: '1.4' }}>{detailTitle}</h3>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>Analisi dei volumi e spesa consolidata</p>
+                </div>
+
+                {/* Grand Total Summary Box */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '12px'
+                }}>
+                  {/* Volume Card */}
+                  <div style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.04)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 500 }}>
+                      Volume Totale Consolidato
+                    </span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                      {totalUnits.toLocaleString()}
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400 }}>unità</span>
+                    </span>
+                  </div>
+
+                  {/* Spend Card */}
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.04)',
+                    border: '1px solid rgba(16, 185, 129, 0.1)',
+                    borderRadius: '12px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                  }}>
+                    <span style={{ fontSize: '0.7rem', color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+                      Spesa Totale Consolidata
+                    </span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#34d399' }}>
+                      € {totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{
