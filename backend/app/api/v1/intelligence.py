@@ -130,7 +130,8 @@ async def get_cross_location_matrix(
             Fattura.location_id, 
             RigaFattura.prezzo_netto_normalizzato,
             RigaFattura.descrizione_fornitore_raw,
-            Fattura.id.label("fattura_id")
+            Fattura.id.label("fattura_id"),
+            RigaFattura.quantita
         )
         .join(subquery, RigaFattura.id == subquery.c.max_riga_id)
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
@@ -141,14 +142,15 @@ async def get_cross_location_matrix(
     
     # Costruiamo la risposta JSON formattata per la griglia UI
     matrix = {}
-    for sku, loc_id, price, desc, fattura_id in records:
+    for sku, loc_id, price, desc, fattura_id, quantita in records:
         display_name = f"{desc or 'Prodotto Senza Nome'} ({sku})"
         if display_name not in matrix:
             matrix[display_name] = {}
         # Arrotonda a 2 decimali per allinearsi perfettamente alla griglia UI ed evitare falsi positivi
         matrix[display_name][loc_id] = {
             "prezzo": round(float(price), 2),
-            "fattura_id": int(fattura_id)
+            "fattura_id": int(fattura_id),
+            "quantita": float(quantita)
         }
         
     # Filtriamo per restituire solo gli SKU con reale delta prezzi tra le sedi (delta > 0.01)

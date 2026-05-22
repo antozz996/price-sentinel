@@ -15,7 +15,7 @@ interface FornitoreItem {
 }
 
 export default function CrossLocationMatrix() {
-  const [matrix, setMatrix] = useState<Record<string, Record<string, { prezzo: number; fattura_id: number }>> | null>(null);
+  const [matrix, setMatrix] = useState<Record<string, Record<string, { prezzo: number; fattura_id: number; quantita?: number }>> | null>(null);
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [fornitori, setFornitori] = useState<FornitoreItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,8 +272,11 @@ export default function CrossLocationMatrix() {
 
                         const price = cellData.prezzo;
                         const fatturaId = cellData.fattura_id;
+                        const quantita = cellData.quantita || 0;
                         const isMin = minPrice !== null && (price - minPrice) <= 0.0101;
                         const delta = minPrice !== null && minPrice > 0 ? ((price - minPrice) / minPrice) * 100 : 0;
+                        const deltaUnitario = minPrice !== null && price > minPrice ? price - minPrice : 0;
+                        const deltaTotaleEconomico = deltaUnitario * quantita;
 
                         return (
                           <td 
@@ -317,6 +320,16 @@ export default function CrossLocationMatrix() {
                                   fontWeight: 500
                                 }}>
                                   +{delta.toFixed(0)}% delta
+                                </span>
+                              )}
+                              {!isMin && delta > 0 && deltaTotaleEconomico > 0 && (
+                                <span style={{ 
+                                  fontSize: '0.65rem', 
+                                  color: 'rgba(255, 255, 255, 0.65)',
+                                  marginTop: '2px',
+                                  fontWeight: 400
+                                }}>
+                                  Spreco: <strong style={{ color: '#ef4444' }}>€ {deltaTotaleEconomico.toFixed(2)}</strong> ({quantita.toFixed(0)} BT)
                                 </span>
                               )}
                               {isMin && pricesList.length > 1 && (
