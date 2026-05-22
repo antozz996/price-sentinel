@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2 } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -16,6 +16,7 @@ import { API_BASE, getHeaders } from './api'
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isAuth, setIsAuth] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
   // Login form states
   const [email, setEmail] = useState('')
@@ -255,19 +256,37 @@ export default function App() {
 
   return (
     <div className="app-container">
+      {/* Mobile Sidebar Backdrop */}
+      {mobileSidebarOpen && (
+        <div 
+          className="sidebar-backdrop"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="sidebar">
-        <div style={{ marginBottom: '40px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Activity color="white" size={20} />
+      <aside className={`sidebar ${mobileSidebarOpen ? 'sidebar-open' : ''}`}>
+        <div style={{ marginBottom: '40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Activity color="white" size={20} />
+            </div>
+            <h2 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 700, letterSpacing: '1px' }}>PRICE SENTINEL</h2>
           </div>
-          <h2 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 700, letterSpacing: '1px' }}>PRICE SENTINEL</h2>
+          {/* Mobile Close Drawer Button */}
+          <button 
+            className="mobile-sidebar-close" 
+            onClick={() => setMobileSidebarOpen(false)}
+            style={{ display: 'none' }}
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button 
             className={`btn ${activeTab === 'dashboard' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'dashboard' ? '' : 'transparent', border: 'none' }}
           >
             <LayoutDashboard size={18} /> Overview
@@ -275,7 +294,7 @@ export default function App() {
           
           <button 
             className={`btn ${activeTab === 'upload' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('upload')}
+            onClick={() => { setActiveTab('upload'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'upload' ? '' : 'transparent', border: 'none' }}
           >
             <FileUp size={18} /> Carica Fatture
@@ -283,7 +302,7 @@ export default function App() {
 
           <button 
             className={`btn ${activeTab === 'fatture' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('fatture')}
+            onClick={() => { setActiveTab('fatture'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'fatture' ? '' : 'transparent', border: 'none' }}
           >
             <FileText size={18} /> Registro Fatture
@@ -291,7 +310,7 @@ export default function App() {
 
           <button 
             className={`btn ${activeTab === 'validation' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('validation')}
+            onClick={() => { setActiveTab('validation'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'validation' ? '' : 'transparent', border: 'none' }}
           >
             <AlertTriangle size={18} /> Validazione
@@ -299,7 +318,7 @@ export default function App() {
           
           <button 
             className={`btn ${activeTab === 'listini' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('listini')}
+            onClick={() => { setActiveTab('listini'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'listini' ? '' : 'transparent', border: 'none' }}
           >
             <FileSpreadsheet size={18} /> Listini Master
@@ -307,7 +326,7 @@ export default function App() {
 
           <button 
             className={`btn ${activeTab === 'crosslocation' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('crosslocation')}
+            onClick={() => { setActiveTab('crosslocation'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'crosslocation' ? '' : 'transparent', border: 'none' }}
           >
             <Grid size={18} /> Analisi Incrociata
@@ -315,7 +334,7 @@ export default function App() {
 
           <button 
             className={`btn ${activeTab === 'productconsumption' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('productconsumption')}
+            onClick={() => { setActiveTab('productconsumption'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'productconsumption' ? '' : 'transparent', border: 'none' }}
           >
             <BarChart2 size={18} /> Analisi Consumi
@@ -323,7 +342,7 @@ export default function App() {
 
           <button 
             className={`btn ${activeTab === 'ordini' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('ordini')}
+            onClick={() => { setActiveTab('ordini'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'ordini' ? '' : 'transparent', border: 'none' }}
           >
             <ShoppingCart size={18} /> Ottimizzatore Ordini
@@ -331,7 +350,7 @@ export default function App() {
 
           <button 
             className={`btn ${activeTab === 'skumanager' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('skumanager')}
+            onClick={() => { setActiveTab('skumanager'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'skumanager' ? '' : 'transparent', border: 'none' }}
           >
             <Tag size={18} /> Gestione SKU
@@ -341,7 +360,7 @@ export default function App() {
         <div style={{ marginTop: 'auto' }}>
           <button 
             className={`btn ${activeTab === 'settings' ? 'btn-primary' : ''}`}
-            onClick={() => setActiveTab('settings')}
+            onClick={() => { setActiveTab('settings'); setMobileSidebarOpen(false); }}
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'settings' ? '' : 'transparent', border: 'none', color: activeTab === 'settings' ? 'white' : 'var(--text-secondary)' }}
           >
             <Settings size={18} /> Settings
@@ -355,14 +374,37 @@ export default function App() {
         <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'var(--accent-blue)', filter: 'blur(150px)', opacity: 0.15, pointerEvents: 'none', borderRadius: '50%' }}></div>
         <div style={{ position: 'absolute', bottom: '-10%', left: '20%', width: '300px', height: '300px', background: 'var(--status-red)', filter: 'blur(150px)', opacity: 0.1, pointerEvents: 'none', borderRadius: '50%' }}></div>
 
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', position: 'relative', zIndex: 1 }}>
-          <div>
-            <h1 style={{ fontSize: '2rem', marginBottom: '8px' }}>{info.title}</h1>
-            <p style={{ color: 'var(--text-secondary)' }}>{info.sub}</p>
+        <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Hamburger button shown ONLY on mobile */}
+            <button 
+              className="hamburger-btn" 
+              onClick={() => setMobileSidebarOpen(true)}
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--border-glass)',
+                borderRadius: '8px',
+                width: '40px',
+                height: '40px',
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                cursor: 'pointer',
+                transition: 'var(--transition-smooth)'
+              }}
+            >
+              <Menu size={20} />
+            </button>
+            
+            <div>
+              <h1 className="header-title" style={{ fontSize: '2rem', marginBottom: '8px' }}>{info.title}</h1>
+              <p className="header-subtitle" style={{ color: 'var(--text-secondary)' }}>{info.sub}</p>
+            </div>
           </div>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ textAlign: 'right' }}>
+          <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div className="profile-info" style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 600 }}>C.E.O. Direction</div>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>admin@pricesentinel.it</div>
             </div>
