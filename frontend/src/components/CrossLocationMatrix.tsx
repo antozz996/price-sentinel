@@ -272,7 +272,7 @@ export default function CrossLocationMatrix() {
 
                         const price = cellData.prezzo;
                         const fatturaId = cellData.fattura_id;
-                        const isMin = minPrice !== null && price === minPrice;
+                        const isMin = minPrice !== null && (price - minPrice) <= 0.0101;
                         const delta = minPrice !== null && minPrice > 0 ? ((price - minPrice) / minPrice) * 100 : 0;
 
                         return (
