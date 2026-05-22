@@ -166,6 +166,87 @@ async def get_cross_location_matrix(
     return sorted_matrix
 
 
+@router.get("/cross-supplier", summary="Cross-Supplier Pricing Matrix")
+async def get_cross_supplier_matrix(
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """
+    Ritorna la matrice comparativa incrociata dei prezzi per fornitore.
+    Incrocia i listini concordati (ListinoMaster) e le fatture storiche (prezzo spot minimo).
+    """
+    # 1. Recupero contratti attivi (data_scadenza IS NULL)
+    contracts_stmt = select(
+        ListinoMaster.sku_interno,
+        ListinoMaster.descrizione,
+        ListinoMaster.fornitore_id,
+        ListinoMaster.prezzo_pattuito
+    ).where(ListinoMaster.data_scadenza.is_(None))
+    
+    contracts_res = await db.execute(contracts_stmt)
+    contracts = contracts_res.all()
+    
+    # 2. Recupero prezzi storici spot minimi da righe fattura registrate (matched)
+    spot_stmt = (
+        select(
+            RigaFattura.sku_interno,
+            RigaFattura.descrizione_fornitore_raw,
+            Fattura.fornitore_id,
+            func.min(RigaFattura.prezzo_netto_normalizzato).label("prezzo_min")
+        )
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+        .where(RigaFattura.stato_matching == StatoMatching.matched)
+        .where(RigaFattura.sku_interno.isnot(None))
+        .group_by(RigaFattura.sku_interno, RigaFattura.descrizione_fornitore_raw, Fattura.fornitore_id)
+    )
+    
+    spot_res = await db.execute(spot_stmt)
+    spots = spot_res.all()
+    
+    # 3. Consolidamento dei dati in formato SKU -> prezzi per fornitore
+    matrix = {}
+    
+    # Processiamo prima gli spot storici
+    for sku, desc, fornitore_id, prezzo_min in spots:
+        if not sku:
+            continue
+        if sku not in matrix:
+            matrix[sku] = {
+                "sku_interno": sku,
+                "descrizione": desc or f"Prodotto {sku}",
+                "prezzi": {}
+            }
+        matrix[sku]["prezzi"][str(fornitore_id)] = {
+            "prezzo": round(float(prezzo_min), 2),
+            "tipo": "spot"
+        }
+        
+    # Sovrapponiamo i contratti concordati (hanno priorità rispetto allo spot dello stesso fornitore)
+    for sku, desc, fornitore_id, prezzo_pattuito in contracts:
+        if not sku:
+            continue
+        if sku not in matrix:
+            matrix[sku] = {
+                "sku_interno": sku,
+                "descrizione": desc or f"Prodotto {sku}",
+                "prezzi": {}
+            }
+        if desc:
+            matrix[sku]["descrizione"] = desc
+            
+        matrix[sku]["prezzi"][str(fornitore_id)] = {
+            "prezzo": round(float(prezzo_pattuito), 2),
+            "tipo": "concordato"
+        }
+        
+    # Ordiniamo alfabeticamente per descrizione prodotto
+    sorted_matrix = {}
+    for sku in sorted(matrix.keys(), key=lambda s: matrix[s]["descrizione"].lower()):
+        sorted_matrix[sku] = matrix[sku]
+        
+    return sorted_matrix
+
+
 @router.get("/export-vendor-passport/{fornitore_id}", summary="Download Vendor Passport PDF")
 async def export_vendor_passport(
     fornitore_id: int,

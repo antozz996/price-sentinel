@@ -11,6 +11,7 @@ import OrderOptimizer from './components/OrderOptimizer'
 import SkuManager from './components/SkuManager'
 import SentinelCopilot from './components/SentinelCopilot'
 import ProductConsumptionReport from './components/ProductConsumptionReport'
+import CrossSupplierMatrix from './components/CrossSupplierMatrix'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -228,6 +229,7 @@ export default function App() {
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
       case 'crosslocation': return <CrossLocationMatrix />;
+      case 'crosssupplier': return <CrossSupplierMatrix />;
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
@@ -244,6 +246,7 @@ export default function App() {
       case 'validation': return { title: 'Stanza di Validazione', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
       case 'crosslocation': return { title: 'Analisi Comparativa Sedi', sub: 'Matrice comparativa prezzi d\'acquisto e Vendor Passport' };
+      case 'crosssupplier': return { title: 'Comparazione Fornitori', sub: 'Matrice incrociata dei prezzi per fornitore' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
@@ -330,6 +333,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'crosslocation' ? '' : 'transparent', border: 'none' }}
           >
             <Grid size={18} /> Analisi Incrociata
+          </button>
+
+          <button 
+            className={`btn ${activeTab === 'crosssupplier' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('crosssupplier'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'crosssupplier' ? '' : 'transparent', border: 'none' }}
+          >
+            <Grid size={18} style={{ transform: 'rotate(90deg)' }} /> Comparazione Fornitori
           </button>
 
           <button 
