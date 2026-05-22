@@ -137,3 +137,124 @@ h1, h2, h3, h4 {
 .badge-red { background: var(--status-red-bg); color: var(--status-red); border: 1px solid rgba(239, 68, 68, 0.2); }
 .badge-yellow { background: var(--status-yellow-bg); color: var(--status-yellow); border: 1px solid rgba(245, 158, 11, 0.2); }
 .badge-green { background: var(--status-green-bg); color: var(--status-green); border: 1px solid rgba(16, 185, 129, 0.2); }
+
+/* Responsive Media Queries & Mobile Optimization */
+@media (max-width: 1024px) {
+  .app-container {
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+  }
+
+  .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    z-index: 10000 !important;
+    width: 280px !important;
+    height: 100vh !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-shadow: 5px 0 25px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0) !important;
+  }
+
+  .sidebar-backdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: rgba(10, 10, 15, 0.75) !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    z-index: 9999 !important;
+  }
+
+  .mobile-sidebar-close {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-secondary) !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 8px !important;
+    border-radius: 50% !important;
+    transition: var(--transition-smooth) !important;
+  }
+
+  .mobile-sidebar-close:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: white !important;
+  }
+
+  .main-content {
+    padding: 20px !important;
+    overflow-y: visible !important;
+  }
+
+  /* Header adjustments */
+  .app-header {
+    margin-bottom: 24px !important;
+  }
+
+  .hamburger-btn {
+    display: flex !important;
+  }
+
+  .header-title {
+    font-size: 1.5rem !important;
+    margin-bottom: 4px !important;
+  }
+
+  .header-subtitle {
+    font-size: 0.8rem !important;
+  }
+
+  .profile-info {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .glass-panel {
+    padding: 16px !important;
+    border-radius: var(--border-radius-md) !important;
+  }
+
+  /* ProductConsumptionReport details responsive adjustments */
+  .detail-kpi-row-1 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .detail-kpi-row-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .detail-split-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+
+  .invoices-modal-content {
+    max-height: 95vh !important;
+    padding: 16px !important;
+  }
+
+  .modal-header-container {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .modal-header-container > div {
+    width: 100% !important;
+  }
+}
+

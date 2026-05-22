@@ -726,7 +726,7 @@ export default function ProductConsumptionReport() {
                 {/* Grand Total Summary Box */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {/* Row 1: Volume & Spesa */}
-                  <div style={{
+                  <div className="detail-kpi-row-1" style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr 1fr',
                     gap: '12px'
@@ -772,7 +772,7 @@ export default function ProductConsumptionReport() {
                   </div>
 
                   {/* Row 2: Min, Medio, Max Prices */}
-                  <div style={{
+                  <div className="detail-kpi-row-2" style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
                     gap: '12px'
@@ -833,7 +833,7 @@ export default function ProductConsumptionReport() {
                   </div>
                 </div>
 
-                <div style={{
+                <div className="detail-split-grid" style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
                   gap: '32px',
@@ -930,7 +930,7 @@ export default function ProductConsumptionReport() {
           padding: '20px',
           boxSizing: 'border-box'
         }}>
-          <div className="glass-panel" style={{
+          <div className="glass-panel invoices-modal-content" style={{
             width: '100%',
             maxWidth: '1000px',
             maxHeight: '85vh',
@@ -944,7 +944,7 @@ export default function ProductConsumptionReport() {
             overflow: 'hidden'
           }}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '16px', marginBottom: '20px' }}>
+            <div className="modal-header-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: '16px', marginBottom: '20px' }}>
               <div>
                 <h4 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FileText size={20} color="var(--accent-blue)" />
@@ -1011,7 +1011,7 @@ export default function ProductConsumptionReport() {
                 Nessuna fattura trovata per i criteri selezionati.
               </div>
             ) : (
-              <div style={{ flex: 1, overflowY: 'auto', marginRight: '-8px', paddingRight: '8px' }}>
+              <div style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', marginRight: '-8px', paddingRight: '8px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: 'var(--text-secondary)', textAlign: 'left' }}>
