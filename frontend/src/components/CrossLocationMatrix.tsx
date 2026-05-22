@@ -300,7 +300,7 @@ export default function CrossLocationMatrix() {
                               e.currentTarget.style.backgroundColor = 'transparent';
                             }}
                           >
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
                               <span style={{ 
                                 fontWeight: 600,
                                 color: isMin ? '#10b981' : '#f59e0b',
@@ -310,26 +310,23 @@ export default function CrossLocationMatrix() {
                               }}>
                                 € {price.toFixed(2)}
                               </span>
+                              {!isMin && delta > 0 && deltaTotaleEconomico > 0 && (
+                                <span style={{ 
+                                  fontSize: '0.75rem', 
+                                  color: '#ef4444', 
+                                  fontWeight: 700,
+                                  marginTop: '1px'
+                                }}>
+                                  Spreco: € {deltaTotaleEconomico.toFixed(2)} ({quantita.toFixed(0)} BT)
+                                </span>
+                              )}
                               {!isMin && delta > 0 && (
                                 <span style={{ 
-                                  fontSize: '0.7rem', 
-                                  color: '#ef4444', 
-                                  background: 'rgba(239,68,68,0.1)', 
-                                  padding: '1px 6px', 
-                                  borderRadius: '4px',
+                                  fontSize: '0.65rem', 
+                                  color: 'rgba(255, 255, 255, 0.45)', 
                                   fontWeight: 500
                                 }}>
                                   +{delta.toFixed(0)}% delta
-                                </span>
-                              )}
-                              {!isMin && delta > 0 && deltaTotaleEconomico > 0 && (
-                                <span style={{ 
-                                  fontSize: '0.65rem', 
-                                  color: 'rgba(255, 255, 255, 0.65)',
-                                  marginTop: '2px',
-                                  fontWeight: 400
-                                }}>
-                                  Spreco: <strong style={{ color: '#ef4444' }}>€ {deltaTotaleEconomico.toFixed(2)}</strong> ({quantita.toFixed(0)} BT)
                                 </span>
                               )}
                               {isMin && pricesList.length > 1 && (
