@@ -151,11 +151,11 @@ async def get_cross_location_matrix(
             "fattura_id": int(fattura_id)
         }
         
-    # Filtriamo per restituire solo gli SKU con reale delta prezzi tra le sedi (delta > 0)
+    # Filtriamo per restituire solo gli SKU con reale delta prezzi tra le sedi (delta > 0.01)
     filtered_matrix = {}
     for display_name, loc_prices in matrix.items():
-        unique_prices = {item["prezzo"] for item in loc_prices.values()}
-        if len(unique_prices) > 1:
+        prices = [item["prezzo"] for item in loc_prices.values()]
+        if len(prices) > 1 and (max(prices) - min(prices)) > 0.011:
             filtered_matrix[display_name] = loc_prices
             
     # Ordiniamo alfabeticamente per nome del prodotto
