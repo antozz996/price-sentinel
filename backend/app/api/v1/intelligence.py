@@ -118,8 +118,14 @@ async def get_cross_location_matrix(
             func.max(RigaFattura.id).label("max_riga_id")
         )
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(RigaFattura.stato_matching == StatoMatching.matched)
-        .where(RigaFattura.sku_interno.isnot(None))
+        .where(
+            and_(
+                RigaFattura.stato_matching == StatoMatching.matched,
+                RigaFattura.sku_interno.isnot(None),
+                RigaFattura.prezzo_netto_normalizzato > 0,
+                RigaFattura.is_omaggio.isnot(True)
+            )
+        )
         .group_by(RigaFattura.sku_interno, Fattura.location_id)
         .subquery()
     )
@@ -187,6 +193,7 @@ async def get_cross_supplier_matrix(
     contracts = contracts_res.all()
     
     # 2. Recupero prezzi storici spot minimi da righe fattura registrate (matched)
+    # Escludiamo omaggi e articoli a prezzo zero (prezzo_netto_normalizzato > 0 e is_omaggio is False)
     spot_stmt = (
         select(
             RigaFattura.sku_interno,
@@ -195,8 +202,14 @@ async def get_cross_supplier_matrix(
             func.min(RigaFattura.prezzo_netto_normalizzato).label("prezzo_min")
         )
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(RigaFattura.stato_matching == StatoMatching.matched)
-        .where(RigaFattura.sku_interno.isnot(None))
+        .where(
+            and_(
+                RigaFattura.stato_matching == StatoMatching.matched,
+                RigaFattura.sku_interno.isnot(None),
+                RigaFattura.prezzo_netto_normalizzato > 0,
+                RigaFattura.is_omaggio.isnot(True)
+            )
+        )
         .group_by(RigaFattura.sku_interno, RigaFattura.descrizione_fornitore_raw, Fattura.fornitore_id)
     )
     
@@ -498,8 +511,8 @@ async def get_pricing_audit(
         lp.prezzo_precedente_lag,
         lc.prezzo_pattuito as prezzo_concordato,
         COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) as prezzo_precedente,
-        (SELECT MIN(rf2.prezzo_netto_normalizzato) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id) as hist_prezzo_min,
-        (SELECT MAX(rf2.prezzo_netto_normalizzato) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id) as hist_prezzo_max,
+        (SELECT MIN(rf2.prezzo_netto_normalizzato) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND rf2.prezzo_netto_normalizzato > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_min,
+        (SELECT MAX(rf2.prezzo_netto_normalizzato) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND rf2.prezzo_netto_normalizzato > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_max,
         ap.stato
     FROM lagged_prezzi lp
     LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id
@@ -599,7 +612,10 @@ async def get_efficiency_leaderboard(
             sku_interno,
             MIN(prezzo_netto_normalizzato) as hist_prezzo_min
         FROM righe_fattura
-        WHERE sku_interno IS NOT NULL AND stato_matching = 'matched'
+        WHERE sku_interno IS NOT NULL 
+          AND stato_matching = 'matched'
+          AND prezzo_netto_normalizzato > 0
+          AND is_omaggio IS NOT TRUE
         GROUP BY sku_interno
     ),
     purchases AS (
@@ -894,7 +910,8 @@ async def get_product_consumption(
         ) as unita_misura,
         SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
         CASE 
-            WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
             ELSE 0 
         END as prezzo_medio
     FROM righe_fattura rf
@@ -1035,7 +1052,8 @@ async def get_product_consumption_detail(
         MIN(CASE WHEN rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato END) as prezzo_minimo,
         MAX(CASE WHEN rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato END) as prezzo_massimo,
         CASE 
-            WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
             ELSE 0 
         END as prezzo_medio
     FROM righe_fattura rf
@@ -1273,7 +1291,8 @@ async def export_product_consumption_excel(
         ) as unita_misura,
         SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
         CASE 
-            WHEN SUM(rf.quantita) > 0 THEN SUM(rf.prezzo_netto_normalizzato * rf.quantita) / SUM(rf.quantita) 
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
             ELSE 0 
         END as prezzo_medio
     FROM righe_fattura rf

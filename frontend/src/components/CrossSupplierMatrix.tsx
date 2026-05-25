@@ -25,7 +25,7 @@ export default function CrossSupplierMatrix() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [onlyComparable, setOnlyComparable] = useState(true);
+  const [onlyComparable, setOnlyComparable] = useState(false);
 
   const headers = getHeaders();
 
@@ -240,7 +240,7 @@ export default function CrossSupplierMatrix() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left', background: 'rgba(255,255,255,0.01)' }}>
-                <th style={{ padding: '16px 12px', minWidth: '180px' }}>SKU Interno / Descrizione</th>
+                <th style={{ padding: '16px 12px', minWidth: '180px' }}>Descrizione / SKU Interno</th>
                 {fornitori.map(f => (
                   <th key={f.id} style={{ padding: '16px 12px', textAlign: 'right', minWidth: '150px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
@@ -270,8 +270,8 @@ export default function CrossSupplierMatrix() {
                       {/* Cella SKU / Dettaglio */}
                       <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: 700, color: 'white' }}>{sku}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{row.descrizione}</span>
+                          <span style={{ fontWeight: 700, color: 'white' }}>{row.descrizione}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{sku}</span>
                         </div>
                       </td>
 
