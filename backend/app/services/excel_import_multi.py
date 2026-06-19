@@ -190,7 +190,15 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
             if price_val is None or str(price_val).strip() == "":
                 continue
                 
-            price_str = str(price_val).strip().replace(",", ".")
+            price_raw_str = str(price_val).strip()
+            match_num = re.search(r'([0-9]+(?:[.,][0-9]+)?)', price_raw_str)
+            if not match_num:
+                result.errors.append(
+                    MultiExcelValidationError(row_idx, supplier_name, f"Formato prezzo non valido: '{price_val}'")
+                )
+                continue
+
+            price_str = match_num.group(1).replace(",", ".")
             try:
                 price_dec = Decimal(price_str)
                 if price_dec <= 0:
