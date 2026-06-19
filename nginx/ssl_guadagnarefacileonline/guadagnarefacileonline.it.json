@@ -1,0 +1,19 @@
+{
+	"sans": [
+		"guadagnarefacileonline.it"
+	],
+	"issuer_data": {
+		"url": "https://acme-v02.api.letsencrypt.org/acme/cert/06828baf6a18e6495a101f1b1e513d57a48d",
+		"ca": "https://acme-v02.api.letsencrypt.org/directory",
+		"account": "https://acme-v02.api.letsencrypt.org/acme/acct/3395432886",
+		"renewal_info": {
+			"suggestedWindow": {
+				"start": "2026-07-31T15:06:47Z",
+				"end": "2026-08-02T10:17:37Z"
+			},
+			"_uniqueIdentifier": "uVnyjs8i8IbTN0j_dhQYuoLYVYc.BoKLr2oY5klaEB8bHlE9V6SN",
+			"_retryAfter": "2026-06-02T21:54:15.856002088+02:00",
+			"_selectedTime": "2026-08-02T04:51:35Z"
+		}
+	}
+}

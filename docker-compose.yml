@@ -66,9 +66,12 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/ssl_guadagnarefacileonline:/etc/nginx/ssl_guadagnarefacileonline:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
     networks:
       - ps_internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       backend:
         condition: service_healthy

@@ -88,7 +88,19 @@ def calcola_hash_idempotenza(piva: str, numero: str, data: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+import html
 import re
+
+
+def clean_text(text: str) -> str:
+    """Risolve ricorsivamente le entità HTML (es. &amp;deg; -> &deg; -> °)"""
+    if not text:
+        return text
+    prev = ""
+    while text != prev:
+        prev = text
+        text = html.unescape(text)
+    return text
 
 
 def decode_xml_base64(xml_b64: str) -> str:
@@ -133,9 +145,11 @@ def _findall(element, xpath: str) -> list:
 
 
 def _text(element, xpath: str, default: str = "") -> str:
-    """Estrai testo da un sotto-elemento."""
+    """Estrai e decodifica ricorsivamente le entità HTML dal testo di un sotto-elemento."""
     el = _find(element, xpath)
-    return el.text.strip() if el is not None and el.text else default
+    if el is not None and el.text:
+        return clean_text(el.text.strip())
+    return default
 
 
 def _decimal(element, xpath: str, default: str = "0") -> Decimal:

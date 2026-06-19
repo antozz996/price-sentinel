@@ -4,6 +4,7 @@ Import Listino Master da file Excel (template standard).
 Spec §8 - Sprint 1: template Excel listini.
 """
 
+import html
 import io
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -203,7 +204,7 @@ def parse_listino_excel(file_data: BinaryIO, fornitore_id: int) -> ExcelParseRes
         row_errors = False
 
         # ── SKU ──
-        sku_str = str(sku or "").strip()
+        sku_str = html.unescape(str(sku or "").strip())
         if not sku_str:
             result.errors.append(ExcelValidationError(row_idx, "A (SKU)", "SKU obbligatorio"))
             row_errors = True
@@ -214,7 +215,7 @@ def parse_listino_excel(file_data: BinaryIO, fornitore_id: int) -> ExcelParseRes
             record["sku_interno"] = sku_str
 
         # ── Descrizione ──
-        desc_str = str(desc or "").strip()
+        desc_str = html.unescape(str(desc or "").strip())
         if not desc_str:
             result.errors.append(ExcelValidationError(row_idx, "B (Descrizione)", "Descrizione obbligatoria"))
             row_errors = True

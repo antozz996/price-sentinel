@@ -80,7 +80,13 @@ export default function CrossLocationMatrix() {
       const supplier = fornitori.find(f => f.id === selectedSupplier);
       const supplierName = supplier ? supplier.nome_azienda : `Fornitore_${selectedSupplier}`;
       
-      const res = await fetch(`${API_BASE}/intelligence/export-vendor-passport/${selectedSupplier}`, {
+      const queryParams = new URLSearchParams();
+      if (dataDa) queryParams.append("data_da", dataDa);
+      if (dataA) queryParams.append("data_a", dataA);
+      const queryString = queryParams.toString();
+      const passportUrl = `${API_BASE}/intelligence/export-vendor-passport/${selectedSupplier}${queryString ? `?${queryString}` : ''}`;
+      
+      const res = await fetch(passportUrl, {
         headers
       });
 
