@@ -223,6 +223,138 @@ async def import_listino_excel(
     }
 
 
+@router.post(
+    "/import-multi-supplier",
+    summary="Importa Listino Comparativo Multi-Fornitore",
+    description=(
+        "Carica un file Excel con colonne per molteplici fornitori. "
+        "Identifica automaticamente i fornitori, li crea se mancanti, "
+        "e carica i relativi prezzi a listino con logica append-only."
+    ),
+)
+async def import_multi_supplier(
+    file: UploadFile = File(..., description="File Excel .xlsx comparativo"),
+    dry_run: bool = Query(False, description="Se true, valida senza inserire"),
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # Validazione tipo file
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=400,
+            detail="Formato non supportato. Usa un file .xlsx (Excel)",
+        )
+
+    import io
+    from app.services.excel_import_multi import parse_multi_supplier_excel, generate_deterministic_piva
+    from app.models.fornitori import Fornitore
+    from app.models.listino import ListinoMaster
+    from sqlalchemy import select, func, and_
+    from datetime import date
+
+    file_data = io.BytesIO(await file.read())
+    parse_result = parse_multi_supplier_excel(file_data)
+
+    if dry_run or not parse_result.is_valid:
+        return {
+            "mode": "dry_run" if dry_run else "validation_failed",
+            **parse_result.to_dict(),
+        }
+
+    # Mappa i nomi dei fornitori rilevati ad ID del database (o creali)
+    suppliers_map = {}
+    for name in parse_result.suppliers_detected:
+        # Search by name (case-insensitive)
+        stmt = select(Fornitore).where(func.lower(Fornitore.nome_azienda) == name.lower())
+        res = await db.execute(stmt)
+        forn = res.scalar_one_or_none()
+        
+        if not forn:
+            # Genera P.IVA deterministica
+            piva = generate_deterministic_piva(name)
+            # Verifica se esiste già un fornitore con questa P.IVA (es. creato in precedenza)
+            piva_stmt = select(Fornitore).where(Fornitore.partita_iva == piva)
+            piva_res = await db.execute(piva_stmt)
+            forn = piva_res.scalar_one_or_none()
+            
+            if not forn:
+                # Crea nuovo fornitore
+                forn = Fornitore(
+                    nome_azienda=name.upper(),
+                    partita_iva=piva,
+                    attivo_whitelist=True
+                )
+                db.add(forn)
+                await db.flush()
+        
+        suppliers_map[name] = forn
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    today = date.today()
+
+    for record in parse_result.records:
+        sku = record["sku_interno"]
+        desc = record["descrizione"]
+        uom = record["unita_misura"]
+        
+        for name, price in record["prezzi"].items():
+            fornitore = suppliers_map[name]
+            fornitore_id = fornitore.id
+            
+            # Cerca duplicato SKU attivo per lo stesso fornitore
+            existing = await db.execute(
+                select(ListinoMaster).where(
+                    and_(
+                        ListinoMaster.fornitore_id == fornitore_id,
+                        ListinoMaster.sku_interno == sku,
+                        ListinoMaster.data_scadenza.is_(None),
+                    )
+                )
+            )
+            existing_listino = existing.scalar_one_or_none()
+            
+            if existing_listino:
+                # Se il prezzo è identico, salta
+                if float(existing_listino.prezzo_pattuito) == float(price) and existing_listino.unita_misura == uom:
+                    skipped += 1
+                    continue
+                
+                # Prezzo cambiato: storicizza il vecchio
+                existing_listino.data_scadenza = today
+                updated += 1
+            else:
+                inserted += 1
+
+            # Inserisci il nuovo record listino
+            listino = ListinoMaster(
+                fornitore_id=fornitore_id,
+                sku_interno=sku,
+                descrizione=desc,
+                prezzo_pattuito=price,
+                unita_misura=uom,
+                data_inizio_validita=today,
+                data_scadenza=None,
+                pfa_tipo=None,
+                pfa_valore=None,
+            )
+            db.add(listino)
+
+    await db.flush()
+
+    return {
+        "mode": "imported",
+        "total_rows": parse_result.total_rows,
+        "suppliers_detected": parse_result.suppliers_detected,
+        "inserted": inserted,
+        "updated": updated,
+        "skipped_duplicates": skipped,
+        "errors_count": 0,
+    }
+
+
+
 @router.delete(
     "/fornitore/{fornitore_id}",
     summary="Elimina Listino Fornitore",
