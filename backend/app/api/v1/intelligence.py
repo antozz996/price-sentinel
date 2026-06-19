@@ -101,6 +101,8 @@ async def get_expiring_protocols(
 
 @router.get("/cross-location", summary="Cross-Location Tracker")
 async def get_cross_location_matrix(
+    data_da: date | None = Query(None, description="Data inizio"),
+    data_a: date | None = Query(None, description="Data fine"),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -109,6 +111,18 @@ async def get_cross_location_matrix(
     Ritorna l'ultimo prezzo di acquisto di uno sku per ogni location.
     I dati permettono al frontend di costruire una griglia Prodotti x Location.
     """
+    # Costruzione condizioni dinamiche per data
+    conditions = [
+        RigaFattura.stato_matching == StatoMatching.matched,
+        RigaFattura.sku_interno.isnot(None),
+        RigaFattura.prezzo_netto_normalizzato > 0,
+        RigaFattura.is_omaggio.isnot(True)
+    ]
+    if data_da:
+        conditions.append(Fattura.data_documento >= data_da)
+    if data_a:
+        conditions.append(Fattura.data_documento <= data_a)
+
     # Vogliamo l'ultimo prezzo normalizzato per (sku_interno, location_id).
     # Group By SKU e Location, max ID
     subquery = (
@@ -118,14 +132,7 @@ async def get_cross_location_matrix(
             func.max(RigaFattura.id).label("max_riga_id")
         )
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(
-            and_(
-                RigaFattura.stato_matching == StatoMatching.matched,
-                RigaFattura.sku_interno.isnot(None),
-                RigaFattura.prezzo_netto_normalizzato > 0,
-                RigaFattura.is_omaggio.isnot(True)
-            )
-        )
+        .where(and_(*conditions))
         .group_by(RigaFattura.sku_interno, Fattura.location_id)
         .subquery()
     )
