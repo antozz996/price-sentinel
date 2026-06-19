@@ -1,40 +1,33 @@
-import asyncio
+import os
 import sys
-from sqlalchemy import text
 
+# Set host to 127.0.0.1 to connect from the host machine to the docker container port
+os.environ["POSTGRES_HOST"] = "127.0.0.1"
 sys.path.append("/root/PRICE SENTINEL/backend")
+
+import asyncio
+from sqlalchemy import text
 from app.database import async_session_factory, engine
 
 async def main():
     async with async_session_factory() as session:
-        # count righe
-        res_righe = await session.execute(text("SELECT COUNT(*) FROM righe_fattura"))
-        count_righe = res_righe.scalar()
-        print(f"Righe in DB: {count_righe}")
+        # Check righe_fattura containing '&'
+        res_righe = await session.execute(text(
+            "SELECT id, descrizione_fornitore_raw FROM righe_fattura WHERE descrizione_fornitore_raw LIKE '%&%' LIMIT 10"
+        ))
+        righe = res_righe.all()
+        print(f"Righe in DB containing '&':")
+        for r in righe:
+            print(f" - ID: {r.id} | Desc: {r.descrizione_fornitore_raw}")
 
-        # check what is in righe_fattura (sku_interno)
-        res_sku = await session.execute(text("SELECT sku_interno IS NOT NULL as has_sku, COUNT(*) FROM righe_fattura GROUP BY has_sku"))
-        sku_groups = res_sku.all()
-        print(f"\nSKU groups in righe_fattura:")
-        for has_sku, count in sku_groups:
-            print(f" - Has SKU: '{has_sku}', Count: {count}")
-
-        # check sku_manager query
-        sql = """
-            SELECT 
-                sku_interno, 
-                MAX(descrizione_fornitore_raw) as nome_prodotto,
-                COUNT(id) as total_acquisti
-            FROM righe_fattura 
-            WHERE sku_interno IS NOT NULL 
-            GROUP BY sku_interno
-            ORDER BY total_acquisti DESC
-            LIMIT 5
-        """
-        res_manager = await session.execute(text(sql))
-        print("\nTop 5 SKUs in catalog:")
-        for r in res_manager.all():
-            print(f" - SKU: {r.sku_interno}, Prodotto: {r.nome_prodotto}, Acquisti: {r.total_acquisti}")
+        # Check listino_master containing '&'
+        res_list = await session.execute(text(
+            "SELECT id, descrizione_contratto_raw FROM listino_master WHERE descrizione_contratto_raw LIKE '%&%' LIMIT 10"
+        ))
+        listini = res_list.all()
+        print(f"\nListino master containing '&':")
+        for l in listini:
+            print(f" - ID: {l.id} | Desc: {l.descrizione_contratto_raw}")
 
     await engine.dispose()
 

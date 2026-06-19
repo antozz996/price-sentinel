@@ -26,6 +26,8 @@ export default function CrossSupplierMatrix() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [onlyComparable, setOnlyComparable] = useState(false);
+  const [dataDa, setDataDa] = useState<string>('');
+  const [dataA, setDataA] = useState<string>('');
 
   const headers = getHeaders();
 
@@ -33,9 +35,18 @@ export default function CrossSupplierMatrix() {
     setLoading(true);
     setError(null);
     try {
+      let matrixUrl = `${API_BASE}/intelligence/cross-supplier`;
+      const queryParams = new URLSearchParams();
+      if (dataDa) queryParams.append("data_da", dataDa);
+      if (dataA) queryParams.append("data_a", dataA);
+      const queryString = queryParams.toString();
+      if (queryString) {
+        matrixUrl += `?${queryString}`;
+      }
+
       const [fornitoriRes, matrixRes] = await Promise.all([
         fetch(`${API_BASE}/fornitori/`, { headers, signal }),
-        fetch(`${API_BASE}/intelligence/cross-supplier`, { headers, signal })
+        fetch(matrixUrl, { headers, signal })
       ]);
 
       if (!fornitoriRes.ok || !matrixRes.ok) {
@@ -73,7 +84,7 @@ export default function CrossSupplierMatrix() {
     const controller = new AbortController();
     loadData(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [dataDa, dataA]);
 
   if (loading) {
     return (
@@ -210,6 +221,60 @@ export default function CrossSupplierMatrix() {
                 Mostra solo prodotti comparabili (2+ fornitori)
               </span>
             </label>
+          </div>
+
+          {/* Date Filters */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Da:</span>
+              <input
+                type="date"
+                value={dataDa}
+                onChange={e => setDataDa(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  outline: 'none',
+                  fontSize: '0.85rem'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>A:</span>
+              <input
+                type="date"
+                value={dataA}
+                onChange={e => setDataA(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  outline: 'none',
+                  fontSize: '0.85rem'
+                }}
+              />
+            </div>
+            {(dataDa || dataA) && (
+              <button
+                onClick={() => { setDataDa(''); setDataA(''); }}
+                style={{
+                  padding: '8px 12px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  borderRadius: '8px',
+                  color: '#fca5a5',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+              >
+                Resetta
+              </button>
+            )}
           </div>
 
           {/* Input di Ricerca */}

@@ -8,7 +8,7 @@ from typing import Any
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import select, func, and_, case, text
+from sqlalchemy import select, func, and_, or_, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin, get_current_user
@@ -111,6 +111,11 @@ async def get_cross_location_matrix(
     Ritorna l'ultimo prezzo di acquisto di uno sku per ogni location.
     I dati permettono al frontend di costruire una griglia Prodotti x Location.
     """
+    if not isinstance(data_da, date):
+        data_da = None
+    if not isinstance(data_a, date):
+        data_a = None
+
     # Costruzione condizioni dinamiche per data
     conditions = [
         RigaFattura.stato_matching == StatoMatching.matched,
@@ -181,6 +186,8 @@ async def get_cross_location_matrix(
 
 @router.get("/cross-supplier", summary="Cross-Supplier Pricing Matrix")
 async def get_cross_supplier_matrix(
+    data_da: date | None = Query(None, description="Data inizio"),
+    data_a: date | None = Query(None, description="Data fine"),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
@@ -188,19 +195,45 @@ async def get_cross_supplier_matrix(
     Ritorna la matrice comparativa incrociata dei prezzi per fornitore.
     Incrocia i listini concordati (ListinoMaster) e le fatture storiche (prezzo spot minimo).
     """
-    # 1. Recupero contratti attivi (data_scadenza IS NULL)
+    if not isinstance(data_da, date):
+        data_da = None
+    if not isinstance(data_a, date):
+        data_a = None
+
+    # 1. Recupero contratti attivi nel periodo
     contracts_stmt = select(
         ListinoMaster.sku_interno,
         ListinoMaster.descrizione,
         ListinoMaster.fornitore_id,
         ListinoMaster.prezzo_pattuito
-    ).where(ListinoMaster.data_scadenza.is_(None))
+    )
+    contracts_conds = []
+    if data_da:
+        contracts_conds.append(or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= data_da))
+    if data_a:
+        contracts_conds.append(ListinoMaster.data_inizio_validita <= data_a)
+        
+    if not contracts_conds:
+        contracts_conds.append(ListinoMaster.data_scadenza.is_(None))
+        
+    contracts_stmt = contracts_stmt.where(and_(*contracts_conds))
     
     contracts_res = await db.execute(contracts_stmt)
     contracts = contracts_res.all()
     
     # 2. Recupero prezzi storici spot minimi da righe fattura registrate (matched)
     # Escludiamo omaggi e articoli a prezzo zero (prezzo_netto_normalizzato > 0 e is_omaggio is False)
+    spot_conds = [
+        RigaFattura.stato_matching == StatoMatching.matched,
+        RigaFattura.sku_interno.isnot(None),
+        RigaFattura.prezzo_netto_normalizzato > 0,
+        RigaFattura.is_omaggio.isnot(True)
+    ]
+    if data_da:
+        spot_conds.append(Fattura.data_documento >= data_da)
+    if data_a:
+        spot_conds.append(Fattura.data_documento <= data_a)
+
     spot_stmt = (
         select(
             RigaFattura.sku_interno,
@@ -209,14 +242,7 @@ async def get_cross_supplier_matrix(
             func.min(RigaFattura.prezzo_netto_normalizzato).label("prezzo_min")
         )
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(
-            and_(
-                RigaFattura.stato_matching == StatoMatching.matched,
-                RigaFattura.sku_interno.isnot(None),
-                RigaFattura.prezzo_netto_normalizzato > 0,
-                RigaFattura.is_omaggio.isnot(True)
-            )
-        )
+        .where(and_(*spot_conds))
         .group_by(RigaFattura.sku_interno, RigaFattura.descrizione_fornitore_raw, Fattura.fornitore_id)
     )
     
@@ -270,12 +296,18 @@ async def get_cross_supplier_matrix(
 @router.get("/export-vendor-passport/{fornitore_id}", summary="Download Vendor Passport PDF")
 async def export_vendor_passport(
     fornitore_id: int,
+    data_da: date | None = Query(None, description="Data inizio"),
+    data_a: date | None = Query(None, description="Data fine"),
     db: AsyncSession = Depends(get_db),
     _admin=Depends(require_admin),
 ):
     """
     Genera il PDF Business Intelligence per il fornitore.
     """
+    if not isinstance(data_da, date):
+        data_da = None
+    if not isinstance(data_a, date):
+        data_a = None
     from app.models.fornitori import Fornitore
     fornitore = await db.scalar(select(Fornitore).where(Fornitore.id == fornitore_id))
     if not fornitore:
@@ -287,8 +319,12 @@ async def export_vendor_passport(
         select(Location.nome_struttura)
         .join(Fattura, Fattura.location_id == Location.id)
         .where(Fattura.fornitore_id == fornitore_id)
-        .distinct()
     )
+    if data_da:
+        stmt = stmt.where(Fattura.data_documento >= data_da)
+    if data_a:
+        stmt = stmt.where(Fattura.data_documento <= data_a)
+    stmt = stmt.distinct()
     locations = (await db.scalars(stmt)).all()
     
     # Questo è un mockup di astrazione in quanto richiede incrociare 
