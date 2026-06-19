@@ -15,6 +15,7 @@ export default function PriceListManager() {
   const [uploadingMulti, setUploadingMulti] = useState(false);
   const [activeTab, setActiveTab] = useState<'standard' | 'multi'>('standard');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+  const [validationErrors, setValidationErrors] = useState<{ row: number, column: string, message: string }[]>([]);
 
   const loadFornitori = async (signal?: AbortSignal) => {
     try {
@@ -51,6 +52,7 @@ export default function PriceListManager() {
 
     setUploading(true);
     setMessage(null);
+    setValidationErrors([]);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -69,6 +71,7 @@ export default function PriceListManager() {
       if (res.ok) {
         if (result.mode === 'validation_failed') {
           setMessage({ text: `Validazione fallita. Errori: ${result.errors?.length || 0}`, type: 'error' });
+          setValidationErrors(result.errors || []);
           return;
         }
         
@@ -84,9 +87,11 @@ export default function PriceListManager() {
            errorMsg = Array.isArray(errorMsg) ? errorMsg.map((e:any) => e.msg).join(', ') : JSON.stringify(errorMsg);
         }
         setMessage({ text: `Errore: ${errorMsg}`, type: 'error' });
+        setValidationErrors([]);
       }
     } catch (err) {
       setMessage({ text: 'Errore di rete o server non raggiungibile', type: 'error' });
+      setValidationErrors([]);
     } finally {
       setUploading(false);
     }
@@ -100,6 +105,7 @@ export default function PriceListManager() {
 
     setUploadingMulti(true);
     setMessage(null);
+    setValidationErrors([]);
 
     const formData = new FormData();
     formData.append('file', file);
@@ -118,6 +124,7 @@ export default function PriceListManager() {
       if (res.ok) {
         if (result.mode === 'validation_failed') {
           setMessage({ text: `Validazione fallita. Errori: ${result.errors?.length || 0}`, type: 'error' });
+          setValidationErrors(result.errors || []);
           return;
         }
         
@@ -134,13 +141,16 @@ export default function PriceListManager() {
            errorMsg = Array.isArray(errorMsg) ? errorMsg.map((e:any) => e.msg).join(', ') : JSON.stringify(errorMsg);
         }
         setMessage({ text: `Errore: ${errorMsg}`, type: 'error' });
+        setValidationErrors([]);
       }
     } catch (err) {
       setMessage({ text: 'Errore di rete o server non raggiungibile', type: 'error' });
+      setValidationErrors([]);
     } finally {
       setUploadingMulti(false);
     }
   };
+
 
   const handleDownloadTemplate = async () => {
     try {
@@ -268,10 +278,34 @@ export default function PriceListManager() {
                   borderRadius: 'var(--border-radius-md)', 
                   background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
                   color: message.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
-                  display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem'
+                  display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem'
                 }}>
-                  {message.type === 'success' ? <CheckCircle2 size={18}/> : <AlertCircle size={18}/>}
-                  {message.text}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {message.type === 'success' ? <CheckCircle2 size={18}/> : <AlertCircle size={18}/>}
+                    <span>{message.text}</span>
+                  </div>
+                  
+                  {message.type === 'error' && validationErrors.length > 0 && (
+                    <div style={{
+                      maxHeight: '150px',
+                      overflowY: 'auto',
+                      borderTop: '1px solid rgba(239, 68, 68, 0.2)',
+                      paddingTop: '10px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      color: '#fca5a5',
+                      textAlign: 'left'
+                    }}>
+                      <strong style={{ color: 'white' }}>Dettagli errori:</strong>
+                      {validationErrors.map((err, idx) => (
+                        <div key={idx}>
+                          • Riga {err.row}, Colonna {err.column}: {err.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -318,10 +352,34 @@ export default function PriceListManager() {
                   borderRadius: 'var(--border-radius-md)', 
                   background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
                   color: message.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
-                  display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem'
+                  display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem'
                 }}>
-                  {message.type === 'success' ? <CheckCircle2 size={18}/> : <AlertCircle size={18}/>}
-                  {message.text}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {message.type === 'success' ? <CheckCircle2 size={18}/> : <AlertCircle size={18}/>}
+                    <span>{message.text}</span>
+                  </div>
+                  
+                  {message.type === 'error' && validationErrors.length > 0 && (
+                    <div style={{
+                      maxHeight: '150px',
+                      overflowY: 'auto',
+                      borderTop: '1px solid rgba(239, 68, 68, 0.2)',
+                      paddingTop: '10px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      color: '#fca5a5',
+                      textAlign: 'left'
+                    }}>
+                      <strong style={{ color: 'white' }}>Dettagli errori:</strong>
+                      {validationErrors.map((err, idx) => (
+                        <div key={idx}>
+                          • Riga {err.row}, Colonna {err.column}: {err.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
