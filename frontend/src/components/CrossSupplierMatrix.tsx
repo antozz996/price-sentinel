@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Grid, Search, CheckCircle, RefreshCw, Info, AlertTriangle } from 'lucide-react';
+import { Grid, Search, CheckCircle, RefreshCw, Info, AlertTriangle, Filter } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface FornitoreItem {
@@ -28,6 +28,8 @@ export default function CrossSupplierMatrix() {
   const [onlyComparable, setOnlyComparable] = useState(false);
   const [dataDa, setDataDa] = useState<string>('');
   const [dataA, setDataA] = useState<string>('');
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([]);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   const headers = getHeaders();
 
@@ -66,6 +68,28 @@ export default function CrossSupplierMatrix() {
         }
         const filteredFornitori = fornitoriData.filter(f => activeSupplierIds.has(String(f.id)));
         setFornitori(filteredFornitori);
+
+        const stored = localStorage.getItem('ps_selected_supplier_ids');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored) as number[];
+            const activeIds = filteredFornitori.map(f => f.id);
+            const storedActiveIds = parsed.filter(id => activeIds.includes(id));
+            
+            const newlyAdded = activeIds.filter(id => !parsed.includes(id));
+            if (newlyAdded.length > 0) {
+              const merged = [...storedActiveIds, ...newlyAdded];
+              setSelectedSupplierIds(merged);
+              localStorage.setItem('ps_selected_supplier_ids', JSON.stringify(merged));
+            } else {
+              setSelectedSupplierIds(storedActiveIds);
+            }
+          } catch (e) {
+            setSelectedSupplierIds(filteredFornitori.map(f => f.id));
+          }
+        } else {
+          setSelectedSupplierIds(filteredFornitori.map(f => f.id));
+        }
       }
       
       if (matrixData) {
@@ -78,6 +102,23 @@ export default function CrossSupplierMatrix() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSupplierToggle = (id: number) => {
+    let updated: number[];
+    if (selectedSupplierIds.includes(id)) {
+      updated = selectedSupplierIds.filter(x => x !== id);
+    } else {
+      updated = [...selectedSupplierIds, id];
+    }
+    setSelectedSupplierIds(updated);
+    localStorage.setItem('ps_selected_supplier_ids', JSON.stringify(updated));
+  };
+
+  const handleToggleAllSuppliers = (selectAll: boolean) => {
+    const updated = selectAll ? fornitori.map(f => f.id) : [];
+    setSelectedSupplierIds(updated);
+    localStorage.setItem('ps_selected_supplier_ids', JSON.stringify(updated));
   };
 
   useEffect(() => {
@@ -277,6 +318,89 @@ export default function CrossSupplierMatrix() {
             )}
           </div>
 
+          {/* Supplier Columns Selector */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+              className="btn"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--border-glass)',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                height: '38px'
+              }}
+            >
+              <Filter size={14} color="var(--accent-blue)" />
+              <span>Fornitori ({selectedSupplierIds.length}/{fornitori.length})</span>
+            </button>
+            
+            {showFilterDropdown && (
+              <>
+                <div 
+                  onClick={() => setShowFilterDropdown(false)} 
+                  style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }}
+                />
+                <div 
+                  className="glass-panel" 
+                  style={{
+                    position: 'absolute',
+                    top: '45px',
+                    left: 0,
+                    zIndex: 1000,
+                    minWidth: '260px',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px', marginBottom: '4px' }}>
+                    <button 
+                      onClick={() => handleToggleAllSuppliers(true)}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Tutti
+                    </button>
+                    <button 
+                      onClick={() => handleToggleAllSuppliers(false)}
+                      style={{ background: 'none', border: 'none', color: '#fca5a5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      Deseleziona
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {fornitori.map(f => {
+                      const isChecked = selectedSupplierIds.includes(f.id);
+                      return (
+                        <label key={f.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleSupplierToggle(f.id)}
+                            style={{ cursor: 'pointer', accentColor: 'var(--accent-blue)' }}
+                          />
+                          <span>{f.nome_azienda}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Input di Ricerca */}
           <div style={{ position: 'relative', width: '100%', maxWidth: '320px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
@@ -306,7 +430,7 @@ export default function CrossSupplierMatrix() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left', background: 'rgba(255,255,255,0.01)' }}>
                 <th style={{ padding: '16px 12px', minWidth: '180px' }}>Descrizione / SKU Interno</th>
-                {fornitori.map(f => (
+                {fornitori.filter(f => selectedSupplierIds.includes(f.id)).map(f => (
                   <th key={f.id} style={{ padding: '16px 12px', textAlign: 'right', minWidth: '150px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
                       <span style={{ fontWeight: 600, color: 'white', fontSize: '0.85rem' }}>{f.nome_azienda}</span>
@@ -319,15 +443,17 @@ export default function CrossSupplierMatrix() {
             <tbody>
               {filteredSkus.length === 0 ? (
                 <tr>
-                  <td colSpan={fornitori.length + 1} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan={fornitori.filter(f => selectedSupplierIds.includes(f.id)).length + 1} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     Nessun prodotto corrisponde ai criteri impostati. Prova a cambiare la ricerca o disattivare il toggle.
                   </td>
                 </tr>
               ) : (
                 filteredSkus.map(sku => {
                   const row = matrix![sku];
-                  const pricesList = Object.values(row.prezzi).map(p => p.prezzo);
-                  const minPrice = pricesList.length > 0 ? Math.min(...pricesList) : null;
+                  const visiblePricesList = Object.entries(row.prezzi)
+                    .filter(([fid]) => selectedSupplierIds.includes(Number(fid)))
+                    .map(([_, p]) => p.prezzo);
+                  const minPrice = visiblePricesList.length > 0 ? Math.min(...visiblePricesList) : null;
 
                   return (
                     <tr key={sku} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.85rem', transition: 'background-color 0.15s' }} className="table-row-hover">
@@ -341,7 +467,7 @@ export default function CrossSupplierMatrix() {
                       </td>
 
                       {/* Celle Fornitori */}
-                      {fornitori.map(f => {
+                      {fornitori.filter(f => selectedSupplierIds.includes(f.id)).map(f => {
                         const priceInfo = row.prezzi[f.id];
                         if (!priceInfo) {
                           return (
