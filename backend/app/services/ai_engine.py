@@ -49,6 +49,27 @@ TOOLS = [
                 "required": ["nome_fornitore"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_prodotti_piu_acquistati_fornitore",
+            "description": "Ottiene la lista dei prodotti più acquistati da un determinato fornitore, ordinati per quantità totale acquistata.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nome_fornitore": {
+                        "type": "string",
+                        "description": "Il nome del fornitore da cercare (es. 'Navas' o 'Playa')"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Il numero massimo di prodotti da restituire (default: 50)"
+                    }
+                },
+                "required": ["nome_fornitore"]
+            }
+        }
     }
 ]
 
@@ -114,7 +135,7 @@ class SentinelAI:
         sql = """
         SELECT f.id, f.nome_azienda, 
                (SELECT COUNT(*) FROM fatture WHERE fornitore_id = f.id) as num_fatture,
-               (SELECT COALESCE(SUM(totale_documento), 0) FROM fatture WHERE fornitore_id = f.id) as fatturato_totale
+               (SELECT COALESCE(SUM(totale_imponibile), 0) FROM fatture WHERE fornitore_id = f.id) as fatturato_totale
         FROM fornitori f
         WHERE f.nome_azienda ILIKE :nome
         LIMIT 3
@@ -125,6 +146,36 @@ class SentinelAI:
             for r in res.all()
         ]
         return json.dumps(results if results else {"errore": "Nessun fornitore trovato con questo nome."})
+
+    async def _execute_get_prodotti_piu_acquistati_fornitore(self, db: AsyncSession, nome_fornitore: str, limit: int = 50) -> str:
+        sql = """
+        SELECT 
+            COALESCE(rf.sku_interno, rf.descrizione_fornitore_raw) AS prodotto_id,
+            COALESCE(MAX(lm.descrizione), MAX(rf.descrizione_fornitore_raw), MAX(rf.sku_interno)) AS prodotto_nome,
+            SUM(rf.quantita) AS quantita_totale,
+            COUNT(rf.id) AS numero_acquisti,
+            SUM(rf.prezzo_netto_normalizzato * rf.quantita) AS spesa_totale
+        FROM righe_fattura rf
+        JOIN fatture f ON rf.fattura_id = f.id
+        JOIN fornitori fo ON f.fornitore_id = fo.id
+        LEFT JOIN listino_master lm ON lm.sku_interno = rf.sku_interno AND lm.data_scadenza IS NULL
+        WHERE fo.nome_azienda ILIKE :nome
+        GROUP BY COALESCE(rf.sku_interno, rf.descrizione_fornitore_raw)
+        ORDER BY quantita_totale DESC
+        LIMIT :limit
+        """
+        res = await db.execute(text(sql), {"nome": f"%{nome_fornitore}%", "limit": limit})
+        results = [
+            {
+                "sku_interno": r.prodotto_id,
+                "prodotto": r.prodotto_nome,
+                "quantita_totale": float(r.quantita_totale),
+                "numero_acquisti": int(r.numero_acquisti),
+                "spesa_totale": float(r.spesa_totale)
+            }
+            for r in res.all()
+        ]
+        return json.dumps(results if results else {"errore": f"Nessun prodotto trovato per il fornitore '{nome_fornitore}'."})
 
 
     # ── Core Engine ──
@@ -179,6 +230,12 @@ class SentinelAI:
                             result = await self._execute_get_top_sprechi(db)
                         elif fn_name == "get_info_fornitore":
                             result = await self._execute_get_info_fornitore(db, args.get("nome_fornitore", ""))
+                        elif fn_name == "get_prodotti_piu_acquistati_fornitore":
+                            result = await self._execute_get_prodotti_piu_acquistati_fornitore(
+                                db,
+                                args.get("nome_fornitore", ""),
+                                int(args.get("limit", 50))
+                            )
                         else:
                             result = '{"error": "Funzione sconosciuta"}'
                     except Exception as ex:
