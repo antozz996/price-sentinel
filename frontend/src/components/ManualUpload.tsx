@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileUp, FileArchive, CheckCircle2, AlertCircle, Loader2, History, Info, X, ShieldAlert, Building2, MapPin } from 'lucide-react';
+import { FileUp, FileArchive, CheckCircle2, AlertCircle, Loader2, History, Info, X, ShieldAlert, Building2, MapPin, FileSpreadsheet, Sparkles } from 'lucide-react';
 import { API_BASE, fetchWithAuth } from '../api';
 
 interface BatchSummary {
@@ -37,6 +37,7 @@ export default function ManualUpload() {
   const [summary, setSummary] = useState<BatchSummary | null>(null);
   const [history, setHistory] = useState<BatchHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [autoCataloging, setAutoCataloging] = useState(false);
 
   // Unregistered entities modal state
   const [showModal, setShowModal] = useState(false);
@@ -195,6 +196,43 @@ export default function ManualUpload() {
       setError("Si è verificato un errore durante la scansione delle fatture sospese.");
     } finally {
       setReprocessing(false);
+    }
+  };
+
+  const handleAutoInitializeCatalog = async () => {
+    if (!window.confirm("Sei sicuro di voler inizializzare e associare automaticamente tutti i prodotti delle fatture in sospeso? Verranno creati gli SKU interni e i listini master di riferimento per tutti i nuovi fornitori. L'operazione potrebbe richiedere qualche secondo.")) return;
+
+    setAutoCataloging(true);
+    setError(null);
+    setSummary(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_BASE}/intelligence/auto-catalog-initialize`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'bypass-tunnel-reminder': 'true'
+        }
+      });
+
+      if (!res.ok) throw new Error("Errore durante l'inizializzazione del catalogo");
+
+      const result = await res.json();
+      if (result.status === 'no_work') {
+        alert(result.message);
+      } else {
+        let msg = `Catalogazione completata con successo!\n\n`;
+        result.report.forEach((rep: any) => {
+          msg += `• ${rep.fornitore_nome}: creati ${rep.prodotti_creati} prodotti e ${rep.alias_creati} alias, associate ${rep.righe_aggiornate} righe.\n`;
+        });
+        alert(msg);
+      }
+      loadHistory();
+    } catch (err) {
+      setError("Si è verificato un errore durante l'auto-inizializzazione del catalogo.");
+    } finally {
+      setAutoCataloging(false);
     }
   };
 
@@ -392,6 +430,29 @@ export default function ManualUpload() {
           >
             {reprocessing ? <Loader2 className="spinner" size={14} /> : <ShieldAlert size={14} />}
             {reprocessing ? 'Analisi in corso...' : 'Scansiona Fatture Sospese'}
+          </button>
+        </div>
+
+        {/* Auto-inizializzazione Catalogo */}
+        <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+          <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Sparkles size={20} color="var(--accent-blue)" /> Auto-Associazione SKU
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
+            Genera automaticamente gli SKU interni e compila i listini di riferimento per i nuovi fornitori.
+          </p>
+          <button 
+            className="btn btn-primary" 
+            disabled={uploading || reprocessing || autoCataloging}
+            onClick={handleAutoInitializeCatalog}
+            style={{ 
+              width: '100%', gap: '8px', 
+              display: 'flex', justifyContent: 'center', alignItems: 'center',
+              fontWeight: 600, fontSize: '0.85rem', padding: '10px 0', cursor: 'pointer'
+            }}
+          >
+            {autoCataloging ? <Loader2 className="spinner" size={14} /> : <FileSpreadsheet size={14} />}
+            {autoCataloging ? 'Generazione in corso...' : 'Associa SKU Automaticamente'}
           </button>
         </div>
 
