@@ -122,7 +122,6 @@ export default function TopProductsPriceList() {
   // Helper calculation for KPI cards
   const totalSpend = products.reduce((sum, p) => sum + p.spesa_totale, 0);
   const totalVolume = products.reduce((sum, p) => sum + p.quantita_totale, 0);
-  const totalOrders = products.reduce((sum, p) => sum + p.numero_acquisti, 0);
   const avgUnitPrice = totalVolume > 0 ? totalSpend / totalVolume : 0;
 
   const handleLocationToggle = (id: number) => {
