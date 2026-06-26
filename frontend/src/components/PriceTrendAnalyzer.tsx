@@ -773,8 +773,8 @@ export default function PriceTrendAnalyzer() {
         `"${r.fornitore.replace(/"/g, '""')}"`,
         `"${r.location.replace(/"/g, '""')}"`,
         r.quantita,
-        r.prezzo_pagato.toFixed(4),
-        r.prezzo_contratto ? r.prezzo_contratto.toFixed(4) : '',
+        r.prezzo_pagato.toFixed(2),
+        r.prezzo_contratto ? r.prezzo_contratto.toFixed(2) : '',
         delta
       ]
       csvRows.push(rowData.join(';'))
@@ -1132,9 +1132,9 @@ export default function PriceTrendAnalyzer() {
                         <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{r.fornitore}</td>
                         <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{r.location}</td>
                         <td style={{ padding: '12px 10px' }}>{r.quantita}</td>
-                        <td style={{ padding: '12px 10px', fontWeight: 600 }}>{r.prezzo_pagato.toFixed(4)} €</td>
+                        <td style={{ padding: '12px 10px', fontWeight: 600 }}>{r.prezzo_pagato.toFixed(2)} €</td>
                         <td style={{ padding: '12px 10px', opacity: r.prezzo_contratto ? 1 : 0.4 }}>
-                          {r.prezzo_contratto ? `${r.prezzo_contratto.toFixed(4)} €` : '-'}
+                          {r.prezzo_contratto ? `${r.prezzo_contratto.toFixed(2)} €` : '-'}
                         </td>
                         <td style={{ padding: '12px 10px' }}>
                           {delta !== null ? (
