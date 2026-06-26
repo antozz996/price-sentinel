@@ -1652,4 +1652,179 @@ async def export_top_purchased_excel(
     )
 
 
+@router.post("/auto-catalog-initialize", summary="Inizializza automaticamente il catalogo dai dati delle fatture")
+async def auto_catalog_initialize(
+    fornitore_id: int | None = Query(None, description="ID del fornitore da inizializzare (opzionale)"),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Rileva le righe in parking e senza SKU per il fornitore indicato (o per tutti i fornitori),
+    genera automaticamente gli SKU interni basandosi sulla descrizione o codice,
+    popola il listino master e la tabella alias, e infine associa tutte le righe di fattura.
+    """
+    from decimal import Decimal
+    import re
+    from app.models.alias import AliasProdotto
+    from app.models.utenti import Utente
+    from app.models.listino import ListinoMaster
+    
+    # 1. Trova i fornitori da elaborare
+    if fornitore_id is not None:
+        suppliers_res = await db.execute(
+            select(Fornitore.id, Fornitore.nome_azienda).where(Fornitore.id == fornitore_id)
+        )
+    else:
+        # Trova tutti i fornitori che hanno almeno una riga fattura in parking/senza SKU e non omaggio
+        suppliers_res = await db.execute(
+            select(Fornitore.id, Fornitore.nome_azienda)
+            .join(Fattura, Fattura.fornitore_id == Fornitore.id)
+            .join(RigaFattura, RigaFattura.fattura_id == Fattura.id)
+            .where(and_(RigaFattura.sku_interno.is_(None), RigaFattura.is_omaggio.isnot(True)))
+            .distinct()
+        )
+    
+    suppliers = suppliers_res.all()
+    if not suppliers:
+        return {
+            "status": "no_work",
+            "message": "Tutti i fornitori sono già inizializzati o non ci sono righe fattura senza SKU."
+        }
+    
+    # Trova admin_id per l'audit trail delle conferme alias
+    admin_res = await db.execute(select(Utente.id).where(Utente.ruolo == 'admin').limit(1))
+    admin_id = admin_res.scalar() or 1
+    
+    report = []
+    
+    for forn_id, forn_nome in suppliers:
+        # Recupera tutte le righe non associate per questo fornitore
+        rows_res = await db.execute(
+            select(
+                RigaFattura.id,
+                RigaFattura.codice_fornitore_raw,
+                RigaFattura.descrizione_fornitore_raw,
+                RigaFattura.prezzo_unitario_fatturato,
+                RigaFattura.unita_misura_fattura
+            )
+            .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+            .where(and_(
+                Fattura.fornitore_id == forn_id,
+                RigaFattura.sku_interno.is_(None),
+                RigaFattura.is_omaggio.isnot(True)
+            ))
+        )
+        all_rows = rows_res.all()
+        if not all_rows:
+            continue
+            
+        # Raggruppa per descrizione fornitore
+        product_groups = {}
+        for r_id, code_raw, desc_raw, price_fat, uom_fat in all_rows:
+            desc = desc_raw
+            if not desc:
+                continue
+            if desc not in product_groups:
+                product_groups[desc] = {
+                    "codes": set(),
+                    "prices": [],
+                    "uoms": set(),
+                    "row_ids": []
+                }
+            if code_raw and code_raw != 'None':
+                product_groups[desc]["codes"].add(code_raw)
+            if uom_fat and uom_fat != 'None':
+                product_groups[desc]["uoms"].add(uom_fat)
+            product_groups[desc]["prices"].append(Decimal(str(price_fat)))
+            product_groups[desc]["row_ids"].append(r_id)
+            
+        used_skus = set()
+        created_listino = 0
+        created_alias = 0
+        updated_rows = 0
+        
+        # Genera prefisso SKU basato sul nome azienda del fornitore (es: VEMO_ o NAVAS_)
+        clean_prefix = re.sub(r'[^a-zA-Z0-9]+', '', forn_nome).upper()
+        prefix = f"{clean_prefix[:5]}_"
+        
+        for desc, info in product_groups.items():
+            code = list(info["codes"])[0] if info["codes"] else None
+            prices = [p for p in info["prices"] if p > 0]
+            min_price = min(prices) if prices else min(info["prices"]) if info["prices"] else Decimal("0.0")
+            uom = list(info["uoms"])[0] if info["uoms"] else "Pz"
+            
+            sku = None
+            if code:
+                clean_code = re.sub(r'[^a-zA-Z0-9\-]+', '_', code).upper().strip('_')
+                sku = f"{prefix}{clean_code}"
+            if not sku:
+                clean_desc = re.sub(r'[^a-zA-Z0-9\-]+', '_', desc).upper().strip('_')
+                sku = f"{prefix}{clean_desc[:35]}"
+                
+            base_sku = sku
+            counter = 1
+            while sku in used_skus:
+                sku = f"{base_sku[:40]}_{counter}"
+                counter += 1
+            used_skus.add(sku)
+            
+            # 1. Crea record in listino_master (con data di validità pregressa)
+            db.add(ListinoMaster(
+                fornitore_id=forn_id,
+                sku_interno=sku,
+                descrizione=desc,
+                prezzo_pattuito=min_price,
+                unita_misura=uom,
+                data_inizio_validita=date(2025, 1, 1),
+                data_scadenza=None
+            ))
+            created_listino += 1
+            
+            # 2. Crea record in alias_prodotti
+            for c in info["codes"]:
+                # Verifica duplicato
+                alias_ex_res = await db.execute(
+                    select(AliasProdotto.id).where(and_(
+                        AliasProdotto.fornitore_id == forn_id,
+                        AliasProdotto.codice_fornitore_originale == c
+                    ))
+                )
+                if not alias_ex_res.scalar():
+                    db.add(AliasProdotto(
+                        fornitore_id=forn_id,
+                        codice_fornitore_originale=c,
+                        sku_interno=sku,
+                        coefficiente_conversione=1.0,
+                        confermato_da_user_id=admin_id,
+                        created_at=datetime.now(timezone.utc)
+                    ))
+                    created_alias += 1
+                    
+            # 3. Aggiorna righe_fattura
+            row_ids = info["row_ids"]
+            if row_ids:
+                await db.execute(
+                    update(RigaFattura)
+                    .where(RigaFattura.id.in_(row_ids))
+                    .values(sku_interno=sku, stato_matching=StatoMatching.matched)
+                )
+                updated_rows += len(row_ids)
+                
+        report.append({
+            "fornitore_id": forn_id,
+            "fornitore_nome": forn_nome,
+            "prodotti_creati": created_listino,
+            "alias_creati": created_alias,
+            "righe_aggiornate": updated_rows
+        })
+        
+    await db.commit()
+    return {
+        "status": "success",
+        "message": f"Inizializzazione completata con successo per {len(report)} fornitori.",
+        "report": report
+    }
+
+
+
 
