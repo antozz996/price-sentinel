@@ -884,7 +884,7 @@ export default function PriceTrendAnalyzer() {
       </div>
 
       {/* 2. Product Search & Tags Section */}
-      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', zIndex: 5 }}>
         <h3 style={{ fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Search size={18} color="var(--accent-blue)" /> Seleziona Prodotti da Confrontare
         </h3>
