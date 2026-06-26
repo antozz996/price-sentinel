@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, X, Calendar, Download, ArrowUpDown, Info, TrendingUp } from 'lucide-react'
-import { API_BASE, getHeaders } from '../api'
+import { fetchWithAuth } from '../api'
 
 interface ProductSku {
   sku_interno: string
@@ -100,28 +100,18 @@ export default function PriceTrendAnalyzer() {
   // 1. Initial Load: SKUs, Suppliers, Locations
   useEffect(() => {
     async function loadInitialData() {
-      const headers = getHeaders()
       try {
-        // Load SKUs
-        const skusRes = await fetch(`${API_BASE}/sku`, { headers })
-        if (skusRes.ok) {
-          const skusData = await skusRes.json()
-          setAllProducts(skusData)
-        }
+        // Load SKUs (Requires trailing slash in FastAPI router)
+        const skusData = await fetchWithAuth('/sku/')
+        setAllProducts(skusData)
 
         // Load Suppliers
-        const suppliersRes = await fetch(`${API_BASE}/fornitori/`, { headers })
-        if (suppliersRes.ok) {
-          const suppliersData = await suppliersRes.json()
-          setSuppliers(suppliersData)
-        }
+        const suppliersData = await fetchWithAuth('/fornitori/')
+        setSuppliers(suppliersData)
 
         // Load Locations
-        const locationsRes = await fetch(`${API_BASE}/location/`, { headers })
-        if (locationsRes.ok) {
-          const locationsData = await locationsRes.json()
-          setLocations(locationsData)
-        }
+        const locationsData = await fetchWithAuth('/location/')
+        setLocations(locationsData)
       } catch (err) {
         console.error('Error loading initial filters data', err)
       }
@@ -140,10 +130,9 @@ export default function PriceTrendAnalyzer() {
     async function fetchTrends() {
       setLoading(true)
       setError(null)
-      const headers = getHeaders()
       
       const skusParam = selectedProducts.map(p => p.sku).join(',')
-      let url = `${API_BASE}/intelligence/price-trends?skus=${encodeURIComponent(skusParam)}`
+      let url = `/intelligence/price-trends?skus=${encodeURIComponent(skusParam)}`
       
       if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`
       if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`
@@ -151,9 +140,7 @@ export default function PriceTrendAnalyzer() {
       if (selectedLocation) url += `&location_ids=${encodeURIComponent(selectedLocation)}`
 
       try {
-        const res = await fetch(url, { headers })
-        if (!res.ok) throw new Error('Impossibile caricare lo storico dei prezzi.')
-        const data = await res.json()
+        const data = await fetchWithAuth(url)
         setTrendData(data)
       } catch (err: any) {
         setError(err.message || 'Errore di connessione.')
