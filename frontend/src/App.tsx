@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -13,6 +13,7 @@ import SentinelCopilot from './components/SentinelCopilot'
 import ProductConsumptionReport from './components/ProductConsumptionReport'
 import CrossSupplierMatrix from './components/CrossSupplierMatrix'
 import TopProductsPriceList from './components/TopProductsPriceList'
+import PriceTrendAnalyzer from './components/PriceTrendAnalyzer'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -233,6 +234,7 @@ export default function App() {
       case 'crosslocation': return <CrossLocationMatrix />;
       case 'crosssupplier': return <CrossSupplierMatrix />;
       case 'productconsumption': return <ProductConsumptionReport />;
+      case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
       case 'settings': return <SettingsPage />;
@@ -251,6 +253,7 @@ export default function App() {
       case 'crosslocation': return { title: 'Analisi Comparativa Sedi', sub: 'Matrice comparativa prezzi d\'acquisto e Vendor Passport' };
       case 'crosssupplier': return { title: 'Comparazione Fornitori', sub: 'Matrice incrociata dei prezzi per fornitore' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
+      case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
@@ -360,6 +363,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'productconsumption' ? '' : 'transparent', border: 'none' }}
           >
             <BarChart2 size={18} /> Analisi Consumi
+          </button>
+
+          <button 
+            className={`btn ${activeTab === 'priceanalysis' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('priceanalysis'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'priceanalysis' ? '' : 'transparent', border: 'none' }}
+          >
+            <TrendingUp size={18} /> Analisi Oscillazioni
           </button>
 
           <button 

@@ -505,6 +505,119 @@ async def get_price_trend(
     }
 
 
+@router.get("/price-trends", summary="Trend Storico Prezzi per SKU multipli")
+async def get_price_trends(
+    skus: str = Query(..., description="Elenco di SKU separati da virgola"),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
+    location_ids: str | None = Query(None),
+    fornitore_ids: str | None = Query(None),
+    _user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Split SKUs
+    sku_list = [s.strip() for s in skus.split(",") if s.strip()]
+    if not sku_list:
+        return {}
+
+    # Recupera i listini attivi correnti per questi SKU
+    listino_stmt = select(ListinoMaster).where(
+        and_(
+            ListinoMaster.sku_interno.in_(sku_list),
+            ListinoMaster.data_scadenza.is_(None)
+        )
+    )
+    listino_res = await db.execute(listino_stmt)
+    listini = listino_res.scalars().all()
+    contracts = {l.sku_interno: l for l in listini}
+
+    # Recupera lo storico degli acquisti cronologicamente con filtri
+    stmt = (
+        select(
+            Fattura.data_documento,
+            Fattura.location_id,
+            Fattura.fornitore_id,
+            RigaFattura.sku_interno,
+            RigaFattura.prezzo_netto_normalizzato,
+            RigaFattura.quantita,
+            RigaFattura.descrizione_fornitore_raw,
+            Fornitore.nome_azienda.label("fornitore_nome"),
+            Location.nome_struttura.label("location_nome")
+        )
+        .join(RigaFattura, RigaFattura.fattura_id == Fattura.id)
+        .join(Fornitore, Fattura.fornitore_id == Fornitore.id)
+        .join(Location, Fattura.location_id == Location.id)
+        .where(
+            and_(
+                RigaFattura.sku_interno.in_(sku_list),
+                RigaFattura.stato_matching == "matched"
+            )
+        )
+    )
+
+    # Applica i filtri opzionali
+    if start_date:
+        try:
+            s_dt = date.fromisoformat(start_date)
+            stmt = stmt.where(Fattura.data_documento >= s_dt)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            e_dt = date.fromisoformat(end_date)
+            stmt = stmt.where(Fattura.data_documento <= e_dt)
+        except ValueError:
+            pass
+    if location_ids:
+        loc_list = [int(lid.strip()) for lid in location_ids.split(",") if lid.strip().isdigit()]
+        if loc_list:
+            stmt = stmt.where(Fattura.location_id.in_(loc_list))
+    if fornitore_ids:
+        forn_list = [int(fid.strip()) for fid in fornitore_ids.split(",") if fid.strip().isdigit()]
+        if forn_list:
+            stmt = stmt.where(Fattura.fornitore_id.in_(forn_list))
+
+    stmt = stmt.order_by(Fattura.data_documento.asc())
+    res = await db.execute(stmt)
+    history = res.all()
+
+    # Prepara la risposta raggruppata per SKU
+    response_data = {}
+    for sku in sku_list:
+        l_active = contracts.get(sku)
+        prezzo_contratto = float(l_active.prezzo_pattuito) if l_active else None
+        prod_name = l_active.descrizione if l_active else sku
+        response_data[sku] = {
+            "sku_interno": sku,
+            "prodotto_nome": prod_name,
+            "prezzo_contratto_corrente": prezzo_contratto,
+            "history": []
+        }
+
+    for r in history:
+        sku = r.sku_interno
+        if sku not in response_data:
+            continue
+
+        # Se il nome del prodotto è ancora lo SKU di fallback, aggiornalo con la prima descrizione reale trovata
+        if response_data[sku]["prodotto_nome"] == sku and r.descrizione_fornitore_raw:
+            response_data[sku]["prodotto_nome"] = r.descrizione_fornitore_raw
+
+        l_active = contracts.get(sku)
+        prezzo_contratto = float(l_active.prezzo_pattuito) if l_active else None
+
+        response_data[sku]["history"].append({
+            "data": r.data_documento.isoformat() if isinstance(r.data_documento, date) else str(r.data_documento),
+            "prezzo_pagato": float(r.prezzo_netto_normalizzato),
+            "quantita": float(r.quantita),
+            "fornitore": r.fornitore_nome,
+            "location": r.location_nome,
+            "prezzo_contratto": prezzo_contratto
+        })
+
+    return response_data
+
+
 # ─────────────────────────────────────────────
 # 2. Audit & Anomalie Pricing (ConfrontoPrezzi)
 # ─────────────────────────────────────────────
