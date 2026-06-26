@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -12,6 +12,7 @@ import SkuManager from './components/SkuManager'
 import SentinelCopilot from './components/SentinelCopilot'
 import ProductConsumptionReport from './components/ProductConsumptionReport'
 import CrossSupplierMatrix from './components/CrossSupplierMatrix'
+import TopProductsPriceList from './components/TopProductsPriceList'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -228,6 +229,7 @@ export default function App() {
       case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
+      case 'topproducts': return <TopProductsPriceList />;
       case 'crosslocation': return <CrossLocationMatrix />;
       case 'crosssupplier': return <CrossSupplierMatrix />;
       case 'productconsumption': return <ProductConsumptionReport />;
@@ -245,6 +247,7 @@ export default function App() {
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Stanza di Validazione', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
+      case 'topproducts': return { title: 'Listino Top Prodotti', sub: 'Sviluppa e analizza il listino prezzi dei prodotti più acquistati' };
       case 'crosslocation': return { title: 'Analisi Comparativa Sedi', sub: 'Matrice comparativa prezzi d\'acquisto e Vendor Passport' };
       case 'crosssupplier': return { title: 'Comparazione Fornitori', sub: 'Matrice incrociata dei prezzi per fornitore' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
@@ -325,6 +328,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'listini' ? '' : 'transparent', border: 'none' }}
           >
             <FileSpreadsheet size={18} /> Listini Master
+          </button>
+
+          <button 
+            className={`btn ${activeTab === 'topproducts' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('topproducts'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'topproducts' ? '' : 'transparent', border: 'none' }}
+          >
+            <Award size={18} /> Listino Top Prodotti
           </button>
 
           <button 
