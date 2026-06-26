@@ -1448,3 +1448,208 @@ async def export_product_consumption_excel(
     )
 
 
+@router.get("/top-purchased-products", summary="Ottiene i prodotti più acquistati")
+async def get_top_purchased_products(
+    limit: int | None = Query(50, ge=1, le=1000),
+    sort_by: str = Query("quantita", description="Ordinamento: quantita, spesa, acquisti"),
+    fornitore_id: int | None = Query(None),
+    location_ids: str | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ritorna la lista dei prodotti più acquistati filtrati per fornitore, location e date range.
+    """
+    loc_ids = []
+    if location_ids:
+        try:
+            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
+        except ValueError:
+            pass
+
+    location_filter = ""
+    params = {
+        "fornitore_id": fornitore_id,
+        "data_da": data_da,
+        "data_a": data_a,
+        "limit": limit
+    }
+    if loc_ids:
+        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
+        location_filter = f"AND f.location_id IN ({id_placeholders})"
+        for i, val in enumerate(loc_ids):
+            params[f"loc_id_{i}"] = val
+
+    valid_sorts = {
+        "quantita": "quantita_totale DESC",
+        "spesa": "spesa_totale DESC",
+        "acquisti": "numero_acquisti DESC"
+    }
+    order_by_clause = valid_sorts.get(sort_by, "quantita_totale DESC")
+
+    sql = f"""
+    SELECT 
+        rf.sku_interno, 
+        MAX(rf.descrizione_fornitore_raw) as descrizione,
+        SUM(rf.quantita) as quantita_totale,
+        SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
+        COALESCE(
+            MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
+            MAX(rf.unita_misura_fattura)
+        ) as unita_misura,
+        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        COUNT(rf.id) as numero_acquisti,
+        CASE 
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
+            ELSE 0 
+        END as prezzo_medio
+    FROM righe_fattura rf
+    JOIN fatture f ON rf.fattura_id = f.id
+    WHERE rf.sku_interno IS NOT NULL
+      {location_filter}
+      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
+      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
+    GROUP BY rf.sku_interno
+    ORDER BY {order_by_clause}
+    LIMIT :limit
+    """
+    
+    res = await db.execute(text(sql), params)
+    
+    results = []
+    for r in res.all():
+        results.append({
+            "sku_interno": r.sku_interno,
+            "descrizione": r.descrizione,
+            "quantita_totale": float(r.quantita_totale or 0),
+            "quantita_omaggio": float(r.quantita_omaggio or 0),
+            "unita_misura": r.unita_misura or "Pz",
+            "spesa_totale": float(r.spesa_totale or 0),
+            "numero_acquisti": int(r.numero_acquisti or 0),
+            "prezzo_medio": float(r.prezzo_medio or 0)
+        })
+    return results
+
+
+@router.get("/export-top-purchased-excel", summary="Esporta Excel dei prodotti più acquistati")
+async def export_top_purchased_excel(
+    limit: int | None = Query(50, ge=1, le=1000),
+    sort_by: str = Query("quantita", description="Ordinamento: quantita, spesa, acquisti"),
+    fornitore_id: int | None = Query(None),
+    location_ids: str | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Genera ed esporta un report Excel (.xlsx) dei prodotti più acquistati con filtri.
+    """
+    data = await get_top_purchased_products(
+        limit=limit,
+        sort_by=sort_by,
+        fornitore_id=fornitore_id,
+        location_ids=location_ids,
+        data_da=data_da,
+        data_a=data_a,
+        _admin=_admin,
+        db=db
+    )
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Listino Top Prodotti"
+    
+    ws.views.sheetView[0].showGridLines = True
+    
+    headers = [
+        "Posizione", "SKU Interno", "Prodotto", "Unità di Misura", 
+        "Quantità Totale", "Numero Acquisti", "Prezzo Medio (€)", "Spesa Totale (€)"
+    ]
+    
+    ws.append(headers)
+    
+    header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    
+    thin_border = Border(
+        left=Side(style='thin', color='DDDDDD'),
+        right=Side(style='thin', color='DDDDDD'),
+        top=Side(style='thin', color='DDDDDD'),
+        bottom=Side(style='thin', color='DDDDDD')
+    )
+    
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_align
+        cell.border = thin_border
+    
+    row_num = 2
+    for idx, item in enumerate(data):
+        row_data = [
+            idx + 1,
+            item["sku_interno"],
+            item["descrizione"],
+            item["unita_misura"],
+            item["quantita_totale"],
+            item["numero_acquisti"],
+            item["prezzo_medio"],
+            item["spesa_totale"]
+        ]
+        ws.append(row_data)
+        
+        for col_idx in range(1, len(row_data) + 1):
+            cell = ws.cell(row=row_num, column=col_idx)
+            cell.border = thin_border
+            cell.font = Font(name="Calibri", size=11)
+            
+            if col_idx in (7, 8):
+                cell.number_format = '€ #,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+            elif col_idx == 5:
+                cell.number_format = '#,##0.00'
+                cell.alignment = Alignment(horizontal="right")
+            elif col_idx == 6:
+                cell.number_format = '#,##0'
+                cell.alignment = Alignment(horizontal="right")
+            elif col_idx in (1, 2, 4):
+                cell.alignment = Alignment(horizontal="center")
+            else:
+                cell.alignment = Alignment(horizontal="left")
+                
+        row_num += 1
+        
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val_str = str(cell.value or '')
+            if cell.column in (7, 8) and type(cell.value) in (int, float):
+                val_str = f"€ {cell.value:.2f}"
+            if len(val_str) > max_len:
+                max_len = len(val_str)
+        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    
+    filename = f"listino_top_{limit or 'all'}_prodotti.xlsx"
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"'
+    }
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers
+    )
+
+
+
