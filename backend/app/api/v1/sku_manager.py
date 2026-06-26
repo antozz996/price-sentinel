@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.api.deps import require_admin
+from app.api.deps import require_admin, get_current_user
 from app.database import get_db
 
 router = APIRouter()
 
 @router.get("/", summary="Lista di tutti gli SKU nel sistema")
 async def get_all_skus(
-    _admin = Depends(require_admin),
+    _user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
