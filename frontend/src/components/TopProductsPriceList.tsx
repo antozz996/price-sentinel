@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileSpreadsheet, TrendingUp, Coins, Package, ShoppingCart, Calendar, Filter, ArrowUpDown } from 'lucide-react';
+import { FileSpreadsheet, TrendingUp, Coins, Package, ShoppingCart, Calendar, ArrowUpDown } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface ProductItem {
@@ -34,7 +34,7 @@ export default function TopProductsPriceList() {
   // Filters
   const [limit, setLimit] = useState<number>(50);
   const [sortBy, setSortBy] = useState<string>('quantita');
-  const [selectedSupplier, setSelectedSupplier] = useState<string>('');
+  const [selectedSuppliers, setSelectedSuppliers] = useState<number[]>([]);
   const [selectedLocations, setSelectedLocations] = useState<number[]>([]);
   const [dataDa, setDataDa] = useState<string>('');
   const [dataA, setDataA] = useState<string>('');
@@ -65,7 +65,7 @@ export default function TopProductsPriceList() {
         const params = new URLSearchParams();
         params.append('limit', limit.toString());
         params.append('sort_by', sortBy);
-        if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
+        if (selectedSuppliers.length > 0) params.append('fornitore_ids', selectedSuppliers.join(','));
         if (selectedLocations.length > 0) params.append('location_ids', selectedLocations.join(','));
         if (dataDa) params.append('data_da', dataDa);
         if (dataA) params.append('data_a', dataA);
@@ -83,7 +83,7 @@ export default function TopProductsPriceList() {
       }
     }
     loadData();
-  }, [limit, sortBy, selectedSupplier, selectedLocations, dataDa, dataA]);
+  }, [limit, sortBy, selectedSuppliers, selectedLocations, dataDa, dataA]);
 
   // Excel export trigger
   const handleExportExcel = async () => {
@@ -92,7 +92,7 @@ export default function TopProductsPriceList() {
       const params = new URLSearchParams();
       params.append('limit', limit.toString());
       params.append('sort_by', sortBy);
-      if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
+      if (selectedSuppliers.length > 0) params.append('fornitore_ids', selectedSuppliers.join(','));
       if (selectedLocations.length > 0) params.append('location_ids', selectedLocations.join(','));
       if (dataDa) params.append('data_da', dataDa);
       if (dataA) params.append('data_a', dataA);
@@ -129,6 +129,14 @@ export default function TopProductsPriceList() {
       setSelectedLocations(selectedLocations.filter(locId => locId !== id));
     } else {
       setSelectedLocations([...selectedLocations, id]);
+    }
+  };
+
+  const handleSupplierToggle = (id: number) => {
+    if (selectedSuppliers.includes(id)) {
+      setSelectedSuppliers(selectedSuppliers.filter(supId => supId !== id));
+    } else {
+      setSelectedSuppliers([...selectedSuppliers, id]);
     }
   };
 
@@ -246,27 +254,9 @@ export default function TopProductsPriceList() {
 
         </div>
 
-        {/* Row 2: Selectors & Date Range */}
+        {/* Row 2: Date Range */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
           
-          {/* Supplier filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}><Filter size={12} style={{ display: 'inline', marginRight: '4px' }} />Fornitore</label>
-            <select
-              value={selectedSupplier}
-              onChange={e => setSelectedSupplier(e.target.value)}
-              style={{
-                padding: '10px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)',
-                borderRadius: '8px', color: 'white', outline: 'none', fontSize: '0.9rem'
-              }}
-            >
-              <option value="">Tutti i Fornitori</option>
-              {suppliers.map(s => (
-                <option key={s.id} value={s.id}>{s.nome_azienda}</option>
-              ))}
-            </select>
-          </div>
-
           {/* Date range - Da */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}><Calendar size={12} style={{ display: 'inline', marginRight: '4px' }} />Data Inizio</label>
@@ -295,6 +285,43 @@ export default function TopProductsPriceList() {
             />
           </div>
 
+        </div>
+
+        {/* Row 3: Supplier pills multi-select */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-glass)', paddingTop: '16px' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Filtra per Fornitore (Seleziona per includere):</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            <button
+              onClick={() => setSelectedSuppliers([])}
+              style={{
+                padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer',
+                border: '1px solid ' + (selectedSuppliers.length === 0 ? 'var(--accent-blue)' : 'transparent'),
+                background: selectedSuppliers.length === 0 ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
+                color: selectedSuppliers.length === 0 ? 'white' : 'var(--text-secondary)',
+                fontWeight: 600, transition: 'all 0.2s'
+              }}
+            >
+              Tutti i Fornitori
+            </button>
+            {suppliers.map(s => {
+              const isSelected = selectedSuppliers.includes(s.id);
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => handleSupplierToggle(s.id)}
+                  style={{
+                    padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer',
+                    border: '1px solid ' + (isSelected ? 'var(--accent-blue)' : 'transparent'),
+                    background: isSelected ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
+                    color: isSelected ? 'white' : 'var(--text-secondary)',
+                    fontWeight: 500, transition: 'all 0.2s'
+                  }}
+                >
+                  {s.nome_azienda}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Row 3: Location pills multi-select */}

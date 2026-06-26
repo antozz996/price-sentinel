@@ -1452,7 +1452,8 @@ async def export_product_consumption_excel(
 async def get_top_purchased_products(
     limit: int | None = Query(50, ge=1, le=1000),
     sort_by: str = Query("quantita", description="Ordinamento: quantita, spesa, acquisti"),
-    fornitore_id: int | None = Query(None),
+    fornitore_id: int | None = Query(None, description="ID singolo fornitore (retrocompatibilità)"),
+    fornitore_ids: str | None = Query(None, description="ID fornitori separati da virgola per multi-selezione"),
     location_ids: str | None = Query(None),
     data_da: date | None = Query(None),
     data_a: date | None = Query(None),
@@ -1460,7 +1461,7 @@ async def get_top_purchased_products(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Ritorna la lista dei prodotti più acquistati filtrati per fornitore, location e date range.
+    Ritorna la lista dei prodotti più acquistati filtrati per fornitori, location e date range.
     """
     loc_ids = []
     if location_ids:
@@ -1469,18 +1470,34 @@ async def get_top_purchased_products(
         except ValueError:
             pass
 
+    forn_ids = []
+    if fornitore_ids:
+        try:
+            forn_ids = [int(x) for x in fornitore_ids.split(",") if x.strip()]
+        except ValueError:
+            pass
+    elif fornitore_id is not None:
+        forn_ids = [fornitore_id]
+
     location_filter = ""
+    fornitore_filter = ""
     params = {
-        "fornitore_id": fornitore_id,
         "data_da": data_da,
         "data_a": data_a,
         "limit": limit
     }
+
     if loc_ids:
         id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
         location_filter = f"AND f.location_id IN ({id_placeholders})"
         for i, val in enumerate(loc_ids):
             params[f"loc_id_{i}"] = val
+
+    if forn_ids:
+        forn_placeholders = ",".join(f":forn_id_{i}" for i in range(len(forn_ids)))
+        fornitore_filter = f"AND f.fornitore_id IN ({forn_placeholders})"
+        for i, val in enumerate(forn_ids):
+            params[f"forn_id_{i}"] = val
 
     valid_sorts = {
         "quantita": "quantita_totale DESC",
@@ -1510,7 +1527,7 @@ async def get_top_purchased_products(
     JOIN fatture f ON rf.fattura_id = f.id
     WHERE rf.sku_interno IS NOT NULL
       {location_filter}
-      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
+      {fornitore_filter}
       AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
       AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
     GROUP BY rf.sku_interno
@@ -1540,6 +1557,7 @@ async def export_top_purchased_excel(
     limit: int | None = Query(50, ge=1, le=1000),
     sort_by: str = Query("quantita", description="Ordinamento: quantita, spesa, acquisti"),
     fornitore_id: int | None = Query(None),
+    fornitore_ids: str | None = Query(None),
     location_ids: str | None = Query(None),
     data_da: date | None = Query(None),
     data_a: date | None = Query(None),
@@ -1553,6 +1571,7 @@ async def export_top_purchased_excel(
         limit=limit,
         sort_by=sort_by,
         fornitore_id=fornitore_id,
+        fornitore_ids=fornitore_ids,
         location_ids=location_ids,
         data_da=data_da,
         data_a=data_a,
