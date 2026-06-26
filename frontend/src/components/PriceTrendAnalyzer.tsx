@@ -97,26 +97,34 @@ export default function PriceTrendAnalyzer() {
 
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // 1. Initial Load: SKUs, Suppliers, Locations
+  // 1. Initial Load: SKUs, Suppliers, Locations (Fetches in parallel to prevent cascading failures)
   useEffect(() => {
-    async function loadInitialData() {
-      try {
-        // Load SKUs (Requires trailing slash in FastAPI router)
-        const skusData = await fetchWithAuth('/sku/')
-        setAllProducts(skusData)
+    // Load SKUs (Requires trailing slash in FastAPI router)
+    fetchWithAuth('/sku/')
+      .then(data => {
+        setAllProducts(data)
+      })
+      .catch(err => {
+        console.error('Error loading SKUs:', err)
+      })
 
-        // Load Suppliers
-        const suppliersData = await fetchWithAuth('/fornitori/')
-        setSuppliers(suppliersData)
+    // Load Suppliers
+    fetchWithAuth('/fornitori/')
+      .then(data => {
+        setSuppliers(data)
+      })
+      .catch(err => {
+        console.error('Error loading Suppliers:', err)
+      })
 
-        // Load Locations
-        const locationsData = await fetchWithAuth('/location/')
-        setLocations(locationsData)
-      } catch (err) {
-        console.error('Error loading initial filters data', err)
-      }
-    }
-    loadInitialData()
+    // Load Locations
+    fetchWithAuth('/location/')
+      .then(data => {
+        setLocations(data)
+      })
+      .catch(err => {
+        console.error('Error loading Locations:', err)
+      })
   }, [])
 
   // 2. Fetch Trend Data whenever products or filters change
