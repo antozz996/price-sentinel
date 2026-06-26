@@ -6,6 +6,7 @@ from app.database import get_db
 
 router = APIRouter()
 
+@router.get("", summary="Lista di tutti gli SKU nel sistema")
 @router.get("/", summary="Lista di tutti gli SKU nel sistema")
 async def get_all_skus(
     _user = Depends(get_current_user),
