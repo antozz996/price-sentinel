@@ -1665,6 +1665,7 @@ async def auto_catalog_initialize(
     """
     from decimal import Decimal
     import re
+    from sqlalchemy import update
     from app.models.alias import AliasProdotto
     from app.models.utenti import Utente
     from app.models.listino import ListinoMaster
