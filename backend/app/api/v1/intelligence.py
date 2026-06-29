@@ -117,11 +117,13 @@ async def get_cross_location_matrix(
         data_a = None
 
     # Costruzione condizioni dinamiche per data
+    from app.models.esclusi import SKUEscluso
     conditions = [
         RigaFattura.stato_matching == StatoMatching.matched,
         RigaFattura.sku_interno.isnot(None),
         RigaFattura.prezzo_netto_normalizzato > 0,
-        RigaFattura.is_omaggio.isnot(True)
+        RigaFattura.is_omaggio.isnot(True),
+        ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno))
     ]
     if data_da:
         conditions.append(Fattura.data_documento >= data_da)
@@ -207,14 +209,12 @@ async def get_cross_supplier_matrix(
         ListinoMaster.fornitore_id,
         ListinoMaster.prezzo_pattuito
     )
-    contracts_conds = []
+    from app.models.esclusi import SKUEscluso
+    contracts_conds = [~ListinoMaster.sku_interno.in_(select(SKUEscluso.sku_interno))]
     if data_da:
         contracts_conds.append(or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= data_da))
     if data_a:
         contracts_conds.append(ListinoMaster.data_inizio_validita <= data_a)
-        
-    if not contracts_conds:
-        contracts_conds.append(ListinoMaster.data_scadenza.is_(None))
         
     contracts_stmt = contracts_stmt.where(and_(*contracts_conds))
     
@@ -227,7 +227,8 @@ async def get_cross_supplier_matrix(
         RigaFattura.stato_matching == StatoMatching.matched,
         RigaFattura.sku_interno.isnot(None),
         RigaFattura.prezzo_netto_normalizzato > 0,
-        RigaFattura.is_omaggio.isnot(True)
+        RigaFattura.is_omaggio.isnot(True),
+        ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno))
     ]
     if data_da:
         spot_conds.append(Fattura.data_documento >= data_da)
@@ -455,6 +456,12 @@ async def get_price_trend(
     _user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.esclusi import SKUEscluso
+    # Verifica se è escluso
+    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
+    if chk.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
+
     # Recupera lo storico degli acquisti cronologicamente
     stmt = (
         select(
@@ -655,6 +662,7 @@ async def get_pricing_audit(
         JOIN fatture f ON rf.fattura_id = f.id
         JOIN fornitori fo ON f.fornitore_id = fo.id
         WHERE rf.sku_interno IS NOT NULL
+          AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
           AND (:location_id IS NULL OR f.location_id = :location_id)
           AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
         GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
@@ -702,6 +710,7 @@ async def get_pricing_audit(
             FROM righe_fattura rf
             JOIN fatture f ON rf.fattura_id = f.id
             WHERE rf.sku_interno IS NOT NULL
+              AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
               AND (:location_id IS NULL OR f.location_id = :location_id)
               AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
             GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, to_char(f.data_documento, 'YYYY-MM')
@@ -778,6 +787,7 @@ async def get_efficiency_leaderboard(
             MIN(prezzo_netto_normalizzato) as hist_prezzo_min
         FROM righe_fattura
         WHERE sku_interno IS NOT NULL 
+          AND sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
           AND stato_matching = 'matched'
           AND prezzo_netto_normalizzato > 0
           AND is_omaggio IS NOT TRUE
@@ -841,6 +851,7 @@ async def get_variance_loss(
             MIN(prezzo_netto_normalizzato) AS min_price
         FROM righe_fattura
         WHERE stato_matching = 'matched' AND sku_interno IS NOT NULL AND prezzo_netto_normalizzato > 0
+          AND sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
         GROUP BY sku_interno
     )
     SELECT 
@@ -1082,6 +1093,7 @@ async def get_product_consumption(
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
     WHERE rf.sku_interno IS NOT NULL
+      AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
       {location_filter}
       AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
       AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
@@ -1116,6 +1128,11 @@ async def get_product_consumption_detail(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.esclusi import SKUEscluso
+    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
+    if chk.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
+
     # Normalizza i parametri in caso di chiamata diretta in Python (es. unit tests)
     if not isinstance(location_ids, str):
         location_ids = None
@@ -1255,6 +1272,11 @@ async def get_product_consumption_invoices(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.esclusi import SKUEscluso
+    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
+    if chk.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
+
     if not isinstance(location_ids, str):
         location_ids = None
     if not isinstance(fornitore_id, int):
@@ -1349,6 +1371,11 @@ async def get_product_consumption_invoices_pdf(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.esclusi import SKUEscluso
+    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
+    if chk.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
+
     if not isinstance(location_ids, str):
         location_ids = None
     if not isinstance(fornitore_id, int):
@@ -1648,6 +1675,7 @@ async def get_top_purchased_products(
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
     WHERE rf.sku_interno IS NOT NULL
+      AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
       {location_filter}
       {fornitore_filter}
       AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
