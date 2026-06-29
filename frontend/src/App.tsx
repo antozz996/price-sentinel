@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -14,6 +14,7 @@ import ProductConsumptionReport from './components/ProductConsumptionReport'
 import CrossSupplierMatrix from './components/CrossSupplierMatrix'
 import TopProductsPriceList from './components/TopProductsPriceList'
 import PriceTrendAnalyzer from './components/PriceTrendAnalyzer'
+import ExcludedProducts from './components/ExcludedProducts'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -237,6 +238,7 @@ export default function App() {
       case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
+      case 'excludedproducts': return <ExcludedProducts />;
       case 'settings': return <SettingsPage />;
       default: return <Dashboard />;
     }
@@ -256,6 +258,7 @@ export default function App() {
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
+      case 'excludedproducts': return { title: 'Prodotti Esclusi', sub: 'Gestisci la blacklist globale dei prodotti da escludere dalle analisi' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
       default: return { title: 'Price Sentinel', sub: 'Audit System' };
     }
@@ -387,6 +390,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'skumanager' ? '' : 'transparent', border: 'none' }}
           >
             <Tag size={18} /> Gestione SKU
+          </button>
+
+          <button 
+            className={`btn ${activeTab === 'excludedproducts' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('excludedproducts'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'excludedproducts' ? '' : 'transparent', border: 'none' }}
+          >
+            <EyeOff size={18} /> Prodotti Esclusi
           </button>
         </nav>
         
