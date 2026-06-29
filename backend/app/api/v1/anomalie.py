@@ -46,8 +46,15 @@ async def list_anomalie(
     from app.models.fatture import RigaFattura, Fattura
     from app.models.fornitori import Fornitore
 
-    query = select(Anomalia).options(
+    from app.models.esclusi import SKUEscluso
+
+    query = select(Anomalia).join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id).options(
         selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore)
+    ).where(
+        and_(
+            RigaFattura.sku_interno.is_(None) |
+            ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno))
+        )
     ).order_by(Anomalia.id.desc())
 
     if stato:
@@ -55,8 +62,7 @@ async def list_anomalie(
 
     if current_user.ruolo.value == "manager":
         query = (
-            query.join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
-            .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+            query.join(Fattura, RigaFattura.fattura_id == Fattura.id)
             .where(Fattura.location_id == current_user.location_id)
         )
 

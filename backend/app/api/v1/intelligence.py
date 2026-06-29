@@ -520,6 +520,15 @@ async def get_price_trends(
     if not sku_list:
         return {}
 
+    # Filtra SKU esclusi
+    from app.models.esclusi import SKUEscluso
+    stmt_ex = select(SKUEscluso.sku_interno).where(SKUEscluso.sku_interno.in_(sku_list))
+    res_ex = await db.execute(stmt_ex)
+    excluded = set(res_ex.scalars().all())
+    sku_list = [s for s in sku_list if s not in excluded]
+    if not sku_list:
+        return {}
+
     # Recupera i listini attivi correnti per questi SKU
     listino_stmt = select(ListinoMaster).where(
         and_(
