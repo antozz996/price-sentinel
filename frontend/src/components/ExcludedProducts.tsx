@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { EyeOff, Search, ShieldAlert, Plus, Eye, Loader2 } from 'lucide-react';
+import { EyeOff, Search, ShieldAlert, Plus, Eye, Loader2, X, RotateCcw } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 
 interface ExcludedSku {
@@ -17,10 +17,13 @@ export default function ExcludedProducts() {
   const [availableSkus, setAvailableSkus] = useState<SkuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSku, setSelectedSku] = useState<SkuItem | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Multi-selection states
+  const [selectedToExclude, setSelectedToExclude] = useState<SkuItem[]>([]);
+  const [selectedToRestore, setSelectedToRestore] = useState<string[]>([]);
 
   useEffect(() => {
     loadData();
@@ -40,6 +43,7 @@ export default function ExcludedProducts() {
       if (Array.isArray(allSkus)) {
         setAvailableSkus(allSkus);
       }
+      setSelectedToRestore([]); // Reset selection on reload
     } catch (err) {
       console.error('Error loading data', err);
     } finally {
@@ -47,27 +51,48 @@ export default function ExcludedProducts() {
     }
   };
 
-  const handleExclude = async (sku: string) => {
-    if (!sku) return;
+  const handleAddProductToExclude = (skuItem: SkuItem) => {
+    if (selectedToExclude.some(item => item.sku_interno === skuItem.sku_interno)) {
+      setSearchQuery('');
+      setDropdownOpen(false);
+      return;
+    }
+    setSelectedToExclude([...selectedToExclude, skuItem]);
+    setSearchQuery('');
+    setDropdownOpen(false);
+  };
+
+  const handleRemoveProductToExclude = (sku: string) => {
+    setSelectedToExclude(selectedToExclude.filter(item => item.sku_interno !== sku));
+  };
+
+  const handleBulkExclude = async () => {
+    if (selectedToExclude.length === 0) return;
     setSubmitting(true);
     setMessage(null);
     try {
-      await fetchWithAuth('/sku/excluded', {
-        method: 'POST',
-        body: JSON.stringify({ sku_interno: sku })
+      await Promise.all(
+        selectedToExclude.map(item =>
+          fetchWithAuth('/sku/excluded', {
+            method: 'POST',
+            body: JSON.stringify({ sku_interno: item.sku_interno })
+          })
+        )
+      );
+      setMessage({
+        text: `Esclusi con successo ${selectedToExclude.length} prodotti dalle analisi.`,
+        type: 'success'
       });
-      setMessage({ text: `SKU '${sku}' escluso con successo dalle analisi.`, type: 'success' });
-      setSelectedSku(null);
-      setSearchQuery('');
+      setSelectedToExclude([]);
       loadData();
     } catch (err: any) {
-      setMessage({ text: err.message || 'Errore durante l\'esclusione dello SKU', type: 'error' });
+      setMessage({ text: err.message || 'Errore durante l\'esclusione dei prodotti', type: 'error' });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleRestore = async (sku: string) => {
+  const handleSingleRestore = async (sku: string) => {
     setSubmitting(true);
     setMessage(null);
     try {
@@ -83,11 +108,53 @@ export default function ExcludedProducts() {
     }
   };
 
+  const handleBulkRestore = async () => {
+    if (selectedToRestore.length === 0) return;
+    setSubmitting(true);
+    setMessage(null);
+    try {
+      await Promise.all(
+        selectedToRestore.map(sku =>
+          fetchWithAuth(`/sku/excluded/${sku}`, {
+            method: 'DELETE'
+          })
+        )
+      );
+      setMessage({
+        text: `Ripristinati con successo ${selectedToRestore.length} prodotti.`,
+        type: 'success'
+      });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Errore durante il ripristino dei prodotti', type: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSelectAllRestore = (checked: boolean) => {
+    if (checked) {
+      setSelectedToRestore(excludedList.map(item => item.sku_interno));
+    } else {
+      setSelectedToRestore([]);
+    }
+  };
+
+  const handleToggleRestoreSelect = (sku: string, checked: boolean) => {
+    if (checked) {
+      setSelectedToRestore([...selectedToRestore, sku]);
+    } else {
+      setSelectedToRestore(selectedToRestore.filter(s => s !== sku));
+    }
+  };
+
   // Filter available SKUs based on search input
-  const filteredAvailable = availableSkus.filter(s =>
-    s.sku_interno.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (s.nome_prodotto && s.nome_prodotto.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredAvailable = availableSkus.filter(s => {
+    const matchesSearch = s.sku_interno.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.nome_prodotto && s.nome_prodotto.toLowerCase().includes(searchQuery.toLowerCase()));
+    const alreadySelected = selectedToExclude.some(item => item.sku_interno === s.sku_interno);
+    return matchesSearch && !alreadySelected;
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -112,9 +179,9 @@ export default function ExcludedProducts() {
               <EyeOff size={24} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Esclusione Prodotti</h3>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Esclusione Prodotti (Selezione Multipla)</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                Aggiungi o rimuovi SKU dalla blacklist globale per escluderli da anomalie, grafici e statistiche.
+                Cerca e aggiungi più prodotti alla lista, quindi applica l'esclusione globale in un'unica operazione.
               </p>
             </div>
           </div>
@@ -126,12 +193,11 @@ export default function ExcludedProducts() {
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
             <input
               type="text"
-              placeholder="Cerca prodotto o SKU da escludere..."
+              placeholder="Cerca e seleziona prodotti da escludere..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setDropdownOpen(true);
-                setSelectedSku(null);
               }}
               onFocus={() => setDropdownOpen(true)}
               style={{
@@ -168,11 +234,7 @@ export default function ExcludedProducts() {
                   filteredAvailable.map((s) => (
                     <div
                       key={`avail-${s.sku_interno}`}
-                      onClick={() => {
-                        setSelectedSku(s);
-                        setSearchQuery(`${s.nome_prodotto || s.sku_interno} (${s.sku_interno})`);
-                        setDropdownOpen(false);
-                      }}
+                      onClick={() => handleAddProductToExclude(s)}
                       style={{
                         padding: '10px 14px',
                         cursor: 'pointer',
@@ -197,8 +259,8 @@ export default function ExcludedProducts() {
             )}
           </div>
           <button
-            onClick={() => selectedSku && handleExclude(selectedSku.sku_interno)}
-            disabled={!selectedSku || submitting}
+            onClick={handleBulkExclude}
+            disabled={selectedToExclude.length === 0 || submitting}
             className="btn btn-primary"
             style={{
               padding: '12px 24px',
@@ -209,21 +271,86 @@ export default function ExcludedProducts() {
               fontSize: '0.9rem',
               backgroundColor: 'var(--status-red)',
               borderColor: 'var(--status-red)',
-              cursor: !selectedSku ? 'not-allowed' : 'pointer',
-              opacity: !selectedSku ? 0.5 : 1
+              cursor: selectedToExclude.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: selectedToExclude.length === 0 ? 0.5 : 1
             }}
           >
             {submitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={18} />}
-            Escludi Prodotto
+            Escludi Selezionati ({selectedToExclude.length})
           </button>
         </div>
+
+        {/* Selected products tags to exclude */}
+        {selectedToExclude.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '8px', padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-glass)', borderRadius: '8px' }}>
+            {selectedToExclude.map(item => (
+              <div
+                key={`to-ex-${item.sku_interno}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: '999px',
+                  padding: '6px 14px',
+                  fontSize: '0.85rem',
+                  color: 'white'
+                }}
+              >
+                <span style={{ fontWeight: 500 }}>{item.nome_prodotto || item.sku_interno}</span>
+                <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>({item.sku_interno})</span>
+                <button
+                  onClick={() => handleRemoveProductToExclude(item.sku_interno)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 0
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Blacklist Table panel */}
       <div className="glass-panel" style={{ padding: '24px' }}>
-        <h4 style={{ margin: '0 0 16px 0', fontSize: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ShieldAlert size={18} style={{ color: 'var(--status-red)' }} /> Prodotti Attualmente Esclusi ({excludedList.length})
-        </h4>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ShieldAlert size={18} style={{ color: 'var(--status-red)' }} /> Prodotti Attualmente Esclusi ({excludedList.length})
+          </h4>
+          
+          {selectedToRestore.length > 0 && (
+            <button
+              onClick={handleBulkRestore}
+              disabled={submitting}
+              className="btn btn-primary"
+              style={{
+                padding: '8px 16px',
+                fontSize: '0.85rem',
+                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                borderColor: 'rgba(16, 185, 129, 0.3)',
+                color: '#10b981',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {submitting ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+              Ripristina Selezionati ({selectedToRestore.length})
+            </button>
+          )}
+        </div>
 
         {loading ? (
           <div style={{ padding: '40px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'var(--text-secondary)' }}>
@@ -239,6 +366,14 @@ export default function ExcludedProducts() {
             <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-glass)', textAlign: 'left' }}>
+                  <th style={{ padding: '12px 10px', width: '40px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedToRestore.length === excludedList.length && excludedList.length > 0}
+                      onChange={(e) => handleSelectAllRestore(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </th>
                   <th style={{ padding: '12px 10px', fontWeight: 500 }}>SKU</th>
                   <th style={{ padding: '12px 10px', fontWeight: 500 }}>Data Esclusione</th>
                   <th style={{ padding: '12px 10px', fontWeight: 500, textAlign: 'right' }}>Azioni</th>
@@ -246,6 +381,7 @@ export default function ExcludedProducts() {
               </thead>
               <tbody>
                 {excludedList.map((item) => {
+                  const isChecked = selectedToRestore.includes(item.sku_interno);
                   const dateStr = new Date(item.created_at).toLocaleDateString('it-IT', {
                     day: '2-digit',
                     month: '2-digit',
@@ -255,11 +391,19 @@ export default function ExcludedProducts() {
                   });
                   return (
                     <tr key={`ex-${item.sku_interno}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }} className="table-row-hover">
+                      <td style={{ padding: '12px 10px' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => handleToggleRestoreSelect(item.sku_interno, e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </td>
                       <td style={{ padding: '12px 10px', fontFamily: 'monospace', fontWeight: 600 }}>{item.sku_interno}</td>
                       <td style={{ padding: '12px 10px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{dateStr}</td>
                       <td style={{ padding: '12px 10px', textAlign: 'right' }}>
                         <button
-                          onClick={() => handleRestore(item.sku_interno)}
+                          onClick={() => handleSingleRestore(item.sku_interno)}
                           disabled={submitting}
                           style={{
                             background: 'rgba(16, 185, 129, 0.1)',
