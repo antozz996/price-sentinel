@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { EyeOff, Search, ShieldAlert, Plus, Eye, Loader2, X, RotateCcw } from 'lucide-react';
 import { fetchWithAuth } from '../api';
 
@@ -25,8 +25,21 @@ export default function ExcludedProducts() {
   const [selectedToExclude, setSelectedToExclude] = useState<SkuItem[]>([]);
   const [selectedToRestore, setSelectedToRestore] = useState<string[]>([]);
 
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     loadData();
+
+    // Close dropdown on outside click
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   const loadData = async () => {
@@ -51,15 +64,13 @@ export default function ExcludedProducts() {
     }
   };
 
-  const handleAddProductToExclude = (skuItem: SkuItem) => {
-    if (selectedToExclude.some(item => item.sku_interno === skuItem.sku_interno)) {
-      setSearchQuery('');
-      setDropdownOpen(false);
-      return;
+  const handleToggleProductToExclude = (skuItem: SkuItem) => {
+    const isSelected = selectedToExclude.some(item => item.sku_interno === skuItem.sku_interno);
+    if (isSelected) {
+      setSelectedToExclude(selectedToExclude.filter(item => item.sku_interno !== skuItem.sku_interno));
+    } else {
+      setSelectedToExclude([...selectedToExclude, skuItem]);
     }
-    setSelectedToExclude([...selectedToExclude, skuItem]);
-    setSearchQuery('');
-    setDropdownOpen(false);
   };
 
   const handleRemoveProductToExclude = (sku: string) => {
@@ -148,13 +159,11 @@ export default function ExcludedProducts() {
     }
   };
 
-  // Filter available SKUs based on search input
-  const filteredAvailable = availableSkus.filter(s => {
-    const matchesSearch = s.sku_interno.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.nome_prodotto && s.nome_prodotto.toLowerCase().includes(searchQuery.toLowerCase()));
-    const alreadySelected = selectedToExclude.some(item => item.sku_interno === s.sku_interno);
-    return matchesSearch && !alreadySelected;
-  });
+  // Filter available SKUs based on search input (selected ones remain visible in dropdown)
+  const filteredAvailable = availableSkus.filter(s =>
+    s.sku_interno.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.nome_prodotto && s.nome_prodotto.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -181,7 +190,7 @@ export default function ExcludedProducts() {
             <div>
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Esclusione Prodotti (Selezione Multipla)</h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                Cerca e aggiungi più prodotti alla lista, quindi applica l'esclusione globale in un'unica operazione.
+                Cerca e spunta più prodotti direttamente dal menu a tendina, quindi applica l'esclusione globale in blocco.
               </p>
             </div>
           </div>
@@ -189,11 +198,11 @@ export default function ExcludedProducts() {
 
         {/* Input area */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', position: 'relative', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', flex: 1, minWidth: '280px' }}>
+          <div ref={searchContainerRef} style={{ position: 'relative', flex: 1, minWidth: '280px' }}>
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
             <input
               type="text"
-              placeholder="Cerca e seleziona prodotti da escludere..."
+              placeholder="Cerca e spunta prodotti da escludere..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -213,7 +222,7 @@ export default function ExcludedProducts() {
                 transition: 'var(--transition-smooth)'
               }}
             />
-            {/* Search Dropdown */}
+            {/* Search Dropdown with Checkboxes */}
             {dropdownOpen && searchQuery.length > 0 && (
               <div style={{
                 position: 'absolute',
@@ -221,9 +230,9 @@ export default function ExcludedProducts() {
                 left: 0,
                 right: 0,
                 marginTop: '6px',
-                maxHeight: '220px',
+                maxHeight: '250px',
                 overflowY: 'auto',
-                background: 'rgba(15, 15, 23, 0.95)',
+                background: 'rgba(15, 15, 23, 0.98)',
                 backdropFilter: 'blur(10px)',
                 border: '1px solid var(--border-glass)',
                 borderRadius: '8px',
@@ -231,25 +240,39 @@ export default function ExcludedProducts() {
                 zIndex: 999
               }}>
                 {filteredAvailable.length > 0 ? (
-                  filteredAvailable.map((s) => (
-                    <div
-                      key={`avail-${s.sku_interno}`}
-                      onClick={() => handleAddProductToExclude(s)}
-                      style={{
-                        padding: '10px 14px',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid rgba(255,255,255,0.03)',
-                        transition: 'background 0.2s',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '2px'
-                      }}
-                      className="dropdown-item-hover"
-                    >
-                      <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>{s.nome_prodotto || 'Prodotto senza nome'}</span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>SKU: {s.sku_interno}</span>
-                    </div>
-                  ))
+                  filteredAvailable.map((s) => {
+                    const isSelected = selectedToExclude.some(item => item.sku_interno === s.sku_interno);
+                    return (
+                      <div
+                        key={`avail-${s.sku_interno}`}
+                        onClick={() => handleToggleProductToExclude(s)}
+                        style={{
+                          padding: '10px 14px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid rgba(255,255,255,0.03)',
+                          transition: 'background 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          background: isSelected ? 'rgba(239, 68, 68, 0.05)' : 'transparent'
+                        }}
+                        className="dropdown-item-hover"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}} // Handled by outer container click
+                          style={{ cursor: 'pointer', accentColor: 'var(--status-red)' }}
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
+                          <span style={{ fontWeight: 500, fontSize: '0.9rem', color: isSelected ? 'white' : 'var(--text-secondary)' }}>
+                            {s.nome_prodotto || 'Prodotto senza nome'}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>SKU: {s.sku_interno}</span>
+                        </div>
+                      </div>
+                    );
+                  })
                 ) : (
                   <div style={{ padding: '14px', color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center' }}>
                     Nessun prodotto disponibile trovato
