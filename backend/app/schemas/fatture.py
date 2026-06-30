@@ -71,6 +71,11 @@ class RigaFatturaResponse(BaseModel):
     is_omaggio: bool
     stato_matching: str
 
+    # Campi per accordi commerciali (Premio Fine Anno)
+    pfa_tipo: str | None = None
+    pfa_valore: Decimal | None = None
+    netto_rientro: Decimal | None = None
+
     model_config = {"from_attributes": True}
 
 

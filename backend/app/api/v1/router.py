@@ -21,6 +21,7 @@ from app.api.v1 import (
     ordini,
     sku_manager,
     ai,
+    accordi,
 )
 
 api_router = APIRouter(redirect_slashes=False)
@@ -39,3 +40,4 @@ api_router.include_router(intelligence.router, prefix="/intelligence", tags=["In
 api_router.include_router(ordini.router, prefix="/ordini", tags=["Ottimizzazione Ordini"])
 api_router.include_router(sku_manager.router, prefix="/sku", tags=["Gestione SKU"])
 api_router.include_router(ai.router, prefix="/ai", tags=["Sentinel AI"])
+api_router.include_router(accordi.router, prefix="/accordi", tags=["Accordi Commerciali"])

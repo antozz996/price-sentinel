@@ -30,6 +30,9 @@ interface RigaFattura {
   unita_misura_fattura: string | null;
   aliquota_iva: number | null;
   stato_matching: string;
+  pfa_tipo?: string | null;
+  pfa_valore?: number | null;
+  netto_rientro?: number | null;
 }
 
 interface Fornitore { id: number; nome_azienda: string; }
@@ -428,7 +431,20 @@ export default function FattureList() {
                                         <td style={{ ...tdStyle, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.numero_linea}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem' }}>{r.descrizione_fornitore_raw || '—'}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{r.codice_fornitore_raw || '—'}</td>
-                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right' }}>€{Number(r.prezzo_unitario_fatturato).toFixed(2)}</td>
+                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right' }}>
+                                          <div>€{Number(r.prezzo_netto_normalizzato).toFixed(2)}</div>
+                                          {r.netto_rientro !== undefined && r.netto_rientro !== null && Number(r.netto_rientro) !== Number(r.prezzo_netto_normalizzato) && (
+                                            <div style={{
+                                              fontSize: '0.72rem', color: '#10b981', fontWeight: 600, marginTop: '2px',
+                                              display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px'
+                                            }}>
+                                              <span>Net: €{Number(r.netto_rientro).toFixed(2)}</span>
+                                              <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 5px', borderRadius: '10px' }}>
+                                                {r.pfa_tipo === 'fisso' ? `-${Number(r.pfa_valore).toFixed(2)}€` : `-${(Number(r.pfa_valore)*100).toFixed(0)}%`}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right' }}>{Number(r.quantita).toFixed(2)}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontWeight: 600 }}>€{Number(r.prezzo_netto_normalizzato * r.quantita).toFixed(2)}</td>
                                         <td style={{ ...tdStyle, textAlign: 'center' }}>
