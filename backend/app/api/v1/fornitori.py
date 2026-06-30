@@ -4,7 +4,7 @@ CRUD Fornitori con toggle whitelist — Admin only.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
@@ -141,13 +141,141 @@ async def delete_fornitore(
     if not fornitore:
         raise HTTPException(status_code=404, detail="Fornitore non trovato")
     
-    from sqlalchemy.exc import IntegrityError
     try:
-        await db.delete(fornitore)
+        # 1. Note di credito
+        await db.execute(
+            text("""
+                DELETE FROM note_di_credito 
+                WHERE anomalia_id IN (
+                    SELECT a.id FROM anomalie a 
+                    JOIN righe_fattura r ON r.id = a.riga_fattura_id
+                    JOIN fatture f ON f.id = r.fattura_id
+                    WHERE f.fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 2. Anomalie
+        await db.execute(
+            text("""
+                DELETE FROM anomalie 
+                WHERE riga_fattura_id IN (
+                    SELECT r.id FROM righe_fattura r
+                    JOIN fatture f ON f.id = r.fattura_id
+                    WHERE f.fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 3. Approvazioni prezzo
+        await db.execute(
+            text("""
+                DELETE FROM approvazioni_prezzo
+                WHERE riga_fattura_id IN (
+                    SELECT r.id FROM righe_fattura r
+                    JOIN fatture f ON f.id = r.fattura_id
+                    WHERE f.fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 4. Righe fattura
+        await db.execute(
+            text("""
+                DELETE FROM righe_fattura 
+                WHERE fattura_id IN (
+                    SELECT id FROM fatture 
+                    WHERE fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 5. Fatture
+        await db.execute(
+            text("DELETE FROM fatture WHERE fornitore_id = :fornitore_id"),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 6. Righe ordine (listino)
+        await db.execute(
+            text("""
+                DELETE FROM righe_ordine
+                WHERE listino_id IN (
+                    SELECT id FROM listino_master
+                    WHERE fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 7. UOM conversioni
+        await db.execute(
+            text("""
+                DELETE FROM uom_conversioni
+                WHERE listino_id IN (
+                    SELECT id FROM listino_master
+                    WHERE fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 8. PFA scaglioni
+        await db.execute(
+            text("""
+                DELETE FROM pfa_scaglioni
+                WHERE listino_id IN (
+                    SELECT id FROM listino_master
+                    WHERE fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 9. Listino master
+        await db.execute(
+            text("DELETE FROM listino_master WHERE fornitore_id = :fornitore_id"),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 10. Righe ordine (ordine)
+        await db.execute(
+            text("""
+                DELETE FROM righe_ordine
+                WHERE ordine_id IN (
+                    SELECT id FROM ordini
+                    WHERE fornitore_id = :fornitore_id
+                )
+            """),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 11. Ordini
+        await db.execute(
+            text("DELETE FROM ordini WHERE fornitore_id = :fornitore_id"),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 12. Alias prodotti
+        await db.execute(
+            text("DELETE FROM alias_prodotti WHERE fornitore_id = :fornitore_id"),
+            {"fornitore_id": fornitore_id}
+        )
+        
+        # 13. Fornitore
+        await db.execute(
+            text("DELETE FROM fornitori WHERE id = :fornitore_id"),
+            {"fornitore_id": fornitore_id}
+        )
+        
         await db.commit()
-    except IntegrityError:
+    except Exception as e:
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Impossibile eliminare il fornitore: sono presenti listini, fatture o alias associati ad esso. Riassegna o elimina prima i dati dipendenti."
+            detail=f"Impossibile eliminare il fornitore a causa di un errore di database: {str(e)}"
         )
