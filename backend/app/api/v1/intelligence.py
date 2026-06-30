@@ -1023,6 +1023,15 @@ async def export_dispute_excel(
                 
         row_num += 1
         
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val_str = str(cell.value or '')
+            if cell.column in (5, 6, 8, 9) and type(cell.value) in (int, float):
+                val_str = f"€ {cell.value:.2f}"
+            if len(val_str) > max_len:
+                max_len = len(val_str)
         ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
     stream = BytesIO()
@@ -1475,6 +1484,7 @@ async def export_product_consumption_excel(
     SELECT 
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
+        string_agg(DISTINCT fo.nome_azienda, ', ') as fornitori,
         SUM(rf.quantita) as quantita_totale,
         SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
         COALESCE(
@@ -1489,6 +1499,7 @@ async def export_product_consumption_excel(
         END as prezzo_medio
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
+    JOIN fornitori fo ON f.fornitore_id = fo.id
     WHERE rf.sku_interno IS NOT NULL
       {location_filter}
       AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
@@ -1509,7 +1520,7 @@ async def export_product_consumption_excel(
     ws.views.sheetView[0].showGridLines = True
     
     headers = [
-        "SKU Interno", "Prodotto", "Quantità Totale", "di cui Omaggi",
+        "SKU Interno", "Prodotto", "Fornitore", "Quantità Totale", "di cui Omaggi",
         "Unità di Misura", "Prezzo Medio (€)", "Spesa Totale (€)"
     ]
     
@@ -1545,6 +1556,7 @@ async def export_product_consumption_excel(
         row_data = [
             r.sku_interno,
             r.descrizione,
+            r.fornitori or "—",
             quantita,
             quantita_omaggio,
             r.unita_misura or "Pz",
@@ -1558,13 +1570,13 @@ async def export_product_consumption_excel(
             cell.border = thin_border
             cell.font = Font(name="Calibri", size=11)
             
-            if col_idx in (6, 7):
+            if col_idx in (7, 8):
                 cell.number_format = '€ #,##0.00'
                 cell.alignment = Alignment(horizontal="right")
-            elif col_idx in (3, 4):
+            elif col_idx in (4, 5):
                 cell.number_format = '#,##0.00'
                 cell.alignment = Alignment(horizontal="right")
-            elif col_idx in (1, 5):
+            elif col_idx in (1, 6):
                 cell.alignment = Alignment(horizontal="center")
             else:
                 cell.alignment = Alignment(horizontal="left")
@@ -1577,7 +1589,7 @@ async def export_product_consumption_excel(
         col_letter = get_column_letter(col[0].column)
         for cell in col:
             val_str = str(cell.value or '')
-            if cell.column in (6, 7) and type(cell.value) in (int, float):
+            if cell.column in (7, 8) and type(cell.value) in (int, float):
                 val_str = f"€ {cell.value:.2f}"
             if len(val_str) > max_len:
                 max_len = len(val_str)
@@ -1659,6 +1671,7 @@ async def get_top_purchased_products(
     SELECT 
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
+        string_agg(DISTINCT fo.nome_azienda, ', ') as fornitori,
         SUM(rf.quantita) as quantita_totale,
         SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
         COALESCE(
@@ -1674,6 +1687,7 @@ async def get_top_purchased_products(
         END as prezzo_medio
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
+    JOIN fornitori fo ON f.fornitore_id = fo.id
     WHERE rf.sku_interno IS NOT NULL
       AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
       {location_filter}
@@ -1692,6 +1706,7 @@ async def get_top_purchased_products(
         results.append({
             "sku_interno": r.sku_interno,
             "descrizione": r.descrizione,
+            "fornitori": r.fornitori or "—",
             "quantita_totale": float(r.quantita_totale or 0),
             "quantita_omaggio": float(r.quantita_omaggio or 0),
             "unita_misura": r.unita_misura or "Pz",
@@ -1736,7 +1751,7 @@ async def export_top_purchased_excel(
     ws.views.sheetView[0].showGridLines = True
     
     headers = [
-        "Posizione", "SKU Interno", "Prodotto", "Unità di Misura", 
+        "Posizione", "SKU Interno", "Prodotto", "Fornitore", "Unità di Misura", 
         "Quantità Totale", "Numero Acquisti", "Prezzo Medio (€)", "Spesa Totale (€)"
     ]
     
@@ -1766,6 +1781,7 @@ async def export_top_purchased_excel(
             idx + 1,
             item["sku_interno"],
             item["descrizione"],
+            item["fornitori"],
             item["unita_misura"],
             item["quantita_totale"],
             item["numero_acquisti"],
@@ -1779,16 +1795,16 @@ async def export_top_purchased_excel(
             cell.border = thin_border
             cell.font = Font(name="Calibri", size=11)
             
-            if col_idx in (7, 8):
+            if col_idx in (8, 9):
                 cell.number_format = '€ #,##0.00'
                 cell.alignment = Alignment(horizontal="right")
-            elif col_idx == 5:
+            elif col_idx == 6:
                 cell.number_format = '#,##0.00'
                 cell.alignment = Alignment(horizontal="right")
-            elif col_idx == 6:
+            elif col_idx == 7:
                 cell.number_format = '#,##0'
                 cell.alignment = Alignment(horizontal="right")
-            elif col_idx in (1, 2, 4):
+            elif col_idx in (1, 2, 5):
                 cell.alignment = Alignment(horizontal="center")
             else:
                 cell.alignment = Alignment(horizontal="left")
@@ -1800,7 +1816,7 @@ async def export_top_purchased_excel(
         col_letter = get_column_letter(col[0].column)
         for cell in col:
             val_str = str(cell.value or '')
-            if cell.column in (7, 8) and type(cell.value) in (int, float):
+            if cell.column in (8, 9) and type(cell.value) in (int, float):
                 val_str = f"€ {cell.value:.2f}"
             if len(val_str) > max_len:
                 max_len = len(val_str)
