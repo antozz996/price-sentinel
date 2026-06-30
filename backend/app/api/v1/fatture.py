@@ -7,7 +7,8 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_current_user_from_query
@@ -189,7 +190,8 @@ async def list_righe_fattura(
             Fattura.location_id == current_user.location_id
         )
     fattura_result = await db.execute(fattura_query)
-    if not fattura_result.scalar_one_or_none():
+    fattura = fattura_result.scalar_one_or_none()
+    if not fattura:
         raise HTTPException(status_code=404, detail="Fattura non trovata")
 
     result = await db.execute(
@@ -197,7 +199,87 @@ async def list_righe_fattura(
         .where(RigaFattura.fattura_id == fattura_id)
         .order_by(RigaFattura.numero_linea)
     )
-    return result.scalars().all()
+    righe = result.scalars().all()
+
+    # Resolve commercial agreement (PFA) details for each matched line item
+    skus = [r.sku_interno for r in righe if r.sku_interno]
+    if skus:
+        from app.models.listino import ListinoMaster, PFATipo
+        from decimal import Decimal
+        listino_query = select(ListinoMaster).where(
+            and_(
+                ListinoMaster.fornitore_id == fattura.fornitore_id,
+                ListinoMaster.sku_interno.in_(skus),
+                ListinoMaster.data_inizio_validita <= fattura.data_documento,
+                (ListinoMaster.data_scadenza.is_(None) | (ListinoMaster.data_scadenza >= fattura.data_documento))
+            )
+        ).options(selectinload(ListinoMaster.pfa_scaglioni))
+        listino_res = await db.execute(listino_query)
+        listini = listino_res.scalars().all()
+        sku_to_listino = {lst.sku_interno: lst for lst in listini}
+
+        # Pre-query cumulative year-to-date spent per SKU for scaglioni if there are scaglioni agreements
+        has_scaglioni = any(l.pfa_tipo == PFATipo.scaglioni for l in listini)
+        sku_to_cumulative_spent = {}
+        if has_scaglioni:
+            year_start = date(fattura.data_documento.year, 1, 1)
+            spent_query = select(
+                RigaFattura.sku_interno,
+                func.sum(
+                    func.coalesce(
+                        # Subtract if credit note, else add
+                        func.distinct(
+                            func.case(
+                                (Fattura.tipo_documento == "TD04", -RigaFattura.prezzo_netto_normalizzato * RigaFattura.quantita),
+                                else_=RigaFattura.prezzo_netto_normalizzato * RigaFattura.quantita
+                            )
+                        ),
+                        Decimal("0.0")
+                    )
+                )
+            ).join(Fattura).where(
+                and_(
+                    Fattura.fornitore_id == fattura.fornitore_id,
+                    RigaFattura.sku_interno.in_(skus),
+                    Fattura.data_documento >= year_start,
+                    Fattura.data_documento <= fattura.data_documento
+                )
+            ).group_by(RigaFattura.sku_interno)
+            spent_res = await db.execute(spent_query)
+            for row in spent_res.all():
+                sku_to_cumulative_spent[row[0]] = Decimal(str(row[1] or "0.0"))
+
+        for riga in righe:
+            if riga.sku_interno in sku_to_listino:
+                lst = sku_to_listino[riga.sku_interno]
+                riga.pfa_tipo = lst.pfa_tipo.value if (lst.pfa_tipo and hasattr(lst.pfa_tipo, 'value')) else lst.pfa_tipo
+                riga.pfa_valore = lst.pfa_valore
+                
+                # Calculate the netto_rientro unit price
+                prezzo_netto = Decimal(str(riga.prezzo_netto_normalizzato))
+                if lst.pfa_tipo == PFATipo.fisso and lst.pfa_valore:
+                    riga.netto_rientro = prezzo_netto - Decimal(str(lst.pfa_valore))
+                elif lst.pfa_tipo == PFATipo.percentuale and lst.pfa_valore:
+                    riga.netto_rientro = prezzo_netto * (Decimal("1.0") - Decimal(str(lst.pfa_valore)))
+                elif lst.pfa_tipo == PFATipo.scaglioni and lst.pfa_scaglioni:
+                    cumulative = sku_to_cumulative_spent.get(riga.sku_interno, Decimal("0.0"))
+                    active_pct = Decimal("0.0")
+                    for sc in lst.pfa_scaglioni:
+                        soglia_da = Decimal(str(sc.soglia_da))
+                        soglia_a = Decimal(str(sc.soglia_a)) if sc.soglia_a is not None else None
+                        if cumulative >= soglia_da:
+                            if soglia_a is None or cumulative < soglia_a:
+                                active_pct = Decimal(str(sc.valore_percentuale))
+                                break
+                    if active_pct == Decimal("0.0") and lst.pfa_scaglioni:
+                        matching_scs = [sc for sc in lst.pfa_scaglioni if cumulative >= Decimal(str(sc.soglia_da))]
+                        if matching_scs:
+                            matching_scs.sort(key=lambda x: x.soglia_da, reverse=True)
+                            active_pct = Decimal(str(matching_scs[0].valore_percentuale))
+                    
+                    riga.netto_rientro = prezzo_netto * (Decimal("1.0") - active_pct)
+
+    return righe
 
 
 @router.get(

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -15,6 +15,7 @@ import CrossSupplierMatrix from './components/CrossSupplierMatrix'
 import TopProductsPriceList from './components/TopProductsPriceList'
 import PriceTrendAnalyzer from './components/PriceTrendAnalyzer'
 import ExcludedProducts from './components/ExcludedProducts'
+import CommercialAgreements from './components/CommercialAgreements'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -239,6 +240,7 @@ export default function App() {
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
       case 'excludedproducts': return <ExcludedProducts />;
+      case 'accordicommerciali': return <CommercialAgreements />;
       case 'settings': return <SettingsPage />;
       default: return <Dashboard />;
     }
@@ -259,6 +261,7 @@ export default function App() {
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'excludedproducts': return { title: 'Prodotti Esclusi', sub: 'Gestisci la blacklist globale dei prodotti da escludere dalle analisi' };
+      case 'accordicommerciali': return { title: 'Accordi Commerciali (PFA)', sub: 'Rientri di fine anno, volumi d\'acquisto e calcolo prezzi netti' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
       default: return { title: 'Price Sentinel', sub: 'Audit System' };
     }
@@ -334,6 +337,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'listini' ? '' : 'transparent', border: 'none' }}
           >
             <FileSpreadsheet size={18} /> Listini Master
+          </button>
+
+          <button 
+            className={`btn ${activeTab === 'accordicommerciali' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('accordicommerciali'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'accordicommerciali' ? '' : 'transparent', border: 'none' }}
+          >
+            <Percent size={18} /> Accordi Commerciali
           </button>
 
           <button 

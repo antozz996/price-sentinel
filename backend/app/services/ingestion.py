@@ -266,9 +266,32 @@ async def _process_td04(
     db.add(fattura)
     await db.flush()
 
-    # Salva le righe per reference
+    # Salva le righe per reference e prova ad abbinare gli SKU
+    from app.services.matching import match_riga
     for riga_parsed in parsed.righe:
-        riga_db = _create_riga_fattura(fattura.id, riga_parsed, StatoMatching.matched, None)
+        sku = None
+        stato = StatoMatching.no_match
+        
+        try:
+            match_res = await match_riga(
+                db=db,
+                fornitore_id=fornitore.id,
+                codice_articolo=riga_parsed.codice_articolo,
+                tipo_codice=riga_parsed.tipo_codice,
+                descrizione=riga_parsed.descrizione,
+                prezzo_netto_normalizzato=riga_parsed.prezzo_netto_normalizzato,
+                quantita=riga_parsed.quantita,
+                unita_misura_fattura=riga_parsed.unita_misura,
+                data_documento=parsed.data_documento,
+            )
+            if match_res.matched:
+                sku = match_res.sku_interno
+                stato = StatoMatching.matched
+        except Exception as e:
+            # Fallback safe
+            pass
+            
+        riga_db = _create_riga_fattura(fattura.id, riga_parsed, stato, sku)
         db.add(riga_db)
 
     # ── Caricamento Anomalie Aperte dello stesso Fornitore e Location ──
