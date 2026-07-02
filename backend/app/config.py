@@ -64,5 +64,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
+    # ── Sicurezza Ripristino ─────────────────
+    RESET_PASSWORD: str = "REMOVED_RESET_CREDENTIAL"
+
 
 settings = Settings()

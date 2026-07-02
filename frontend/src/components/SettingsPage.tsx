@@ -43,6 +43,50 @@ export default function SettingsPage() {
   const [submittingLoc, setSubmittingLoc] = useState(false);
   const [submittingForn, setSubmittingForn] = useState(false);
 
+  // States for database reset
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetMessage, setResetMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handleResetDatabase = async () => {
+    if (!resetPassword.trim()) {
+      setResetMessage({ text: 'Inserisci la password di sicurezza.', type: 'error' });
+      return;
+    }
+    
+    const confirmReset = window.confirm(
+      "ATTENZIONE: Questa azione eliminerà permanentemente tutte le fatture, le righe di fattura, i listini master, le anomalie e le impostazioni del sistema. Gli account utente non verranno cancellati. Vuoi procedere?"
+    );
+    
+    if (!confirmReset) return;
+    
+    setResetLoading(true);
+    setResetMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/intelligence/reset-database`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: resetPassword.trim() })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Errore durante il ripristino del database');
+      }
+      
+      setResetMessage({ text: 'Database svuotato con successo!', type: 'success' });
+      setResetPassword('');
+      loadData();
+    } catch (err: any) {
+      setResetMessage({ text: err.message || 'Errore di connessione', type: 'error' });
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const [editingLocId, setEditingLocId] = useState<number | null>(null);
   const [editLocNome, setEditLocNome] = useState('');
   const [editLocTipo, setEditLocTipo] = useState('');
@@ -526,6 +570,64 @@ export default function SettingsPage() {
         <button className="btn" onClick={() => loadData()} style={{ marginTop: '16px', gap: '8px', background: 'transparent', border: '1px solid var(--border-glass)' }}>
           <RefreshCw size={14} /> Aggiorna Stato
         </button>
+      </div>
+
+      {/* Resetta Database */}
+      <div className="glass-panel" style={{ padding: '24px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+        <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444' }}>
+          <AlertCircle size={20} /> Ripristino e Cancellazione Dati
+        </h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+          Questa operazione rimuove tutte le fatture caricate, le anomalie rilevate, i listini master concordati e le associazioni di alias. Gli account utente rimarranno intatti.
+        </p>
+
+        {resetMessage && (
+          <div style={{
+            padding: '12px 16px',
+            borderRadius: '8px',
+            background: resetMessage.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
+            color: resetMessage.type === 'success' ? '#10b981' : '#ef4444',
+            border: `1px solid ${resetMessage.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+            marginBottom: '16px',
+            fontSize: '0.85rem'
+          }}>
+            {resetMessage.text}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="password"
+            placeholder="Inserisci la password di sicurezza..."
+            value={resetPassword}
+            onChange={e => setResetPassword(e.target.value)}
+            style={{
+              padding: '10px 14px',
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '8px',
+              color: 'white',
+              outline: 'none',
+              fontSize: '0.9rem',
+              flex: 1,
+              minWidth: '240px'
+            }}
+          />
+          <button
+            onClick={handleResetDatabase}
+            disabled={resetLoading}
+            className="btn btn-primary"
+            style={{
+              padding: '10px 24px',
+              background: '#ef4444',
+              borderColor: '#ef4444',
+              color: 'white',
+              cursor: resetLoading ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {resetLoading ? 'Cancellazione in corso...' : 'Resetta Tutti i Dati'}
+          </button>
+        </div>
       </div>
 
       {/* Users */}

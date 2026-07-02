@@ -8,7 +8,7 @@ echo "============================================="
 
 # 1. Pulizia Docker Hang
 echo -n "🛠️  Pulizia container e sblocco network... "
-docker-compose down -v >/dev/null 2>&1
+docker-compose down >/dev/null 2>&1
 echo "Fatto."
 
 # 2. Riavvio Backend & DB
