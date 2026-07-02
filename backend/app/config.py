@@ -64,5 +64,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
+    # ── Sicurezza Ripristino ─────────────────
+    RESET_PASSWORD: str = "sentinel_reset_2026"
+
 
 settings = Settings()

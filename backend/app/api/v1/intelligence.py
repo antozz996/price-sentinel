@@ -7,7 +7,7 @@ from datetime import date, timedelta, datetime, timezone
 from typing import Any
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Body
 from sqlalchemy import select, func, and_, or_, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -2010,6 +2010,36 @@ async def auto_catalog_initialize(
         "message": f"Inizializzazione completata con successo per {len(report)} fornitori.",
         "report": report
     }
+
+
+@router.post("/reset-database", summary="Svuota completamente il database")
+async def reset_database(
+    password: str = Body(..., embed=True),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Svuota tutte le tabelle delle fatture, anomalie, listini, alias e importazioni,
+    previa verifica di una password di sicurezza.
+    """
+    from app.config import settings
+    from fastapi import Body
+
+    if password != settings.RESET_PASSWORD:
+        raise HTTPException(
+            status_code=401,
+            detail="Password di ripristino non valida"
+        )
+        
+    try:
+        # Svuota le tabelle ma lascia gli utenti intatti
+        await db.execute(text("TRUNCATE TABLE note_di_credito, anomalie, righe_fattura, fatture, xml_raw, upload_batches, listino_master, alias_prodotti, approvazioni_prezzo, skus_esclusi RESTART IDENTITY CASCADE;"))
+        await db.commit()
+        return {"success": True, "message": "Database svuotato con successo"}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
