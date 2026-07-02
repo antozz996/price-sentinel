@@ -168,19 +168,7 @@ async def delete_fornitore(
             """),
             {"fornitore_id": fornitore_id}
         )
-        
-        # 3. Approvazioni prezzo
-        await db.execute(
-            text("""
-                DELETE FROM approvazioni_prezzo
-                WHERE riga_fattura_id IN (
-                    SELECT r.id FROM righe_fattura r
-                    JOIN fatture f ON f.id = r.fattura_id
-                    WHERE f.fornitore_id = :fornitore_id
-                )
-            """),
-            {"fornitore_id": fornitore_id}
-        )
+
         
         # 4. Righe fattura
         await db.execute(

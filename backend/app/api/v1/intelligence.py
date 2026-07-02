@@ -2033,7 +2033,10 @@ async def reset_database(
         
     try:
         # Svuota le tabelle ma lascia gli utenti intatti
+        await db.execute(text("UPDATE utenti SET location_id = NULL"))
         await db.execute(text("TRUNCATE TABLE note_di_credito, anomalie, righe_fattura, fatture, xml_raw, upload_batches, listino_master, alias_prodotti, approvazioni_prezzo, skus_esclusi RESTART IDENTITY CASCADE;"))
+        await db.execute(text("DELETE FROM location"))
+        await db.execute(text("DELETE FROM fornitori"))
         await db.commit()
         return {"success": True, "message": "Database svuotato con successo"}
     except Exception as e:
