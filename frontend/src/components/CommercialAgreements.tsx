@@ -273,6 +273,11 @@ export default function CommercialAgreements() {
     ...selectStyle, minWidth: '130px'
   };
 
+  const optionStyle = {
+    background: '#121e36',
+    color: 'white'
+  };
+
   const thStyle: React.CSSProperties = {
     padding: '14px 16px', textAlign: 'left', fontSize: '0.8rem',
     color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase',
@@ -308,8 +313,8 @@ export default function CommercialAgreements() {
               <Truck size={12} /> Fornitore
             </label>
             <select value={filterFornitore} onChange={e => setFilterFornitore(e.target.value)} style={selectStyle}>
-              <option value="">Tutti i fornitori</option>
-              {fornitori.map(f => <option key={f.id} value={f.id}>{f.nome_azienda}</option>)}
+              <option value="" style={optionStyle}>Tutti i fornitori</option>
+              {fornitori.map(f => <option key={f.id} value={f.id} style={optionStyle}>{f.nome_azienda}</option>)}
             </select>
           </div>
 
@@ -318,8 +323,8 @@ export default function CommercialAgreements() {
               <Building2 size={12} /> Sede (Location)
             </label>
             <select value={filterLocation} onChange={e => setFilterLocation(e.target.value)} style={selectStyle}>
-              <option value="">Tutte le sedi</option>
-              {locations.map(l => <option key={l.id} value={l.id}>{l.nome_struttura}</option>)}
+              <option value="" style={optionStyle}>Tutte le sedi</option>
+              {locations.map(l => <option key={l.id} value={l.id} style={optionStyle}>{l.nome_struttura}</option>)}
             </select>
           </div>
 
@@ -565,8 +570,8 @@ export default function CommercialAgreements() {
                   disabled={editingAgreement !== null}
                   style={selectStyle}
                 >
-                  <option value="">Seleziona Fornitore...</option>
-                  {fornitori.map(f => <option key={f.id} value={f.id}>{f.nome_azienda}</option>)}
+                  <option value="" style={optionStyle}>Seleziona Fornitore...</option>
+                  {fornitori.map(f => <option key={f.id} value={f.id} style={optionStyle}>{f.nome_azienda}</option>)}
                 </select>
               </div>
 
@@ -584,9 +589,9 @@ export default function CommercialAgreements() {
                     disabled={editingAgreement !== null || !modalSupplier}
                     style={selectStyle}
                   >
-                    <option value="">Seleziona Prodotto dal listino...</option>
+                    <option value="" style={optionStyle}>Seleziona Prodotto dal listino...</option>
                     {supplierProducts.map(p => (
-                      <option key={p.id} value={p.id}>
+                      <option key={p.id} value={p.id} style={optionStyle}>
                         {p.descrizione} ({p.sku_interno}) — €{Number(p.prezzo_pattuito).toFixed(2)}
                       </option>
                     ))}
@@ -602,9 +607,9 @@ export default function CommercialAgreements() {
                   onChange={e => setModalPfaTipo(e.target.value)}
                   style={selectStyle}
                 >
-                  <option value="percentuale">Sconto Percentuale (%)</option>
-                  <option value="fisso">Sconto Economico Fisso per Unità (€)</option>
-                  {editingAgreement && <option value="none">Rimuovi Accordo (Elimina)</option>}
+                  <option value="percentuale" style={optionStyle}>Sconto Percentuale (%)</option>
+                  <option value="fisso" style={optionStyle}>Sconto Economico Fisso per Unità (€)</option>
+                  {editingAgreement && <option value="none" style={optionStyle}>Rimuovi Accordo (Elimina)</option>}
                 </select>
               </div>
 
