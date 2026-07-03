@@ -419,6 +419,20 @@ async def aggiorna_prezzo_listino(
     attuale.data_scadenza = oggi
 
     # Step 2: crea nuova versione
+    pfa_tipo_val = attuale.pfa_tipo
+    pfa_valore_val = attuale.pfa_valore
+    
+    if data.pfa_tipo is not None:
+        if data.pfa_tipo.lower() == "none" or data.pfa_tipo == "":
+            pfa_tipo_val = None
+            pfa_valore_val = None
+        else:
+            pfa_tipo_val = PFATipo(data.pfa_tipo)
+            if data.pfa_valore is not None:
+                pfa_valore_val = data.pfa_valore
+    elif data.pfa_valore is not None:
+        pfa_valore_val = data.pfa_valore
+
     nuovo = ListinoMaster(
         fornitore_id=attuale.fornitore_id,
         sku_interno=attuale.sku_interno,
@@ -427,8 +441,8 @@ async def aggiorna_prezzo_listino(
         unita_misura=attuale.unita_misura,
         data_inizio_validita=data.data_inizio_validita or (oggi + timedelta(days=1)),
         data_scadenza=None,
-        pfa_tipo=PFATipo(data.pfa_tipo) if data.pfa_tipo else attuale.pfa_tipo,
-        pfa_valore=data.pfa_valore if data.pfa_valore is not None else attuale.pfa_valore,
+        pfa_tipo=pfa_tipo_val,
+        pfa_valore=pfa_valore_val,
     )
     db.add(nuovo)
     await db.flush()
