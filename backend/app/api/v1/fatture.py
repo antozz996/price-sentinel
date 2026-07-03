@@ -818,3 +818,210 @@ async def get_fattura_html(
 </html>
 """
     return HTMLResponse(content=content, status_code=200)
+
+
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
+
+class ResolveActionPayload(BaseModel):
+    action: str  # "associate_existing", "create_canonical", "associate_equivalence", "ignore", "mark_free"
+    product_id: Optional[int] = None
+    group_id: Optional[int] = None
+    coefficiente_conversione: Optional[float] = 1.0
+    canonical_data: Optional[Dict[str, Any]] = None
+
+
+@router.post(
+    "/righe/{riga_id}/resolve",
+    summary="Risolve una riga nel parking area con una delle 5 azioni",
+)
+async def resolve_parked_line(
+    riga_id: int,
+    payload: ResolveActionPayload,
+    current_user: Utente = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.products import Product, SupplierProductAlias, MatchCandidate, ProductEquivalenceGroupItem
+    from app.models.fatture import RigaFattura, Fattura, StatoMatching
+    from app.models.anomalie import Anomalia, StatoValidazione
+    from app.services.normalization import normalize_text
+    from app.services.matching import normalize_price_for_comparison, _get_listino_attivo
+    from decimal import Decimal
+    from sqlalchemy import delete
+    
+    # 1. Recupera la riga
+    riga = await db.get(RigaFattura, riga_id)
+    if not riga:
+        raise HTTPException(status_code=404, detail="Riga fattura non trovata")
+        
+    fattura = await db.get(Fattura, riga.fattura_id)
+    if not fattura:
+        raise HTTPException(status_code=404, detail="Fattura non trovata")
+        
+    # Esegui l'azione richiesta
+    if payload.action == "associate_existing":
+        if not payload.product_id:
+            raise HTTPException(status_code=400, detail="product_id richiesto per questa azione")
+        product = await db.get(Product, payload.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Prodotto canonico non trovato")
+            
+        # Crea alias fornitore in modalità 'manual' per apprendimento futuro
+        if riga.codice_fornitore_raw:
+            existing_alias = await db.execute(
+                select(SupplierProductAlias).where(
+                    and_(
+                        SupplierProductAlias.supplier_id == fattura.fornitore_id,
+                        SupplierProductAlias.supplier_code == riga.codice_fornitore_raw
+                    )
+                )
+            )
+            old_alias = existing_alias.scalar_one_or_none()
+            if old_alias:
+                old_alias.product_id = product.id
+                old_alias.last_seen_at = datetime.utcnow()
+            else:
+                new_alias = SupplierProductAlias(
+                    supplier_id=fattura.fornitore_id,
+                    product_id=product.id,
+                    supplier_code=riga.codice_fornitore_raw,
+                    raw_description=riga.descrizione_fornitore_raw or "",
+                    normalized_description=normalize_text(riga.descrizione_fornitore_raw or ""),
+                    source="manual",
+                )
+                db.add(new_alias)
+        else:
+            new_alias = SupplierProductAlias(
+                supplier_id=fattura.fornitore_id,
+                product_id=product.id,
+                supplier_code=None,
+                raw_description=riga.descrizione_fornitore_raw or "",
+                normalized_description=normalize_text(riga.descrizione_fornitore_raw or ""),
+                source="manual",
+            )
+            db.add(new_alias)
+            
+        # Aggiorna la riga
+        riga.sku_interno = product.sku_interno
+        riga.stato_matching = StatoMatching.matched
+        
+        # Elimina i candidati per questa riga
+        await db.execute(delete(MatchCandidate).where(MatchCandidate.invoice_line_id == riga.id))
+        
+        await db.flush()
+        
+        # Calcola prezzo normalizzato e verifica anomalie
+        listino = await _get_listino_attivo(db, fattura.fornitore_id, product.sku_interno, str(fattura.data_documento))
+        if listino:
+            norm_price_res = normalize_price_for_comparison(riga, product)
+            if norm_price_res.reliable:
+                riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
+                delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
+                if delta > 0:
+                    await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
+                    
+                    anomalia = Anomalia(
+                        riga_fattura_id=riga.id,
+                        delta_prezzo=delta,
+                        delta_totale=delta * riga.quantita,
+                        prezzo_listino_snapshot=listino.prezzo_pattuito,
+                        prezzo_fatturato_snapshot=riga.prezzo_netto_normalizzato,
+                        stato_validazione=StatoValidazione.da_verificare,
+                    )
+                    db.add(anomalia)
+                    
+    elif payload.action == "create_canonical":
+        if not payload.canonical_data:
+            raise HTTPException(status_code=400, detail="canonical_data richiesto per questa azione")
+            
+        c_data = payload.canonical_data
+        from datetime import datetime
+        c_sku = c_data.get("sku_interno") or f"CAN-{riga.codice_fornitore_raw or 'PROD'}-{int(datetime.utcnow().timestamp())}"
+        
+        new_prod = Product(
+            canonical_name=c_data.get("canonical_name", riga.descrizione_fornitore_raw),
+            sku_interno=c_sku,
+            brand=c_data.get("brand"),
+            category=c_data.get("category"),
+            subcategory=c_data.get("subcategory"),
+            variant=c_data.get("variant"),
+            volume_ml=c_data.get("volume_ml"),
+            weight_g=c_data.get("weight_g"),
+            unit_count=c_data.get("unit_count", 1),
+            container_type=c_data.get("container_type"),
+            comparison_unit=c_data.get("comparison_unit", "piece"),
+            is_active=True,
+        )
+        db.add(new_prod)
+        await db.flush()
+        
+        payload.product_id = new_prod.id
+        payload.action = "associate_existing"
+        return await resolve_parked_line(riga_id, payload, current_user, db)
+        
+    elif payload.action == "associate_equivalence":
+        if not payload.product_id or not payload.group_id:
+            raise HTTPException(status_code=400, detail="product_id e group_id richiesti per questa azione")
+            
+        existing_item = await db.execute(
+            select(ProductEquivalenceGroupItem).where(
+                and_(
+                    ProductEquivalenceGroupItem.group_id == payload.group_id,
+                    ProductEquivalenceGroupItem.product_id == payload.product_id
+                )
+            )
+        )
+        if not existing_item.scalar_one_or_none():
+            group_item = ProductEquivalenceGroupItem(
+                group_id=payload.group_id,
+                product_id=payload.product_id,
+            )
+            db.add(group_item)
+            
+        payload.action = "associate_existing"
+        return await resolve_parked_line(riga_id, payload, current_user, db)
+        
+    elif payload.action == "ignore":
+        riga.stato_matching = StatoMatching.no_match
+        await db.execute(delete(MatchCandidate).where(MatchCandidate.invoice_line_id == riga.id))
+        
+    elif payload.action == "mark_free":
+        riga.is_omaggio = True
+        riga.stato_matching = StatoMatching.matched
+        await db.execute(delete(MatchCandidate).where(MatchCandidate.invoice_line_id == riga.id))
+        await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
+        
+    else:
+        raise HTTPException(status_code=400, detail="Azione non supportata")
+        
+    await db.commit()
+    return {"status": "success", "message": f"Riga risolta con successo tramite azione {payload.action}"}
+
+
+@router.get(
+    "/righe/{riga_id}/candidates",
+    summary="Recupera i candidati suggeriti per la riga",
+)
+async def list_riga_candidates(
+    riga_id: int,
+    current_user: Utente = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.products import MatchCandidate
+    result = await db.execute(
+        select(MatchCandidate)
+        .where(MatchCandidate.invoice_line_id == riga_id)
+        .order_by(MatchCandidate.score.desc())
+    )
+    candidates = result.scalars().all()
+    
+    res = []
+    for c in candidates:
+        res.append({
+            "id": c.id,
+            "product_id": c.product_id,
+            "canonical_name": c.product.canonical_name if c.product else None,
+            "score": float(c.score),
+            "reason_json": c.reason_json,
+        })
+    return res

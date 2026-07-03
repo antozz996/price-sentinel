@@ -120,7 +120,7 @@ class XMLRaw(Base):
     )
 
     # ── Relationships ────────────────────────
-    fatture = relationship("Fattura", back_populates="xml_raw", lazy="selectin")
+    fatture = relationship("Fattura", back_populates="xml_raw", lazy="selectin", cascade="all, delete-orphan")
     batch = relationship("UploadBatch", back_populates="files")
 
     def __repr__(self) -> str:
@@ -214,7 +214,7 @@ class Fattura(Base):
     xml_raw = relationship("XMLRaw", back_populates="fatture")
     fornitore = relationship("Fornitore", back_populates="fatture")
     location = relationship("Location", back_populates="fatture")
-    righe = relationship("RigaFattura", back_populates="fattura", lazy="selectin")
+    righe = relationship("RigaFattura", back_populates="fattura", lazy="selectin", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Fattura {self.numero_documento} ({self.tipo_documento.value})>"
@@ -298,7 +298,7 @@ class RigaFattura(Base):
 
     # ── Relationships ────────────────────────
     fattura = relationship("Fattura", back_populates="righe")
-    anomalie = relationship("Anomalia", back_populates="riga_fattura", lazy="selectin")
+    anomalie = relationship("Anomalia", back_populates="riga_fattura", lazy="selectin", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<RigaFattura L{self.numero_linea} @ {self.prezzo_netto_normalizzato}>"

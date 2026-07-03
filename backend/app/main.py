@@ -56,6 +56,10 @@ def create_app() -> FastAPI:
                     "/api/v1/webhook",
                     "/api/v1/ingestion",
                     "/api/v1/intelligence",
+                    "/api/v1/accordi",
+                    "/api/v1/ordini",
+                    "/api/v1/sku",
+                    "/api/v1/ai",
                 }
                 if path in base_routes:
                     scope["path"] = path + "/"

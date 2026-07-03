@@ -197,6 +197,19 @@ async def _process_td01(
         db.add(riga_db)
         await db.flush()
 
+        # ── Salva Match Candidates per Review / Parking Area (Fase 1 / 6) ──
+        if stato == StatoMatching.in_parking and getattr(match_result, "candidates", None):
+            from app.models.products import MatchCandidate
+            for c in match_result.candidates:
+                candidate = MatchCandidate(
+                    invoice_line_id=riga_db.id,
+                    product_id=c["product_id"],
+                    score=Decimal(str(c["score"])),
+                    reason_json=c["reason_json"],
+                )
+                db.add(candidate)
+            await db.flush()
+
         # ── Genera Anomalia se Delta > 0 — Spec §4.1 ──
         if match_result.matched and match_result.delta_prezzo > Decimal("0"):
             anomalia = Anomalia(
