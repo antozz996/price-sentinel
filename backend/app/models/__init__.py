@@ -14,6 +14,13 @@ from app.models.anomalie import Anomalia, NotaDiCredito, ApprovazionePrezzo  # n
 from app.models.alias import AliasProdotto  # noqa: F401
 from app.models.ordini import Ordine, RigaOrdine  # noqa: F401
 from app.models.esclusi import SKUEscluso  # noqa: F401
+from app.models.products import (  # noqa: F401
+    Product,
+    SupplierProductAlias,
+    ProductEquivalenceGroup,
+    ProductEquivalenceGroupItem,
+    MatchCandidate,
+)
 
 __all__ = [
     "Base",
@@ -33,4 +40,9 @@ __all__ = [
     "Ordine",
     "RigaOrdine",
     "SKUEscluso",
+    "Product",
+    "SupplierProductAlias",
+    "ProductEquivalenceGroup",
+    "ProductEquivalenceGroupItem",
+    "MatchCandidate",
 ]
