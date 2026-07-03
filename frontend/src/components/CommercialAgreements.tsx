@@ -56,6 +56,10 @@ export default function CommercialAgreements() {
   const [saving, setSaving] = useState(false);
   const [editingAgreement, setEditingAgreement] = useState<AgreementItem | null>(null);
 
+  // Searchable Product Dropdown State
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+
   const headers = getHeaders();
 
   useEffect(() => {
@@ -75,9 +79,12 @@ export default function CommercialAgreements() {
   useEffect(() => {
     if (modalSupplier) {
       loadSupplierProducts(Number(modalSupplier));
+      setModalProduct('');
+      setProductSearchQuery('');
     } else {
       setSupplierProducts([]);
       setModalProduct('');
+      setProductSearchQuery('');
     }
   }, [modalSupplier]);
 
@@ -188,6 +195,7 @@ export default function CommercialAgreements() {
       setModalProduct('');
       setModalPfaTipo('percentuale');
       setModalPfaValore('');
+      setProductSearchQuery('');
       setEditingAgreement(null);
 
       // Reload list
@@ -230,6 +238,7 @@ export default function CommercialAgreements() {
     setEditingAgreement(null);
     setModalSupplier('');
     setModalProduct('');
+    setProductSearchQuery('');
     setModalPfaTipo('percentuale');
     setModalPfaValore('');
     setIsModalOpen(true);
@@ -291,6 +300,14 @@ export default function CommercialAgreements() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
+      {/* Click outside shield to close product dropdown */}
+      {isProductDropdownOpen && (
+        <div 
+          onClick={() => setIsProductDropdownOpen(false)} 
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1005 }} 
+        />
+      )}
+
       {/* Search and Filters Bar */}
       <div className="glass-panel" style={{ padding: '20px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
@@ -575,27 +592,99 @@ export default function CommercialAgreements() {
                 </select>
               </div>
 
-              {/* Prodotto Field */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {/* Prodotto Field (Searchable dropdown) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', position: 'relative' }}>
                 <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Prodotto</label>
                 {loadingProducts ? (
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '10px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <RefreshCw size={14} className="animate-spin" /> Caricamento catalogo prodotti...
                   </div>
+                ) : !modalSupplier ? (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '10px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                    Seleziona prima un fornitore
+                  </div>
+                ) : editingAgreement !== null ? (
+                  <div style={{ fontSize: '0.85rem', color: 'white', padding: '10px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid var(--border-glass)', opacity: 0.7 }}>
+                    {editingAgreement.descrizione} ({editingAgreement.sku_interno})
+                  </div>
                 ) : (
-                  <select
-                    value={modalProduct}
-                    onChange={e => setModalProduct(Number(e.target.value) || '')}
-                    disabled={editingAgreement !== null || !modalSupplier}
-                    style={selectStyle}
-                  >
-                    <option value="" style={optionStyle}>Seleziona Prodotto dal listino...</option>
-                    {supplierProducts.map(p => (
-                      <option key={p.id} value={p.id} style={optionStyle}>
-                        {p.descrizione} ({p.sku_interno}) — €{Number(p.prezzo_pattuito).toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      placeholder="Cerca prodotto per parola chiave..."
+                      value={productSearchQuery}
+                      onChange={e => {
+                        setProductSearchQuery(e.target.value);
+                        setIsProductDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsProductDropdownOpen(true)}
+                      style={{ ...inputStyle, width: '100%' }}
+                    />
+                    
+                    {productSearchQuery && (
+                      <button
+                        onClick={() => {
+                          setProductSearchQuery('');
+                          setModalProduct('');
+                          setIsProductDropdownOpen(true);
+                        }}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+
+                    {isProductDropdownOpen && (
+                      <div style={{
+                        position: 'absolute', top: '100%', left: 0, right: 0,
+                        maxHeight: '220px', overflowY: 'auto',
+                        background: '#121e36', border: '1px solid var(--border-glass)',
+                        borderRadius: '8px', marginTop: '4px', zIndex: 1010,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                      }}>
+                        {supplierProducts.filter(p => {
+                          if (!productSearchQuery) return true;
+                          const q = productSearchQuery.toLowerCase();
+                          return p.descrizione.toLowerCase().includes(q) || p.sku_interno.toLowerCase().includes(q);
+                        }).length === 0 ? (
+                          <div style={{ padding: '10px 12px', fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                            Nessun prodotto trovato
+                          </div>
+                        ) : (
+                          supplierProducts.filter(p => {
+                            if (!productSearchQuery) return true;
+                            const q = productSearchQuery.toLowerCase();
+                            return p.descrizione.toLowerCase().includes(q) || p.sku_interno.toLowerCase().includes(q);
+                          }).map(p => {
+                            const isSelected = modalProduct === p.id;
+                            return (
+                              <div
+                                key={p.id}
+                                onClick={() => {
+                                  setModalProduct(p.id);
+                                  setProductSearchQuery(`${p.descrizione} (${p.sku_interno}) — €${Number(p.prezzo_pattuito).toFixed(2)}`);
+                                  setIsProductDropdownOpen(false);
+                                }}
+                                style={{
+                                  padding: '10px 12px', fontSize: '0.85rem', color: 'white', cursor: 'pointer',
+                                  background: isSelected ? 'var(--accent-blue)' : 'transparent',
+                                  borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                              >
+                                <div style={{ fontWeight: 600 }}>{p.descrizione}</div>
+                                <div style={{ fontSize: '0.75rem', color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                  <span>SKU: {p.sku_interno}</span>
+                                  <span>€{Number(p.prezzo_pattuito).toFixed(2)}</span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
