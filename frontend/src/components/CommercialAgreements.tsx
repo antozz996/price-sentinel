@@ -288,9 +288,9 @@ export default function CommercialAgreements() {
   });
 
   // Calculate aggregated stats
-  const totalVolume = filteredAgreements.reduce((sum, ag) => sum + ag.quantita_acquistata, 0);
-  const totalSpent = filteredAgreements.reduce((sum, ag) => sum + ag.totale_fatturato, 0);
-  const totalRebate = filteredAgreements.reduce((sum, ag) => sum + ag.rientro_accumulato, 0);
+  const totalVolume = filteredAgreements.reduce((sum, ag) => sum + Number(ag.quantita_acquistata), 0);
+  const totalSpent = filteredAgreements.reduce((sum, ag) => sum + Number(ag.totale_fatturato), 0);
+  const totalRebate = filteredAgreements.reduce((sum, ag) => sum + Number(ag.rientro_accumulato), 0);
   const averageDiscountPct = totalSpent > 0 ? (totalRebate / totalSpent) * 100 : 0;
 
   const selectStyle: React.CSSProperties = {
