@@ -114,7 +114,15 @@ export default function CommercialAgreements() {
       const res = await fetch(`${API_BASE}/listino/?fornitore_id=${supplierId}&limit=10000`, { headers });
       const data = await res.json();
       if (Array.isArray(data)) {
-        setSupplierProducts(data);
+        // De-duplicate by sku_interno, keeping the item with the highest id
+        const uniqueProductsMap: { [sku: string]: ProductItem } = {};
+        data.forEach(p => {
+          const existing = uniqueProductsMap[p.sku_interno];
+          if (!existing || p.id > existing.id) {
+            uniqueProductsMap[p.sku_interno] = p;
+          }
+        });
+        setSupplierProducts(Object.values(uniqueProductsMap));
       } else {
         setSupplierProducts([]);
       }
