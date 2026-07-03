@@ -62,6 +62,18 @@ export default function CommercialAgreements() {
 
   const headers = getHeaders();
 
+  // Document listener to close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element;
+      if (!target.closest('.product-search-container')) {
+        setIsProductDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     loadFornitori(controller.signal);
@@ -308,14 +320,6 @@ export default function CommercialAgreements() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
-      {/* Click outside shield to close product dropdown */}
-      {isProductDropdownOpen && (
-        <div 
-          onClick={() => setIsProductDropdownOpen(false)} 
-          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1005 }} 
-        />
-      )}
-
       {/* Search and Filters Bar */}
       <div className="glass-panel" style={{ padding: '20px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
@@ -616,7 +620,7 @@ export default function CommercialAgreements() {
                     {editingAgreement.descrizione} ({editingAgreement.sku_interno})
                   </div>
                 ) : (
-                  <div style={{ position: 'relative' }}>
+                  <div className="product-search-container" style={{ position: 'relative' }}>
                     <input
                       type="text"
                       placeholder="Cerca prodotto per parola chiave..."
@@ -636,7 +640,7 @@ export default function CommercialAgreements() {
                           setModalProduct('');
                           setIsProductDropdownOpen(true);
                         }}
-                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', zIndex: 1012 }}
                       >
                         <X size={14} />
                       </button>
