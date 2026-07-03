@@ -217,6 +217,13 @@ async def list_accordi_commerciali(
                 Decimal("0.0001"), rounding=ROUND_HALF_UP
             )
 
+        # Quantize all Decimal fields to 4 decimal places to satisfy Pydantic validation constraints
+        total_qty = total_qty.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        total_spent = total_spent.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        total_reconciled_rebate = total_reconciled_rebate.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+        if netto_rientro_contratto is not None:
+            netto_rientro_contratto = netto_rientro_contratto.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+
         results.append(
             AccordoCommercialeResponse(
                 listino_id=ag.id,
