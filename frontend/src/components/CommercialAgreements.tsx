@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Percent, TrendingDown, Truck, Building2, Calendar, Award, DollarSign, BarChart2 } from 'lucide-react';
+import { Search, Percent, TrendingDown, Truck, Building2, Calendar, Award, DollarSign, BarChart2, Plus, Trash2, Edit2, X, RefreshCw } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface PFAScaglioneInfo {
@@ -29,6 +29,7 @@ interface AgreementItem {
 
 interface Fornitore { id: number; nome_azienda: string; }
 interface Location { id: number; nome_struttura: string; }
+interface ProductItem { id: number; sku_interno: string; descrizione: string; prezzo_pattuito: number; }
 
 export default function CommercialAgreements() {
   const [agreements, setAgreements] = useState<AgreementItem[]>([]);
@@ -44,6 +45,17 @@ export default function CommercialAgreements() {
   const [filterDataA, setFilterDataA] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Modal / Management State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalSupplier, setModalSupplier] = useState<number | ''>('');
+  const [modalProduct, setModalProduct] = useState<number | ''>('');
+  const [modalPfaTipo, setModalPfaTipo] = useState<string>('percentuale');
+  const [modalPfaValore, setModalPfaValore] = useState<string>('');
+  const [supplierProducts, setSupplierProducts] = useState<ProductItem[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingAgreement, setEditingAgreement] = useState<AgreementItem | null>(null);
+
   const headers = getHeaders();
 
   useEffect(() => {
@@ -58,6 +70,16 @@ export default function CommercialAgreements() {
     loadAgreements(controller.signal);
     return () => controller.abort();
   }, [filterFornitore, filterLocation, filterDataDa, filterDataA]);
+
+  // Fetch products when supplier selected in Modal
+  useEffect(() => {
+    if (modalSupplier) {
+      loadSupplierProducts(Number(modalSupplier));
+    } else {
+      setSupplierProducts([]);
+      setModalProduct('');
+    }
+  }, [modalSupplier]);
 
   async function loadFornitori(signal?: AbortSignal) {
     try {
@@ -76,6 +98,24 @@ export default function CommercialAgreements() {
       if (Array.isArray(data)) setLocations(data);
     } catch (e: any) {
       if (e.name !== 'AbortError') console.error(e);
+    }
+  }
+
+  async function loadSupplierProducts(supplierId: number) {
+    setLoadingProducts(true);
+    try {
+      const res = await fetch(`${API_BASE}/listino/?fornitore_id=${supplierId}&limit=10000`, { headers });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setSupplierProducts(data);
+      } else {
+        setSupplierProducts([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setSupplierProducts([]);
+    } finally {
+      setLoadingProducts(false);
     }
   }
 
@@ -106,6 +146,107 @@ export default function CommercialAgreements() {
       if (!signal?.aborted) setLoading(false);
     }
   }
+
+  const handleSaveAgreement = async () => {
+    if (!modalProduct) {
+      alert("Seleziona un prodotto.");
+      return;
+    }
+    if (!modalPfaValore && modalPfaTipo !== 'none') {
+      alert("Inserisci il valore dello sconto.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const tipo = modalPfaTipo;
+      let valore = 0;
+      if (tipo === 'percentuale') {
+        valore = Number(modalPfaValore) / 100;
+      } else if (tipo === 'fisso') {
+        valore = Number(modalPfaValore);
+      }
+
+      const payload = {
+        pfa_tipo: tipo,
+        pfa_valore: tipo === 'none' ? 0 : valore
+      };
+
+      const res = await fetch(`${API_BASE}/listino/${modalProduct}/aggiorna-prezzo`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        throw new Error("Errore durante il salvataggio dell'accordo");
+      }
+
+      setIsModalOpen(false);
+      // Reset Modal fields
+      setModalSupplier('');
+      setModalProduct('');
+      setModalPfaTipo('percentuale');
+      setModalPfaValore('');
+      setEditingAgreement(null);
+
+      // Reload list
+      loadAgreements();
+    } catch (err: any) {
+      alert(err.message || "Errore nel salvataggio dell'accordo");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAgreement = async (agreement: AgreementItem) => {
+    if (!window.confirm(`Sei sicuro di voler eliminare l'accordo commerciale per ${agreement.descrizione}?`)) {
+      return;
+    }
+
+    try {
+      const payload = {
+        pfa_tipo: 'none',
+        pfa_valore: 0
+      };
+
+      const res = await fetch(`${API_BASE}/listino/${agreement.listino_id}/aggiorna-prezzo`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        throw new Error("Errore durante l'eliminazione");
+      }
+
+      loadAgreements();
+    } catch (err: any) {
+      alert(err.message || "Errore nell'eliminazione dell'accordo");
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingAgreement(null);
+    setModalSupplier('');
+    setModalProduct('');
+    setModalPfaTipo('percentuale');
+    setModalPfaValore('');
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (agreement: AgreementItem) => {
+    setEditingAgreement(agreement);
+    setModalSupplier(agreement.fornitore_id);
+    setModalProduct(agreement.listino_id);
+    setModalPfaTipo(agreement.pfa_tipo);
+    setModalPfaValore(
+      agreement.pfa_tipo === 'percentuale'
+        ? String(agreement.pfa_valore ? (agreement.pfa_valore * 100) : 0)
+        : String(agreement.pfa_valore || 0)
+    );
+    setIsModalOpen(true);
+  };
 
   const filteredAgreements = agreements.filter(ag => {
     if (!searchQuery) return true;
@@ -254,13 +395,22 @@ export default function CommercialAgreements() {
 
       {/* Main Table Panel */}
       <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
-        <div style={{ padding: '20px', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '20px', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Award size={18} color="var(--accent-blue)" /> Accordi Commerciali Attivi
           </h3>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px' }}>
-            {filteredAgreements.length} Accordi
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px' }}>
+              {filteredAgreements.length} Accordi
+            </span>
+            <button
+              onClick={openAddModal}
+              className="btn btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '0.85rem', height: '34px' }}
+            >
+              <Plus size={14} /> Aggiungi Accordo
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -283,6 +433,7 @@ export default function CommercialAgreements() {
                   <th style={{ ...thStyle, textAlign: 'right' }}>Tot. Fatturato</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Rientro Maturato</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Netto Medio Real.</th>
+                  <th style={{ ...thStyle, textAlign: 'center' }}>Azioni</th>
                 </tr>
               </thead>
               <tbody>
@@ -348,6 +499,28 @@ export default function CommercialAgreements() {
                       <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: 'var(--accent-blue)' }}>
                         € {Number(ag.netto_rientro_medio).toFixed(2)}
                       </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                          <button
+                            onClick={() => openEditModal(ag)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px', transition: 'color 0.2s' }}
+                            onMouseEnter={e => e.currentTarget.style.color = 'var(--accent-blue)'}
+                            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+                            title="Modifica Accordo"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAgreement(ag)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px', transition: 'color 0.2s' }}
+                            onMouseEnter={e => e.currentTarget.style.color = 'var(--status-red)'}
+                            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+                            title="Elimina Accordo"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -356,7 +529,131 @@ export default function CommercialAgreements() {
           </div>
         )}
       </div>
-      
+
+      {/* Aggiungi/Modifica Accordo Modal */}
+      {isModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(8px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '24px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: '14px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Percent size={18} color="var(--accent-blue)" />
+                {editingAgreement ? 'Modifica Accordo Commerciale' : 'Nuovo Accordo Commerciale'}
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              {/* Fornitore Field */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fornitore</label>
+                <select
+                  value={modalSupplier}
+                  onChange={e => setModalSupplier(Number(e.target.value) || '')}
+                  disabled={editingAgreement !== null}
+                  style={selectStyle}
+                >
+                  <option value="">Seleziona Fornitore...</option>
+                  {fornitori.map(f => <option key={f.id} value={f.id}>{f.nome_azienda}</option>)}
+                </select>
+              </div>
+
+              {/* Prodotto Field */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Prodotto</label>
+                {loadingProducts ? (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '10px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <RefreshCw size={14} className="animate-spin" /> Caricamento catalogo prodotti...
+                  </div>
+                ) : (
+                  <select
+                    value={modalProduct}
+                    onChange={e => setModalProduct(Number(e.target.value) || '')}
+                    disabled={editingAgreement !== null || !modalSupplier}
+                    style={selectStyle}
+                  >
+                    <option value="">Seleziona Prodotto dal listino...</option>
+                    {supplierProducts.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.descrizione} ({p.sku_interno}) — €{Number(p.prezzo_pattuito).toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Tipo Accordo (PFA Tipo) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Tipo di Accordo Sconto</label>
+                <select
+                  value={modalPfaTipo}
+                  onChange={e => setModalPfaTipo(e.target.value)}
+                  style={selectStyle}
+                >
+                  <option value="percentuale">Sconto Percentuale (%)</option>
+                  <option value="fisso">Sconto Economico Fisso per Unità (€)</option>
+                  {editingAgreement && <option value="none">Rimuovi Accordo (Elimina)</option>}
+                </select>
+              </div>
+
+              {/* Valore Accordo (PFA Valore) */}
+              {modalPfaTipo !== 'none' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    {modalPfaTipo === 'percentuale' ? 'Percentuale di Rientro (%)' : 'Importo di Rientro Fisso (€)'}
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      placeholder={modalPfaTipo === 'percentuale' ? 'es: 5 per sconto 5%' : 'es: 1.50 per 1.50 € di sconto'}
+                      value={modalPfaValore}
+                      onChange={e => setModalPfaValore(e.target.value)}
+                      style={{ ...inputStyle, width: '100%', paddingRight: '30px' }}
+                    />
+                    <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                      {modalPfaTipo === 'percentuale' ? '%' : '€'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid var(--border-glass)', paddingTop: '16px', marginTop: '8px' }}>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="btn"
+                style={{ background: 'transparent', border: '1px solid var(--border-glass)', color: 'white', padding: '8px 16px', fontSize: '0.85rem' }}
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleSaveAgreement}
+                className="btn btn-primary"
+                disabled={saving || !modalProduct}
+                style={{ padding: '8px 20px', fontSize: '0.85rem', minWidth: '100px' }}
+              >
+                {saving ? 'Salvataggio...' : 'Salva'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
