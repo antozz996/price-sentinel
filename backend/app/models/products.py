@@ -197,10 +197,10 @@ class MatchCandidate(Base):
         nullable=True,
         index=True,
     )
-    product_id: Mapped[int] = mapped_column(
+    product_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("products.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     source_type: Mapped[str] = mapped_column(
