@@ -119,19 +119,23 @@ async def run_verification():
         res_order = await resolve_order_item(
             db=db,
             query="BICCHIERE CAFFE",
-            requested_qty=Decimal("10"),
+            requested_qty=Decimal("1000"),
+            requested_unit="piece",
             allow_equivalent=True
         )
         
         print(f"  Query: '{res_order['query']}' -> SKU Rilevato: {res_order['matched_product']['sku_interno']}")
         print(f"  Decisione: {res_order['decision']}")
-        print(f"  Migliore Offerta: Fornitore = {res_order['best_offer']['supplier_name']}, Prezzo normalizzato = € {res_order['best_offer']['normalized_unit_price']}, Totale stimato = € {res_order['best_offer']['estimated_total']}")
+        print(f"  Migliore Offerta: Fornitore = {res_order['best_offer']['supplier_name']}, Prezzo normalizzato = € {res_order['best_offer']['unit_price_normalized']}, Confezioni necessarie = {res_order['best_offer']['packs_needed']}, Totale stimato = € {res_order['best_offer']['estimated_total']}")
         
         for idx, alt in enumerate(res_order['alternatives']):
-            print(f"  Alternativa {idx+1}: Fornitore = {alt['supplier_name']}, Prezzo normalizzato = € {alt['normalized_unit_price']}")
+            print(f"  Alternativa {idx+1}: Fornitore = {alt['supplier_name']}, Prezzo normalizzato = € {alt['unit_price_normalized']}, Confezioni necessarie = {alt['packs_needed']}")
 
         assert res_order["decision"] == "resolved", "Resolver fallito"
-        assert res_order["best_offer"]["supplier_name"] == "Eurocarta", "Miglior fornitore errato (dovrebbe essere Eurocarta con 0.025€/pz)"
+        assert res_order["best_offer"]["supplier_name"] == "Eurocarta", "Miglior fornitore errato"
+        assert res_order["best_offer"]["packs_needed"] == 10, "Calcolo Eurocarta packs errato"
+        assert res_order["alternatives"][1]["supplier_name"] == "Altro Fornitore", "Ordinamento alternativi errato"
+        assert res_order["alternatives"][1]["packs_needed"] == 20, "Calcolo Altro Fornitore packs errato"
         print("  ✅ Test Resolver d'Ordine superato!")
 
     print("\n🎉 TUTTI I TEST DEL PRODUCT IDENTITY LAYER SONO STATI SUPERATI CON SUCCESSO!")

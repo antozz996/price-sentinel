@@ -125,6 +125,7 @@ class CandidateResponse(BaseModel):
 class OrderItemResolveRequest(BaseModel):
     query: str
     requested_qty: Optional[Decimal] = Decimal("1")
+    requested_unit: Optional[str] = None
     allow_equivalent: Optional[bool] = False
     location_id: Optional[int] = None
 
@@ -446,45 +447,42 @@ async def optimize_basket(
             db=db,
             query=item.query,
             requested_qty=item.requested_qty,
+            requested_unit=item.requested_unit,
             allow_equivalent=item.allow_equivalent,
             location_id=req.location_id
         )
 
         if res["decision"] == "resolved":
             best = res["best_offer"]
-            # Contratto o Spot
             tipo_regola = "spot_ottimale" if best["source_type"] == "spot" else "concordato"
             
-            # Calcolo varianza rispetto alle alternative se presenti per stimare il risparmio
             if res["alternatives"]:
                 worst = res["alternatives"][-1]
-                delta_unitario = Decimal(worst["normalized_unit_price"]) - Decimal(best["normalized_unit_price"])
-                risparmio = delta_unitario * item.requested_qty
+                risparmio = Decimal(worst["estimated_total"]) - Decimal(best["estimated_total"])
                 risparmio_preventivo_stimato += risparmio
 
             spesa_totale_blindata += Decimal(best["estimated_total"])
 
-            # Confronto prezzi per il dettaglio UI
             confronto = [
                 {
                     "fornitore_id": best["supplier_id"],
                     "fornitore_name": best["supplier_name"],
-                    "prezzo": float(best["normalized_unit_price"])
+                    "prezzo": float(best["unit_price_normalized"])
                 }
             ]
             for alt in res["alternatives"]:
                 confronto.append({
                     "fornitore_id": alt["supplier_id"],
                     "fornitore_name": alt["supplier_name"],
-                    "prezzo": float(alt["normalized_unit_price"])
+                    "prezzo": float(alt["unit_price_normalized"])
                 })
 
             righe_ottimizzate.append({
                 "sku_interno": res["matched_product"]["sku_interno"],
                 "descrizione": best["supplier_product_name"],
                 "quantita": float(item.requested_qty),
-                "prezzo_inserito": float(best["price"]),
-                "prezzo_ottimale": float(best["price"]),
+                "prezzo_inserito": float(best["price_per_pack"]),
+                "prezzo_ottimale": float(best["price_per_pack"]),
                 "tipo_regola": tipo_regola,
                 "fornitore_id": best["supplier_id"],
                 "fornitore_name": best["supplier_name"],
@@ -492,7 +490,6 @@ async def optimize_basket(
                 "confronto_prezzi": confronto
             })
         else:
-            # Not found o needs review
             avvisi_preventivi.append(f"Prodotto '{item.query}' in parking area o non associato.")
             numero_anomalie += 1
             righe_ottimizzate.append({

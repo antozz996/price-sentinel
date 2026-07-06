@@ -2,6 +2,7 @@ from decimal import Decimal
 from datetime import date
 from typing import Optional, List
 from difflib import SequenceMatcher
+import math
 import json
 
 from sqlalchemy import select, or_, and_
@@ -18,17 +19,21 @@ async def resolve_order_item(
     db: AsyncSession,
     query: str,
     requested_qty: Decimal = Decimal("1"),
+    requested_unit: Optional[str] = None,
     allow_equivalent: bool = False,
     location_id: Optional[int] = None,
 ) -> dict:
     """
     Risolve una riga d'ordine cercandola nel catalogo interno canonico,
     trovando tutti gli alias approvati e ordinandoli per prezzo normalizzato crescente.
+    Gestisce la semantica delle quantità calcolando confezioni necessarie ed unità effettive.
     """
     query_norm = normalize_text(query)
     if not query_norm:
         return {
             "query": query,
+            "requested_qty": float(requested_qty),
+            "requested_unit": requested_unit,
             "matched_product": None,
             "decision": "not_found",
             "best_offer": None,
@@ -37,7 +42,6 @@ async def resolve_order_item(
         }
 
     # 1. Ricerca del prodotto canonico
-    # A. Corrispondenza esatta/ilike
     stmt = select(Product).where(
         and_(
             Product.is_active == True,
@@ -56,7 +60,7 @@ async def resolve_order_item(
     if matched_products:
         matched_product = matched_products[0]
     else:
-        # B. Corrispondenza fuzzy su tutti i prodotti attivi
+        # Corrispondenza fuzzy su tutti i prodotti attivi
         stmt_all = select(Product).where(Product.is_active == True)
         res_all = await db.execute(stmt_all)
         all_products = res_all.scalars().all()
@@ -72,6 +76,8 @@ async def resolve_order_item(
     if not matched_product:
         return {
             "query": query,
+            "requested_qty": float(requested_qty),
+            "requested_unit": requested_unit,
             "matched_product": None,
             "decision": "not_found",
             "best_offer": None,
@@ -79,10 +85,29 @@ async def resolve_order_item(
             "warnings": [f"Nessun prodotto canonico trovato per '{query}'."]
         }
 
+    comp_unit = matched_product.comparison_unit
+    unit_count = matched_product.unit_count or 1
+    volume_ml = matched_product.volume_ml or 0
+    weight_g = matched_product.weight_g or 0
+
+    if not requested_unit:
+        requested_unit = comp_unit or "piece"
+
+    # Conversione quantità a unità di confronto target
+    target_total_units = Decimal(str(requested_qty))
+    
+    if requested_unit == "box" and comp_unit in ("piece", "bottle"):
+        target_total_units = Decimal(str(requested_qty)) * Decimal(str(unit_count))
+    elif requested_unit in ("piece", "bottle") and comp_unit == "box" and unit_count > 0:
+        target_total_units = Decimal(str(requested_qty)) / Decimal(str(unit_count))
+    elif requested_unit in ("piece", "bottle") and comp_unit == "liter" and volume_ml > 0:
+        target_total_units = Decimal(str(requested_qty)) * (Decimal(str(volume_ml)) / Decimal("1000"))
+    elif requested_unit == "piece" and comp_unit == "kg" and weight_g > 0:
+        target_total_units = Decimal(str(requested_qty)) * (Decimal(str(weight_g)) / Decimal("1000"))
+
     # 2. Risoluzione degli ID di prodotto da includere
     product_ids = [matched_product.id]
     if allow_equivalent:
-        # Trova altri prodotti nello stesso gruppo di equivalenza
         subq = select(ProductEquivalenceGroupItem.group_id).where(
             ProductEquivalenceGroupItem.product_id == matched_product.id
         )
@@ -95,7 +120,7 @@ async def resolve_order_item(
             if eid not in product_ids:
                 product_ids.append(eid)
 
-    # 3. Carica gli alias approvati del fornitore per questi prodotti
+    # 3. Carica gli alias approvati per questi prodotti
     alias_stmt = (
         select(SupplierProductAlias)
         .options(
@@ -120,7 +145,7 @@ async def resolve_order_item(
         prod = alias.product
         supplier = alias.supplier
 
-        # Cerca prezzo contrattuale attivo in ListinoMaster
+        # Cerca prezzo contrattuale attivo
         listino_stmt = select(ListinoMaster).where(
             and_(
                 ListinoMaster.fornitore_id == alias.supplier_id,
@@ -142,7 +167,7 @@ async def resolve_order_item(
         if listino:
             price_val = Decimal(str(listino.prezzo_pattuito))
         else:
-            # Fallback su prezzo storico delle fatture (spot)
+            # Fallback spot su fatture passate
             from app.models.fatture import RigaFattura, Fattura
             spot_stmt = (
                 select(RigaFattura.prezzo_netto_normalizzato)
@@ -183,27 +208,55 @@ async def resolve_order_item(
             )
             continue
 
-        # Calcola totale stimato dell'offerta
-        # Se la comparison_unit è piece/bottle, consideriamo che ordiniamo in confezioni da 'pack_qty' pezzi.
-        # Il totale stimato è quindi: prezzo_confezione * requested_qty
-        estimated_total = price_val * Decimal(str(requested_qty))
+        # Risolvi pack_qty specifico
+        pack_qty = None
+        if alias.pack_qty is not None:
+            pack_qty = alias.pack_qty
+        if pack_qty is None and prod.unit_count is not None:
+            pack_qty = prod.unit_count
+        if pack_qty is None or pack_qty <= 0:
+            pack_qty = 1
+
+        alias_vol = alias.volume_ml if alias.volume_ml is not None else prod.volume_ml
+        alias_w = alias.weight_g if alias.weight_g is not None else prod.weight_g
+
+        # Calcolo di packs_needed e actual_units_supplied
+        if comp_unit in ("piece", "bottle"):
+            packs_needed = int(math.ceil(float(target_total_units) / pack_qty))
+            actual_units_supplied = packs_needed * pack_qty
+        elif comp_unit == "liter" and alias_vol and alias_vol > 0:
+            liters_per_pack = (pack_qty * alias_vol) / 1000.0
+            packs_needed = int(math.ceil(float(target_total_units) / liters_per_pack))
+            actual_units_supplied = float(packs_needed * liters_per_pack)
+        elif comp_unit == "kg" and alias_w and alias_w > 0:
+            kg_per_pack = (pack_qty * alias_w) / 1000.0
+            packs_needed = int(math.ceil(float(target_total_units) / kg_per_pack))
+            actual_units_supplied = float(packs_needed * kg_per_pack)
+        else:
+            packs_needed = int(math.ceil(float(target_total_units)))
+            actual_units_supplied = float(packs_needed)
+
+        # Totale stimato dell'offerta: prezzo_confezione * packs_needed
+        estimated_total = price_val * Decimal(str(packs_needed))
 
         offers.append({
             "supplier_id": alias.supplier_id,
             "supplier_name": supplier.nome_azienda,
             "supplier_product_name": alias.raw_description,
             "supplier_code": alias.supplier_code,
-            "pack_qty": norm_res.pack_qty,
-            "price": f"{price_val:.4f}",
-            "normalized_unit_price": f"{norm_res.normalized_unit_price:.4f}",
+            "pack_qty": pack_qty,
+            "packs_needed": packs_needed,
+            "actual_units_supplied": actual_units_supplied,
+            "price_per_pack": f"{price_val:.4f}",
+            "unit_price_normalized": f"{norm_res.normalized_unit_price:.4f}",
             "comparison_unit": norm_res.comparison_unit,
             "estimated_total": f"{estimated_total:.4f}",
             "source_type": source_type,
             "is_equivalent": prod.id != matched_product.id
         })
 
-    # Ordina per prezzo normalizzato unitario crescente
-    offers.sort(key=lambda x: Decimal(x["normalized_unit_price"]))
+    # Ordina per prezzo unitario normalizzato crescente
+    offers.sort(key=lambda x: Decimal(x["unit_price_normalized"]))
 
     if offers:
         best_offer = offers[0]
@@ -217,10 +270,12 @@ async def resolve_order_item(
 
     return {
         "query": query,
+        "requested_qty": float(requested_qty),
+        "requested_unit": requested_unit,
         "matched_product": {
-            "product_id": matched_product.id,
             "sku_interno": matched_product.sku_interno,
-            "canonical_name": matched_product.canonical_name
+            "canonical_name": matched_product.canonical_name,
+            "comparison_unit": comp_unit
         },
         "decision": decision,
         "best_offer": best_offer,
