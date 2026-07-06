@@ -28,6 +28,7 @@ class Product(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     sku_interno: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     canonical_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     subcategory: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -90,6 +91,11 @@ class SupplierProductAlias(Base):
     raw_description: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_description: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     ean: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    pack_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    volume_ml: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    weight_g: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    container_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="approved", server_default="approved")
     confidence_score: Mapped[float] = mapped_column(
         Numeric(5, 2),
         nullable=False,
@@ -185,10 +191,10 @@ class MatchCandidate(Base):
     __tablename__ = "match_candidates"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    invoice_line_id: Mapped[int] = mapped_column(
+    invoice_line_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("righe_fattura.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     product_id: Mapped[int] = mapped_column(
@@ -197,17 +203,54 @@ class MatchCandidate(Base):
         nullable=False,
         index=True,
     )
+    source_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="invoice_line",
+        server_default="invoice_line",
+    )
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    supplier_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("fornitori.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    raw_description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    normalized_description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     score: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
     reason_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    block_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
     )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("utenti.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Relationships
     product = relationship("Product", back_populates="match_candidates", lazy="selectin")
     invoice_line = relationship("RigaFattura", lazy="selectin")
+    supplier = relationship("Fornitore", lazy="selectin")
+    resolved_by = relationship("Utente", lazy="selectin")
+
+    @property
+    def candidate_product_id(self) -> int:
+        return self.product_id
+
+    @candidate_product_id.setter
+    def candidate_product_id(self, value: int):
+        self.product_id = value
 
     def __repr__(self) -> str:
         return f"<MatchCandidate Line ID {self.invoice_line_id} -> Product ID {self.product_id} (Score: {self.score})>"

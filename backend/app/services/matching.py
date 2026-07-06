@@ -54,75 +54,139 @@ class MatchResult:
 class NormalizedPriceResult:
     normalized_unit_price: Decimal
     comparison_unit: str
-    pack_qty: int
+    pack_qty: Optional[int]
     reliable: bool = True
+    explanation: str = ""
 
 
-def normalize_price_for_comparison(invoice_line, product: Product) -> NormalizedPriceResult:
+def normalize_price_for_comparison(
+    price_or_line,
+    quantity_or_product,
+    invoice_uom: Optional[str] = None,
+    product: Optional[Product] = None,
+    alias: Optional[SupplierProductAlias] = None,
+) -> NormalizedPriceResult:
     """
-    Fase 5: Normalizzazione del prezzo unitario per il confronto.
+    Normalizza il prezzo di acquisto unitario per consentire il confronto con il listino.
     """
-    raw_unit_price = Decimal(str(getattr(invoice_line, "prezzo_unitario_fatturato", 0) or 0))
-    discount = Decimal(str(getattr(invoice_line, "sconto_percentuale", 0) or 0))
-    
-    # Calcolo prezzo netto unitario
-    net_price = raw_unit_price * (Decimal("1") - discount / Decimal("100"))
-    
-    comp_unit = product.comparison_unit
-    unit_count = product.unit_count or 1
-    
-    descrizione = getattr(invoice_line, "descrizione_fornitore_raw", "") or ""
-    line_pack = extract_pack_qty(descrizione)
-    pack_qty = line_pack if line_pack is not None else unit_count
-    
+    from decimal import Decimal
+    from app.models.products import Product, SupplierProductAlias
+    from app.services.normalization import extract_pack_qty, extract_volume_ml, extract_weight_g
+
+    if isinstance(quantity_or_product, Product):
+        # Vecchia firma: (invoice_line, product)
+        invoice_line = price_or_line
+        product_obj = quantity_or_product
+        raw_price = getattr(invoice_line, "prezzo_unitario_fatturato", 0) or 0
+        discount = getattr(invoice_line, "sconto_percentuale", 0) or 0
+        price = Decimal(str(raw_price)) * (Decimal("1") - Decimal(str(discount)) / Decimal("100"))
+        quantity = Decimal(str(getattr(invoice_line, "quantita", 1) or 1))
+        uom = getattr(invoice_line, "unita_misura_fattura", "") or ""
+        descrizione = getattr(invoice_line, "descrizione_fornitore_raw", "") or ""
+        alias_obj = alias
+    else:
+        # Nuova firma: (price, quantity, invoice_uom, product, alias)
+        price = Decimal(str(price_or_line))
+        quantity = Decimal(str(quantity_or_product))
+        uom = invoice_uom
+        product_obj = product
+        alias_obj = alias
+        descrizione = ""
+        if alias_obj:
+            descrizione = getattr(alias_obj, "raw_description", "") or ""
+
+    if not product_obj:
+        return NormalizedPriceResult(
+            normalized_unit_price=price,
+            comparison_unit="piece",
+            pack_qty=1,
+            reliable=False,
+            explanation="Prodotto canonico mancante",
+        )
+
+    comp_unit = product_obj.comparison_unit
+    unit_count = product_obj.unit_count or 1
+
+    # 1. Risolvi pack_qty
+    pack_qty = None
+    if alias_obj and getattr(alias_obj, "pack_qty", None) is not None:
+        pack_qty = alias_obj.pack_qty
+    if pack_qty is None and product_obj.unit_count is not None:
+        pack_qty = product_obj.unit_count
+    if pack_qty is None:
+        pack_qty = extract_pack_qty(descrizione)
+    if pack_qty is None or pack_qty <= 0:
+        pack_qty = 1
+
     reliable = True
-    
-    # 1. Se il prezzo è a bottiglia/pezzo, e abbiamo acquistato un pack,
-    # dividiamo il prezzo per il numero di pezzi per confezione.
-    if comp_unit in ("bottle", "piece"):
-        if pack_qty > 1:
-            net_price = net_price / Decimal(str(pack_qty))
-            
-    # 2. Se l'unità è liter, calcoliamo il prezzo a litro.
+    explanation = f"Normalizzazione per {comp_unit}"
+    normalized_price = price
+
+    if comp_unit in ("piece", "bottle"):
+        # Prezzo al pezzo o bottiglia = prezzo confezione / pack_qty
+        uom_lower = (uom or "").lower()
+        is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css", "x"))
+        if is_package_uom or pack_qty > 1:
+            normalized_price = price / Decimal(str(pack_qty))
+        explanation = f"Prezzo unitario normalizzato su confezione da {pack_qty} {comp_unit}"
+
     elif comp_unit == "liter":
-        vol_ml = product.volume_ml or extract_volume_ml(descrizione)
+        vol_ml = None
+        if alias_obj and getattr(alias_obj, "volume_ml", None) is not None:
+            vol_ml = alias_obj.volume_ml
+        if vol_ml is None and product_obj.volume_ml is not None:
+            vol_ml = product_obj.volume_ml
+        if vol_ml is None:
+            vol_ml = extract_volume_ml(descrizione)
+
         if vol_ml:
-            uom_fattura = str(getattr(invoice_line, "unita_misura_fattura", "") or "").lower()
-            is_package_uom = any(x in uom_fattura for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
+            uom_lower = (uom or "").lower()
+            is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
             if is_package_uom and pack_qty > 1:
-                prezzo_singolo = net_price / Decimal(str(pack_qty))
+                prezzo_singolo = price / Decimal(str(pack_qty))
             else:
-                prezzo_singolo = net_price
-            net_price = prezzo_singolo / (Decimal(str(vol_ml)) / Decimal("1000"))
+                prezzo_singolo = price
+            normalized_price = prezzo_singolo / (Decimal(str(vol_ml)) / Decimal("1000"))
+            explanation = f"Prezzo al litro ricavato da {vol_ml}ml (confezione x{pack_qty})"
         else:
             reliable = False
-            
-    # 3. Se l'unità è kg, calcoliamo il prezzo al kg.
+            explanation = "Volume mancante per calcolo prezzo al litro"
+
     elif comp_unit == "kg":
-        weight_g = product.weight_g or extract_weight_g(descrizione)
+        weight_g = None
+        if alias_obj and getattr(alias_obj, "weight_g", None) is not None:
+            weight_g = alias_obj.weight_g
+        if weight_g is None and product_obj.weight_g is not None:
+            weight_g = product_obj.weight_g
+        if weight_g is None:
+            weight_g = extract_weight_g(descrizione)
+
         if weight_g:
-            uom_fattura = str(getattr(invoice_line, "unita_misura_fattura", "") or "").lower()
-            is_package_uom = any(x in uom_fattura for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
+            uom_lower = (uom or "").lower()
+            is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
             if is_package_uom and pack_qty > 1:
-                prezzo_singolo = net_price / Decimal(str(pack_qty))
+                prezzo_singolo = price / Decimal(str(pack_qty))
             else:
-                prezzo_singolo = net_price
-            net_price = prezzo_singolo / (Decimal(str(weight_g)) / Decimal("1000"))
+                prezzo_singolo = price
+            normalized_price = prezzo_singolo / (Decimal(str(weight_g)) / Decimal("1000"))
+            explanation = f"Prezzo al kg ricavato da {weight_g}g (confezione x{pack_qty})"
         else:
             reliable = False
-            
-    # 4. Se l'unità è box/cassa, e il prezzo è al singolo pezzo
+            explanation = "Peso mancante per calcolo prezzo al kg"
+
     elif comp_unit == "box":
-        uom_fattura = str(getattr(invoice_line, "unita_misura_fattura", "") or "").lower()
-        is_package_uom = any(x in uom_fattura for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
+        uom_lower = (uom or "").lower()
+        is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
         if not is_package_uom and pack_qty > 1:
-            net_price = net_price * Decimal(str(unit_count))
-            
+            normalized_price = price * Decimal(str(pack_qty))
+            explanation = f"Prezzo cassa normalizzato da pezzo singolo x{pack_qty}"
+
     return NormalizedPriceResult(
-        normalized_unit_price=net_price,
+        normalized_unit_price=normalized_price,
         comparison_unit=comp_unit,
         pack_qty=pack_qty,
         reliable=reliable,
+        explanation=explanation,
     )
 
 
@@ -148,8 +212,8 @@ async def resolve_invoice_line_product(
     stmt_aliases = select(SupplierProductAlias).where(SupplierProductAlias.supplier_id == fornitore_id)
     aliases_res = (await db.execute(stmt_aliases)).scalars().all()
     
-    aliases_by_code = {a.supplier_code: a for a in aliases_res if a.supplier_code}
-    aliases_by_desc = {a.normalized_description: a for a in aliases_res}
+    aliases_by_code = {a.supplier_code: a for a in aliases_res if a.supplier_code and a.status == "approved"}
+    aliases_by_desc = {a.normalized_description: a for a in aliases_res if a.status == "approved"}
     
     candidates = []
     
@@ -171,47 +235,53 @@ async def resolve_invoice_line_product(
         }
         block_flag = False
         matched_alias_id = None
+        is_alias_matched = False
         
-        # A. Codice fornitore uguale
+        # A. Codice fornitore uguale (approved)
         alias_by_code = aliases_by_code.get(supplier_code) if supplier_code else None
         if alias_by_code and alias_by_code.product_id == p.id:
-            score += 100
+            score = 100.0
             reason_dict["supplier_code_match"] = True
             reason_dict["alias_match"] = True
             matched_alias_id = alias_by_code.id
+            is_alias_matched = True
             
-        # B. Descrizione normalizzata alias già nota
-        alias_by_desc = aliases_by_desc.get(norm_desc)
-        if alias_by_desc and alias_by_desc.product_id == p.id:
-            score += 95
-            reason_dict["alias_match"] = True
-            matched_alias_id = alias_by_desc.id
+        # B. Descrizione normalizzata alias già nota (approved)
+        if not is_alias_matched:
+            alias_by_desc = aliases_by_desc.get(norm_desc)
+            if alias_by_desc and alias_by_desc.product_id == p.id:
+                score = 98.0
+                reason_dict["alias_match"] = True
+                matched_alias_id = alias_by_desc.id
+                is_alias_matched = True
             
-        # C. EAN uguale
-        if ean:
-            has_ean_match = any(a.ean == ean for a in aliases_res if a.product_id == p.id)
+        # C. EAN uguale (approved)
+        if not is_alias_matched and ean:
+            has_ean_match = any(a.ean == ean and a.status == "approved" for a in aliases_res if a.product_id == p.id)
             if has_ean_match:
-                score += 100
+                score = 100.0
                 reason_dict["ean_match"] = True
+                is_alias_matched = True
                 
-        is_alias_matched = reason_dict["alias_match"] or reason_dict["ean_match"]
-
         # D. Attributi (bonus e blocchi) - Applicati solo se non c'è match diretto tramite alias/EAN
         if not is_alias_matched:
+            # Similarità nome: max 45 punti
+            fuzzy_score = int(SequenceMatcher(None, norm_desc, normalize_text(p.canonical_name)).ratio() * 100)
+            reason_dict["fuzzy_score"] = fuzzy_score
+            score += (fuzzy_score / 100.0) * 45
+
             # Brand
             if p.brand:
                 if p.brand in norm_desc:
-                    score += 25
+                    score += 10
                     reason_dict["brand_match"] = True
                 else:
-                    score -= 30
                     block_flag = True
-            else:
-                score += 10
-                
+            
             # Category
+            from app.services.normalization import infer_category
+            line_cat = line_attrs.get("category") or infer_category(raw_description)
             if p.category:
-                line_cat = line_attrs["category"]
                 if line_cat:
                     if line_cat == p.category:
                         score += 15
@@ -219,65 +289,28 @@ async def resolve_invoice_line_product(
                     else:
                         block_flag = True
                 else:
-                    if p.category == "beverage" and any(x in norm_desc for x in ["acqua", "cola", "soda", "tonica", "aranciata", "succo", "gin", "vodka", "rum", "amaro", "birra", "vino"]):
-                        score += 15
-                        reason_dict["category_match"] = True
-                    else:
-                        score += 5
-            else:
-                score += 10
+                    block_flag = True
                 
             # Volume
-            line_vol = line_attrs["volume_ml"]
+            line_vol = line_attrs.get("volume_ml")
             if p.volume_ml is not None:
                 if line_vol == p.volume_ml:
-                    score += 25
+                    score += 15
                     reason_dict["volume_match"] = True
                 elif line_vol is not None:
                     block_flag = True
-            elif line_vol is None:
-                score += 10
                 
             # Weight
-            line_w = line_attrs["weight_g"]
+            line_w = line_attrs.get("weight_g")
             if p.weight_g is not None:
                 if line_w == p.weight_g:
-                    score += 20
+                    score += 15
                     reason_dict["weight_match"] = True
                 elif line_w is not None:
                     block_flag = True
-            elif line_w is None:
-                score += 10
-                
-            # Variant / Gusto
-            # Tratta "classica" e None come equivalenti
-            if p.variant and p.variant != "classica":
-                if p.variant in norm_desc:
-                    score += 20
-                    reason_dict["variant_match"] = True
-                else:
-                    block_flag = True
-            else:
-                known_variants = ["fragola", "pesca", "sugarfree", "zero"]
-                if any(v in norm_desc for v in known_variants):
-                    block_flag = True
-                else:
-                    score += 20
-                    reason_dict["variant_match"] = True
-                
-            # Container
-            line_cont = line_attrs["container_type"]
-            if p.container_type and line_cont:
-                if line_cont == p.container_type:
-                    score += 10
-                    reason_dict["container_match"] = True
-                else:
-                    block_flag = True
-            elif not line_cont:
-                score += 5
                 
             # Pack
-            line_pk = line_attrs["pack_qty"] or 1
+            line_pk = line_attrs.get("pack_qty") or 1
             prod_pk = p.unit_count or 1
             if line_pk == prod_pk:
                 score += 10
@@ -286,21 +319,25 @@ async def resolve_invoice_line_product(
                 if p.comparison_unit in ("box", "cartone", "cassa"):
                     block_flag = True
                     
-            # Fuzzy score
-            fuzzy_score = int(SequenceMatcher(None, norm_desc, normalize_text(p.canonical_name)).ratio() * 100)
-            reason_dict["fuzzy_score"] = fuzzy_score
-            if fuzzy_score > 85:
-                score += 15
-            elif fuzzy_score >= 70:
-                score += 8
+            # Container
+            line_cont = line_attrs.get("container_type")
+            if p.container_type and line_cont:
+                if line_cont == p.container_type:
+                    score += 5
+                    reason_dict["container_match"] = True
+                else:
+                    block_flag = True
                 
         # Determina la decisione
-        if score >= 90 and not block_flag:
+        if is_alias_matched:
             candidate_decision = "auto_match"
-        elif score >= 70 or (score >= 90 and block_flag):
-            candidate_decision = "needs_review"
         else:
-            candidate_decision = "parking"
+            if score >= 90 and not block_flag:
+                candidate_decision = "auto_match"
+            elif score >= 70 and not block_flag:
+                candidate_decision = "needs_review"
+            else:
+                candidate_decision = "parking"
             
         reason_dict["decision"] = candidate_decision
         
@@ -319,7 +356,7 @@ async def resolve_invoice_line_product(
     
     if candidates:
         best = candidates[0]
-        best_decision = "parking" if best["score"] < 70 else best["decision"]
+        best_decision = "parking" if best["score"] < 70 or (best["score"] < 90 and best["decision"] == "auto_match" and not best["supplier_alias_id"]) else best["decision"]
         return {
             "product_id": best["product_id"] if best_decision != "parking" else None,
             "sku_interno": best["sku_interno"] if best_decision != "parking" else None,
