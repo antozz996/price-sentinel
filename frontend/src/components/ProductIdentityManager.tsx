@@ -862,8 +862,8 @@ export default function ProductIdentityManager() {
                         <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>{p.uom} (x{p.pack_qty})</td>
                         <td style={{ padding: '10px' }}>
                           {p.match_status === 'auto_match' ? (
-                            <span style={{ color: 'var(--status-green)', background: 'rgba(0, 200, 100, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
-                              Auto ({p.matched_sku})
+                            <span style={{ color: 'var(--status-green)', background: 'rgba(0, 200, 100, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }} title={p.match_reason === 'existing_alias' ? 'Matched via existing alias' : 'Matched via score threshold'}>
+                              Auto ({p.matched_sku}) {p.score ? `(Score ${p.score.toFixed(0)}%)` : ''}
                             </span>
                           ) : (
                             <span style={{ color: '#ffb700', background: 'rgba(255, 200, 0, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
