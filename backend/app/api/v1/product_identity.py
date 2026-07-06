@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select, delete, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -388,6 +388,23 @@ async def approve_candidate(
                                 stato_validazione=StatoValidazione.da_verificare,
                             )
                             db.add(anomalia)
+            # Calcola prezzi ed eventuali anomalie... (riga)
+            pass
+
+    if candidate.source_type == "price_list_row" and candidate.reason_json:
+        price_val = candidate.reason_json.get("price")
+        uom_val = candidate.reason_json.get("uom") or product.comparison_unit or "piece"
+        if price_val is not None:
+            from app.services.supplier_list_import import save_append_only_price
+            await save_append_only_price(
+                db=db,
+                fornitore_id=supplier_id,
+                sku_interno=product.sku_interno,
+                descrizione=raw_desc,
+                prezzo_pattuito=Decimal(str(price_val)),
+                unita_misura=uom_val,
+                data_inizio=date.today()
+            )
 
     candidate.status = "approved"
     candidate.resolved_at = datetime.utcnow()
@@ -410,6 +427,20 @@ async def reject_candidate(
     await db.flush()
 
     return {"message": "Proposta di matching rifiutata"}
+
+@router.post("/product-identity/import-supplier-list/{supplier_id}", summary="Importa un listino prezzi concordato da un file Excel")
+async def import_supplier_list(
+    supplier_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin)
+):
+    file_bytes = await file.read()
+    from app.services.supplier_list_import import import_supplier_list_excel
+    res = await import_supplier_list_excel(db=db, supplier_id=supplier_id, file_bytes=file_bytes)
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res["error"])
+    return res
 
 # ──────────────────────────────────────────────────────────────────────
 # Endpoints: Orders & Optimization

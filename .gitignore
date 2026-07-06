@@ -46,4 +46,7 @@ build/
 
 # Excel files
 *.xlsx
+!backend/data/import_samples/*.xlsx
+
+
 

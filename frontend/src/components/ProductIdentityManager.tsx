@@ -53,13 +53,21 @@ interface MatchCandidate {
 }
 
 export default function ProductIdentityManager() {
-  const [activeSubTab, setActiveSubTab] = useState<'products' | 'candidates'>('products')
+  const [activeSubTab, setActiveSubTab] = useState<'products' | 'candidates' | 'import'>('products')
   const [products, setProducts] = useState<Product[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [aliases, setAliases] = useState<Alias[]>([])
   const [candidates, setCandidates] = useState<MatchCandidate[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Import State
+  const [suppliers, setSuppliers] = useState<any[]>([])
+  const [importSupplierId, setImportSupplierId] = useState<string>('')
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importResult, setImportResult] = useState<any | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
 
   // Search & Filters
   const [productSearch, setProductSearch] = useState('')
@@ -101,7 +109,55 @@ export default function ProductIdentityManager() {
   useEffect(() => {
     fetchProducts()
     fetchCandidates()
+    fetchSuppliers()
   }, [])
+
+  const fetchSuppliers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/fornitori`, { headers: getHeaders() })
+      if (!res.ok) throw new Error("Errore caricamento fornitori")
+      const data = await res.json()
+      setSuppliers(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!importSupplierId || !importFile) return
+    
+    setImportLoading(true)
+    setImportError(null)
+    setImportResult(null)
+    
+    const formData = new FormData()
+    formData.append('file', importFile)
+    
+    try {
+      const headers = getHeaders()
+      const fetchHeaders: any = { ...headers }
+      delete fetchHeaders['Content-Type']
+      
+      const res = await fetch(`${API_BASE}/product-identity/import-supplier-list/${importSupplierId}`, {
+        method: 'POST',
+        headers: fetchHeaders,
+        body: formData
+      })
+      
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.detail || "Errore durante l'importazione del listino")
+      }
+      
+      setImportResult(data)
+      fetchProducts()
+    } catch (err: any) {
+      setImportError(err.message)
+    } finally {
+      setImportLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (selectedProduct) {
@@ -325,6 +381,25 @@ export default function ProductIdentityManager() {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Sparkles size={18} /> Match Candidates ({candidates.length})
+          </div>
+        </button>
+        <button
+          className={`tab-btn ${activeSubTab === 'import' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('import')}
+          style={{
+            background: 'none',
+            border: 'none',
+            borderBottom: activeSubTab === 'import' ? '2px solid var(--accent-blue)' : '2px solid transparent',
+            color: activeSubTab === 'import' ? 'white' : 'var(--text-secondary)',
+            padding: '10px 16px',
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '0.95rem',
+            transition: 'all 0.3s'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={18} /> Import Listino Fornitore
           </div>
         </button>
       </div>
@@ -645,6 +720,178 @@ export default function ProductIdentityManager() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* VIEW: Import Listino */}
+      {activeSubTab === 'import' && (
+        <div className="glass-panel" style={{ padding: '30px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 8px 0' }}>Importazione Listino Fornitore (Excel)</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+              Carica un file Excel con il listino concordato di un fornitore. Il sistema riconoscerà automaticamente le colonne principali (prezzo, descrizione, confezione, codice) e proverà ad abbinare i prodotti.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '30px' }}>
+            <form onSubmit={handleImportSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Seleziona Fornitore</label>
+                <select
+                  required
+                  value={importSupplierId}
+                  onChange={e => setImportSupplierId(e.target.value)}
+                  style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                >
+                  <option value="" style={{ background: '#13131c' }}>-- Seleziona Fornitore --</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id} style={{ background: '#13131c' }}>
+                      {s.nome_azienda} (ID: {s.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>File Excel (.xlsx)</label>
+                <input
+                  required
+                  type="file"
+                  accept=".xlsx"
+                  onChange={e => setImportFile(e.target.files?.[0] || null)}
+                  style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={importLoading || !importSupplierId || !importFile}
+                style={{ padding: '12px', justifyContent: 'center' }}
+              >
+                {importLoading ? (
+                  <>
+                    <RefreshCw className="animate-spin" size={18} /> Importazione in corso...
+                  </>
+                ) : (
+                  'Avvia Importazione'
+                )}
+              </button>
+              
+              {importError && (
+                <div style={{ background: 'var(--status-red-bg)', color: 'var(--status-red)', padding: '12px', borderRadius: '8px', fontSize: '0.85rem' }}>
+                  {importError}
+                </div>
+              )}
+            </form>
+
+            <div style={{ borderLeft: '1px solid var(--border-glass)', paddingLeft: '30px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {importResult ? (
+                <>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Risultato Elaborazione</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Righe Lette</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{importResult.righe_totali_lette}</div>
+                    </div>
+                    <div style={{ background: 'rgba(0, 200, 100, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(0, 200, 100, 0.1)' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--status-green)' }}>Righe Importate (Matched)</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-green)' }}>{importResult.righe_importate}</div>
+                    </div>
+                    <div style={{ background: 'rgba(255, 200, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 200, 0, 0.1)' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#ffb700' }}>Match Candidates (Parking Area)</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffb700' }}>{importResult.match_candidates_creati}</div>
+                    </div>
+                    <div style={{ background: 'rgba(255, 0, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 0, 0, 0.1)' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--status-red)' }}>Righe Scartate/Errori</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-red)' }}>{importResult.righe_scartate}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    <div>Alias Creati: <strong>{importResult.alias_approvati_creati}</strong></div>
+                    <div>Alias Esistenti: <strong>{importResult.alias_gia_esistenti_riconosciuti}</strong></div>
+                    <div>Prezzi Creati: <strong>{importResult.prezzi_nuovi_creati}</strong></div>
+                    <div>Prezzi Invariati: <strong>{importResult.prezzi_invariati}</strong></div>
+                    <div>Prezzi Storicizzati: <strong>{importResult.prezzi_storicizzati}</strong></div>
+                  </div>
+
+                  {importResult.match_candidates_creati > 0 && (
+                    <div style={{ background: 'rgba(255, 200, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 200, 0, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#ffb700' }}>Ci sono {importResult.match_candidates_creati} nuovi candidati da abbinare manualmente.</span>
+                      <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
+                        fetchCandidates();
+                        setActiveSubTab('candidates');
+                      }}>
+                        Risolvi Ora
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem', textAlign: 'center', border: '1px dashed var(--border-glass)', borderRadius: '12px', padding: '40px' }}>
+                  Seleziona un fornitore e carica il file Excel per avviare l'importazione.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {importResult?.preview?.length > 0 && (
+            <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Anteprima Importazione (Top 20)</h4>
+              <div style={{ overflowX: 'auto', border: '1px solid var(--border-glass)', borderRadius: '8px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-glass)', textAlign: 'left' }}>
+                      <th style={{ padding: '10px' }}>Riga</th>
+                      <th style={{ padding: '10px' }}>Codice</th>
+                      <th style={{ padding: '10px' }}>Descrizione</th>
+                      <th style={{ padding: '10px', textAlign: 'right' }}>Prezzo</th>
+                      <th style={{ padding: '10px' }}>UM/Pack</th>
+                      <th style={{ padding: '10px' }}>Matching</th>
+                      <th style={{ padding: '10px' }}>Esito Prezzo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importResult.preview.map((p: any, idx: number) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                        <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>{p.row_index}</td>
+                        <td style={{ padding: '10px' }}><code>{p.supplier_code || '-'}</code></td>
+                        <td style={{ padding: '10px' }}>{p.raw_description}</td>
+                        <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>€ {p.price.toFixed(2)}</td>
+                        <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>{p.uom} (x{p.pack_qty})</td>
+                        <td style={{ padding: '10px' }}>
+                          {p.match_status === 'auto_match' ? (
+                            <span style={{ color: 'var(--status-green)', background: 'rgba(0, 200, 100, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                              Auto ({p.matched_sku})
+                            </span>
+                          ) : (
+                            <span style={{ color: '#ffb700', background: 'rgba(255, 200, 0, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                              Parking (Score {p.score.toFixed(0)}%)
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '10px', color: p.price_outcome === 'created' ? 'var(--status-green)' : p.price_outcome === 'updated' ? '#ffb700' : 'var(--text-secondary)' }}>
+                          {p.price_outcome || '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {importResult?.errori_parsing?.length > 0 && (
+            <div style={{ border: '1px solid rgba(255,0,0,0.2)', background: 'rgba(255,0,0,0.02)', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <h4 style={{ margin: 0, color: 'var(--status-red)', fontSize: '0.9rem', fontWeight: 600 }}>Errori e Segnalazioni</h4>
+              <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {importResult.errori_parsing.map((err: string, idx: number) => (
+                  <div key={idx}>• {err}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
