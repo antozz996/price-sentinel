@@ -43,3 +43,7 @@ dist/
 .next/
 out/
 build/
+
+# Excel files
+*.xlsx
+
