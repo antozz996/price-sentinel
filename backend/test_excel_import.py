@@ -1,12 +1,12 @@
 import asyncio
 from decimal import Decimal
-from datetime import date
-from sqlalchemy import select
+from datetime import date, datetime
+from sqlalchemy import select, delete, and_
 
 from app.database import async_session_factory
 from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.models.listino import ListinoMaster
-from app.services.supplier_list_import import import_supplier_list_excel
+from app.services.supplier_list_import import import_supplier_list_excel, save_append_only_price
 from app.services.order_resolver import resolve_order_item
 
 
@@ -21,12 +21,32 @@ async def run_import_test():
         file_bytes = f.read()
 
     async with async_session_factory() as db:
-        # Pulisci eventuali record precedenti di listino importati o candidati di test
-        # per garantire che il test sia ripetibile ed isolato
+        # Pulisci record di precedenti test per garantire isolamento
         await db.execute(delete(MatchCandidate).where(MatchCandidate.source_type == "price_list_row"))
-        # Non eliminiamo i listini concordati del seed ma scadiamo quelli importati in passato
-        # per non violare la data protection
-        
+        await db.execute(delete(SupplierProductAlias).where(
+            and_(
+                SupplierProductAlias.supplier_id == 10,
+                SupplierProductAlias.raw_description.in_([
+                    "BICCHIERE ACQUA 200ML BIANCO",
+                    "Tovagliolo monouso 40x40 pz50",
+                    "BICCHIERE MULTICOLORE MEDIO",
+                    "STRUMENTO MUSICALE XILOFONO DI LEGNO"
+                ])
+            )
+        ))
+        await db.execute(delete(ListinoMaster).where(
+            and_(
+                ListinoMaster.fornitore_id == 10,
+                ListinoMaster.descrizione.in_([
+                    "BICCHIERE ACQUA 200ML BIANCO",
+                    "Tovagliolo monouso 40x40 pz50",
+                    "BICCHIERE MULTICOLORE MEDIO",
+                    "STRUMENTO MUSICALE XILOFONO DI LEGNO"
+                ])
+            )
+        ))
+        await db.commit()
+
         # Esegui primo import
         print("\n[Passo 1] Esecuzione primo import Excel per Eurocarta (ID 10)...")
         res = await import_supplier_list_excel(db=db, supplier_id=10, file_bytes=file_bytes)
@@ -38,32 +58,106 @@ async def run_import_test():
         print(f"  Prezzi nuovi creati: {res['prezzi_nuovi_creati']}")
         print(f"  Match candidates creati: {res['match_candidates_creati']}")
         print(f"  Errori di parsing: {len(res['errori_parsing'])}")
-        for err in res["errori_parsing"]:
-            print(f"    - Parsing Error: {err}")
 
-        # Assertions
+        # Assertions primo import
         assert res["righe_totali_lette"] == 5, f"Lette {res['righe_totali_lette']} invece di 5"
         assert res["righe_importate"] == 1, f"Matched {res['righe_importate']} invece di 1"
         assert res["match_candidates_creati"] == 4, f"Candidati {res['match_candidates_creati']} invece di 4"
         assert (res["prezzi_nuovi_creati"] + res["prezzi_invariati"]) == 1, f"Prezzi {res['prezzi_nuovi_creati'] + res['prezzi_invariati']} invece di 1"
         print("  ✅ Primo import superato con successo!")
 
-        # 2. Verifica candidati in Parking Area
-        print("\n[Passo 2] Verifica Match Candidates creati a DB...")
+        # 2. Verifica candidati in Parking Area (con score 70-89 e < 70)
+        print("\n[Passo 2] Verifica Match Candidates e score 70-89...")
         stmt_cand = select(MatchCandidate).where(MatchCandidate.source_type == "price_list_row").order_by(MatchCandidate.score.desc())
         cands = (await db.execute(stmt_cand)).scalars().all()
         
+        cand_70_89 = None
         for c in cands:
             print(f"  Candidato: '{c.raw_description}' | Score: {c.score} | Linked Product ID: {c.product_id}")
-            if c.score < 70.0:
+            if c.raw_description == "BICCHIERE ACQUA 200ML BIANCO":
+                cand_70_89 = c
+                assert c.score >= 70.0 and c.score < 90.0, f"Score non corretto per candidato 70-89: {c.score}"
+                assert c.product_id is not None, "Il candidato 70-89 deve avere il product_id valorizzato!"
+            elif c.score < 70.0:
                 assert c.product_id is None, f"Candidato {c.raw_description} con score < 70 ({c.score}) ha product_id!"
-            else:
-                assert c.product_id is not None, f"Candidato {c.raw_description} con score >= 70 ({c.score}) non ha product_id!"
+                
+            # Verifica che il prezzo non sia in ListinoMaster (Fase pre-approvazione)
+            stmt_lm_pre = select(ListinoMaster).where(
+                and_(ListinoMaster.fornitore_id == 10, ListinoMaster.descrizione == c.raw_description)
+            )
+            lm_pre = (await db.execute(stmt_lm_pre)).scalars().first()
+            assert lm_pre is None, f"Errore: Prezzo salvato in ListinoMaster pre-approvazione per: {c.raw_description}"
 
-        print("  ✅ Verifica Match Candidates a DB completata!")
+        assert cand_70_89 is not None, "Dovrebbe esserci un candidato per BICCHIERE ACQUA 200ML BIANCO nella fascia 70-89!"
+        print("  ✅ Verifica Match Candidates e score 70-89 superata!")
 
-        # 3. Verifica Idempotenza
-        print("\n[Passo 3] Esecuzione secondo import dello stesso file (Idempotenza)...")
+        # 3. Verifica Approvazione Manuale (Punto 2)
+        print("\n[Passo 3] Test di approvazione manuale del candidato dubbio...")
+        
+        # Pre-approvazione checks per cand_70_89
+        stmt_alias_pre = select(SupplierProductAlias).where(
+            and_(
+                SupplierProductAlias.supplier_id == 10,
+                SupplierProductAlias.raw_description == cand_70_89.raw_description
+            )
+        )
+        alias_pre = (await db.execute(stmt_alias_pre)).scalars().first()
+        assert alias_pre is None, "L'alias non deve esistere prima dell'approvazione!"
+
+        # Eseguiamo il flusso di approvazione
+        prod_obj = await db.get(Product, cand_70_89.product_id)
+        assert prod_obj is not None
+        
+        # A. Crea alias
+        new_alias = SupplierProductAlias(
+            supplier_id=10,
+            product_id=prod_obj.id,
+            supplier_code=cand_70_89.reason_json.get("supplier_code"),
+            raw_description=cand_70_89.raw_description,
+            normalized_description=cand_70_89.normalized_description,
+            status="approved",
+            source="manual",
+            confidence_score=1.0
+        )
+        db.add(new_alias)
+        
+        # B. Salva prezzo in ListinoMaster prendendolo da reason_json (Punto 12)
+        price_val = cand_70_89.reason_json.get("price")
+        uom_val = cand_70_89.reason_json.get("uom") or prod_obj.comparison_unit or "piece"
+        
+        await save_append_only_price(
+            db=db,
+            fornitore_id=10,
+            sku_interno=prod_obj.sku_interno,
+            descrizione=cand_70_89.raw_description,
+            prezzo_pattuito=Decimal(str(price_val)),
+            unita_misura=uom_val,
+            data_inizio=date.today()
+        )
+        
+        # C. Aggiorna stato del candidato
+        cand_70_89.status = "approved"
+        cand_70_89.resolved_at = datetime.utcnow()
+        await db.flush()
+
+        # Post-approvazione checks
+        alias_post = (await db.execute(stmt_alias_pre)).scalars().first()
+        assert alias_post is not None and alias_post.status == "approved", "L'alias deve essere approved post-approvazione!"
+        
+        stmt_lm_post = select(ListinoMaster).where(
+            and_(
+                ListinoMaster.fornitore_id == 10,
+                ListinoMaster.sku_interno == prod_obj.sku_interno,
+                ListinoMaster.descrizione == cand_70_89.raw_description
+            )
+        )
+        lm_post = (await db.execute(stmt_lm_post)).scalars().first()
+        assert lm_post is not None and lm_post.prezzo_pattuito == Decimal("3.20"), "Il prezzo a listino deve corrispondere a 3.20!"
+        assert cand_70_89.status == "approved", "Lo stato del candidato non è approved!"
+        print("  ✅ Approvazione manuale verificata con successo!")
+
+        # 4. Verifica Idempotenza
+        print("\n[Passo 4] Esecuzione secondo import dello stesso file (Idempotenza)...")
         res2 = await import_supplier_list_excel(db=db, supplier_id=10, file_bytes=file_bytes)
         
         print(f"  Righe lette: {res2['righe_totali_lette']}")
@@ -71,16 +165,18 @@ async def run_import_test():
         print(f"  Prezzi invariati: {res2['prezzi_invariati']}")
         print(f"  Match candidates creati (dovrebbero essere 0): {res2['match_candidates_creati']}")
         
-        assert (res2["prezzi_invariati"] + res2["prezzi_nuovi_creati"]) == 1, "Idempotenza fallita: i prezzi non sono stati riconosciuti come invariati"
+        # Post-approvazione sia caffè che acqua sono importati automaticamente come contratti attivi
+        assert res2["righe_importate"] == 2, f"Matched {res2['righe_importate']} invece di 2"
+        assert (res2["prezzi_invariati"] + res2["prezzi_nuovi_creati"]) == 2, "Idempotenza fallita: i prezzi non sono stati riconosciuti come invariati"
         assert res2["match_candidates_creati"] == 0, "Idempotenza fallita: sono stati creati candidati duplicati"
         print("  ✅ Test Idempotenza superato!")
 
-        # 4. Resolve ordine per un prodotto importato
-        print("\n[Passo 4] Esecuzione resolver ordine dopo l'importazione...")
+        # 5. Resolve ordine per un prodotto importato
+        print("\n[Passo 5] Esecuzione resolver ordine dopo l'importazione ed approvazione...")
         res_resolve = await resolve_order_item(
             db=db,
-            query="BICCHIERE CAFFE",
-            requested_qty=Decimal("100"),
+            query="BICCHIERE ACQUA",
+            requested_qty=Decimal("10"),
             requested_unit="piece",
             allow_equivalent=True
         )
@@ -90,6 +186,7 @@ async def run_import_test():
         
         assert res_resolve["decision"] == "resolved", "Risoluzione fallita per Bicchiere"
         assert best["supplier_name"] == "Eurocarta", "Fornitore errato per Bicchiere"
+        assert Decimal(best["price_per_pack"]) == Decimal("3.2000"), f"Prezzo errato: {best['price_per_pack']}"
         print("  ✅ Risoluzione ordine post-import superata!")
 
     print("\n🎉 TUTTI I TEST DI IMPORTAZIONE EXCEL E IDEMPOTENZA SONO STATI SUPERATI CON SUCCESSO!")

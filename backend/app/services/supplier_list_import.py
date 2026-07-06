@@ -389,6 +389,15 @@ async def import_supplier_list_excel(
 
         # Genera preview dei primi 20 risultati
         if len(preview) < 20:
+            preview_score = score
+            match_reason = None
+            if match_status == "auto_match":
+                if alias and alias.status == "approved":
+                    preview_score = 100.0
+                    match_reason = "existing_alias"
+                else:
+                    match_reason = "auto_score"
+
             preview.append({
                 "row_index": idx + header_idx + 2,
                 "raw_description": raw_desc,
@@ -398,7 +407,8 @@ async def import_supplier_list_excel(
                 "pack_qty": pack_qty,
                 "match_status": match_status,
                 "matched_sku": matched_sku,
-                "score": score,
+                "score": preview_score,
+                "match_reason": match_reason,
                 "price_outcome": price_outcome
             })
 

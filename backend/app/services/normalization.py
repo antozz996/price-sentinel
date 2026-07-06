@@ -251,9 +251,11 @@ def extract_candidate_attributes(text: str) -> dict:
             variant = v
             break
 
-    # Rileva la categoria
+    # Rileva la categoria (priorità monouso)
     category = None
-    if any(x in normalized for x in ["acqua", "cola", "soda", "tonica", "aranciata", "succo", "gin", "vodka", "rum", "amaro", "birra", "vino"]):
+    if any(x in normalized for x in ["bicchiere", "tovagliolo", "cannuccia", "posate", "piatto", "monouso", "tovaglia", "vaschetta"]):
+        category = "monouso"
+    elif any(x in normalized for x in ["acqua", "cola", "soda", "tonica", "aranciata", "succo", "gin", "vodka", "rum", "amaro", "birra", "vino"]):
         category = "beverage"
 
     return {
@@ -272,16 +274,21 @@ def infer_category(text: str) -> Optional[str]:
     Inferisce la categoria base: acqua, soft_drink, monouso, vino, spirits, food.
     """
     cleaned = normalize_text(text)
-    if "acqua" in cleaned:
+    
+    def has_word(pattern: str) -> bool:
+        return bool(re.search(rf"\b{pattern}\b", cleaned))
+
+    if has_word("acqua"):
         return "acqua"
-    if any(x in cleaned for x in ["cola", "soda", "tonica", "aranciata", "succo", "lemon", "gassosa", "ginger", "red bull", "lemonsoda", "cedrata", "chinotto", "soft drink"]):
+    if any(has_word(x) for x in ["cola", "soda", "tonica", "aranciata", "succo", "lemon", "gassosa", "ginger", "red bull", "lemonsoda", "cedrata", "chinotto", "soft drink"]):
         return "soft_drink"
-    if any(x in cleaned for x in ["bicchiere", "tovagliolo", "cannuccia", "posate", "piatto", "monouso", "tovaglia", "vaschetta"]):
+    if any(has_word(x) for x in ["bicchiere", "tovagliolo", "cannuccia", "posate", "piatto", "monouso", "tovaglia", "vaschetta"]):
         return "monouso"
-    if any(x in cleaned for x in ["vino", "spumante", "prosecco", "champagne", "chardonnay", "pinot", "merlot", "cabernet", "passito"]):
+    if any(has_word(x) for x in ["vino", "spumante", "prosecco", "champagne", "chardonnay", "pinot", "merlot", "cabernet", "passito"]):
         return "vino"
-    if any(x in cleaned for x in ["gin", "vodka", "rum", "amaro", "whisky", "liqueur", "liquore", "tequila", "brandy", "cognac", "aperol", "campari", "limoncello", "sambuca"]):
+    if any(has_word(x) for x in ["gin", "vodka", "rum", "amaro", "whisky", "liqueur", "liquore", "tequila", "brandy", "cognac", "aperol", "campari", "limoncello", "sambuca"]):
         return "spirits"
-    if any(x in cleaned for x in ["caffe", "pane", "pasta", "olio", "sale", "zucchero", "farina", "latte", "burro", "uova", "cioccolato", "food", "cibo"]):
+    if any(has_word(x) for x in ["caffe", "pane", "pasta", "olio", "sale", "zucchero", "farina", "latte", "burro", "uova", "cioccolato", "food", "cibo"]):
         return "food"
     return None
+
