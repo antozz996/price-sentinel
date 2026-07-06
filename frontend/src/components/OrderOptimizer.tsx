@@ -8,9 +8,10 @@ interface LocationItem {
 }
 
 interface OrderItemInput {
-  sku_interno: string;
+  query: string;
   quantita: number;
   prezzo_inserito: number | '';
+  allow_equivalent?: boolean;
 }
 
 interface ConfrontoPrezzoItem {
@@ -52,7 +53,7 @@ export default function OrderOptimizer() {
   
   // Cart state
   const [basket, setBasket] = useState<OrderItemInput[]>([
-    { sku_interno: '', quantita: 1, prezzo_inserito: '' }
+    { query: '', quantita: 1, prezzo_inserito: '', allow_equivalent: false }
   ]);
 
   // Result states
@@ -85,9 +86,7 @@ export default function OrderOptimizer() {
           if (matrixData) {
             setAvailableSkus(Object.keys(matrixData));
             // Default first basket item
-            if (Object.keys(matrixData).length > 0) {
-              setBasket([{ sku_interno: Object.keys(matrixData)[0], quantita: 1, prezzo_inserito: '' }]);
-            }
+            setBasket([{ query: '', quantita: 1, prezzo_inserito: '', allow_equivalent: false }]);
           }
         }
       } catch (err) {
@@ -98,8 +97,7 @@ export default function OrderOptimizer() {
   }, []);
 
   const handleAddRow = () => {
-    const defaultSku = availableSkus.length > 0 ? availableSkus[0] : '';
-    setBasket([...basket, { sku_interno: defaultSku, quantita: 1, prezzo_inserito: '' }]);
+    setBasket([...basket, { query: '', quantita: 1, prezzo_inserito: '', allow_equivalent: false }]);
   };
 
   const handleRemoveRow = (index: number) => {
@@ -119,25 +117,27 @@ export default function OrderOptimizer() {
     setSuccessMsg(null);
     setLoadingOpt(true);
     try {
-      // Filter out rows with no SKU
-      const validItems = basket.filter(item => item.sku_interno !== '');
+      const validItems = basket.filter(item => item.query.trim() !== '');
       if (validItems.length === 0) {
         throw new Error("Aggiungi almeno un articolo valido al carrello.");
       }
 
       const formattedItems = validItems.map(item => ({
-        sku_interno: item.sku_interno,
-        quantita: Number(item.quantita) || 1,
-        prezzo_inserito: item.prezzo_inserito !== '' ? Number(item.prezzo_inserito) : null
+        query: item.query.trim(),
+        requested_qty: Number(item.quantita) || 1,
+        allow_equivalent: !!item.allow_equivalent
       }));
 
-      const res = await fetch(`${API_BASE}/ordini/ottimizza`, {
+      const res = await fetch(`${API_BASE}/orders/optimize`, {
         method: 'POST',
         headers: {
           ...headers,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formattedItems)
+        body: JSON.stringify({
+          location_id: selectedLocation ? Number(selectedLocation) : null,
+          items: formattedItems
+        })
       });
 
       if (!res.ok) {
@@ -158,18 +158,24 @@ export default function OrderOptimizer() {
       alert("Seleziona la sede emittente dell'ordine.");
       return;
     }
+    if (!optResult) return;
 
     setError(null);
     setSuccessMsg(null);
     setSubmittingOrder(true);
 
     try {
-      const validItems = basket.filter(item => item.sku_interno !== '');
-      const formattedItems = validItems.map(item => ({
-        sku_interno: item.sku_interno,
-        quantita: Number(item.quantita) || 1,
-        prezzo_inserito: item.prezzo_inserito !== '' ? Number(item.prezzo_inserito) : null
-      }));
+      const formattedItems = optResult.righe_ottimizzate
+        .filter(riga => riga.sku_interno && riga.tipo_regola !== "sconosciuto")
+        .map(riga => ({
+          sku_interno: riga.sku_interno,
+          quantita: Number(riga.quantita) || 1,
+          prezzo_inserito: riga.prezzo_inserito || null
+        }));
+
+      if (formattedItems.length === 0) {
+        throw new Error("Nessun articolo risolto nel carrello da poter ordinare.");
+      }
 
       const res = await fetch(`${API_BASE}/ordini/crea`, {
         method: 'POST',
@@ -192,8 +198,7 @@ export default function OrderOptimizer() {
         `Ordini d'acquisto emessi ed inviati correttamente! Generati ${orderIds.length} documenti d'ordine suddivisi per fornitore.`
       );
       // Reset basket
-      const defaultSku = availableSkus.length > 0 ? availableSkus[0] : '';
-      setBasket([{ sku_interno: defaultSku, quantita: 1, prezzo_inserito: '' }]);
+      setBasket([{ query: '', quantita: 1, prezzo_inserito: '', allow_equivalent: false }]);
       setOptResult(null);
     } catch (err: any) {
       setError(err.message || "Errore durante la finalizzazione degli ordini.");
@@ -260,9 +265,10 @@ export default function OrderOptimizer() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
-                <th style={{ padding: '12px' }}>Seleziona SKU Prodotto</th>
+                <th style={{ padding: '12px' }}>Cerca Prodotto / Descrizione Libera</th>
                 <th style={{ padding: '12px', width: '120px' }}>Quantità</th>
                 <th style={{ padding: '12px', width: '180px' }}>Prezzo Manuale (Opzionale)</th>
+                <th style={{ padding: '12px', width: '140px', textAlign: 'center' }}>Consenti Equivalenti</th>
                 <th style={{ padding: '12px', width: '60px', textAlign: 'center' }}>Rimuovi</th>
               </tr>
             </thead>
@@ -270,27 +276,31 @@ export default function OrderOptimizer() {
               {basket.map((row, index) => (
                 <tr key={index} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                   <td style={{ padding: '10px 6px' }}>
-                    <select
-                      value={row.sku_interno}
-                      onChange={e => handleChangeRow(index, 'sku_interno', e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '10px',
-                        borderRadius: '8px',
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid var(--border-glass)',
-                        color: 'white',
-                        outline: 'none',
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      <option value="" style={{ background: '#13131c' }}>Scegli Prodotto...</option>
-                      {availableSkus.map(sku => (
-                        <option key={sku} value={sku} style={{ background: '#13131c' }}>
-                          {sku}
-                        </option>
-                      ))}
-                    </select>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        placeholder="Es. BICCHIERE CAFFE o SKU..."
+                        value={row.query}
+                        list={`sku-options-${index}`}
+                        onChange={e => handleChangeRow(index, 'query', e.target.value)}
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '10px 10px 10px 12px',
+                          borderRadius: '8px',
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid var(--border-glass)',
+                          color: 'white',
+                          outline: 'none',
+                          fontSize: '0.85rem'
+                        }}
+                      />
+                      <datalist id={`sku-options-${index}`}>
+                        {availableSkus.map(sku => (
+                          <option key={sku} value={sku} />
+                        ))}
+                      </datalist>
+                    </div>
                   </td>
                   <td style={{ padding: '10px 6px' }}>
                     <input
@@ -333,6 +343,14 @@ export default function OrderOptimizer() {
                         fontSize: '0.85rem',
                         textAlign: 'right'
                       }}
+                    />
+                  </td>
+                  <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                    <input 
+                      type="checkbox"
+                      checked={row.allow_equivalent || false}
+                      onChange={e => handleChangeRow(index, 'allow_equivalent', e.target.checked)}
+                      style={{ cursor: 'pointer', transform: 'scale(1.2)' }}
                     />
                   </td>
                   <td style={{ padding: '10px 6px', textAlign: 'center' }}>

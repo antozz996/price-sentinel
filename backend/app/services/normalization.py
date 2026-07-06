@@ -49,15 +49,24 @@ def normalize_text(text: str) -> str:
     for pattern, replacement in brand_map.items():
         normalized = re.sub(pattern, replacement, normalized)
 
+    # Espande abbreviazioni speciali e normalizza x prima dei numeri per pezzi
+    # es: X100 -> 100 pezzi
+    normalized = re.sub(r"\bx\s*(\d+)\b", r"\1 pezzi", normalized)
+
     # Espande abbreviazioni comuni
     abbrev_map = {
-        r"\bbott\b": "bottiglia",
-        r"\bpz\b": "pezzi",
-        r"\bconf\b": "confezione",
-        r"\bcart\b": "cartone",
-        r"\blt\b": "litro",
-        r"\bcl\b": "centilitri",
-        r"\bml\b": "millilitri",
+        r"\bbicch\b\.?": "bicchiere",
+        r"\bp\.?z\.?\b": "pezzi",
+        r"\bconf\b\.?": "confezione",
+        r"\bct\b\.?": "cartone",
+        r"\bcrt\b\.?": "cartone",
+        r"\bbt\b\.?": "bottiglia",
+        r"\bbott\b\.?": "bottiglia",
+        r"\blt\b\.?": "litro",
+        r"\bcl\b\.?": "centilitro",
+        r"\bgr\b\.?": "grammi",
+        r"\bkg\b\.?": "chilogrammi",
+        r"\bcc\b\.?": "ml",
     }
     for pattern, replacement in abbrev_map.items():
         normalized = re.sub(pattern, replacement, normalized)
@@ -78,18 +87,19 @@ def extract_volume_ml(text: str) -> Optional[int]:
     - 100cl, cl 100 -> 1000
     - 1lt, lt 1, 1 l -> 1000
     - 1000ml -> 1000
+    - 80cc -> 80
     - Fallback per volumi decimali senza unità (es. 0,50 -> 500ml)
     """
     cleaned = text.lower()
     # Converte virgole in punti nei numeri
     cleaned = re.sub(r"(\d+),(\d+)", r"\1.\2", cleaned)
 
-    # 1. Pattern <valore><unita> (es. "100cl", "1lt", "0.75l", "1000ml")
-    pattern1 = r"(\d+(?:\.\d+)?)\s*(ml|cl|lt|l)\b"
+    # 1. Pattern <valore><unita> (es. "100cl", "1lt", "0.75l", "1000ml", "80cc")
+    pattern1 = r"(\d+(?:\.\d+)?)\s*(ml|cl|lt|l|cc)\b"
     for val_str, unit in re.findall(pattern1, cleaned):
         try:
             val = float(val_str)
-            if unit == "ml":
+            if unit in ("ml", "cc"):
                 return int(val)
             elif unit == "cl":
                 return int(val * 10)
@@ -98,12 +108,12 @@ def extract_volume_ml(text: str) -> Optional[int]:
         except ValueError:
             pass
 
-    # 2. Pattern <unita><valore> (es. "cl 100", "lt 1", "l 1.5", "ml 1000")
-    pattern2 = r"\b(ml|cl|lt|l)\s*(\d+(?:\.\d+)?)"
+    # 2. Pattern <unita><valore> (es. "cl 100", "lt 1", "l 1.5", "ml 1000", "cc 80")
+    pattern2 = r"\b(ml|cl|lt|l|cc)\s*(\d+(?:\.\d+)?)"
     for unit, val_str in re.findall(pattern2, cleaned):
         try:
             val = float(val_str)
-            if unit == "ml":
+            if unit in ("ml", "cc"):
                 return int(val)
             elif unit == "cl":
                 return int(val * 10)
@@ -255,3 +265,23 @@ def extract_candidate_attributes(text: str) -> dict:
         "container_type": extract_container_type(text),
         "variant": variant,
     }
+
+
+def infer_category(text: str) -> Optional[str]:
+    """
+    Inferisce la categoria base: acqua, soft_drink, monouso, vino, spirits, food.
+    """
+    cleaned = normalize_text(text)
+    if "acqua" in cleaned:
+        return "acqua"
+    if any(x in cleaned for x in ["cola", "soda", "tonica", "aranciata", "succo", "lemon", "gassosa", "ginger", "red bull", "lemonsoda", "cedrata", "chinotto", "soft drink"]):
+        return "soft_drink"
+    if any(x in cleaned for x in ["bicchiere", "tovagliolo", "cannuccia", "posate", "piatto", "monouso", "tovaglia", "vaschetta"]):
+        return "monouso"
+    if any(x in cleaned for x in ["vino", "spumante", "prosecco", "champagne", "chardonnay", "pinot", "merlot", "cabernet", "passito"]):
+        return "vino"
+    if any(x in cleaned for x in ["gin", "vodka", "rum", "amaro", "whisky", "liqueur", "liquore", "tequila", "brandy", "cognac", "aperol", "campari", "limoncello", "sambuca"]):
+        return "spirits"
+    if any(x in cleaned for x in ["caffe", "pane", "pasta", "olio", "sale", "zucchero", "farina", "latte", "burro", "uova", "cioccolato", "food", "cibo"]):
+        return "food"
+    return None
