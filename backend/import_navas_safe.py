@@ -166,7 +166,7 @@ async def run_safe_import(mode: str):
             print("Esecuzione in modalità APPLY: Inserimento dei 19 candidati a database...")
             async with db.begin():
                 for item in group_b:
-                    # Idempotenza: cerca se esiste già
+                    # Idempotenza: cerca se esiste già come candidato pending o come alias approvato
                     stmt = select(MatchCandidate).where(
                         MatchCandidate.supplier_id == supplier_id,
                         MatchCandidate.raw_description == item["raw_description"],
@@ -174,6 +174,15 @@ async def run_safe_import(mode: str):
                     )
                     exists = (await db.execute(stmt)).scalars().first()
                     if exists:
+                        continue
+                    
+                    alias_stmt = select(SupplierProductAlias).where(
+                        SupplierProductAlias.supplier_id == supplier_id,
+                        SupplierProductAlias.raw_description == item["raw_description"],
+                        SupplierProductAlias.status == "approved"
+                    )
+                    alias_exists = (await db.execute(alias_stmt)).scalars().first()
+                    if alias_exists:
                         continue
                     
                     # Recupera ID del prodotto dal candidate_sku
