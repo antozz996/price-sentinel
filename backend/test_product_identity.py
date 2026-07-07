@@ -114,6 +114,49 @@ async def run_verification():
         assert abs(res_liter.normalized_unit_price - Decimal("2.666666")) < Decimal("0.01"), "Prezzo al litro calcolato errato"
         print("  ✅ Test Normalizzazione Prezzo superato!")
 
+        # Test di regressione esplicito sulla normalizzazione piece -> liter (Batch 3 suspects)
+        print("\n[Test 3b] Test di regressione UOM 'piece' -> 'liter'...")
+        # 1. Acqua Vera
+        product_vera = Product(comparison_unit="liter", volume_ml=2000, unit_count=6)
+        alias_vera = SupplierProductAlias(pack_qty=6, volume_ml=2000)
+        res_vera = normalize_price_for_comparison(
+            price_or_line=Decimal("1.4760"),
+            quantity_or_product=Decimal("1"),
+            invoice_uom="piece",
+            product=product_vera,
+            alias=alias_vera
+        )
+        print(f"  Acqua Vera: expected 0.1230, got {res_vera.normalized_unit_price:.4f}")
+        assert abs(res_vera.normalized_unit_price - Decimal("0.1230")) < Decimal("0.0001"), "Errore normalizzazione Acqua Vera"
+
+        # 2. Ferrarelle 75cl vetro
+        product_ferr = Product(comparison_unit="liter", volume_ml=750, unit_count=12)
+        alias_ferr = SupplierProductAlias(pack_qty=12, volume_ml=750)
+        res_ferr = normalize_price_for_comparison(
+            price_or_line=Decimal("5.3275"),
+            quantity_or_product=Decimal("1"),
+            invoice_uom="piece",
+            product=product_ferr,
+            alias=alias_ferr
+        )
+        print(f"  Ferrarelle 75cl: expected 0.5919, got {res_ferr.normalized_unit_price:.4f}")
+        assert abs(res_ferr.normalized_unit_price - Decimal("0.591944")) < Decimal("0.0001"), "Errore normalizzazione Ferrarelle VAR"
+
+        # 3. Cedrata San Benedetto
+        product_cedr = Product(comparison_unit="liter", volume_ml=1500, unit_count=6)
+        alias_cedr = SupplierProductAlias(pack_qty=6, volume_ml=1500)
+        res_cedr = normalize_price_for_comparison(
+            price_or_line=Decimal("3.2800"),
+            quantity_or_product=Decimal("1"),
+            invoice_uom="piece",
+            product=product_cedr,
+            alias=alias_cedr
+        )
+        print(f"  Cedrata: expected 0.3644, got {res_cedr.normalized_unit_price:.4f}")
+        assert abs(res_cedr.normalized_unit_price - Decimal("0.364444")) < Decimal("0.0001"), "Errore normalizzazione Cedrata"
+        
+        print("  ✅ Test Regressione Normalizzazione UOM superato!")
+
         # 4. Test del Resolver d'Ordine (resolve_order_item)
         print("\n[Test 4] Verifica Resolver d'Ordine (Routing Fornitori)...")
         res_order = await resolve_order_item(
