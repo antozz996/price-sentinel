@@ -143,7 +143,8 @@ async def import_supplier_list_excel(
     db: AsyncSession,
     supplier_id: int,
     file_bytes: bytes,
-    data_validita: Optional[date] = None
+    data_validita: Optional[date] = None,
+    dry_run: bool = False
 ) -> dict:
     if not data_validita:
         data_validita = date.today()
@@ -271,6 +272,9 @@ async def import_supplier_list_excel(
         match_status = "parking"
         matched_sku = None
         score = 0.0
+        block_flag = False
+        best_product_id = None
+        best_sku = None
 
         if alias and alias.status == "approved":
             # Alias esistente approvato -> match sicuro!
@@ -279,11 +283,12 @@ async def import_supplier_list_excel(
             alias_esistenti_riconosciuti += 1
             
             # Aggiorna attributi pack/volume se vuoti
-            if alias.pack_qty is None:
-                alias.pack_qty = pack_qty
-            if alias.volume_ml is None:
-                alias.volume_ml = volume_ml
-            db.add(alias)
+            if not dry_run:
+                if alias.pack_qty is None:
+                    alias.pack_qty = pack_qty
+                if alias.volume_ml is None:
+                    alias.volume_ml = volume_ml
+                db.add(alias)
         else:
             # Esegui motore di matching
             res_match = await resolve_invoice_line_product(
@@ -310,21 +315,22 @@ async def import_supplier_list_excel(
                 match_status = "auto_match"
                 matched_sku = best_sku
                 
-                alias = SupplierProductAlias(
-                    supplier_id=supplier_id,
-                    product_id=best_product_id,
-                    supplier_code=supplier_code,
-                    raw_description=raw_desc,
-                    normalized_description=normalized_description,
-                    pack_qty=pack_qty,
-                    volume_ml=volume_ml,
-                    weight_g=weight_g,
-                    container_type=container_type,
-                    status="approved",
-                    source="import",
-                    confidence_score=score
-                )
-                db.add(alias)
+                if not dry_run:
+                    alias = SupplierProductAlias(
+                        supplier_id=supplier_id,
+                        product_id=best_product_id,
+                        supplier_code=supplier_code,
+                        raw_description=raw_desc,
+                        normalized_description=normalized_description,
+                        pack_qty=pack_qty,
+                        volume_ml=volume_ml,
+                        weight_g=weight_g,
+                        container_type=container_type,
+                        status="approved",
+                        source="import",
+                        confidence_score=score
+                    )
+                    db.add(alias)
                 alias_approvati_creati += 1
             else:
                 # Match dubbio -> crea MatchCandidate in Parking Area
@@ -345,74 +351,118 @@ async def import_supplier_list_excel(
                     # Se lo score è < 70, il product_id è Null (senza aggancio certo)
                     linked_prod_id = best_product_id if score >= 70.0 else None
                     
-                    candidate = MatchCandidate(
-                        supplier_id=supplier_id,
-                        product_id=linked_prod_id,
-                        source_type="price_list_row",
-                        raw_description=raw_desc,
-                        normalized_description=normalized_description,
-                        score=score,
-                        block_flag=block_flag,
-                        status="pending",
-                        reason_json={
-                            "price": float(price_val),
-                            "uom": uom,
-                            "pack_qty": pack_qty,
-                            "volume_ml": volume_ml,
-                            "category": category
-                        }
-                    )
-                    db.add(candidate)
+                    if not dry_run:
+                        candidate = MatchCandidate(
+                            supplier_id=supplier_id,
+                            product_id=linked_prod_id,
+                            source_type="price_list_row",
+                            raw_description=raw_desc,
+                            normalized_description=normalized_description,
+                            score=score,
+                            block_flag=block_flag,
+                            status="pending",
+                            reason_json={
+                                "price": float(price_val),
+                                "uom": uom,
+                                "pack_qty": pack_qty,
+                                "volume_ml": volume_ml,
+                                "category": category,
+                                "supplier_code": supplier_code
+                            }
+                        )
+                        db.add(candidate)
                     candidati_creati += 1
 
         # 5. SALVATAGGIO PREZZI (Solo se match_status == "auto_match")
         price_outcome = None
         if match_status == "auto_match" and matched_sku:
-            outcome = await save_append_only_price(
-                db=db,
-                fornitore_id=supplier_id,
-                sku_interno=matched_sku,
-                descrizione=raw_desc,
-                prezzo_pattuito=price_val,
-                unita_misura=uom,
-                data_inizio=data_validita
-            )
-            price_outcome = outcome
-            if outcome == "created":
+            if not dry_run:
+                outcome = await save_append_only_price(
+                    db=db,
+                    fornitore_id=supplier_id,
+                    sku_interno=matched_sku,
+                    descrizione=raw_desc,
+                    prezzo_pattuito=price_val,
+                    unita_misura=uom,
+                    data_inizio=data_validita
+                )
+                price_outcome = outcome
+            else:
+                # Simula save_append_only_price senza scrivere a DB
+                stmt = select(ListinoMaster).where(
+                    and_(
+                        ListinoMaster.fornitore_id == supplier_id,
+                        ListinoMaster.sku_interno == matched_sku,
+                        ListinoMaster.data_scadenza.is_(None)
+                    )
+                )
+                res_lm = await db.execute(stmt)
+                attivi = res_lm.scalars().all()
+                if attivi:
+                    corrente = attivi[0]
+                    if corrente.prezzo_pattuito == price_val and corrente.unita_misura == uom:
+                        price_outcome = "unchanged"
+                    else:
+                        price_outcome = "updated"
+                else:
+                    price_outcome = "created"
+
+            if price_outcome == "created":
                 prezzi_nuovi_creati += 1
-            elif outcome == "updated":
+            elif price_outcome == "updated":
                 prezzi_storicizzati += 1
                 prezzi_nuovi_creati += 1
-            elif outcome == "unchanged":
+            elif price_outcome == "unchanged":
                 prezzi_invariati += 1
             righe_importate += 1
 
-        # Genera preview dei primi 20 risultati
-        if len(preview) < 20:
-            preview_score = score
-            match_reason = None
-            if match_status == "auto_match":
-                if alias and alias.status == "approved":
-                    preview_score = 100.0
-                    match_reason = "existing_alias"
-                else:
-                    match_reason = "auto_score"
+        # Calcola eventuali warnings della riga
+        row_warnings = []
+        if price_val == 0:
+            row_warnings.append("Prezzo pari a zero")
+        if not supplier_code:
+            row_warnings.append("Codice fornitore mancante")
+        if pack_qty == 1:
+            row_warnings.append("Pack qty pari a 1 (confezione singola)")
+        if match_status == "parking":
+            if score >= 70.0 and best_product_id:
+                row_warnings.append("Match parziale (score 70-89), richiede verifica")
+            else:
+                row_warnings.append("Prodotto non riconosciuto (score < 70)")
+        if block_flag:
+            row_warnings.append("Matching bloccato per incompatibilità brand/volume/categoria")
 
-            preview.append({
-                "row_index": idx + header_idx + 2,
-                "raw_description": raw_desc,
-                "supplier_code": supplier_code,
-                "price": float(price_val),
-                "uom": uom,
-                "pack_qty": pack_qty,
-                "match_status": match_status,
-                "matched_sku": matched_sku,
-                "score": preview_score,
-                "match_reason": match_reason,
-                "price_outcome": price_outcome
-            })
+        # Genera preview dei risultati
+        preview_score = score
+        match_reason = None
+        if match_status == "auto_match":
+            if alias and alias.status == "approved":
+                preview_score = 100.0
+                match_reason = "existing_alias"
+            else:
+                match_reason = "auto_score"
 
-    await db.flush()
+        preview.append({
+            "row_index": idx + header_idx + 2,
+            "raw_description": raw_desc,
+            "supplier_code": supplier_code,
+            "normalized_description": normalized_description,
+            "price": float(price_val),
+            "uom": uom,
+            "pack_qty": pack_qty,
+            "volume_ml": volume_ml,
+            "category": category,
+            "matched_sku": matched_sku,
+            "score": preview_score,
+            "match_reason": match_reason,
+            "decision": match_status,
+            "match_status": match_status,
+            "warning": ", ".join(row_warnings) if row_warnings else None,
+            "price_outcome": price_outcome
+        })
+
+    if not dry_run:
+        await db.flush()
 
     return {
         "righe_totali_lette": totale_lette,
@@ -425,5 +475,6 @@ async def import_supplier_list_excel(
         "match_candidates_creati": candidati_creati,
         "righe_scartate": righe_scartate,
         "errori_parsing": errori_parsing[:50],
-        "preview": preview
+        "preview": preview,
+        "dry_run": dry_run
     }
