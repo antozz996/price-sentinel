@@ -141,7 +141,7 @@ def normalize_price_for_comparison(
 
         if vol_ml:
             uom_lower = (uom or "").lower()
-            is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
+            is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css", "piece", "pz", "fl", "bt"))
             if is_package_uom and pack_qty > 1:
                 prezzo_singolo = price / Decimal(str(pack_qty))
             else:
