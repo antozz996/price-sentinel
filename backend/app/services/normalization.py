@@ -251,12 +251,7 @@ def extract_candidate_attributes(text: str) -> dict:
             variant = v
             break
 
-    # Rileva la categoria (priorità monouso)
-    category = None
-    if any(x in normalized for x in ["bicchiere", "tovagliolo", "cannuccia", "posate", "piatto", "monouso", "tovaglia", "vaschetta"]):
-        category = "monouso"
-    elif any(x in normalized for x in ["acqua", "cola", "soda", "tonica", "aranciata", "succo", "gin", "vodka", "rum", "amaro", "birra", "vino"]):
-        category = "beverage"
+    category = infer_category(text)
 
     return {
         "brand": brand,

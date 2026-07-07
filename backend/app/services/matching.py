@@ -272,7 +272,7 @@ async def resolve_invoice_line_product(
 
             # Brand
             if p.brand:
-                if p.brand in norm_desc:
+                if p.brand.lower() in norm_desc:
                     score += 10
                     reason_dict["brand_match"] = True
                 else:
