@@ -68,6 +68,8 @@ export default function ProductIdentityManager() {
   const [importResult, setImportResult] = useState<any | null>(null)
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
+  const [importDryRun, setImportDryRun] = useState(true)
+  const [previewFilter, setPreviewFilter] = useState('all')
 
   // Search & Filters
   const [productSearch, setProductSearch] = useState('')
@@ -123,6 +125,14 @@ export default function ProductIdentityManager() {
     }
   }
 
+  useEffect(() => {
+    if (selectedProduct) {
+      fetchAliases(selectedProduct.id)
+    } else {
+      setAliases([])
+    }
+  }, [selectedProduct])
+
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!importSupplierId || !importFile) return
@@ -138,8 +148,8 @@ export default function ProductIdentityManager() {
       const headers = getHeaders()
       const fetchHeaders: any = { ...headers }
       delete fetchHeaders['Content-Type']
-      
-      const res = await fetch(`${API_BASE}/product-identity/import-supplier-list/${importSupplierId}`, {
+
+      const res = await fetch(`${API_BASE}/product-identity/import-supplier-list/${importSupplierId}?dry_run=${importDryRun}`, {
         method: 'POST',
         headers: fetchHeaders,
         body: formData
@@ -158,14 +168,6 @@ export default function ProductIdentityManager() {
       setImportLoading(false)
     }
   }
-
-  useEffect(() => {
-    if (selectedProduct) {
-      fetchAliases(selectedProduct.id)
-    } else {
-      setAliases([])
-    }
-  }, [selectedProduct])
 
   const fetchProducts = async () => {
     setLoading(true)
@@ -763,6 +765,19 @@ export default function ProductIdentityManager() {
                 />
               </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '4px 0' }}>
+                <input
+                  type="checkbox"
+                  id="importDryRunCheckbox"
+                  checked={importDryRun}
+                  onChange={e => setImportDryRun(e.target.checked)}
+                  style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)' }}
+                />
+                <label htmlFor="importDryRunCheckbox" style={{ fontSize: '0.85rem', color: 'white', fontWeight: 500, cursor: 'pointer' }}>
+                  Modalità prova / dry run (simulazione)
+                </label>
+              </div>
+
               <button
                 type="submit"
                 className="btn btn-primary"
@@ -771,10 +786,10 @@ export default function ProductIdentityManager() {
               >
                 {importLoading ? (
                   <>
-                    <RefreshCw className="animate-spin" size={18} /> Importazione in corso...
+                    <RefreshCw className="animate-spin" size={18} /> {importDryRun ? 'Simulazione in corso...' : 'Importazione in corso...'}
                   </>
                 ) : (
-                  'Avvia Importazione'
+                  importDryRun ? 'Simula Importazione (Dry Run)' : 'Avvia Importazione Reale'
                 )}
               </button>
               
@@ -789,6 +804,11 @@ export default function ProductIdentityManager() {
               {importResult ? (
                 <>
                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Risultato Elaborazione</h4>
+                  {importResult.is_dry_run && (
+                    <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '10px 14px', borderRadius: '8px', color: '#60a5fa', fontSize: '0.85rem', fontWeight: 500 }}>
+                      <strong>SIMULAZIONE ATTIVA:</strong> Nessun record è stato realmente modificato o creato nel database.
+                    </div>
+                  )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Righe Lette</span>
@@ -837,8 +857,117 @@ export default function ProductIdentityManager() {
           </div>
 
           {importResult?.preview?.length > 0 && (
-            <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Anteprima Importazione (Top 20)</h4>
+            <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Anteprima Importazione (Top 20)</h4>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('all')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'all' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'all' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Tutti
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('matched')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'matched' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'matched' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Matched (Auto)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('parking')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'parking' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'parking' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Parking Area
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('errors')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'errors' ? 'var(--status-red)' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'errors' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Errori/Avvisi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('low_score')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'low_score' ? '#ff9900' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'low_score' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Score Basso (&lt;70%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('no_price')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'no_price' ? '#9d4edd' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'no_price' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Senza Prezzo (€0)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('no_pack')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'no_pack' ? '#06d6a0' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'no_pack' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Senza Pack (x1)
+                  </button>
+                </div>
+              </div>
               <div style={{ overflowX: 'auto', border: '1px solid var(--border-glass)', borderRadius: '8px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
@@ -853,7 +982,17 @@ export default function ProductIdentityManager() {
                     </tr>
                   </thead>
                   <tbody>
-                    {importResult.preview.map((p: any, idx: number) => (
+                    {importResult.preview
+                      .filter((p: any) => {
+                        if (previewFilter === 'matched') return p.match_status === 'auto_match';
+                        if (previewFilter === 'parking') return p.match_status !== 'auto_match';
+                        if (previewFilter === 'errors') return p.warning && p.warning.length > 0;
+                        if (previewFilter === 'low_score') return p.score < 70;
+                        if (previewFilter === 'no_price') return p.price === 0 || !p.price;
+                        if (previewFilter === 'no_pack') return p.pack_qty === null || p.pack_qty === undefined || p.pack_qty === 1;
+                        return true;
+                      })
+                      .map((p: any, idx: number) => (
                       <tr key={idx} style={{ borderBottom: '1px solid var(--border-glass)' }}>
                         <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>{p.row_index}</td>
                         <td style={{ padding: '10px' }}><code>{p.supplier_code || '-'}</code></td>

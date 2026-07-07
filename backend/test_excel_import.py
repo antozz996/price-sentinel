@@ -12,7 +12,7 @@ from app.services.order_resolver import resolve_order_item
 
 async def run_import_test():
     print("=" * 60)
-    print("🧪 PRICE SENTINEL — Excel Listino Import Verification")
+    print("🧪 PRICE SENTINEL — Excel Listino Import Verification (Fase 3)")
     print("=" * 60)
 
     # 1. Carica il file Excel di test
@@ -47,9 +47,48 @@ async def run_import_test():
         ))
         await db.commit()
 
-        # Esegui primo import
-        print("\n[Passo 1] Esecuzione primo import Excel per Eurocarta (ID 10)...")
-        res = await import_supplier_list_excel(db=db, supplier_id=10, file_bytes=file_bytes)
+        # [Passo 0] Esecuzione import Excel in modalità DRY_RUN
+        print("\n[Passo 0] Esecuzione import Excel in modalità DRY_RUN (dry_run=True)...")
+        res_dry = await import_supplier_list_excel(db=db, supplier_id=10, file_bytes=file_bytes, dry_run=True)
+        
+        print(f"  [DRY] Righe lette: {res_dry['righe_totali_lette']}")
+        print(f"  [DRY] Righe importate (Auto-Match previste): {res_dry['righe_importate']}")
+        print(f"  [DRY] Alias approvati creati previsti: {res_dry['alias_approvati_creati']}")
+        print(f"  [DRY] Match candidates creati previsti: {res_dry['match_candidates_creati']}")
+        print(f"  [DRY] Preview length: {len(res_dry['preview'])}")
+
+        # Verifiche statistiche dry_run
+        assert res_dry["righe_totali_lette"] == 5
+        assert res_dry["righe_importate"] == 1
+        assert res_dry["match_candidates_creati"] == 4
+        assert res_dry["dry_run"] is True
+
+        # Verifica campi preview richiesti
+        preview_row = res_dry["preview"][0]
+        required_keys = [
+            "raw_description", "supplier_code", "normalized_description", 
+            "price", "uom", "pack_qty", "volume_ml", "category", 
+            "matched_sku", "score", "match_reason", "decision", "warning"
+        ]
+        for key in required_keys:
+            assert key in preview_row, f"Chiave preview mancante nel dry run: {key}"
+        print("  ✅ Tutti i campi richiesti sono presenti nell'anteprima del dry run!")
+
+        # Verifica che il DB sia rimasto pulito
+        cand_db_count = (await db.execute(select(MatchCandidate).where(MatchCandidate.supplier_id == 10))).scalars().all()
+        alias_db_count = (await db.execute(select(SupplierProductAlias).where(SupplierProductAlias.supplier_id == 10))).scalars().all()
+        
+        # Filtriamo solo quelli che abbiamo pulito prima (per evitare di contare i dati seed originari del db)
+        cand_db_clean = [c for c in cand_db_count if c.source_type == "price_list_row"]
+        alias_db_clean = [a for a in alias_db_count if a.raw_description in ["BICCHIERE ACQUA 200ML BIANCO", "Tovagliolo monouso 40x40 pz50"]]
+        
+        assert len(cand_db_clean) == 0, f"Errore: Trovati {len(cand_db_clean)} candidati nel DB durante dry_run!"
+        assert len(alias_db_clean) == 0, f"Errore: Trovati {len(alias_db_clean)} alias nel DB durante dry_run!"
+        print("  ✅ Modalità DRY_RUN non ha scritto nulla a DB ed ha restituito statistiche corrette!")
+
+        # [Passo 1] Esecuzione import Excel reale (dry_run=False)
+        print("\n[Passo 1] Esecuzione import reale (dry_run=False) per Eurocarta (ID 10)...")
+        res = await import_supplier_list_excel(db=db, supplier_id=10, file_bytes=file_bytes, dry_run=False)
         
         print(f"  Righe lette: {res['righe_totali_lette']}")
         print(f"  Righe importate (Auto-Match): {res['righe_importate']}")
@@ -59,12 +98,13 @@ async def run_import_test():
         print(f"  Match candidates creati: {res['match_candidates_creati']}")
         print(f"  Errori di parsing: {len(res['errori_parsing'])}")
 
-        # Assertions primo import
+        # Assertions primo import reale
         assert res["righe_totali_lette"] == 5, f"Lette {res['righe_totali_lette']} invece di 5"
         assert res["righe_importate"] == 1, f"Matched {res['righe_importate']} invece di 1"
         assert res["match_candidates_creati"] == 4, f"Candidati {res['match_candidates_creati']} invece di 4"
         assert (res["prezzi_nuovi_creati"] + res["prezzi_invariati"]) == 1, f"Prezzi {res['prezzi_nuovi_creati'] + res['prezzi_invariati']} invece di 1"
-        print("  ✅ Primo import superato con successo!")
+        assert res["dry_run"] is False
+        print("  ✅ Primo import reale superato con successo!")
 
         # 2. Verifica candidati in Parking Area (con score 70-89 e < 70)
         print("\n[Passo 2] Verifica Match Candidates e score 70-89...")
@@ -157,8 +197,8 @@ async def run_import_test():
         print("  ✅ Approvazione manuale verificata con successo!")
 
         # 4. Verifica Idempotenza
-        print("\n[Passo 4] Esecuzione secondo import dello stesso file (Idempotenza)...")
-        res2 = await import_supplier_list_excel(db=db, supplier_id=10, file_bytes=file_bytes)
+        print("\n[Passo 4] Esecuzione secondo import reale dello stesso file (Idempotenza)...")
+        res2 = await import_supplier_list_excel(db=db, supplier_id=10, file_bytes=file_bytes, dry_run=False)
         
         print(f"  Righe lette: {res2['righe_totali_lette']}")
         print(f"  Righe importate: {res2['righe_importate']}")
@@ -189,7 +229,7 @@ async def run_import_test():
         assert Decimal(best["price_per_pack"]) == Decimal("3.2000"), f"Prezzo errato: {best['price_per_pack']}"
         print("  ✅ Risoluzione ordine post-import superata!")
 
-    print("\n🎉 TUTTI I TEST DI IMPORTAZIONE EXCEL E IDEMPOTENZA SONO STATI SUPERATI CON SUCCESSO!")
+    print("\n🎉 TUTTI I TEST DI IMPORTAZIONE EXCEL, DRY_RUN E IDEMPOTENZA SONO STATI SUPERATI CON SUCCESSO!")
     print("=" * 60)
 
 

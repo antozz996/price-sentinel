@@ -425,25 +425,23 @@ async def reject_candidate(
     candidate.status = "rejected"
     candidate.resolved_at = datetime.utcnow()
     await db.flush()
-
     return {"message": "Proposta di matching rifiutata"}
 
 @router.post("/product-identity/import-supplier-list/{supplier_id}", summary="Importa un listino prezzi concordato da un file Excel")
 async def import_supplier_list(
     supplier_id: int,
     file: UploadFile = File(...),
+    dry_run: bool = Query(True, description="Esegue l'importazione in modalità dry run (simulazione)"),
     db: AsyncSession = Depends(get_db),
     _admin: Utente = Depends(require_admin)
 ):
     file_bytes = await file.read()
     from app.services.supplier_list_import import import_supplier_list_excel
-    res = await import_supplier_list_excel(db=db, supplier_id=supplier_id, file_bytes=file_bytes)
+    res = await import_supplier_list_excel(db=db, supplier_id=supplier_id, file_bytes=file_bytes, dry_run=dry_run)
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
     return res
 
-# ──────────────────────────────────────────────────────────────────────
-# Endpoints: Orders & Optimization
 # ──────────────────────────────────────────────────────────────────────
 
 @router.post("/orders/resolve-item", summary="Risolve un singolo articolo preventivo trovando il fornitore migliore")
