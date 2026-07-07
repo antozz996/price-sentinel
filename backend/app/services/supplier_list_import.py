@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.models.listino import ListinoMaster
-from app.services.normalization import normalize_text, extract_volume_ml, infer_category
+from app.services.normalization import normalize_text, extract_volume_ml, infer_category, extract_pack_qty, extract_weight_g
 from app.services.matching import resolve_invoice_line_product
 
 
@@ -228,16 +228,13 @@ async def import_supplier_list_excel(
         # Normalizzazioni descrizioni ed estrazioni fisiche
         normalized_description = normalize_text(raw_desc)
         volume_ml = extract_volume_ml(raw_desc)
-        weight_g = None  # Estrazione peso g se presente
+        weight_g = extract_weight_g(raw_desc)
         category = infer_category(raw_desc)
         container_type = None
 
         # Se pack_qty non è specificato in colonna, prova ad estrarlo
         if not pack_qty:
-            if "x" in normalized_description:
-                m_conf = re.search(r'x\s*(\d+)', normalized_description)
-                if m_conf:
-                    pack_qty = int(m_conf.group(1))
+            pack_qty = extract_pack_qty(raw_desc)
             if not pack_qty:
                 pack_qty = 1
 
