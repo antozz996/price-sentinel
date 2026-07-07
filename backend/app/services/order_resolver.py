@@ -197,7 +197,7 @@ async def resolve_order_item(
         norm_res = normalize_price_for_comparison(
             price_or_line=price_val,
             quantity_or_product=Decimal("1"),
-            invoice_uom=prod.comparison_unit,
+            invoice_uom=listino.unita_misura if listino else prod.comparison_unit,
             product=prod,
             alias=alias
         )
