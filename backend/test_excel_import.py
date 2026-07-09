@@ -165,6 +165,7 @@ async def run_import_test():
         price_val = cand_70_89.reason_json.get("price")
         uom_val = cand_70_89.reason_json.get("uom") or prod_obj.comparison_unit or "piece"
         
+        await db.flush()
         await save_append_only_price(
             db=db,
             fornitore_id=10,
@@ -172,7 +173,8 @@ async def run_import_test():
             descrizione=cand_70_89.raw_description,
             prezzo_pattuito=Decimal(str(price_val)),
             unita_misura=uom_val,
-            data_inizio=date.today()
+            data_inizio=date.today(),
+            supplier_product_alias_id=new_alias.id
         )
         
         # C. Aggiorna stato del candidato

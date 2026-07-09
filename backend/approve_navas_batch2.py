@@ -130,6 +130,7 @@ async def run_approval():
                 aliases_created += 1
                 
                 # 2. Crea/Aggiorna prezzo in ListinoMaster (usa il prezzo della confezione letto da Excel)
+                await db.flush()
                 outcome = await save_append_only_price(
                     db=db,
                     fornitore_id=supplier_id,
@@ -137,7 +138,8 @@ async def run_approval():
                     descrizione=row["raw_desc"],
                     prezzo_pattuito=Decimal(str(row["price"])),
                     unita_misura=reason.get("uom", "piece"),
-                    data_inizio=today
+                    data_inizio=today,
+                    supplier_product_alias_id=alias.id
                 )
                 if outcome in ("created", "updated"):
                     prices_created += 1

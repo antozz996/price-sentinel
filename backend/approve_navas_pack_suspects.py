@@ -136,6 +136,7 @@ async def run_operation(mode: str):
                     aliases_created += 1
                     
                     # 2. Salva in ListinoMaster
+                    await db.flush()
                     outcome = await save_append_only_price(
                         db=db,
                         fornitore_id=supplier_id,
@@ -143,7 +144,8 @@ async def run_operation(mode: str):
                         descrizione=config["desc"],
                         prezzo_pattuito=config["price"],
                         unita_misura=config["uom"],
-                        data_inizio=today
+                        data_inizio=today,
+                        supplier_product_alias_id=alias.id
                     )
                     if outcome in ("created", "updated"):
                         prices_created += 1

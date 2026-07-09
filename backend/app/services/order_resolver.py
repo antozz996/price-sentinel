@@ -5,7 +5,7 @@ from difflib import SequenceMatcher
 import math
 import json
 
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -145,18 +145,29 @@ async def resolve_order_item(
         prod = alias.product
         supplier = alias.supplier
 
-        # Cerca prezzo contrattuale attivo
+        # Cerca prezzo contrattuale attivo (specifico per alias o generico per SKU)
         listino_stmt = select(ListinoMaster).where(
             and_(
                 ListinoMaster.fornitore_id == alias.supplier_id,
                 ListinoMaster.sku_interno == prod.sku_interno,
+                or_(
+                    ListinoMaster.supplier_product_alias_id == alias.id,
+                    ListinoMaster.supplier_product_alias_id.is_(None)
+                ),
                 ListinoMaster.data_inizio_validita <= today,
                 or_(
                     ListinoMaster.data_scadenza.is_(None),
                     ListinoMaster.data_scadenza >= today
                 )
             )
-        ).order_by(ListinoMaster.data_inizio_validita.desc()).limit(1)
+        ).order_by(
+            case(
+                (ListinoMaster.supplier_product_alias_id == alias.id, 1),
+                else_=0
+            ).desc(),
+            ListinoMaster.data_inizio_validita.desc(),
+            ListinoMaster.id.desc()
+        ).limit(1)
 
         listino_res = await db.execute(listino_stmt)
         listino = listino_res.scalar_one_or_none()

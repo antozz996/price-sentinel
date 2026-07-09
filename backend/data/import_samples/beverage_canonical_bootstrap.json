@@ -1,0 +1,784 @@
+{
+  "proposals": [
+    {
+      "sku_interno": "ACQ-ELECTA-50CL",
+      "canonical_name": "Acqua Electa 50 cl",
+      "brand": "Electa",
+      "category": "acqua",
+      "volume_ml": 500,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Electa formato 50 cl (copre 2 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 67: ACQUA ELECTA 50 CL X 24 PET (Codice: NAVAS_ELECTA3)",
+        "Riga 69: ACQUA ELECTA 50 CL X 20 VAR BIANCA (Codice: NAVAS_ELECTA5)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-ELECTA-75CL",
+      "canonical_name": "Acqua Electa 75 cl",
+      "brand": "Electa",
+      "category": "acqua",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Electa formato 75 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 68: ACQUA ELECTA VERDE 75 CL X 12 VAR (Codice: NAVAS_ELECTA4)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-ELECTA-100CL",
+      "canonical_name": "Acqua Electa 100 cl",
+      "brand": "Electa",
+      "category": "acqua",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Electa formato 100 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 66: ACQUA ELECTA 1 LT PET X 12 (Codice: NAVAS_ELECTA2)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-FERRARELLE-50CL",
+      "canonical_name": "Acqua Ferrarelle 50 cl",
+      "brand": "Ferrarelle",
+      "category": "acqua",
+      "volume_ml": 500,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Ferrarelle formato 50 cl (copre 3 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 12: ACQUA FERRARELLE 0,50 X 24 BT PET (Codice: NAVAS_ACQU002)",
+        "Riga 16: ACQUA FERRARELLE 0.50 X20 VAR (Codice: NAVAS_ACQUA003)",
+        "Riga 17: ACQUA FERRARELLE 0.50 X20 VAR BIANCA (Codice: NAVAS_ACQUA003_1)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-FERRARELLE-75CL",
+      "canonical_name": "Acqua Ferrarelle 75 cl",
+      "brand": "Ferrarelle",
+      "category": "acqua",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Ferrarelle formato 75 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 15: ACQUA FERRARELLE 0.75 VR VETRO (Codice: NAVAS_ACQUA002)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-FERRARELLE-100CL",
+      "canonical_name": "Acqua Ferrarelle 100 cl",
+      "brand": "Ferrarelle",
+      "category": "acqua",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Ferrarelle formato 100 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 18: FERRARELLE PET 1LT X 12 BT (Codice: NAVAS_ACQUA066)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-LETE-1CL",
+      "canonical_name": "Acqua Lete 1 cl",
+      "brand": "Lete",
+      "category": "acqua",
+      "volume_ml": 15,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Lete formato 1 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 14: ACQUA LETE 1,50 CL X 6 BT (Codice: NAVAS_ACQU015)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-SAN_BENEDETTO-150CL",
+      "canonical_name": "Acqua San Benedetto 150 cl",
+      "brand": "San Benedetto",
+      "category": "acqua",
+      "volume_ml": 1500,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard San Benedetto formato 150 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 50: CEDRATA SAN BENEDETTO 1,5 LT (Codice: NAVAS_CEDR8621)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-SORGESANA-200CL",
+      "canonical_name": "Acqua Sorgesana 200 cl",
+      "brand": "Sorgesana",
+      "category": "acqua",
+      "volume_ml": 2000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Sorgesana formato 200 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 19: ACQUA SORGESANA 2 LT X 6 (Codice: NAVAS_ACQUA073)"
+      ]
+    },
+    {
+      "sku_interno": "ACQ-VERA-200CL",
+      "canonical_name": "Acqua Vera 200 cl",
+      "brand": "Vera",
+      "category": "acqua",
+      "volume_ml": 2000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Vera formato 200 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 13: ACQUA VERA 2LT (Codice: NAVAS_ACQU013)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-ABSOLUT-70CL",
+      "canonical_name": "Absolut 70 cl",
+      "brand": "Absolut",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Absolut formato 70 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 163: VODKA ABSOLUT 70 CL (Codice: NAVAS_VOD028)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-ABSOLUT-100CL",
+      "canonical_name": "Absolut 100 cl",
+      "brand": "Absolut",
+      "category": "beverage",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Absolut formato 100 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 162: VODKA ABSOLUT 1 LT (Codice: NAVAS_VOD025)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-APEROL-100CL",
+      "canonical_name": "Aperol 100 cl",
+      "brand": "Aperol",
+      "category": "beverage",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Aperol formato 100 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 25: APEROL  1LITRO  BT (Codice: NAVAS_APER004)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-BELLAVISTA-75CL",
+      "canonical_name": "Bellavista 75 cl",
+      "brand": "Bellavista",
+      "category": "beverage",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Bellavista formato 75 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 30: BELLAVISTA ALMA ASSEMBLAGE 1 FRANCIACORTA DA 75 CL (Codice: NAVAS_BELLASSE1)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-BELVEDERE-70CL",
+      "canonical_name": "Belvedere 70 cl",
+      "brand": "Belvedere",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Belvedere formato 70 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 170: VODKA BELVEDERE 70 CL (Codice: NAVAS_VODKA025)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-BERLUCCHI-75CL",
+      "canonical_name": "Berlucchi 75 cl",
+      "brand": "Berlucchi",
+      "category": "beverage",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Berlucchi formato 75 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 31: BERLUCCHI 61 FRANCIACORTA EXTRA BRUT 75 CL (Codice: NAVAS_BERL025)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-CAMPARI-9CL",
+      "canonical_name": "Campari 9 cl",
+      "brand": "Campari",
+      "category": "beverage",
+      "volume_ml": 98,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Campari formato 9 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 48: CAMPARI SODA VP 9,8 CL (Codice: NAVAS_CAMP001)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-DISARONNO-100CL",
+      "canonical_name": "Disaronno 100 cl",
+      "brand": "Disaronno",
+      "category": "beverage",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Disaronno formato 100 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 64: DISARONNO 1 LT (Codice: NAVAS_DIS02)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-FERRARI-75CL",
+      "canonical_name": "Ferrari 75 cl",
+      "brand": "Ferrari",
+      "category": "beverage",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Ferrari formato 75 cl (copre 2 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 74: FERRARI MAXIMUM 75 CL (Codice: NAVAS_FERR01)",
+        "Riga 75: FERRARI BRUT 75 CL (Codice: NAVAS_FERR987)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-FEUDI_DI_SAN_GREGORIO-75CL",
+      "canonical_name": "Feudi di San Gregorio 75 cl",
+      "brand": "Feudi di San Gregorio",
+      "category": "beverage",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Feudi di San Gregorio formato 75 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 76: VINO FEUDI AGLIANICO RUBRATO IRPINIA 75 CL (Codice: NAVAS_FEUDI01)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-GIN_MARE-70CL",
+      "canonical_name": "Gin Mare 70 cl",
+      "brand": "Gin Mare",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Gin Mare formato 70 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 91: GIN MARE 70 CL (Codice: NAVAS_GIN11)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-GRAPPA_903-70CL",
+      "canonical_name": "Grappa 903 70 cl",
+      "brand": "Grappa 903",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Grappa 903 formato 70 cl (copre 2 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 94: GRAPPA 903 BIANCA 70 CL (Codice: NAVAS_GRAPP0002)",
+        "Riga 96: GRAPPA 903 BARRIQUE 70 CL (Codice: NAVAS_GRAPP01)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-GREY_GOOSE-70CL",
+      "canonical_name": "Grey Goose 70 cl",
+      "brand": "Grey Goose",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Grey Goose formato 70 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 161: VODKA GREY GOOSE 70 CL (Codice: NAVAS_VOD0035)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-HENDRICKS-70CL",
+      "canonical_name": "Hendrick's 70 cl",
+      "brand": "Hendrick's",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Hendrick's formato 70 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 85: GIN HENDRICK' S CL 70 (Codice: NAVAS_GIN002)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-JACK_DANIELS-100CL",
+      "canonical_name": "Jack Daniel's 100 cl",
+      "brand": "Jack Daniel's",
+      "category": "beverage",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Jack Daniel's formato 100 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 174: JACK DANIEL' S CL 100 (Codice: NAVAS_WHISKI1)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-JERMANN-75CL",
+      "canonical_name": "Jermann 75 cl",
+      "brand": "Jermann",
+      "category": "beverage",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Jermann formato 75 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 159: VINO CHARDONNAY JERMANN 75 CL (Codice: NAVAS_VINO095)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-LIMONCELLO-200CL",
+      "canonical_name": "Limoncello 200 cl",
+      "brand": "Limoncello",
+      "category": "beverage",
+      "volume_ml": 2000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Limoncello formato 200 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 101: LIMONCELLO 200 CL (Codice: NAVAS_LIM010)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-MARISA_CUOMO-75CL",
+      "canonical_name": "Marisa Cuomo 75 cl",
+      "brand": "Marisa Cuomo",
+      "category": "beverage",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Marisa Cuomo formato 75 cl (copre 2 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 81: FURORE BIANCO COSTA D'AMALFI 75 CL MARISA CUOMO (Codice: NAVAS_FURORE1)",
+        "Riga 82: FIORDUVA FURORE BIANCO COSTA D'AMALFI 75 CL MARISA CUOMO (Codice: NAVAS_FURORE3)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-TANQUERAY-70CL",
+      "canonical_name": "Tanqueray 70 cl",
+      "brand": "Tanqueray",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Tanqueray formato 70 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 86: GIN TANQUERAY TEN 70 CL (Codice: NAVAS_GIN0020)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-TANQUERAY-100CL",
+      "canonical_name": "Tanqueray 100 cl",
+      "brand": "Tanqueray",
+      "category": "beverage",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Tanqueray formato 100 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 87: GIN TANQUERAY TEN 1 LT (Codice: NAVAS_GIN0021)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-TERRA_SERENA-75CL",
+      "canonical_name": "Terra Serena 75 cl",
+      "brand": "Terra Serena",
+      "category": "beverage",
+      "volume_ml": 750,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Terra Serena formato 75 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 125: GRAN CUVE' TERRA SERENA MILLESIMATO EXTRA DRY 75 CL X 6 (Codice: NAVAS_PROS4)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-YOGA-100CL",
+      "canonical_name": "Yoga 100 cl",
+      "brand": "Yoga",
+      "category": "beverage",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Yoga formato 100 cl (copre 4 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 184: YOGA ACE 1 LT PET X 6 (Codice: NAVAS_YOGA035)",
+        "Riga 185: YOGA ARA.ROSSA 1 LT PET X 6 (Codice: NAVAS_YOGA036)",
+        "Riga 186: YOGA ARANCIA PET 1 LT (Codice: NAVAS_YOGA040)",
+        "Riga 187: YOGA ANANAS PET 1 LT (Codice: NAVAS_YOGA041)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-ZACAPA-70CL",
+      "canonical_name": "Zacapa 70 cl",
+      "brand": "Zacapa",
+      "category": "beverage",
+      "volume_ml": 700,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "bottle",
+      "is_commodity": false,
+      "motivazione": "Referenza standard Zacapa formato 70 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 130: RUM ZACAPA 23 DA 70 CL (Codice: NAVAS_RUM002)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-COCA_COLA-33CL",
+      "canonical_name": "Coca Cola 33 cl",
+      "brand": "Coca Cola",
+      "category": "soft_drink",
+      "volume_ml": 330,
+      "weight_g": null,
+      "container_type": "lattina",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Coca Cola formato 33 cl (copre 3 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 54: COCA COLA 0.33 X 24 VAP VETRO (Codice: NAVAS_COC01)",
+        "Riga 55: COCA COLA ZERO 0.33 X 24 VAP VETRO (Codice: NAVAS_COC02)",
+        "Riga 60: COCA COLA ZERO CAFFEINA LATTINA 33 CL X 24 (Codice: NAVAS_COCZEZE32)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-COCA_COLA-150CL",
+      "canonical_name": "Coca Cola 150 cl",
+      "brand": "Coca Cola",
+      "category": "soft_drink",
+      "volume_ml": 1500,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Coca Cola formato 150 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 58: COCA COLA ZERO PET 1,5 LT X 6 BT (Codice: NAVAS_COCA031)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-COCA_COLA-200CL",
+      "canonical_name": "Coca Cola 200 cl",
+      "brand": "Coca Cola",
+      "category": "soft_drink",
+      "volume_ml": 2000,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Coca Cola formato 200 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 56: COCA COLA  PET 2 LT X 6 BT (Codice: NAVAS_COCA001)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-CRODINO-17CL",
+      "canonical_name": "Crodino 17 cl",
+      "brand": "Crodino",
+      "category": "soft_drink",
+      "volume_ml": 175,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Crodino formato 17 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 62: CRODINO XL ROSSO DA 175 ML X 24 BT (Codice: NAVAS_CRODXL992)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-FANTA-33CL",
+      "canonical_name": "Fanta 33 cl",
+      "brand": "Fanta",
+      "category": "soft_drink",
+      "volume_ml": 330,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Fanta formato 33 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 73: FANTA 0.33 X 24 VAP VETRO (Codice: NAVAS_FANTA01)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-FEVER_TREE-20CL",
+      "canonical_name": "Fever Tree 20 cl",
+      "brand": "Fever Tree",
+      "category": "soft_drink",
+      "volume_ml": 200,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Fever Tree formato 20 cl (copre 3 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 77: FEVER-TREE EDERFLOWER TONIC WATER 200 ML (Codice: NAVAS_FEVER0025)",
+        "Riga 78: FEVER-TREE TONIC 200  ML INDIAN (Codice: NAVAS_FEVER2)",
+        "Riga 80: FEVER-TREE PINK GRAPEFRUIT 20 CL (Codice: NAVAS_FEVER5)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-RED_BULL-25CL",
+      "canonical_name": "Red Bull 25 cl",
+      "brand": "Red Bull",
+      "category": "soft_drink",
+      "volume_ml": 250,
+      "weight_g": null,
+      "container_type": "lattina",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Red Bull formato 25 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 126: RED BULL 0,25 X24 LATT (Codice: NAVAS_RED0012)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-SAN_PELLEGRINO-20CL",
+      "canonical_name": "San Pellegrino 20 cl",
+      "brand": "San Pellegrino",
+      "category": "soft_drink",
+      "volume_ml": 200,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard San Pellegrino formato 20 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 142: S. PELLEGRINO COCKTAIL BIANCO 20 CL 24 VAP (Codice: NAVAS_SPEL013)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-SCHWEPPES-18CL",
+      "canonical_name": "Schweppes 18 cl",
+      "brand": "Schweppes",
+      "category": "soft_drink",
+      "volume_ml": 180,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Schweppes formato 18 cl (copre 3 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 136: SCHWEPPES ARANCIA 18 CL X 24 VAP VETRO (Codice: NAVAS_SCHW014)",
+        "Riga 137: SCHWEPPES LIMONE 18 CL VAP X 24 VETRO (Codice: NAVAS_SCHW015)",
+        "Riga 138: SCHWEPPES TONICA 18 CL VAP X 24 VETRO (Codice: NAVAS_SCHW016)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-SCHWEPPES-100CL",
+      "canonical_name": "Schweppes 100 cl",
+      "brand": "Schweppes",
+      "category": "soft_drink",
+      "volume_ml": 1000,
+      "weight_g": null,
+      "container_type": "pet",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Schweppes formato 100 cl (copre 3 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 135: SCHWEPPES POMPELMO ROSA 1 LITRO X 6 (Codice: NAVAS_SCHPOM22)",
+        "Riga 139: SCHWEPPES TONICA 1 LITRO PET X 6 (Codice: NAVAS_SCHWEP02)",
+        "Riga 140: SCHWEPPES LIMONE 1 LT PET X 6 (Codice: NAVAS_SCHWEPP)"
+      ]
+    },
+    {
+      "sku_interno": "BEV-THOMAS_HENRY-20CL",
+      "canonical_name": "Thomas Henry 20 cl",
+      "brand": "Thomas Henry",
+      "category": "soft_drink",
+      "volume_ml": 200,
+      "weight_g": null,
+      "container_type": "vetro",
+      "comparison_unit": "liter",
+      "is_commodity": true,
+      "motivazione": "Referenza standard Thomas Henry formato 20 cl (copre 1 righe nel listino Navas)",
+      "esempi_righe_navas": [
+        "Riga 6: THOMAS H.PINK POMPELMO 20 CL (Codice: NAVAS_4242THOMPINK_POMP)"
+      ]
+    }
+  ],
+  "excluded_count": 123,
+  "excluded_samples": [
+    [
+      7,
+      "ABACA STRAWBERRY 75 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      8,
+      "ABACA SWEET & SOUR 75 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      9,
+      "ABACA COCONUT 75 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      10,
+      "ABACA ELDER FLOWER 75 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      11,
+      "ABACA PASSION FRUIT 75 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      20,
+      "AMARO AMARA 70 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      21,
+      "AMARO 2 LT",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      22,
+      "AMARO AMARA ARANCIA DI SICILIA 30\u00b0 50 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      23,
+      "AMARO DEL CAPO CL 70",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      24,
+      "AMARO JEFFERSON CL 70",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      26,
+      "BACARDI CARTA BLANCA 1 LT",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      27,
+      "BACARDI ORO 100 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      28,
+      "BAILEYS CREAM 100 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      29,
+      "GIN BEEFEATER BLACK 70 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      32,
+      "BIRRA CERES 33 CL X 24 BT",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      33,
+      "BIRRA CORONA 33 CL X 24 BT",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      34,
+      "BIRRA HEINEKEN 0.33 CL X 24 BT",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      35,
+      "BIRRA NASTRO AZZ. 0.33 CL X 24 BT",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      36,
+      "BIRRA PERONI  033X 24 BT",
+      "Nessuna delle famiglie prioritare individuate"
+    ],
+    [
+      37,
+      "BIRRA TENNENT'S 33 CL",
+      "Nessuna delle famiglie prioritare individuate"
+    ]
+  ]
+}
