@@ -1,0 +1,410 @@
+{
+  "righe_totali": 184,
+  "righe_con_prezzo": 183,
+  "righe_senza_prezzo": 1,
+  "righe_senza_codice": 0,
+  "righe_senza_pack": 118,
+  "righe_con_volume_peso": 142,
+  "auto_match": 3,
+  "parking_70_89": 32,
+  "parking_under_70": 148,
+  "cat_counts": {
+    "acqua": 11,
+    "beverage": 55,
+    "soft_drink": 20
+  },
+  "top_30_low_score": [
+    {
+      "row_index": 123,
+      "raw_description": "PREMIO ANNO 2025",
+      "score": 27.1,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 143,
+      "raw_description": "Spese di segreteria",
+      "score": 28.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 124,
+      "raw_description": "PREMIO FINE ANNO 2025",
+      "score": 28.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 99,
+      "raw_description": "LEMONSODA 200 X 24 VAP",
+      "score": 29.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 114,
+      "raw_description": "POWERADE  ARANCIO ROSSO 500 ML X12",
+      "score": 29.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 71,
+      "raw_description": "ESTATHE'  PESCA LATTINA 033X24",
+      "score": 30.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 70,
+      "raw_description": "ESTATHE'  LATTINA LIMONE 033X24",
+      "score": 31.099999999999998,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 100,
+      "raw_description": "LEMONSODA LATT SLEEK 033X24",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 119,
+      "raw_description": "POWERADE CITRUS 500 ML X 12",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 121,
+      "raw_description": "POWERADE ORANGE 500 ML X 12",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 122,
+      "raw_description": "POWERADE ACTIVE 500 ML X 12",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 106,
+      "raw_description": "CREMA MELONE 2 LITRI",
+      "score": 32.5,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 36,
+      "raw_description": "BIRRA PERONI  033X 24 BT",
+      "score": 33.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 120,
+      "raw_description": "POWERADE MOUNTAIN BLAST' PET 500 ML X12",
+      "score": 34.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 52,
+      "raw_description": "RUINART BLANC DE BLANC AST",
+      "score": 35.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 34,
+      "raw_description": "BIRRA HEINEKEN 0.33 CL X 24 BT",
+      "score": 35.25,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 35,
+      "raw_description": "BIRRA NASTRO AZZ. 0.33 CL X 24 BT",
+      "score": 35.25,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 134,
+      "raw_description": "S. PELLEGRINO COCKTAIL ROSSO X 24 BT",
+      "score": 35.550000000000004,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 183,
+      "raw_description": "YOGA MAGIC  POMPELMO 200X24",
+      "score": 36.099999999999994,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 79,
+      "raw_description": "FEVER-TREE MEDITERRANEAN TONIC WATER 200",
+      "score": 36.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 40,
+      "raw_description": "S.PELLEGRINO BITTER BIANCO X 40",
+      "score": 36.9,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 41,
+      "raw_description": "S.PELLEGRINO BITTER ROSSO X 40",
+      "score": 36.9,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 176,
+      "raw_description": "YOGA MAGIC ALB. 200X24",
+      "score": 37.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 178,
+      "raw_description": "YOGA MAGIC ARANCIO 200X24",
+      "score": 37.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 179,
+      "raw_description": "YOGA MAGIC ARAN/ROSSO 200X24",
+      "score": 37.45,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 95,
+      "raw_description": "GRAPPA VIGNA ORO SCURA 40% CL 1,50",
+      "score": 38.35,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 32,
+      "raw_description": "BIRRA CERES 33 CL X 24 BT",
+      "score": 38.400000000000006,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 110,
+      "raw_description": "MOET BLU RESERVE IMPERIAL AST CL75",
+      "score": 38.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 33,
+      "raw_description": "BIRRA CORONA 33 CL X 24 BT",
+      "score": 39.3,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    },
+    {
+      "row_index": 175,
+      "raw_description": "YOGA MAGIC ACE 200X24",
+      "score": 41.05,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria",
+      "decision": "parking"
+    }
+  ],
+  "top_30_warning": [
+    {
+      "row_index": 123,
+      "raw_description": "PREMIO ANNO 2025",
+      "score": 27.1,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 143,
+      "raw_description": "Spese di segreteria",
+      "score": 28.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 124,
+      "raw_description": "PREMIO FINE ANNO 2025",
+      "score": 28.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 99,
+      "raw_description": "LEMONSODA 200 X 24 VAP",
+      "score": 29.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 114,
+      "raw_description": "POWERADE  ARANCIO ROSSO 500 ML X12",
+      "score": 29.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 71,
+      "raw_description": "ESTATHE'  PESCA LATTINA 033X24",
+      "score": 30.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 70,
+      "raw_description": "ESTATHE'  LATTINA LIMONE 033X24",
+      "score": 31.099999999999998,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 100,
+      "raw_description": "LEMONSODA LATT SLEEK 033X24",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 119,
+      "raw_description": "POWERADE CITRUS 500 ML X 12",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 121,
+      "raw_description": "POWERADE ORANGE 500 ML X 12",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 122,
+      "raw_description": "POWERADE ACTIVE 500 ML X 12",
+      "score": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 106,
+      "raw_description": "CREMA MELONE 2 LITRI",
+      "score": 32.5,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 36,
+      "raw_description": "BIRRA PERONI  033X 24 BT",
+      "score": 33.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 120,
+      "raw_description": "POWERADE MOUNTAIN BLAST' PET 500 ML X12",
+      "score": 34.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 52,
+      "raw_description": "RUINART BLANC DE BLANC AST",
+      "score": 35.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 34,
+      "raw_description": "BIRRA HEINEKEN 0.33 CL X 24 BT",
+      "score": 35.25,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 35,
+      "raw_description": "BIRRA NASTRO AZZ. 0.33 CL X 24 BT",
+      "score": 35.25,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 134,
+      "raw_description": "S. PELLEGRINO COCKTAIL ROSSO X 24 BT",
+      "score": 35.550000000000004,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 183,
+      "raw_description": "YOGA MAGIC  POMPELMO 200X24",
+      "score": 36.099999999999994,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 79,
+      "raw_description": "FEVER-TREE MEDITERRANEAN TONIC WATER 200",
+      "score": 36.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 40,
+      "raw_description": "S.PELLEGRINO BITTER BIANCO X 40",
+      "score": 36.9,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 41,
+      "raw_description": "S.PELLEGRINO BITTER ROSSO X 40",
+      "score": 36.9,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 176,
+      "raw_description": "YOGA MAGIC ALB. 200X24",
+      "score": 37.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 178,
+      "raw_description": "YOGA MAGIC ARANCIO 200X24",
+      "score": 37.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 179,
+      "raw_description": "YOGA MAGIC ARAN/ROSSO 200X24",
+      "score": 37.45,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 95,
+      "raw_description": "GRAPPA VIGNA ORO SCURA 40% CL 1,50",
+      "score": 38.35,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 32,
+      "raw_description": "BIRRA CERES 33 CL X 24 BT",
+      "score": 38.400000000000006,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 110,
+      "raw_description": "MOET BLU RESERVE IMPERIAL AST CL75",
+      "score": 38.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 33,
+      "raw_description": "BIRRA CORONA 33 CL X 24 BT",
+      "score": 39.3,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "row_index": 175,
+      "raw_description": "YOGA MAGIC ACE 200X24",
+      "score": 41.05,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    }
+  ]
+}

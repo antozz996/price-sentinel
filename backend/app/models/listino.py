@@ -69,9 +69,16 @@ class ListinoMaster(Base):
         nullable=True,
         comment="Solo per tipo Percentuale e Fisso",
     )
+    supplier_product_alias_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("supplier_product_aliases.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     # ── Relationships ────────────────────────
     fornitore = relationship("Fornitore", back_populates="listini")
+    supplier_product_alias = relationship("SupplierProductAlias")
     pfa_scaglioni = relationship("PFAScaglione", back_populates="listino", lazy="selectin")
     uom_conversioni = relationship("UoMConversione", back_populates="listino", lazy="selectin")
 

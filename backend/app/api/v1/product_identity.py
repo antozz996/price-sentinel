@@ -395,6 +395,8 @@ async def approve_candidate(
         price_val = candidate.reason_json.get("price")
         uom_val = candidate.reason_json.get("uom") or product.comparison_unit or "piece"
         if price_val is not None:
+            if alias.id is None:
+                await db.flush()
             from app.services.supplier_list_import import save_append_only_price
             await save_append_only_price(
                 db=db,
@@ -403,7 +405,8 @@ async def approve_candidate(
                 descrizione=raw_desc,
                 prezzo_pattuito=Decimal(str(price_val)),
                 unita_misura=uom_val,
-                data_inizio=date.today()
+                data_inizio=date.today(),
+                supplier_product_alias_id=alias.id
             )
 
     candidate.status = "approved"

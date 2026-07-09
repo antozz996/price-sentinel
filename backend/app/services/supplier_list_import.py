@@ -88,7 +88,8 @@ async def save_append_only_price(
     descrizione: str,
     prezzo_pattuito: Decimal,
     unita_misura: str,
-    data_inizio: date
+    data_inizio: date,
+    supplier_product_alias_id: int | None = None
 ) -> str:
     """
     Salva il prezzo concordato in modo append-only.
@@ -100,6 +101,7 @@ async def save_append_only_price(
         and_(
             ListinoMaster.fornitore_id == fornitore_id,
             ListinoMaster.sku_interno == sku_interno,
+            ListinoMaster.supplier_product_alias_id == supplier_product_alias_id,
             ListinoMaster.data_scadenza.is_(None)
         )
     )
@@ -121,7 +123,8 @@ async def save_append_only_price(
                 prezzo_pattuito=prezzo_pattuito,
                 unita_misura=unita_misura,
                 data_inizio_validita=data_inizio,
-                data_scadenza=None
+                data_scadenza=None,
+                supplier_product_alias_id=supplier_product_alias_id
             )
             db.add(nuovo)
             return "updated"
@@ -133,7 +136,8 @@ async def save_append_only_price(
             prezzo_pattuito=prezzo_pattuito,
             unita_misura=unita_misura,
             data_inizio_validita=data_inizio,
-            data_scadenza=None
+            data_scadenza=None,
+            supplier_product_alias_id=supplier_product_alias_id
         )
         db.add(nuovo)
         return "created"
@@ -374,6 +378,9 @@ async def import_supplier_list_excel(
         price_outcome = None
         if match_status == "auto_match" and matched_sku:
             if not dry_run:
+                # Flush to populate the alias ID if it was newly created
+                if alias and alias.id is None:
+                    await db.flush()
                 outcome = await save_append_only_price(
                     db=db,
                     fornitore_id=supplier_id,
@@ -381,15 +388,18 @@ async def import_supplier_list_excel(
                     descrizione=raw_desc,
                     prezzo_pattuito=price_val,
                     unita_misura=uom,
-                    data_inizio=data_validita
+                    data_inizio=data_validita,
+                    supplier_product_alias_id=alias.id if alias else None
                 )
                 price_outcome = outcome
             else:
                 # Simula save_append_only_price senza scrivere a DB
+                alias_id = alias.id if alias else None
                 stmt = select(ListinoMaster).where(
                     and_(
                         ListinoMaster.fornitore_id == supplier_id,
                         ListinoMaster.sku_interno == matched_sku,
+                        ListinoMaster.supplier_product_alias_id == alias_id,
                         ListinoMaster.data_scadenza.is_(None)
                     )
                 )

@@ -8,6 +8,7 @@ from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.services.normalization import normalize_text, extract_volume_ml, infer_category
 from app.services.matching import resolve_invoice_line_product, normalize_price_for_comparison
 from app.services.order_resolver import resolve_order_item
+from app.models.listino import ListinoMaster
 
 
 async def run_verification():
@@ -180,6 +181,138 @@ async def run_verification():
         assert res_order["alternatives"][1]["supplier_name"] == "Altro Fornitore", "Ordinamento alternativi errato"
         assert res_order["alternatives"][1]["packs_needed"] == 20, "Calcolo Altro Fornitore packs errato"
         print("  ✅ Test Resolver d'Ordine superato!")
+
+        # 5. Test di Regressione Alias-Aware Pricing (ListinoMaster Alias-Aware Fix)
+        print("\n[Test 5] Verifica ListinoMaster Alias-Aware Pricing & Resolver...")
+        # A. Crea prodotto di test temporaneo
+        test_prod = Product(
+            sku_interno="TEST-BEV-SODA-50CL",
+            canonical_name="Test Soda 50cl",
+            normalized_name="test soda 50cl",
+            brand="TestBrand",
+            category="beverage",
+            volume_ml=500,
+            unit_count=1,
+            comparison_unit="liter",
+            is_active=True
+        )
+        db.add(test_prod)
+        await db.flush()
+        
+        # B. Crea alias A (Confezione da 24 bottiglie)
+        alias_a = SupplierProductAlias(
+            supplier_id=11,  # Navas Srl
+            product_id=test_prod.id,
+            supplier_code="NAVAS_TEST_A",
+            raw_description="TEST SODA 50CL X 24 PET",
+            normalized_description="test soda 50cl x 24 pet",
+            pack_qty=24,
+            volume_ml=500,
+            status="approved",
+            source="test"
+        )
+        db.add(alias_a)
+        
+        # C. Crea alias B (Confezione da 20 bottiglie in vetro)
+        alias_b = SupplierProductAlias(
+            supplier_id=11,  # Navas Srl
+            product_id=test_prod.id,
+            supplier_code="NAVAS_TEST_B",
+            raw_description="TEST SODA 50CL X 20 VAR",
+            normalized_description="test soda 50cl x 20 var",
+            pack_qty=20,
+            volume_ml=500,
+            status="approved",
+            source="test"
+        )
+        db.add(alias_b)
+        await db.flush()
+        
+        # D. Salva prezzi in ListinoMaster per entrambi gli alias
+        from app.services.supplier_list_import import save_append_only_price
+        
+        # Prezzo per alias_a: € 4.5078 per pack 24 (Prezzo normalizzato: 4.5078 / (24 * 0.5) = 0.37565 €/L)
+        res_a = await save_append_only_price(
+            db=db,
+            fornitore_id=11,
+            sku_interno=test_prod.sku_interno,
+            descrizione=alias_a.raw_description,
+            prezzo_pattuito=Decimal("4.5078"),
+            unita_misura="piece",
+            data_inizio=date.today(),
+            supplier_product_alias_id=alias_a.id
+        )
+        
+        # Prezzo per alias_b: € 4.9180 per pack 20 (Prezzo normalizzato: 4.9180 / (20 * 0.5) = 0.4918 €/L)
+        res_b = await save_append_only_price(
+            db=db,
+            fornitore_id=11,
+            sku_interno=test_prod.sku_interno,
+            descrizione=alias_b.raw_description,
+            prezzo_pattuito=Decimal("4.9180"),
+            unita_misura="piece",
+            data_inizio=date.today(),
+            supplier_product_alias_id=alias_b.id
+        )
+        
+        print(f"  Esito salvataggio prezzo A: {res_a}")
+        print(f"  Esito salvataggio prezzo B: {res_b}")
+        
+        # Verifica che entrambi i prezzi siano attivi (data_scadenza IS NULL)
+        stmt_check = select(ListinoMaster).where(
+            ListinoMaster.sku_interno == test_prod.sku_interno,
+            ListinoMaster.data_scadenza.is_(None)
+        )
+        lm_attivi = (await db.execute(stmt_check)).scalars().all()
+        print(f"  Numero di prezzi attivi per lo SKU {test_prod.sku_interno}: {len(lm_attivi)}")
+        assert len(lm_attivi) == 2, "Errore: i due prezzi per alias diversi non sono rimasti entrambi attivi!"
+        
+        # E. Aggiorna lo stesso alias A con un prezzo diverso
+        res_a_update = await save_append_only_price(
+            db=db,
+            fornitore_id=11,
+            sku_interno=test_prod.sku_interno,
+            descrizione=alias_a.raw_description,
+            prezzo_pattuito=Decimal("4.6000"),  # Prezzo cambiato
+            unita_misura="piece",
+            data_inizio=date.today(),
+            supplier_product_alias_id=alias_a.id
+        )
+        print(f"  Esito aggiornamento prezzo alias A: {res_a_update}")
+        assert res_a_update == "updated", "L'aggiornamento dello stesso alias con prezzo diverso doveva restituire 'updated'"
+        
+        # Verifica che per alias A ci sia un solo prezzo attivo, e che l'altro prezzo per alias B sia ancora attivo
+        stmt_check_post = select(ListinoMaster).where(
+            ListinoMaster.sku_interno == test_prod.sku_interno,
+            ListinoMaster.data_scadenza.is_(None)
+        )
+        lm_attivi_post = (await db.execute(stmt_check_post)).scalars().all()
+        print(f"  Prezzi attivi post aggiornamento: {len(lm_attivi_post)}")
+        assert len(lm_attivi_post) == 2, "Dovrebbero esserci esattamente 2 prezzi attivi (uno per alias A e uno per alias B)"
+        
+        # F. Verifica che il resolver scelga il prezzo normalizzato migliore
+        res_resolve = await resolve_order_item(
+            db=db,
+            query="Test Soda 50cl",
+            requested_qty=Decimal("120"),
+            requested_unit="piece",
+            allow_equivalent=True
+        )
+        print(f"  Resolver per 'Test Soda 50cl': Miglior offerta prezzo normalizzato = € {res_resolve['best_offer']['unit_price_normalized']}")
+        print(f"  Migliore offerta fornitore: {res_resolve['best_offer']['supplier_name']}")
+        print(f"  Colli necessari: {res_resolve['best_offer']['packs_needed']}")
+        print(f"  Totale stimato: € {res_resolve['best_offer']['estimated_total']}")
+        assert res_resolve["best_offer"]["supplier_name"] == "Navas Srl", "Dovrebbe vincere Navas Srl"
+        # Il prezzo normalizzato dell'offerta migliore deve corrispondere a quello di alias A (circa 0.3833)
+        assert abs(Decimal(str(res_resolve["best_offer"]["unit_price_normalized"])) - Decimal("0.3833")) < Decimal("0.001"), "Il resolver non ha selezionato l'alias con il prezzo migliore"
+        
+        # Pulizia record test temporanei per evitare side effects
+        from sqlalchemy import delete
+        await db.execute(delete(ListinoMaster).where(ListinoMaster.sku_interno == test_prod.sku_interno))
+        await db.execute(delete(SupplierProductAlias).where(SupplierProductAlias.product_id == test_prod.id))
+        await db.execute(delete(Product).where(Product.id == test_prod.id))
+        await db.flush()
+        print("  ✅ Test Regressione Alias-Aware Pricing superato!")
 
     print("\n🎉 TUTTI I TEST DEL PRODUCT IDENTITY LAYER SONO STATI SUPERATI CON SUCCESSO!")
     print("=" * 60)

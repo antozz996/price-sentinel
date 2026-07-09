@@ -1,0 +1,1702 @@
+{
+  "riepilogo": {
+    "righe_totali": 184,
+    "righe_con_prezzo_valido": 183,
+    "righe_scartate": 1,
+    "auto_match_previsti": 3,
+    "parking_70_89": 32,
+    "parking_under_70": 148,
+    "errori_parsing": 1,
+    "errori_parsing_dettaglio": [
+      "Riga 189: Descrizione vuota."
+    ]
+  },
+  "auto_matches": [
+    {
+      "raw_description": "ACQUA VERA 2LT",
+      "supplier_code": "NAVAS_ACQU013",
+      "matched_sku": "ACQ-VERA-200CL",
+      "score": 91.4,
+      "match_reason": "auto_score",
+      "price": 1.476,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola)"
+    },
+    {
+      "raw_description": "ACQUA FERRARELLE 0.75 VR VETRO",
+      "supplier_code": "NAVAS_ACQUA002",
+      "matched_sku": "ACQ-FERRARELLE-75CL",
+      "score": 91.0,
+      "match_reason": "auto_score",
+      "price": 5.3275,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola)"
+    },
+    {
+      "raw_description": "CEDRATA SAN BENEDETTO 1,5 LT",
+      "supplier_code": "NAVAS_CEDR8621",
+      "matched_sku": "SOFT-CEDRATA_SAN_BENEDETTO-150CL",
+      "score": 90.05,
+      "match_reason": "auto_score",
+      "price": 3.28,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola)"
+    }
+  ],
+  "parking_70_89": [
+    {
+      "raw_description": "ACQUA FERRARELLE 0,50 X 24 BT PET",
+      "supplier_code": "NAVAS_ACQU002",
+      "candidate_sku": "ACQ-FERRARELLE-50CL",
+      "score": 76.5,
+      "reason": "Fuzzy text match",
+      "price": 4.9178,
+      "pack_qty": 24,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "ACQUA FERRARELLE 0.50 X20 VAR",
+      "supplier_code": "NAVAS_ACQUA003",
+      "candidate_sku": "ACQ-FERRARELLE-50CL",
+      "score": 71.95,
+      "reason": "Fuzzy text match",
+      "price": 4.918,
+      "pack_qty": 20,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "ACQUA SORGESANA 2 LT X 6",
+      "supplier_code": "NAVAS_ACQUA073",
+      "candidate_sku": "ACQ-SORGESANA-200CL",
+      "score": 74.2,
+      "reason": "Fuzzy text match",
+      "price": 1.2297,
+      "pack_qty": 6,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "AMARO AMARA 70 CL",
+      "supplier_code": "NAVAS_AMA432",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-70CL",
+      "score": 71.05,
+      "reason": "Fuzzy text match",
+      "price": 19.26,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN BEEFEATER BLACK 70 CL",
+      "supplier_code": "NAVAS_BEEFBLACK3",
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "score": 70.15,
+      "reason": "Fuzzy text match",
+      "price": 10.6557,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BELLAVISTA ALMA ASSEMBLAGE 1 FRANCIACORTA DA 75 CL",
+      "supplier_code": "NAVAS_BELLASSE1",
+      "candidate_sku": "BEV-BELLAVISTA_ALMA_ALMA-75CL",
+      "score": 71.9,
+      "reason": "Fuzzy text match",
+      "price": 26.2292,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BERLUCCHI 61 FRANCIACORTA EXTRA BRUT 75 CL",
+      "supplier_code": "NAVAS_BERL025",
+      "candidate_sku": "BEV-BERLUCCHI_61_BRUT-75CL",
+      "score": 80.0,
+      "reason": "Fuzzy text match",
+      "price": 12.295,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "COCA COLA 0.33 X 24 VAP VETRO",
+      "supplier_code": "NAVAS_COC01",
+      "candidate_sku": "BEV-COCA_COLA_ZERO-33CL",
+      "score": 71.55,
+      "reason": "Fuzzy text match",
+      "price": 16.39,
+      "pack_qty": 24,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "COCA COLA ZERO 0.33 X 24 VAP VETRO",
+      "supplier_code": "NAVAS_COC02",
+      "candidate_sku": "BEV-COCA_COLA_ZERO-33CL",
+      "score": 76.05,
+      "reason": "Fuzzy text match",
+      "price": 16.3933,
+      "pack_qty": 24,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "COCA COLA ZERO PET 1,5 LT X 6 BT",
+      "supplier_code": "NAVAS_COCA031",
+      "candidate_sku": "BEV-COCA_COLA_ZERO-150CL",
+      "score": 72.0,
+      "reason": "Fuzzy text match",
+      "price": 9.016,
+      "pack_qty": 6,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "COCA COLA ZERO CAFFEINA LATTINA 33 CL X 24",
+      "supplier_code": "NAVAS_COCZEZE32",
+      "candidate_sku": "BEV-COCA_COLA_ZERO_CAFF-33CL",
+      "score": 81.45,
+      "reason": "Fuzzy text match",
+      "price": 12.296,
+      "pack_qty": 24,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "ACQUA ELECTA 1 LT PET X 12",
+      "supplier_code": "NAVAS_ELECTA2",
+      "candidate_sku": "ACQ-ELECTA-100CL",
+      "score": 74.7,
+      "reason": "Fuzzy text match",
+      "price": 4.9167,
+      "pack_qty": 12,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "ACQUA ELECTA 50 CL X 24 PET",
+      "supplier_code": "NAVAS_ELECTA3",
+      "candidate_sku": "ACQ-ELECTA-50CL",
+      "score": 81.0,
+      "reason": "Fuzzy text match",
+      "price": 4.5078,
+      "pack_qty": 24,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "ACQUA ELECTA VERDE 75 CL X 12 VAR",
+      "supplier_code": "NAVAS_ELECTA4",
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "score": 72.85,
+      "reason": "Fuzzy text match",
+      "price": 5.328,
+      "pack_qty": 12,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "ACQUA ELECTA 50 CL X 20 VAR BIANCA",
+      "supplier_code": "NAVAS_ELECTA5",
+      "candidate_sku": "ACQ-ELECTA-50CL",
+      "score": 72.4,
+      "reason": "Fuzzy text match",
+      "price": 4.918,
+      "pack_qty": 20,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "FERRARI MAXIMUM 75 CL",
+      "supplier_code": "NAVAS_FERR01",
+      "candidate_sku": "BEV-FERRARI_MAXIMUM-75CL",
+      "score": 70.1,
+      "reason": "Fuzzy text match",
+      "price": 12.295,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FERRARI BRUT 75 CL",
+      "supplier_code": "NAVAS_FERR987",
+      "candidate_sku": "BEV-FERRARI_BRUT-75CL",
+      "score": 73.25,
+      "reason": "Fuzzy text match",
+      "price": 11.065,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FIORDUVA FURORE BIANCO COSTA D'AMALFI 75 CL MARISA CUOMO",
+      "supplier_code": "NAVAS_FURORE3",
+      "candidate_sku": "BEV-MARISA_CUOMO_FIORDUVA_FURORE-75CL",
+      "score": 70.55000000000001,
+      "reason": "Fuzzy text match",
+      "price": 46.7217,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN MARE 70 CL",
+      "supplier_code": "NAVAS_GIN11",
+      "candidate_sku": "BEV-GRAPPA_903_BARRIQUE-70CL",
+      "score": 71.05,
+      "reason": "Fuzzy text match",
+      "price": 22.95,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GRAPPA 903 BIANCA 70 CL",
+      "supplier_code": "NAVAS_GRAPP0002",
+      "candidate_sku": "BEV-GRAPPA_903_BIANCA-70CL",
+      "score": 75.05,
+      "reason": "Fuzzy text match",
+      "price": 14.75,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GRAPPA 903 BARRIQUE 70 CL",
+      "supplier_code": "NAVAS_GRAPP01",
+      "candidate_sku": "BEV-GRAPPA_903_BARRIQUE-70CL",
+      "score": 80.0,
+      "reason": "Fuzzy text match",
+      "price": 14.75,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "LIMONCELLO 200 CL",
+      "supplier_code": "NAVAS_LIM010",
+      "candidate_sku": "BEV-LIMONCELLO-200CL",
+      "score": 86.0,
+      "reason": "Fuzzy text match",
+      "price": 12.2967,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "RUM ZACAPA 23 DA 70 CL",
+      "supplier_code": "NAVAS_RUM002",
+      "candidate_sku": "BEV-ZACAPA_23_RUM-70CL",
+      "score": 84.65,
+      "reason": "Fuzzy text match",
+      "price": 36.89,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "SCHWEPPES TONICA 18 CL VAP X 24 VETRO",
+      "supplier_code": "NAVAS_SCHW016",
+      "candidate_sku": "BEV-SCHWEPPES_TONICA-18CL",
+      "score": 78.75,
+      "reason": "Fuzzy text match",
+      "price": 13.93,
+      "pack_qty": 24,
+      "warning": "Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "VINO CHARDONNAY JERMANN 75 CL",
+      "supplier_code": "NAVAS_VINO095",
+      "candidate_sku": "BEV-JERMANN_CHARDONNAY-75CL",
+      "score": 83.75,
+      "reason": "Fuzzy text match",
+      "price": 14.7533,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "VODKA GREY GOOSE 70 CL",
+      "supplier_code": "NAVAS_VOD0035",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "score": 86.0,
+      "reason": "Fuzzy text match",
+      "price": 25.0,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "VODKA ABSOLUT 1 LT",
+      "supplier_code": "NAVAS_VOD025",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "score": 77.45,
+      "reason": "Fuzzy text match",
+      "price": 11.475,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "VODKA ABSOLUT 70 CL",
+      "supplier_code": "NAVAS_VOD028",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-70CL",
+      "score": 84.65,
+      "reason": "Fuzzy text match",
+      "price": 10.246,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "VODKA  WYBOROWA 100 CL",
+      "supplier_code": "NAVAS_VODK066",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "score": 71.5,
+      "reason": "Fuzzy text match",
+      "price": 7.7867,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA BELVEDERE 70 CL",
+      "supplier_code": "NAVAS_VODKA025",
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "score": 85.55000000000001,
+      "reason": "Fuzzy text match",
+      "price": 18.85,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica"
+    },
+    {
+      "raw_description": "YOGA ARANCIA PET 1 LT",
+      "supplier_code": "NAVAS_YOGA040",
+      "candidate_sku": "BEV-YOGA_ARANCIA-100CL",
+      "score": 76.0,
+      "reason": "Fuzzy text match",
+      "price": 11.475,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA ANANAS PET 1 LT",
+      "supplier_code": "NAVAS_YOGA041",
+      "candidate_sku": "BEV-YOGA_ANANAS-100CL",
+      "score": 75.1,
+      "reason": "Fuzzy text match",
+      "price": 11.475,
+      "pack_qty": 1,
+      "warning": "Pack qty pari a 1 (confezione singola), Match parziale (score 70-89), richiede verifica, Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    }
+  ],
+  "under_70": [
+    {
+      "raw_description": "THOMAS H.PINK POMPELMO 20 CL",
+      "supplier_code": "NAVAS_4242THOMPINK_POMP",
+      "score": 58.3,
+      "category": null,
+      "candidate_sku": "BEV-THOMAS_HENRY_PINK-20CL",
+      "best_score_found": 58.3,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ABACA STRAWBERRY 75 CL",
+      "supplier_code": "NAVAS_ABAC1",
+      "score": 56.95,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 56.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ABACA SWEET & SOUR 75 CL",
+      "supplier_code": "NAVAS_ABAC2",
+      "score": 58.75,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 58.75,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ABACA COCONUT 75 CL",
+      "supplier_code": "NAVAS_ABAC3",
+      "score": 58.75,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 58.75,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ABACA ELDER FLOWER 75 CL",
+      "supplier_code": "NAVAS_ABAC32",
+      "score": 57.4,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 57.4,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ABACA PASSION FRUIT 75 CL",
+      "supplier_code": "NAVAS_ABAC6",
+      "score": 53.8,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 53.8,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ACQUA LETE 1,50 CL X 6 BT",
+      "supplier_code": "NAVAS_ACQU015",
+      "score": 48.85,
+      "category": "acqua",
+      "candidate_sku": "ACQ-LETE-150CL",
+      "best_score_found": 48.85,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ACQUA FERRARELLE 0.50 X20 VAR BIANCA",
+      "supplier_code": "NAVAS_ACQUA003_1",
+      "score": 68.8,
+      "category": "acqua",
+      "candidate_sku": "ACQ-FERRARELLE-50CL",
+      "best_score_found": 68.8,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "FERRARELLE PET 1LT X 12 BT",
+      "supplier_code": "NAVAS_ACQUA066",
+      "score": 51.15,
+      "category": null,
+      "candidate_sku": "ACQ-FERRARELLE-100CL",
+      "best_score_found": 51.15,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "AMARO 2 LT",
+      "supplier_code": "NAVAS_AMAR002",
+      "score": 59.8,
+      "category": "beverage",
+      "candidate_sku": "BEV-LIMONCELLO-200CL",
+      "best_score_found": 59.8,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "AMARO AMARA ARANCIA DI SICILIA 30\u00b0 50 CL",
+      "supplier_code": "NAVAS_AMARA987",
+      "score": 49.3,
+      "category": "beverage",
+      "candidate_sku": "BEV-TERRA_SERENA_GRAND_CUVE-75CL",
+      "best_score_found": 49.3,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "AMARO DEL CAPO CL 70",
+      "supplier_code": "NAVAS_AMARO04",
+      "score": 63.400000000000006,
+      "category": "beverage",
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 63.400000000000006,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "AMARO JEFFERSON CL 70",
+      "supplier_code": "NAVAS_AMARO12",
+      "score": 62.95,
+      "category": "beverage",
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 62.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "APEROL  1LITRO  BT",
+      "supplier_code": "NAVAS_APER004",
+      "score": 42.55,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 42.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BACARDI CARTA BLANCA 1 LT",
+      "supplier_code": "NAVAS_BACARDI",
+      "score": 47.5,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-100CL",
+      "best_score_found": 47.5,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BACARDI ORO 100 CL",
+      "supplier_code": "NAVAS_BACARDI01",
+      "score": 56.95,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-100CL",
+      "best_score_found": 56.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BAILEYS CREAM 100 CL",
+      "supplier_code": "NAVAS_BAILEYS1",
+      "score": 57.4,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-100CL",
+      "best_score_found": 57.4,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BIRRA CERES 33 CL X 24 BT",
+      "supplier_code": "NAVAS_BIR0005",
+      "score": 38.400000000000006,
+      "category": "beverage",
+      "candidate_sku": "BEV-COCA_COLA_ZERO-33CL",
+      "best_score_found": 38.400000000000006,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BIRRA CORONA 33 CL X 24 BT",
+      "supplier_code": "NAVAS_BIR0009",
+      "score": 39.3,
+      "category": "beverage",
+      "candidate_sku": "BEV-COCA_COLA_ZERO-33CL",
+      "best_score_found": 39.3,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BIRRA HEINEKEN 0.33 CL X 24 BT",
+      "supplier_code": "NAVAS_BIR0013",
+      "score": 35.25,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_ANANAS-20CL",
+      "best_score_found": 35.25,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BIRRA NASTRO AZZ. 0.33 CL X 24 BT",
+      "supplier_code": "NAVAS_BIR0017",
+      "score": 35.25,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_ACE-20CL",
+      "best_score_found": 35.25,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BIRRA PERONI  033X 24 BT",
+      "supplier_code": "NAVAS_BIR0020",
+      "score": 33.0,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_PERA-20CL",
+      "best_score_found": 33.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BIRRA TENNENT'S 33 CL",
+      "supplier_code": "NAVAS_BIRRA",
+      "score": 53.8,
+      "category": "beverage",
+      "candidate_sku": "BEV-FANTA_LATTINA-33CL",
+      "best_score_found": 53.8,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BITTER MARTINI 1 LT",
+      "supplier_code": "NAVAS_BITTE02",
+      "score": 43.9,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ARANCIA-100CL",
+      "best_score_found": 43.9,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BITTER CAMPARI CL.100",
+      "supplier_code": "NAVAS_BITTER5",
+      "score": 50.2,
+      "category": "beverage",
+      "candidate_sku": "BEV-JERMANN_CHARDONNAY-75CL",
+      "best_score_found": 50.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "S.PELLEGRINO BITTER BIANCO X 40",
+      "supplier_code": "NAVAS_BITTER7",
+      "score": 36.9,
+      "category": null,
+      "candidate_sku": "BEV-SAN_PELLEGRINO_BITTER_BIANCO-10CL",
+      "best_score_found": 36.9,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "S.PELLEGRINO BITTER ROSSO X 40",
+      "supplier_code": "NAVAS_BITTER8",
+      "score": 36.9,
+      "category": null,
+      "candidate_sku": "BEV-SAN_PELLEGRINO_BITTER_ROSSO-10CL",
+      "best_score_found": 36.9,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BOLS TRIPLE SEC 70 CL",
+      "supplier_code": "NAVAS_BOLS1",
+      "score": 54.25,
+      "category": null,
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 54.25,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BOLS BLUE CURACAO 70 CL",
+      "supplier_code": "NAVAS_BOLS2",
+      "score": 54.25,
+      "category": null,
+      "candidate_sku": "BEV-ABSOLUT_VODKA-70CL",
+      "best_score_found": 54.25,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BOLS ELDERFLOWER 70 CL",
+      "supplier_code": "NAVAS_BOLS3",
+      "score": 56.95,
+      "category": null,
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 56.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "BOLS CREME DE MENTHE 70 CL",
+      "supplier_code": "NAVAS_BOLS7",
+      "score": 53.35,
+      "category": null,
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 53.35,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CA.DEL BOSCO CUVEE PRESTIGE CL 75",
+      "supplier_code": "NAVAS_CADEL01",
+      "score": 47.95,
+      "category": null,
+      "candidate_sku": "BEV-BELLAVISTA_ALMA-75CL",
+      "best_score_found": 47.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CA.DEL BOSCO CUVEE ROSE CL 75",
+      "supplier_code": "NAVAS_CADEL01_1",
+      "score": 49.3,
+      "category": null,
+      "candidate_sku": "BEV-BELLAVISTA_ALMA-75CL",
+      "best_score_found": 49.3,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CAMPARI SODA VP 9,8 CL",
+      "supplier_code": "NAVAS_CAMP001",
+      "score": 53.8,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-CRODINO-17CL",
+      "best_score_found": 53.8,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CARPANO CLASSICO VERMOUTH 1 LT",
+      "supplier_code": "NAVAS_CARPANO1",
+      "score": 43.45,
+      "category": null,
+      "candidate_sku": "BEV-SCHWEPPES_LIMONE-100CL",
+      "best_score_found": 43.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "THREE CENTS PINK GRAPFRUIT 20 CL",
+      "supplier_code": "NAVAS_CENTS5",
+      "score": 61.9,
+      "category": null,
+      "candidate_sku": "BEV-THOMAS_HENRY_PINK-20CL",
+      "best_score_found": 61.9,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "RUINART BLANC DE BLANC AST",
+      "supplier_code": "NAVAS_CHAMP035",
+      "score": 35.2,
+      "category": null,
+      "candidate_sku": "BEV-FERRARI_MAXIMUM-75CL",
+      "best_score_found": 35.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CHAMPAGNE RUINART ROSE 75 CL",
+      "supplier_code": "NAVAS_CHAMPA03",
+      "score": 67.45,
+      "category": "beverage",
+      "candidate_sku": "BEV-FERRARI_BRUT-75CL",
+      "best_score_found": 67.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "COCA COLA  PET 2 LT X 6 BT",
+      "supplier_code": "NAVAS_COCA001",
+      "score": 67.5,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-COCA_COLA_REG-200CL",
+      "best_score_found": 67.5,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "COCA COLA LATTINA SLEEK 033 X 24",
+      "supplier_code": "NAVAS_COCA013",
+      "score": 58.35,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-COCA_COLA_ZERO_LATTINA-33CL",
+      "best_score_found": 58.35,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "COCA COLA ZERO LATTINA SLEEK 033X24",
+      "supplier_code": "NAVAS_COCA050",
+      "score": 61.5,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-COCA_COLA_ZERO_LATTINA-33CL",
+      "best_score_found": 61.5,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "CRODINO CL X 10X 48",
+      "supplier_code": "NAVAS_CROD0085",
+      "score": 43.75,
+      "category": null,
+      "candidate_sku": "BEV-CRODINO-10CL",
+      "best_score_found": 43.75,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CRODINO XL ROSSO DA 175 ML X 24 BT",
+      "supplier_code": "NAVAS_CRODXL992",
+      "score": 41.2,
+      "category": null,
+      "candidate_sku": "BEV-CRODINO-17CL",
+      "best_score_found": 41.2,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CREMA MENTA BIANCA CL 70 DE KUYPER",
+      "supplier_code": "NAVAS_DEKUYPER2",
+      "score": 50.65,
+      "category": null,
+      "candidate_sku": "BEV-GRAPPA_903_BIANCA-70CL",
+      "best_score_found": 50.65,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "DISARONNO 1 LT",
+      "supplier_code": "NAVAS_DIS02",
+      "score": 44.8,
+      "category": null,
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 44.8,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "DRAMBUIE LIQUORE 70 CL",
+      "supplier_code": "NAVAS_DRAMB70",
+      "score": 69.7,
+      "category": "beverage",
+      "candidate_sku": "BEV-GRAPPA_903_BARRIQUE-70CL",
+      "best_score_found": 69.7,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ESTATHE'  LATTINA LIMONE 033X24",
+      "supplier_code": "NAVAS_ESTA01",
+      "score": 31.099999999999998,
+      "category": null,
+      "candidate_sku": "BEV-ESTATHE_LIMONE-33CL",
+      "best_score_found": 31.099999999999998,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "ESTATHE'  PESCA LATTINA 033X24",
+      "supplier_code": "NAVAS_ESTA02",
+      "score": 30.65,
+      "category": null,
+      "candidate_sku": "BEV-ESTATHE_PESCA-33CL",
+      "best_score_found": 30.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FANTA LATTINA SLEEK 033X24",
+      "supplier_code": "NAVAS_FANT019",
+      "score": 42.0,
+      "category": null,
+      "candidate_sku": "BEV-FANTA_LATTINA-33CL",
+      "best_score_found": 42.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FANTA 0.33 X 24 VAP VETRO",
+      "supplier_code": "NAVAS_FANTA01",
+      "score": 52.5,
+      "category": null,
+      "candidate_sku": "BEV-FANTA_REG-33CL",
+      "best_score_found": 52.5,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VINO FEUDI AGLIANICO RUBRATO IRPINIA 75 CL",
+      "supplier_code": "NAVAS_FEUDI01",
+      "score": 69.7,
+      "category": "beverage",
+      "candidate_sku": "BEV-FEUDI_DI_SAN_GREGORIO_RUBRATO-75CL",
+      "best_score_found": 69.7,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FEVER-TREE EDERFLOWER TONIC WATER 200 ML",
+      "supplier_code": "NAVAS_FEVER0025",
+      "score": 58.75,
+      "category": null,
+      "candidate_sku": "BEV-FEVER_TREE_ELDERFLOWER-20CL",
+      "best_score_found": 58.75,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FEVER-TREE TONIC 200  ML INDIAN",
+      "supplier_code": "NAVAS_FEVER2",
+      "score": 52.9,
+      "category": null,
+      "candidate_sku": "BEV-FEVER_TREE_TONIC-20CL",
+      "best_score_found": 52.9,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FEVER-TREE MEDITERRANEAN TONIC WATER 200",
+      "supplier_code": "NAVAS_FEVER3",
+      "score": 36.55,
+      "category": null,
+      "candidate_sku": "BEV-FEVER_TREE_TONIC-20CL",
+      "best_score_found": 36.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FEVER-TREE PINK GRAPEFRUIT 20 CL",
+      "supplier_code": "NAVAS_FEVER5",
+      "score": 68.65,
+      "category": null,
+      "candidate_sku": "BEV-FEVER_TREE_GRAPEFRUIT-20CL",
+      "best_score_found": 68.65,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FURORE BIANCO COSTA D'AMALFI 75 CL MARISA CUOMO",
+      "supplier_code": "NAVAS_FURORE1",
+      "score": 69.2,
+      "category": null,
+      "candidate_sku": "BEV-MARISA_CUOMO_FURORE_BIANCO-75CL",
+      "best_score_found": 69.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GERMAIN CL 70   20%",
+      "supplier_code": "NAVAS_GERMA01",
+      "score": 48.400000000000006,
+      "category": null,
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 48.400000000000006,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN ROKU 43% DA 70 CL",
+      "supplier_code": "NAVAS_GIN00025",
+      "score": 69.25,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-70CL",
+      "best_score_found": 69.25,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN HENDRICK' S CL 70",
+      "supplier_code": "NAVAS_GIN002",
+      "score": 65.65,
+      "category": "beverage",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 65.65,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN TANQUERAY TEN 70 CL",
+      "supplier_code": "NAVAS_GIN0020",
+      "score": 67.9,
+      "category": "beverage",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 67.9,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN TANQUERAY TEN 1 LT",
+      "supplier_code": "NAVAS_GIN0021",
+      "score": 62.5,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_ANANAS-100CL",
+      "best_score_found": 62.5,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN MALFY ORIGINAL 70 CL",
+      "supplier_code": "NAVAS_GIN00789",
+      "score": 67.45,
+      "category": "beverage",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 67.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GORDON'S GIN 100 CL",
+      "supplier_code": "NAVAS_GIN010",
+      "score": 67.45,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 67.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GIN BEEFEATER 100 CL",
+      "supplier_code": "NAVAS_GIN025",
+      "score": 67.0,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 67.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "THOMAS HENRY GINGER BEER 200 X 24",
+      "supplier_code": "NAVAS_GINGER5",
+      "score": 61.0,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-THOMAS_HENRY_GINGER-20CL",
+      "best_score_found": 61.0,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "N\u00b03 LONDON DRY GIN 70 CL",
+      "supplier_code": "NAVAS_GINLOND10",
+      "score": 66.1,
+      "category": "beverage",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 66.1,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GRAPPA VIGNA ORO SCURA 40% CL 1,50",
+      "supplier_code": "NAVAS_GRAPP003",
+      "score": 38.35,
+      "category": null,
+      "candidate_sku": "BEV-GRAPPA_903_BIANCA-70CL",
+      "best_score_found": 38.35,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "HENNESY  V.S. AST. CL 70",
+      "supplier_code": "NAVAS_HENNE01",
+      "score": 48.85,
+      "category": null,
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 48.85,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "JAGERMEISTER 100 CL",
+      "supplier_code": "NAVAS_JAGM02",
+      "score": 56.5,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-100CL",
+      "best_score_found": 56.5,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "LEMONSODA 200 X 24 VAP",
+      "supplier_code": "NAVAS_LEM0000",
+      "score": 29.4,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-SAN_PELLEGRINO_COCKTAIL_BIANCO-20CL",
+      "best_score_found": 29.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "LEMONSODA LATT SLEEK 033X24",
+      "supplier_code": "NAVAS_LEMN02",
+      "score": 31.65,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-COCA_COLA_REG-200CL",
+      "best_score_found": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "MALIBU 100 CL",
+      "supplier_code": "NAVAS_LIQ12",
+      "score": 57.85,
+      "category": null,
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 57.85,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "LIQUIRIZIA DESIRE' 1L",
+      "supplier_code": "NAVAS_LIQUOR00123",
+      "score": 44.35,
+      "category": null,
+      "candidate_sku": "LIQ-LIMONCELLO-1L",
+      "best_score_found": 44.35,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "PRIMITIVO DI MANDURIA LIRICA 75 CL",
+      "supplier_code": "NAVAS_LIRICA083",
+      "score": 52.45,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 52.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "MARTINI  ROSSO 1 LT",
+      "supplier_code": "NAVAS_MARTI02",
+      "score": 42.55,
+      "category": null,
+      "candidate_sku": "LIQ-LIMONCELLO-1L",
+      "best_score_found": 42.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CREMA MELONE 2 LITRI",
+      "supplier_code": "NAVAS_MEL0821",
+      "score": 32.5,
+      "category": null,
+      "candidate_sku": "BEV-THOMAS_HENRY_TONIC-20CL",
+      "best_score_found": 32.5,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CREMA DI MELONE CL 150 17%",
+      "supplier_code": "NAVAS_MELO01",
+      "score": 49.75,
+      "category": null,
+      "candidate_sku": "SOFT-CEDRATA_SAN_BENEDETTO-150CL",
+      "best_score_found": 49.75,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SARURI LIQUORE MELONE VERDE 100 CL",
+      "supplier_code": "NAVAS_MELON01",
+      "score": 65.65,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 65.65,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "MOET ICE ROSE CL 75",
+      "supplier_code": "NAVAS_MOET013",
+      "score": 48.400000000000006,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 48.400000000000006,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "MOET BLU RESERVE IMPERIAL AST CL75",
+      "supplier_code": "NAVAS_MOET04",
+      "score": 38.95,
+      "category": null,
+      "candidate_sku": "BEV-TERRA_SERENA_GRAND_CUVE-75CL",
+      "best_score_found": 38.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FIOR DI SAMBUCO MONDORO 70 CL",
+      "supplier_code": "NAVAS_MONDORELD1",
+      "score": 50.2,
+      "category": null,
+      "candidate_sku": "BEV-ABSOLUT_VODKA-70CL",
+      "best_score_found": 50.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CHAMPAGNE MUMM 75 CL",
+      "supplier_code": "NAVAS_MUM01",
+      "score": 67.0,
+      "category": "beverage",
+      "candidate_sku": "BEV-JERMANN_CHARDONNAY-75CL",
+      "best_score_found": 67.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "PASSOA LT 1",
+      "supplier_code": "NAVAS_PASSO01",
+      "score": 46.15,
+      "category": null,
+      "candidate_sku": "BEV-SCHWEPPES_LIMONE-100CL",
+      "best_score_found": 46.15,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "POWERADE  ARANCIO ROSSO 500 ML X12",
+      "supplier_code": "NAVAS_PAW023",
+      "score": 29.4,
+      "category": null,
+      "candidate_sku": "ACQUA_NATURALE_50CL_PET",
+      "best_score_found": 29.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "PEPSI COLA 2 LT X 6",
+      "supplier_code": "NAVAS_PEPS001",
+      "score": 47.1,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-COCA_COLA_REG-200CL",
+      "best_score_found": 47.1,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "LIQUORE PEYROT MANDARINE E COGNAC 70 CL",
+      "supplier_code": "NAVAS_PEYROT3",
+      "score": 65.65,
+      "category": "beverage",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 65.65,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "LIQUORE PEYROT POIRE WILLIAMS E COGNAC 70 CL",
+      "supplier_code": "NAVAS_POIREPEY92",
+      "score": 63.85,
+      "category": "beverage",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 63.85,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VINO POUILLY FUME' ARGILE A SILEX 75 CL",
+      "supplier_code": "NAVAS_POUILLY11",
+      "score": 64.3,
+      "category": "beverage",
+      "candidate_sku": "BEV-FERRARI_MAXIMUM-75CL",
+      "best_score_found": 64.3,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "POWERADE CITRUS 500 ML X 12",
+      "supplier_code": "NAVAS_POWE007",
+      "score": 31.65,
+      "category": null,
+      "candidate_sku": "ACQUA_NATURALE_50CL_PET",
+      "best_score_found": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "POWERADE MOUNTAIN BLAST' PET 500 ML X12",
+      "supplier_code": "NAVAS_POWE010",
+      "score": 34.4,
+      "category": null,
+      "candidate_sku": "ACQ-FERRARELLE-50CL",
+      "best_score_found": 34.4,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "POWERADE ORANGE 500 ML X 12",
+      "supplier_code": "NAVAS_POWE016",
+      "score": 31.65,
+      "category": null,
+      "candidate_sku": "ACQUA_NATURALE_50CL_PET",
+      "best_score_found": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "POWERADE ACTIVE 500 ML X 12",
+      "supplier_code": "NAVAS_POWE2",
+      "score": 31.65,
+      "category": null,
+      "candidate_sku": "ACQUA_NATURALE_50CL_PET",
+      "best_score_found": 31.65,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "PREMIO ANNO 2025",
+      "supplier_code": "NAVAS_PREMIO_ANNO_2025",
+      "score": 27.1,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ANANAS-20CL",
+      "best_score_found": 27.1,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "PREMIO FINE ANNO 2025",
+      "supplier_code": "NAVAS_PREMIO_FINE_ANNO_2025",
+      "score": 28.45,
+      "category": null,
+      "candidate_sku": "BEV-SAN_PELLEGRINO_COCKTAIL_BIANCO-20CL",
+      "best_score_found": 28.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GRAN CUVE' TERRA SERENA MILLESIMATO EXTRA DRY 75 CL X 6",
+      "supplier_code": "NAVAS_PROS4",
+      "score": 52.45,
+      "category": null,
+      "candidate_sku": "BEV-TERRA_SERENA_GRAND_CUVE-75CL",
+      "best_score_found": 52.45,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "RED BULL 0,25 X24 LATT",
+      "supplier_code": "NAVAS_RED0012",
+      "score": 62.95,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-RED_BULL-25CL",
+      "best_score_found": 62.95,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "RED BULL BITTER LEMON LATT 250X24",
+      "supplier_code": "NAVAS_RED017",
+      "score": 46.15,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-RED_BULL-25CL",
+      "best_score_found": 46.15,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "RED BULL TONIC WATER LATT 025 X 24",
+      "supplier_code": "NAVAS_RED19",
+      "score": 48.400000000000006,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-RED_BULL-25CL",
+      "best_score_found": 48.400000000000006,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "RED BULL ZERO 250 X 24",
+      "supplier_code": "NAVAS_RED202",
+      "score": 49.75,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-RED_BULL-25CL",
+      "best_score_found": 49.75,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "RUM DIPLOMATICO RESERVA ESCLUSIVA 70 CL",
+      "supplier_code": "NAVAS_RUM0255",
+      "score": 65.2,
+      "category": "beverage",
+      "candidate_sku": "BEV-GRAPPA_903_BIANCA-70CL",
+      "best_score_found": 65.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SAMBUCA MOLINARI 70 CL",
+      "supplier_code": "NAVAS_SAM02",
+      "score": 68.35,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-70CL",
+      "best_score_found": 68.35,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SAMBUCA RAMAZZOTTI 100 CL",
+      "supplier_code": "NAVAS_SAMB022",
+      "score": 64.75,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 64.75,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "S. PELLEGRINO COCKTAIL ROSSO X 24 BT",
+      "supplier_code": "NAVAS_SANPE032",
+      "score": 35.550000000000004,
+      "category": null,
+      "candidate_sku": "BEV-SAN_PELLEGRINO_COCKTAIL_ROSSO-20CL",
+      "best_score_found": 35.550000000000004,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SCHWEPPES POMPELMO ROSA 1 LITRO X 6",
+      "supplier_code": "NAVAS_SCHPOM22",
+      "score": 46.45,
+      "category": null,
+      "candidate_sku": "BEV-SCHWEPPES_POMPELMO-100CL",
+      "best_score_found": 46.45,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SCHWEPPES ARANCIA 18 CL X 24 VAP VETRO",
+      "supplier_code": "NAVAS_SCHW014",
+      "score": 64.2,
+      "category": null,
+      "candidate_sku": "BEV-SCHWEPPES_ARANCIA-18CL",
+      "best_score_found": 64.2,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SCHWEPPES LIMONE 18 CL VAP X 24 VETRO",
+      "supplier_code": "NAVAS_SCHW015",
+      "score": 63.75,
+      "category": null,
+      "candidate_sku": "BEV-SCHWEPPES_LIMONE-18CL",
+      "best_score_found": 63.75,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SCHWEPPES TONICA 1 LITRO PET X 6",
+      "supplier_code": "NAVAS_SCHWEP02",
+      "score": 61.95,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-SCHWEPPES_TONICA-100CL",
+      "best_score_found": 61.95,
+      "warning": "Prodotto non riconosciuto (score < 70)"
+    },
+    {
+      "raw_description": "SCHWEPPES LIMONE 1 LT PET X 6",
+      "supplier_code": "NAVAS_SCHWEPP",
+      "score": 61.95,
+      "category": null,
+      "candidate_sku": "BEV-SCHWEPPES_LIMONE-100CL",
+      "best_score_found": 61.95,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "FIANO DI AVELLINO SEQUENZHA 75 CL BENITO FERRARA",
+      "supplier_code": "NAVAS_SEQUEN1",
+      "score": 47.05,
+      "category": null,
+      "candidate_sku": "BEV-FEUDI_DI_SAN_GREGORIO_RUBRATO-75CL",
+      "best_score_found": 47.05,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "S. PELLEGRINO COCKTAIL BIANCO 20 CL 24 VAP",
+      "supplier_code": "NAVAS_SPEL013",
+      "score": 65.95,
+      "category": null,
+      "candidate_sku": "BEV-SAN_PELLEGRINO_COCKTAIL_BIANCO-20CL",
+      "best_score_found": 65.95,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "Spese di segreteria",
+      "supplier_code": "NAVAS_SPESE_DI_SEGRETERIA",
+      "score": 28.0,
+      "category": null,
+      "candidate_sku": "LIQ-LIMONCELLO-1L",
+      "best_score_found": 28.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SPRITE LATTINA SLEEK 033 X 24",
+      "supplier_code": "NAVAS_SPRI004",
+      "score": 44.25,
+      "category": null,
+      "candidate_sku": "BEV-SPRITE_LATTINA-33CL",
+      "best_score_found": 44.25,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "CEDRATA  TASSONI 18 CL X 25 BT",
+      "supplier_code": "NAVAS_TASS009",
+      "score": 53.85,
+      "category": "soft_drink",
+      "candidate_sku": "BEV-SCHWEPPES_TONICA-18CL",
+      "best_score_found": 53.85,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "TEQUILA OLMECA BLANCO 100 CL",
+      "supplier_code": "NAVAS_TECH020",
+      "score": 66.55,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 66.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "TEQUILA JOSE CUERVO BIANCA 1 LT",
+      "supplier_code": "NAVAS_TEQ020",
+      "score": 59.8,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_ARANCIA-100CL",
+      "best_score_found": 59.8,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "TEQUILA  PATRON SILVER 70 CL",
+      "supplier_code": "NAVAS_TEQUI023",
+      "score": 66.55,
+      "category": "beverage",
+      "candidate_sku": "BEV-BELVEDERE_VODKA-70CL",
+      "best_score_found": 66.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "TEQUILA OLMECA ALTOS PLATA 70 CL",
+      "supplier_code": "NAVAS_TEQUI030",
+      "score": 67.0,
+      "category": "beverage",
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 67.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "UNICUM CL 100",
+      "supplier_code": "NAVAS_UNICUM",
+      "score": 49.3,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-100CL",
+      "best_score_found": 49.3,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GRECO DI TUFO VIGNA CICOGNA 75 CL BENITO FERRARA",
+      "supplier_code": "NAVAS_VIGNA1",
+      "score": 46.599999999999994,
+      "category": null,
+      "candidate_sku": "BEV-MARISA_CUOMO_FURORE_BIANCO-75CL",
+      "best_score_found": 46.599999999999994,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "SAN SALVATORE VETERE ROSATO 75 CL",
+      "supplier_code": "NAVAS_VIN9658",
+      "score": 50.2,
+      "category": null,
+      "candidate_sku": "ACQ-FERRARELLE-75CL",
+      "best_score_found": 50.2,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GEWURZTRAMINER DOC 75 CL ELENA WALCH",
+      "supplier_code": "NAVAS_VINO0066",
+      "score": 48.85,
+      "category": null,
+      "candidate_sku": "BEV-FERRARI_MAXIMUM-75CL",
+      "best_score_found": 48.85,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "MULLER THURGAU 75 CL ELENA WALCH",
+      "supplier_code": "NAVAS_VINO0067",
+      "score": 50.65,
+      "category": null,
+      "candidate_sku": "ACQ-ELECTA-75CL",
+      "best_score_found": 50.65,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "PINOT GRIGIO 75 CL ELENA WALCH",
+      "supplier_code": "NAVAS_VINO0069",
+      "score": 61.599999999999994,
+      "category": "beverage",
+      "candidate_sku": "BEV-BELLAVISTA_ALMA-75CL",
+      "best_score_found": 61.599999999999994,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "PINOT NERO DOC 75 CL ELENA WALCH",
+      "supplier_code": "NAVAS_VINO0070",
+      "score": 63.400000000000006,
+      "category": "beverage",
+      "candidate_sku": "BEV-JERMANN_CHARDONNAY-75CL",
+      "best_score_found": 63.400000000000006,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "GEWURZTRAMINER DOC ST MICHAEL EPPAN 75 CL",
+      "supplier_code": "NAVAS_VINO0667",
+      "score": 51.55,
+      "category": null,
+      "candidate_sku": "BEV-FERRARI_BRUT-75CL",
+      "best_score_found": 51.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "MULLER THURGAU ST MICHAEL-EPPAN 75 CL",
+      "supplier_code": "NAVAS_VINO0669",
+      "score": 50.65,
+      "category": null,
+      "candidate_sku": "BEV-FERRARI_BRUT-75CL",
+      "best_score_found": 50.65,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "LANGHE DOC ARNEIS BLANGE' 75 CL",
+      "supplier_code": "NAVAS_VINOO069",
+      "score": 52.0,
+      "category": null,
+      "candidate_sku": "ACQ-FERRARELLE-75CL",
+      "best_score_found": 52.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA KEGLEVIC FRAGOLA 0.70",
+      "supplier_code": "NAVAS_VOD1",
+      "score": 43.0,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-100CL",
+      "best_score_found": 43.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA KEGLEVICH 0.70 PESCA",
+      "supplier_code": "NAVAS_VOD2",
+      "score": 43.9,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_PESCA-20CL",
+      "best_score_found": 43.9,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA KEGLEVICH MELONE 0.70",
+      "supplier_code": "NAVAS_VOD3",
+      "score": 43.45,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_MELA_VERDE-20CL",
+      "best_score_found": 43.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA SMIRNOFF 1 LITRO",
+      "supplier_code": "NAVAS_VOD5",
+      "score": 46.599999999999994,
+      "category": "beverage",
+      "candidate_sku": "BEV-ABSOLUT_VODKA-70CL",
+      "best_score_found": 46.599999999999994,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA KEGLEVICH PESCA 1LT",
+      "supplier_code": "NAVAS_VODKA",
+      "score": 57.55,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_ARANCIA-100CL",
+      "best_score_found": 57.55,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA KEGLEVICH MELONE 1LT",
+      "supplier_code": "NAVAS_VODKA1",
+      "score": 58.9,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_ACE-100CL",
+      "best_score_found": 58.9,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "VODKA KEGLEVICH FRAGOLA 1LT",
+      "supplier_code": "NAVAS_VODKA3",
+      "score": 58.45,
+      "category": "beverage",
+      "candidate_sku": "BEV-YOGA_ARANCIA-100CL",
+      "best_score_found": 58.45,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "J.WALKER RED LABEL 70 CL",
+      "supplier_code": "NAVAS_WHI010",
+      "score": 51.099999999999994,
+      "category": null,
+      "candidate_sku": "BEV-GREY_GOOSE_VODKA-70CL",
+      "best_score_found": 51.099999999999994,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "JACK DANIEL' S CL 100",
+      "supplier_code": "NAVAS_WHISKI1",
+      "score": 52.0,
+      "category": null,
+      "candidate_sku": "ACQ-FERRARELLE-100CL",
+      "best_score_found": 52.0,
+      "warning": "Pack qty pari a 1 (confezione singola), Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC ACE 200X24",
+      "supplier_code": "NAVAS_YOGA004",
+      "score": 41.05,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ACE-20CL",
+      "best_score_found": 41.05,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC ALB. 200X24",
+      "supplier_code": "NAVAS_YOGA005",
+      "score": 37.0,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ACE-20CL",
+      "best_score_found": 37.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC ANANAS X24 BT",
+      "supplier_code": "NAVAS_YOGA006",
+      "score": 43.3,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ANANAS-20CL",
+      "best_score_found": 43.3,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC ARANCIO 200X24",
+      "supplier_code": "NAVAS_YOGA007",
+      "score": 37.0,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ACE-20CL",
+      "best_score_found": 37.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC ARAN/ROSSO 200X24",
+      "supplier_code": "NAVAS_YOGA008",
+      "score": 37.45,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ANANAS-20CL",
+      "best_score_found": 37.45,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC MELA VERDE 200X24",
+      "supplier_code": "NAVAS_YOGA011",
+      "score": 44.2,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_MELA_VERDE-20CL",
+      "best_score_found": 44.2,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC PERA 200X24",
+      "supplier_code": "NAVAS_YOGA012",
+      "score": 41.5,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_PERA-20CL",
+      "best_score_found": 41.5,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA  MAGIC PESCA 200X24",
+      "supplier_code": "NAVAS_YOGA013",
+      "score": 41.95,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_PESCA-20CL",
+      "best_score_found": 41.95,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC  POMPELMO 200X24",
+      "supplier_code": "NAVAS_YOGA014",
+      "score": 36.099999999999994,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_PERA-20CL",
+      "best_score_found": 36.099999999999994,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA ACE 1 LT PET X 6",
+      "supplier_code": "NAVAS_YOGA035",
+      "score": 57.0,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ACE-100CL",
+      "best_score_found": 57.0,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA ARA.ROSSA 1 LT PET X 6",
+      "supplier_code": "NAVAS_YOGA036",
+      "score": 53.400000000000006,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_ARANCIA-100CL",
+      "best_score_found": 53.400000000000006,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    },
+    {
+      "raw_description": "YOGA MAGIC MIRTILLO 200X24",
+      "supplier_code": "NAVAS_YOGA060",
+      "score": 43.3,
+      "category": null,
+      "candidate_sku": "BEV-YOGA_MIRTILLO-20CL",
+      "best_score_found": 43.3,
+      "warning": "Prodotto non riconosciuto (score < 70), Matching bloccato per incompatibilit\u00e0 brand/volume/categoria"
+    }
+  ]
+}
