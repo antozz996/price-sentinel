@@ -26,6 +26,12 @@ from app.models.liquidstock_integration import (  # noqa: F401
     LiquidStockSupplierOrder,
     LiquidStockSupplierOrderItem,
 )
+from app.models.purchase_order_reconciliation import (  # noqa: F401
+    LiquidStockVenueMapping,
+    PurchaseOrderReconciliation,
+    PurchaseOrderReconciliationAnomaly,
+    PurchaseOrderReconciliationItem,
+)
 
 __all__ = [
     "Base",

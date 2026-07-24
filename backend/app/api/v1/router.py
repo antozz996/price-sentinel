@@ -24,6 +24,7 @@ from app.api.v1 import (
     accordi,
     product_identity,
     integrations,
+    reconciliations,
 )
 
 api_router = APIRouter(redirect_slashes=False)
@@ -49,3 +50,4 @@ api_router.include_router(
     prefix="/integrations",
     tags=["LiquidStock Integration"],
 )
+api_router.include_router(reconciliations.router, prefix="/reconciliations", tags=["Riconciliazioni ordini"])
