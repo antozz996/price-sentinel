@@ -21,6 +21,11 @@ from app.models.products import (  # noqa: F401
     ProductEquivalenceGroupItem,
     MatchCandidate,
 )
+from app.models.liquidstock_integration import (  # noqa: F401
+    LiquidStockIntegrationEvent,
+    LiquidStockSupplierOrder,
+    LiquidStockSupplierOrderItem,
+)
 
 __all__ = [
     "Base",
@@ -45,4 +50,7 @@ __all__ = [
     "ProductEquivalenceGroup",
     "ProductEquivalenceGroupItem",
     "MatchCandidate",
+    "LiquidStockIntegrationEvent",
+    "LiquidStockSupplierOrder",
+    "LiquidStockSupplierOrderItem",
 ]

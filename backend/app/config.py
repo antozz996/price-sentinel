@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     # ── Aruba Webhook ────────────────────────
     ARUBA_WEBHOOK_API_KEY: str = ""
 
+    # ── LiquidStock server-to-server bridge ──
+    LIQUIDSTOCK_INTEGRATION_SECRET: str = ""
+    LIQUIDSTOCK_INTEGRATION_PREVIOUS_SECRET: str = ""
+    INTEGRATION_MAX_CLOCK_SKEW_SECONDS: int = 300
+
     # ── Notifiche (Sprint 3) ─────────────────
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_ADMIN_CHAT_ID: str = ""
