@@ -17,43 +17,28 @@ class Settings(BaseSettings):
     )
 
     # ── Database ─────────────────────────────
-    POSTGRES_USER: str = "sentinel"
-    POSTGRES_PASSWORD: str = "REMOVED_DB_CREDENTIAL"
-    POSTGRES_DB: str = "price_sentinel"
-    POSTGRES_HOST: str = "db"
-    POSTGRES_PORT: int = 5432
-    DATABASE_URL_ENV: str | None = Field(default=None, alias="DATABASE_URL")
+    DATABASE_URL_ENV: str = Field(alias="DATABASE_URL", min_length=1)
 
     @property
     def database_url(self) -> str:
         """Stringa di connessione asyncpg per SQLAlchemy."""
-        if self.DATABASE_URL_ENV:
-            return self.DATABASE_URL_ENV
-        return (
-            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-        )
+        return self.DATABASE_URL_ENV
 
     @property
     def database_url_sync(self) -> str:
         """Stringa di connessione sincrona per Alembic."""
-        if self.DATABASE_URL_ENV:
-            return self.DATABASE_URL_ENV.replace("asyncpg", "psycopg2")
-        return (
-            f"postgresql+psycopg2://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-        )
+        return self.DATABASE_URL_ENV.replace("asyncpg", "psycopg2")
 
     # ── Auth / JWT ───────────────────────────
-    SECRET_KEY: str = "REMOVED_JWT_FALLBACK"
+    SECRET_KEY: str = Field(min_length=32)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minuti
 
     # ── Aruba Webhook ────────────────────────
-    ARUBA_WEBHOOK_API_KEY: str = ""
+    ARUBA_WEBHOOK_API_KEY: str = Field(min_length=1)
 
     # ── LiquidStock server-to-server bridge ──
-    LIQUIDSTOCK_INTEGRATION_SECRET: str = ""
+    LIQUIDSTOCK_INTEGRATION_SECRET: str = Field(min_length=32)
     LIQUIDSTOCK_INTEGRATION_PREVIOUS_SECRET: str = ""
     INTEGRATION_MAX_CLOCK_SKEW_SECONDS: int = 300
 
@@ -68,9 +53,5 @@ class Settings(BaseSettings):
     # ── Ambiente ─────────────────────────────
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
-
-    # ── Sicurezza Ripristino ─────────────────
-    RESET_PASSWORD: str = "REMOVED_RESET_CREDENTIAL"
-
 
 settings = Settings()

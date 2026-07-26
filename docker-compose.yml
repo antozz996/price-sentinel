@@ -2,7 +2,7 @@ version: "2.4"
 
 # ─────────────────────────────────────────────────────────
 # PRICE SENTINEL — Docker Compose
-# VPS Hetzner CX21 dedicata — PostgreSQL NON esposto
+# VPS Hetzner CX21 dedicata — PostgreSQL e backend non esposti
 # docker-compose v2.4 per compatibilità depends_on + healthcheck
 # ─────────────────────────────────────────────────────────
 
@@ -13,19 +13,14 @@ services:
     image: postgres:15-alpine
     container_name: ps_db
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-REMOVED_DB_CREDENTIAL}
-      POSTGRES_DB: ${POSTGRES_DB:-price_sentinel}
+    env_file:
+      - /etc/price-sentinel/postgres.env
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     networks:
       - ps_internal
-    # Esposta per permettere a Vercel di connettersi (Spec §1.2 override per cloud migration)
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentinel"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -38,13 +33,14 @@ services:
     container_name: ps_backend
     restart: unless-stopped
     env_file:
-      - .env
+      - /etc/price-sentinel/backend.env
     volumes:
       - ./backend:/app
     networks:
       - ps_internal
     expose:
       - "8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
     depends_on:
       db:
         condition: service_healthy
@@ -55,23 +51,18 @@ services:
       retries: 3
       start_period: 15s
 
-  # ── Nginx Reverse Proxy ────────────────────────────────
+  # ── Nginx HTTP interno; Caddy è l'unico terminatore TLS ──
   nginx:
     image: nginx:alpine
     container_name: ps_nginx
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "127.0.0.1:8082:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./nginx/ssl_guadagnarefacileonline:/etc/nginx/ssl_guadagnarefacileonline:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
     networks:
       - ps_internal
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       backend:
         condition: service_healthy
