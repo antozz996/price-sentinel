@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from difflib import SequenceMatcher
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import case, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alias import AliasProdotto
@@ -22,6 +22,8 @@ from app.models.purchase_order_reconciliation import (
     PurchaseOrderReconciliationAnomaly,
     PurchaseOrderReconciliationItem,
 )
+from app.models.supplier_identity_equivalence import SupplierIdentityEquivalence
+from app.services.supplier_identity_equivalence import active_equivalence_for_pair
 
 
 class ReconciliationError(Exception):
@@ -90,8 +92,13 @@ async def attach_invoice(
         raise ReconciliationError("cross_venue_invoice_forbidden", 409)
     if order.supplier_id is None:
         raise ReconciliationError("supplier_mapping_required", 409)
+    equivalence = None
     if order.supplier_id != invoice.fornitore_id:
-        raise ReconciliationError("cross_supplier_invoice_forbidden", 409)
+        equivalence = await active_equivalence_for_pair(
+            db, order.supplier_id, invoice.fornitore_id
+        )
+        if not equivalence:
+            raise ReconciliationError("cross_supplier_invoice_forbidden", 409)
     existing = await db.scalar(select(PurchaseOrderReconciliation).where(
         PurchaseOrderReconciliation.fattura_id == invoice.id,
         PurchaseOrderReconciliation.id != reconciliation.id,
@@ -100,6 +107,12 @@ async def attach_invoice(
         raise ReconciliationError("invoice_already_associated", 409)
     if existing:
         existing.fattura_id = None
+        existing.invoice_supplier_id = None
+        existing.supplier_equivalence_id = None
+        existing.supplier_equivalence_approved_by = None
+        existing.supplier_equivalence_approved_at = None
+        existing.supplier_equivalence_used_at = None
+        existing.supplier_equivalence_reason_snapshot = None
         existing.status = "awaiting_invoice"
         existing.reconciliation_version += 1
         existing.updated_at = datetime.now(timezone.utc)
@@ -107,7 +120,20 @@ async def attach_invoice(
             PurchaseOrderReconciliationItem.reconciliation_id == existing.id
         ))
     reconciliation.fattura_id = invoice.id
-    reconciliation.supplier_id = invoice.fornitore_id
+    reconciliation.supplier_id = order.supplier_id
+    reconciliation.invoice_supplier_id = invoice.fornitore_id
+    if equivalence:
+        reconciliation.supplier_equivalence_id = equivalence.id
+        reconciliation.supplier_equivalence_approved_by = equivalence.approved_by
+        reconciliation.supplier_equivalence_approved_at = equivalence.approved_at
+        reconciliation.supplier_equivalence_used_at = datetime.now(timezone.utc)
+        reconciliation.supplier_equivalence_reason_snapshot = equivalence.reason
+    else:
+        reconciliation.supplier_equivalence_id = None
+        reconciliation.supplier_equivalence_approved_by = None
+        reconciliation.supplier_equivalence_approved_at = None
+        reconciliation.supplier_equivalence_used_at = None
+        reconciliation.supplier_equivalence_reason_snapshot = None
     reconciliation.status = "pending"
     reconciliation.price_tolerance_absolute = tolerance_absolute
     reconciliation.price_tolerance_percent = tolerance_percent
@@ -124,6 +150,12 @@ async def detach_invoice(db: AsyncSession, reconciliation: PurchaseOrderReconcil
         PurchaseOrderReconciliationItem.reconciliation_id == reconciliation.id
     ))
     reconciliation.fattura_id = None
+    reconciliation.invoice_supplier_id = None
+    reconciliation.supplier_equivalence_id = None
+    reconciliation.supplier_equivalence_approved_by = None
+    reconciliation.supplier_equivalence_approved_at = None
+    reconciliation.supplier_equivalence_used_at = None
+    reconciliation.supplier_equivalence_reason_snapshot = None
     reconciliation.status = "awaiting_invoice"
     reconciliation.matching_confidence = Decimal("0")
     reconciliation.reconciliation_version += 1
@@ -157,30 +189,54 @@ async def _expected_price(db: AsyncSession, supplier_id: int, product: Product |
     return None, None
 
 
-async def _explicit_product(db: AsyncSession, line: RigaFattura, supplier_id: int) -> tuple[int | None, str | None, Decimal, str]:
+async def _explicit_product(
+    db: AsyncSession,
+    line: RigaFattura,
+    supplier_ids: list[int],
+) -> tuple[int | None, str | None, Decimal, str, int | None]:
     if line.sku_interno:
         product = await db.scalar(select(Product).where(Product.sku_interno == line.sku_interno).limit(1))
         if product:
-            return product.id, "product_id", Decimal("1"), "SKU canonico esplicito sulla riga fattura"
+            return product.id, "product_id", Decimal("1"), "SKU canonico esplicito sulla riga fattura", None
     code = (line.codice_fornitore_raw or "").strip()
     if code:
         alias = await db.scalar(select(SupplierProductAlias).where(
-            SupplierProductAlias.supplier_id == supplier_id,
+            SupplierProductAlias.supplier_id.in_(supplier_ids),
             SupplierProductAlias.status == "approved",
             or_(SupplierProductAlias.supplier_code == code, SupplierProductAlias.ean == code),
-        ).order_by(SupplierProductAlias.id).limit(1))
+        ).order_by(
+            case(
+                {
+                    supplier_id: position
+                    for position, supplier_id in enumerate(supplier_ids)
+                },
+                value=SupplierProductAlias.supplier_id,
+                else_=len(supplier_ids),
+            ),
+            SupplierProductAlias.id,
+        ).limit(1))
         if alias:
             method = "ean" if alias.ean == code else "supplier_product_alias"
-            return alias.product_id, method, Decimal("0.99"), f"Alias fornitore esplicito {alias.id}"
+            return alias.product_id, method, Decimal("0.99"), f"Alias fornitore esplicito {alias.id}", alias.supplier_id
         legacy = await db.scalar(select(AliasProdotto).where(
-            AliasProdotto.fornitore_id == supplier_id,
+            AliasProdotto.fornitore_id.in_(supplier_ids),
             AliasProdotto.codice_fornitore_originale == code,
+        ).order_by(
+            case(
+                {
+                    supplier_id: position
+                    for position, supplier_id in enumerate(supplier_ids)
+                },
+                value=AliasProdotto.fornitore_id,
+                else_=len(supplier_ids),
+            ),
+            AliasProdotto.id,
         ).limit(1))
         if legacy and legacy.sku_interno:
             product = await db.scalar(select(Product).where(Product.sku_interno == legacy.sku_interno).limit(1))
             if product:
-                return product.id, "supplier_product_alias", Decimal("0.98"), f"Alias legacy esplicito {legacy.id}"
-    return None, None, Decimal("0"), "Nessuna associazione esplicita"
+                return product.id, "supplier_product_alias", Decimal("0.98"), f"Alias legacy esplicito {legacy.id}", legacy.fornitore_id
+    return None, None, Decimal("0"), "Nessuna associazione esplicita", None
 
 
 async def run_matching(db: AsyncSession, reconciliation: PurchaseOrderReconciliation) -> PurchaseOrderReconciliation:
@@ -194,6 +250,25 @@ async def run_matching(db: AsyncSession, reconciliation: PurchaseOrderReconcilia
     invoice = await db.scalar(select(Fattura).where(Fattura.id == reconciliation.fattura_id))
     if not order or not invoice:
         raise ReconciliationError("reconciliation_reference_missing", 409)
+    alias_supplier_ids = [invoice.fornitore_id]
+    if order.supplier_id != invoice.fornitore_id:
+        equivalence = await db.get(
+            SupplierIdentityEquivalence,
+            reconciliation.supplier_equivalence_id,
+        )
+        if (
+            not equivalence
+            or not equivalence.is_active
+            or {
+                equivalence.canonical_supplier_id,
+                equivalence.equivalent_supplier_id,
+            }
+            != {order.supplier_id, invoice.fornitore_id}
+        ):
+            raise ReconciliationError(
+                "supplier_equivalence_inactive_or_invalid", 409
+            )
+        alias_supplier_ids.append(order.supplier_id)
     await db.execute(delete(PurchaseOrderReconciliationItem).where(
         PurchaseOrderReconciliationItem.reconciliation_id == reconciliation.id
     ))
@@ -216,7 +291,9 @@ async def run_matching(db: AsyncSession, reconciliation: PurchaseOrderReconcilia
     signatures = Counter((normalize(line.codice_fornitore_raw or line.descrizione_fornitore_raw), Decimal(line.quantita), Decimal(line.prezzo_netto_normalizzato)) for line in invoice_lines)
 
     for line in invoice_lines:
-        product_id, method, confidence, reason = await _explicit_product(db, line, invoice.fornitore_id)
+        product_id, method, confidence, reason, alias_supplier_id = await _explicit_product(
+            db, line, alias_supplier_ids
+        )
         candidates = [item for item in order_items if product_id is not None and item.product_id == product_id and item.id not in matched_orders]
         evidence: dict = {"explicit_product_id": product_id, "fallback_candidates": []}
         if not candidates:
@@ -248,6 +325,7 @@ async def run_matching(db: AsyncSession, reconciliation: PurchaseOrderReconcilia
                 invoice_product_description=line.descrizione_fornitore_raw,
                 invoiced_unit_price=Decimal(line.prezzo_netto_normalizzato), match_status="unordered_item", anomaly_type="unordered_item",
                 match_method=method, match_confidence=confidence, match_reason=reason, candidate_evidence=evidence,
+                match_alias_supplier_id=alias_supplier_id,
                 created_at=now, updated_at=now,
             )
             db.add(item); anomaly_count += 1; confidences.append(confidence); continue
@@ -262,6 +340,7 @@ async def run_matching(db: AsyncSession, reconciliation: PurchaseOrderReconcilia
                 invoice_product_description=line.descrizione_fornitore_raw,
                 invoiced_unit_price=Decimal(line.prezzo_netto_normalizzato), match_status="ambiguous", anomaly_type="ambiguous_match",
                 match_method=method, match_confidence=confidence, match_reason="Più righe ordine compatibili", candidate_evidence=evidence,
+                match_alias_supplier_id=alias_supplier_id,
                 created_at=now, updated_at=now,
             )
             db.add(item); anomaly_count += 1; confidences.append(confidence); continue
@@ -300,7 +379,8 @@ async def run_matching(db: AsyncSession, reconciliation: PurchaseOrderReconcilia
             expected_unit_price=expected, expected_price_source=expected_source, invoiced_unit_price=invoiced_price,
             quantity_delta=quantity_delta, price_delta=price_delta, disputed_amount=disputed,
             match_status=status, anomaly_type=anomaly, match_method=method, match_confidence=confidence,
-            match_reason=reason, candidate_evidence=evidence, created_at=now, updated_at=now,
+            match_reason=reason, match_alias_supplier_id=alias_supplier_id,
+            candidate_evidence=evidence, created_at=now, updated_at=now,
         )
         db.add(item); confidences.append(confidence)
 
@@ -342,7 +422,16 @@ async def create_anomaly(db: AsyncSession, reconciliation: PurchaseOrderReconcil
         liquidstock_item_id=item.liquidstock_item_id, supplier_id=reconciliation.supplier_id,
         venue_id=reconciliation.venue_id, anomaly_type=item.anomaly_type,
         disputed_amount=item.disputed_amount, evidence_key=key,
-        evidence={"match_method": item.match_method, "reason": item.match_reason, "quantity_delta": str(item.quantity_delta) if item.quantity_delta is not None else None, "price_delta": str(item.price_delta) if item.price_delta is not None else None},
+        evidence={
+            "match_method": item.match_method,
+            "reason": item.match_reason,
+            "match_alias_supplier_id": item.match_alias_supplier_id,
+            "order_supplier_id": reconciliation.supplier_id,
+            "invoice_supplier_id": reconciliation.invoice_supplier_id,
+            "supplier_equivalence_id": reconciliation.supplier_equivalence_id,
+            "quantity_delta": str(item.quantity_delta) if item.quantity_delta is not None else None,
+            "price_delta": str(item.price_delta) if item.price_delta is not None else None,
+        },
         workflow_status="da_verificare", notes=notes, created_at=now, updated_at=now,
     )
     db.add(anomaly); await db.flush(); return anomaly
@@ -428,4 +517,5 @@ async def confirm_candidate(
     item.match_method = "manual_confirmation"
     item.match_confidence = Decimal("1")
     item.match_reason = "Confermato manualmente dall’operatore"
+    item.match_alias_supplier_id = None
     item.notes = notes

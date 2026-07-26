@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.fatture import Fattura, RigaFattura
+from app.models.fornitori import Fornitore
 from app.models.liquidstock_integration import LiquidStockSupplierOrder, LiquidStockSupplierOrderItem
 from app.models.location import Location
 from app.models.products import Product
@@ -16,6 +17,7 @@ from app.models.purchase_order_reconciliation import LiquidStockVenueMapping, Pu
 from app.models.utenti import Utente
 from app.schemas.purchase_order_reconciliation import AttachInvoiceInput, CloseReconciliationInput, InvoiceCandidateOut, OrderCandidateOut, ReconciliationAnomalyOut, ReconciliationDetailOut, ReconciliationItemOut, ResolveItemInput, VenueMappingInput
 from app.services.purchase_order_reconciliation import ReconciliationError, attach_invoice, confirm_candidate, create_anomaly, detach_invoice, ensure_reconciliation, run_matching
+from app.services.supplier_identity_equivalence import supplier_scope
 
 router = APIRouter()
 
@@ -39,12 +41,36 @@ async def load(db: AsyncSession, rid: UUID, user: Utente):
 
 
 async def detail(db: AsyncSession, row: PurchaseOrderReconciliation):
-    await db.refresh(row, attribute_names=["items", "anomalies", "invoice", "supplier"])
+    await db.refresh(
+        row,
+        attribute_names=[
+            "items",
+            "anomalies",
+            "invoice",
+            "supplier",
+            "invoice_supplier",
+            "supplier_equivalence",
+            "supplier_equivalence_approver",
+        ],
+    )
     venue_map = await mapping(db, row.venue_id)
     location = await db.get(Location, venue_map.location_id) if venue_map else None
     return ReconciliationDetailOut(
         id=row.id, liquidstock_supplier_order_id=row.liquidstock_supplier_order_id,
         liquidstock_order_id=row.liquidstock_order_id, supplier_id=row.supplier_id,
+        invoice_supplier_id=row.invoice_supplier_id,
+        supplier_equivalence_id=row.supplier_equivalence_id,
+        supplier_equivalence_approved_by=row.supplier_equivalence_approved_by,
+        supplier_equivalence_approved_by_email=(
+            row.supplier_equivalence_approver.email
+            if row.supplier_equivalence_approver
+            else None
+        ),
+        supplier_equivalence_approved_at=row.supplier_equivalence_approved_at,
+        supplier_equivalence_used_at=row.supplier_equivalence_used_at,
+        supplier_equivalence_reason_snapshot=(
+            row.supplier_equivalence_reason_snapshot
+        ),
         fattura_id=row.fattura_id, venue_id=row.venue_id, status=row.status,
         matching_confidence=row.matching_confidence, reconciliation_version=row.reconciliation_version,
         price_tolerance_absolute=row.price_tolerance_absolute, price_tolerance_percent=row.price_tolerance_percent,
@@ -52,6 +78,9 @@ async def detail(db: AsyncSession, row: PurchaseOrderReconciliation):
         invoice_number=row.invoice.numero_documento if row.invoice else None,
         invoice_date=row.invoice.data_documento if row.invoice else None,
         supplier_name=row.supplier.nome_azienda if row.supplier else None,
+        invoice_supplier_name=(
+            row.invoice_supplier.nome_azienda if row.invoice_supplier else None
+        ),
         venue_name=location.nome_struttura if location else None,
         items=[ReconciliationItemOut.model_validate(item) for item in row.items],
         anomalies=[ReconciliationAnomalyOut.model_validate(item) for item in row.anomalies],
@@ -106,17 +135,52 @@ async def candidates(supplier_order_id: UUID, db: AsyncSession = Depends(get_db)
     venue_map = await authorize(db, user, order.liquidstock_venue_id)
     if not venue_map: raise HTTPException(409, "venue_mapping_required")
     if order.supplier_id is None: raise HTTPException(409, "supplier_mapping_required")
-    invoices = (await db.scalars(select(Fattura).where(Fattura.fornitore_id == order.supplier_id, Fattura.location_id == venue_map.location_id).order_by(Fattura.data_documento.desc()).limit(100))).all()
+    supplier_ids, equivalence = await supplier_scope(db, order.supplier_id)
+    invoices = (await db.scalars(
+        select(Fattura).where(
+            Fattura.fornitore_id.in_(supplier_ids),
+            Fattura.location_id == venue_map.location_id,
+        ).order_by(Fattura.data_documento.desc()).limit(100)
+    )).all()
     order_products = set((await db.scalars(select(LiquidStockSupplierOrderItem.product_id).where(LiquidStockSupplierOrderItem.supplier_order_id == order.id, LiquidStockSupplierOrderItem.product_id.is_not(None)))).all())
     product_skus = set((await db.scalars(select(Product.sku_interno).where(Product.id.in_(order_products)))).all()) if order_products else set()
     result = []
     for invoice in invoices:
+        invoice_supplier = await db.get(Fornitore, invoice.fornitore_id)
+        via_equivalence = invoice.fornitore_id != order.supplier_id
         associated = await db.scalar(select(PurchaseOrderReconciliation.id).where(PurchaseOrderReconciliation.fattura_id == invoice.id))
         invoice_skus = set((await db.scalars(select(RigaFattura.sku_interno).where(RigaFattura.fattura_id == invoice.id, RigaFattura.sku_interno.is_not(None)))).all())
         overlap = len(invoice_skus & product_skus); reference = order.received_at.date() if order.received_at else (order.requested_delivery_date or (order.sent_at.date() if order.sent_at else invoice.data_documento)); days = abs((invoice.data_documento-reference).days)
         score = Decimal("0.5") + (Decimal("0.3") if days <= 14 else 0) + min(Decimal("0.2"), Decimal(overlap)*Decimal("0.05"))
-        reasons = ["fornitore esplicito", "venue/location esplicita", f"distanza data {days} giorni"] + ([f"{overlap} prodotti canonici in comune"] if overlap else [])
-        result.append(InvoiceCandidateOut(id=invoice.id, fornitore_id=invoice.fornitore_id, location_id=invoice.location_id, numero_documento=invoice.numero_documento, data_documento=invoice.data_documento, totale_imponibile=invoice.totale_imponibile, already_associated_to=associated, suggestion_score=score, suggestion_reasons=reasons))
+        reasons = [
+            (
+                "equivalenza fornitore esplicitamente approvata"
+                if via_equivalence
+                else "stesso fornitore esplicito"
+            ),
+            "venue/location esplicita",
+            f"distanza data {days} giorni",
+        ] + ([f"{overlap} prodotti canonici in comune"] if overlap else [])
+        result.append(InvoiceCandidateOut(
+            id=invoice.id,
+            fornitore_id=invoice.fornitore_id,
+            location_id=invoice.location_id,
+            numero_documento=invoice.numero_documento,
+            data_documento=invoice.data_documento,
+            totale_imponibile=invoice.totale_imponibile,
+            supplier_name=(
+                invoice_supplier.nome_azienda
+                if invoice_supplier
+                else f"Fornitore #{invoice.fornitore_id}"
+            ),
+            supplier_equivalence_id=(
+                equivalence.id if via_equivalence and equivalence else None
+            ),
+            allowed_via_equivalence=via_equivalence,
+            already_associated_to=associated,
+            suggestion_score=score,
+            suggestion_reasons=reasons,
+        ))
     return result
 
 

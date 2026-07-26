@@ -72,6 +72,9 @@ class InvoiceCandidateOut(BaseModel):
     numero_documento: str
     data_documento: date
     totale_imponibile: Decimal
+    supplier_name: str
+    supplier_equivalence_id: int | None = None
+    allowed_via_equivalence: bool = False
     already_associated_to: UUID | None = None
     suggestion_score: Decimal = Decimal("0")
     suggestion_reasons: list[str] = []
@@ -102,6 +105,8 @@ class ReconciliationItemOut(BaseModel):
     match_method: str | None
     match_confidence: Decimal
     match_reason: str | None
+    match_alias_supplier_id: int | None
+    match_alias_supplier_name: str | None = None
     candidate_evidence: dict | None
     notes: str | None
 
@@ -124,6 +129,13 @@ class ReconciliationDetailOut(BaseModel):
     liquidstock_supplier_order_id: UUID
     liquidstock_order_id: UUID
     supplier_id: int | None
+    invoice_supplier_id: int | None
+    supplier_equivalence_id: int | None
+    supplier_equivalence_approved_by: int | None
+    supplier_equivalence_approved_by_email: str | None = None
+    supplier_equivalence_approved_at: datetime | None
+    supplier_equivalence_used_at: datetime | None
+    supplier_equivalence_reason_snapshot: str | None
     fattura_id: int | None
     venue_id: UUID
     status: str
@@ -138,6 +150,7 @@ class ReconciliationDetailOut(BaseModel):
     invoice_number: str | None = None
     invoice_date: date | None = None
     supplier_name: str | None = None
+    invoice_supplier_name: str | None = None
     venue_name: str | None = None
     items: list[ReconciliationItemOut]
     anomalies: list[ReconciliationAnomalyOut]

@@ -28,6 +28,44 @@ class PurchaseOrderReconciliation(Base):
         CheckConstraint("status in ('pending','awaiting_invoice','matching','partially_matched','matched','anomalies_found','reviewed','closed')", name="ck_po_reconciliations_status"),
         CheckConstraint("matching_confidence >= 0 and matching_confidence <= 1", name="ck_po_reconciliations_confidence"),
         CheckConstraint("price_tolerance_absolute >= 0 and price_tolerance_percent >= 0", name="ck_po_reconciliations_tolerances"),
+        CheckConstraint(
+            """
+            (
+              fattura_id is null
+              and invoice_supplier_id is null
+              and supplier_equivalence_id is null
+              and supplier_equivalence_approved_by is null
+              and supplier_equivalence_approved_at is null
+              and supplier_equivalence_used_at is null
+              and supplier_equivalence_reason_snapshot is null
+            )
+            or
+            (
+              fattura_id is not null
+              and invoice_supplier_id is not null
+              and (
+                (
+                  supplier_id = invoice_supplier_id
+                  and supplier_equivalence_id is null
+                  and supplier_equivalence_approved_by is null
+                  and supplier_equivalence_approved_at is null
+                  and supplier_equivalence_used_at is null
+                  and supplier_equivalence_reason_snapshot is null
+                )
+                or
+                (
+                  supplier_id <> invoice_supplier_id
+                  and supplier_equivalence_id is not null
+                  and supplier_equivalence_approved_by is not null
+                  and supplier_equivalence_approved_at is not null
+                  and supplier_equivalence_used_at is not null
+                  and supplier_equivalence_reason_snapshot is not null
+                )
+              )
+            )
+            """,
+            name="ck_po_reconciliations_supplier_identity_audit",
+        ),
         UniqueConstraint("liquidstock_supplier_order_id", name="uq_po_reconciliations_supplier_order"),
         UniqueConstraint("fattura_id", name="uq_po_reconciliations_invoice"),
     )
@@ -36,6 +74,24 @@ class PurchaseOrderReconciliation(Base):
     liquidstock_supplier_order_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
     liquidstock_order_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
     supplier_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fornitori.id", ondelete="RESTRICT"), index=True)
+    invoice_supplier_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("fornitori.id", ondelete="RESTRICT"), index=True
+    )
+    supplier_equivalence_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("supplier_identity_equivalences.id", ondelete="RESTRICT"),
+        index=True,
+    )
+    supplier_equivalence_approved_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("utenti.id", ondelete="RESTRICT")
+    )
+    supplier_equivalence_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    supplier_equivalence_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    supplier_equivalence_reason_snapshot: Mapped[str | None] = mapped_column(Text)
     fattura_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("fatture.id", ondelete="RESTRICT"), index=True)
     venue_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="awaiting_invoice")
@@ -51,7 +107,20 @@ class PurchaseOrderReconciliation(Base):
     items = relationship("PurchaseOrderReconciliationItem", back_populates="reconciliation", cascade="all, delete-orphan", lazy="selectin")
     anomalies = relationship("PurchaseOrderReconciliationAnomaly", back_populates="reconciliation", cascade="all, delete-orphan", lazy="selectin")
     invoice = relationship("Fattura", lazy="selectin")
-    supplier = relationship("Fornitore", lazy="selectin")
+    supplier = relationship(
+        "Fornitore", foreign_keys=[supplier_id], lazy="selectin"
+    )
+    invoice_supplier = relationship(
+        "Fornitore", foreign_keys=[invoice_supplier_id], lazy="selectin"
+    )
+    supplier_equivalence = relationship(
+        "SupplierIdentityEquivalence", lazy="selectin"
+    )
+    supplier_equivalence_approver = relationship(
+        "Utente",
+        foreign_keys=[supplier_equivalence_approved_by],
+        lazy="selectin",
+    )
 
 
 class PurchaseOrderReconciliationItem(Base):
@@ -86,6 +155,9 @@ class PurchaseOrderReconciliationItem(Base):
     match_method: Mapped[str | None] = mapped_column(String(50))
     match_confidence: Mapped[Decimal] = mapped_column(Numeric(6, 5), nullable=False, default=0)
     match_reason: Mapped[str | None] = mapped_column(Text)
+    match_alias_supplier_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("fornitori.id", ondelete="RESTRICT"), index=True
+    )
     candidate_evidence: Mapped[dict | None] = mapped_column(JSONB)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -94,6 +166,15 @@ class PurchaseOrderReconciliationItem(Base):
     reconciliation = relationship("PurchaseOrderReconciliation", back_populates="items")
     invoice_line = relationship("RigaFattura", lazy="selectin")
     product = relationship("Product", lazy="selectin")
+    match_alias_supplier = relationship(
+        "Fornitore", foreign_keys=[match_alias_supplier_id], lazy="selectin"
+    )
+
+    @property
+    def match_alias_supplier_name(self) -> str | None:
+        if not self.match_alias_supplier:
+            return None
+        return self.match_alias_supplier.nome_azienda
 
 
 class PurchaseOrderReconciliationAnomaly(Base):
