@@ -10,8 +10,9 @@ guadagnarefacileonline.it, www.guadagnarefacileonline.it {
 	@www host www.guadagnarefacileonline.it
 	redir @www https://guadagnarefacileonline.it{uri} permanent
 
-	# Il bridge HMAC entra nel proxy applicativo interno.
-	handle /api/v1/integrations/liquidstock/* {
+	# Tutte le API Price Sentinel usano il certificato pubblico del dominio.
+	# Questo endpoint è anche il target HTTPS del rewrite Vercel.
+	handle /api/v1/* {
 		reverse_proxy 127.0.0.1:8082
 	}
 
