@@ -6,7 +6,6 @@ import PriceListManager from './components/PriceListManager'
 import ManualUpload from './components/ManualUpload'
 import FattureList from './components/FattureList'
 import SettingsPage from './components/SettingsPage'
-import CrossLocationMatrix from './components/CrossLocationMatrix'
 import OrderOptimizer from './components/OrderOptimizer'
 import SkuManager from './components/SkuManager'
 import SentinelCopilot from './components/SentinelCopilot'
@@ -235,7 +234,6 @@ export default function App() {
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
       case 'topproducts': return <TopProductsPriceList />;
-      case 'crosslocation': return <CrossLocationMatrix />;
       case 'crosssupplier': return <CrossSupplierMatrix />;
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'priceanalysis': return <PriceTrendAnalyzer />;
@@ -258,7 +256,6 @@ export default function App() {
       case 'validation': return { title: 'Stanza di Validazione', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
       case 'topproducts': return { title: 'Listino Top Prodotti', sub: 'Sviluppa e analizza il listino prezzi dei prodotti più acquistati' };
-      case 'crosslocation': return { title: 'Analisi Comparativa Sedi', sub: 'Matrice comparativa prezzi d\'acquisto e Vendor Passport' };
       case 'crosssupplier': return { title: 'Comparazione Fornitori', sub: 'Matrice incrociata dei prezzi per fornitore' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
@@ -359,14 +356,6 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'topproducts' ? '' : 'transparent', border: 'none' }}
           >
             <Award size={18} /> Listino Top Prodotti
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'crosslocation' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('crosslocation'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'crosslocation' ? '' : 'transparent', border: 'none' }}
-          >
-            <Grid size={18} /> Analisi Incrociata
           </button>
 
           <button 
