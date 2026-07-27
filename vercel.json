@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "http://46.225.81.66/api/$1"
+      "destination": "https://guadagnarefacileonline.it/api/$1"
     }
   ]
 }
