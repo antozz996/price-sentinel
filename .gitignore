@@ -29,6 +29,7 @@ docker-compose.override.yml
 
 # Database dumps
 backups/
+.tmp/
 *.sql.gz
 
 # OS
@@ -49,5 +50,4 @@ build/
 # Excel files
 *.xlsx
 !backend/data/import_samples/*.xlsx
-
 
