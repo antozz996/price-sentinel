@@ -3,13 +3,33 @@ Price Sentinel — FastAPI Application Factory.
 Sistema di Audit Automatizzato degli Acquisti.
 """
 
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.config import settings
+from app.database import async_session_factory
+from app.services.automation import run_operational_monitor
+
+
+logger = logging.getLogger("price_sentinel.automation")
+
+
+async def _automation_loop() -> None:
+    while True:
+        try:
+            async with async_session_factory() as session:
+                async with session.begin():
+                    await run_operational_monitor(session)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("operational_monitor_failed")
+        await asyncio.sleep(settings.AUTOMATION_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
@@ -17,8 +37,16 @@ async def lifespan(app: FastAPI):
     """Startup e shutdown hooks."""
     # Startup: importa i modelli per registrare metadata
     import app.models  # noqa: F401
+    automation_task = (
+        asyncio.create_task(_automation_loop())
+        if settings.AUTOMATION_ENABLED
+        else None
+    )
     yield
-    # Shutdown: cleanup se necessario
+    if automation_task:
+        automation_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await automation_task
 
 
 def create_app() -> FastAPI:

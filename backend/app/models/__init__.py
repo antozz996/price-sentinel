@@ -36,6 +36,18 @@ from app.models.supplier_identity_equivalence import (  # noqa: F401
     SupplierIdentityEquivalence,
     SupplierIdentityEquivalenceAudit,
 )
+from app.models.disputes import (  # noqa: F401
+    DisputeAttachment,
+    DisputeAuditEvent,
+    DisputeCase,
+    DisputeCaseAnomaly,
+    DisputeCommunication,
+    DisputeCreditNote,
+    DisputeCreditNoteAllocation,
+    DisputeSupplierResponse,
+)
+from app.models.automation import AutomationAlert, AutomationRun  # noqa: F401
+from app.models.onboarding import LocationReconciliationSettings  # noqa: F401
 
 __all__ = [
     "Base",
@@ -65,4 +77,7 @@ __all__ = [
     "LiquidStockSupplierOrderItem",
     "SupplierIdentityEquivalence",
     "SupplierIdentityEquivalenceAudit",
+    "AutomationAlert",
+    "AutomationRun",
+    "LocationReconciliationSettings",
 ]

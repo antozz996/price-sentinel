@@ -17,8 +17,8 @@ class VenueMappingInput(StrictModel):
 class AttachInvoiceInput(StrictModel):
     fattura_id: int = Field(gt=0)
     allow_reassociate: bool = False
-    price_tolerance_absolute: Decimal = Field(default=Decimal("0.01"), ge=0)
-    price_tolerance_percent: Decimal = Field(default=Decimal("1.0"), ge=0)
+    price_tolerance_absolute: Decimal | None = Field(default=None, ge=0)
+    price_tolerance_percent: Decimal | None = Field(default=None, ge=0)
 
 
 class ResolveItemInput(StrictModel):

@@ -53,7 +53,16 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    let detail = '';
+    try {
+      const payload = await response.json();
+      detail = payload?.detail || payload?.error || '';
+    } catch {
+      detail = '';
+    }
+    throw new Error(
+      detail || `API Error: ${response.status} ${response.statusText}`,
+    );
   }
 
   return response.json();

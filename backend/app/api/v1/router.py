@@ -26,6 +26,9 @@ from app.api.v1 import (
     integrations,
     reconciliations,
     supplier_equivalences,
+    disputes,
+    automation,
+    onboarding,
 )
 
 api_router = APIRouter(redirect_slashes=False)
@@ -57,3 +60,18 @@ api_router.include_router(
     tags=["Equivalenze fornitori"],
 )
 api_router.include_router(reconciliations.router, prefix="/reconciliations", tags=["Riconciliazioni ordini"])
+api_router.include_router(
+    disputes.router,
+    prefix="/disputes",
+    tags=["Contestazioni e recuperi"],
+)
+api_router.include_router(
+    automation.router,
+    prefix="/automation",
+    tags=["Monitoraggio operativo"],
+)
+api_router.include_router(
+    onboarding.router,
+    prefix="/onboarding",
+    tags=["Onboarding locale"],
+)

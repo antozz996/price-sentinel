@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.utenti import Utente
-from app.schemas.utenti import TokenResponse, UtenteLogin
+from app.schemas.utenti import TokenResponse, UtenteLogin, UtenteResponse
 from app.services.auth import create_access_token, verify_password
 
 router = APIRouter()
@@ -57,6 +57,17 @@ async def login(
 
 
 from app.api.deps import get_current_user
+
+
+@router.get(
+    "/me",
+    response_model=UtenteResponse,
+    summary="Profilo autenticato corrente",
+)
+async def current_profile(
+    current_user: Utente = Depends(get_current_user),
+) -> UtenteResponse:
+    return current_user
 
 @router.post(
     "/refresh",

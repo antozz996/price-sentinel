@@ -12,6 +12,7 @@ from app.models.fatture import Fattura, RigaFattura
 from app.models.fornitori import Fornitore
 from app.models.liquidstock_integration import LiquidStockSupplierOrder, LiquidStockSupplierOrderItem
 from app.models.location import Location
+from app.models.onboarding import LocationReconciliationSettings
 from app.models.products import Product
 from app.models.purchase_order_reconciliation import LiquidStockVenueMapping, PurchaseOrderReconciliation, PurchaseOrderReconciliationItem
 from app.models.utenti import Utente
@@ -188,10 +189,17 @@ async def candidates(supplier_order_id: UUID, db: AsyncSession = Depends(get_db)
 async def associate(supplier_order_id: UUID, payload: AttachInvoiceInput, db: AsyncSession = Depends(get_db), user: Utente = Depends(get_current_user)):
     order = await db.scalar(select(LiquidStockSupplierOrder).where(LiquidStockSupplierOrder.liquidstock_supplier_order_id == supplier_order_id).with_for_update())
     if not order: raise HTTPException(404, "order_not_found")
-    await authorize(db, user, order.liquidstock_venue_id); invoice = await db.get(Fattura, payload.fattura_id)
+    venue_map = await authorize(db, user, order.liquidstock_venue_id); invoice = await db.get(Fattura, payload.fattura_id)
     if not invoice: raise HTTPException(404, "invoice_not_found")
     row = await ensure_reconciliation(db, order)
-    try: await attach_invoice(db, row, invoice, allow_reassociate=payload.allow_reassociate, tolerance_absolute=payload.price_tolerance_absolute, tolerance_percent=payload.price_tolerance_percent)
+    configured = await db.get(LocationReconciliationSettings, venue_map.location_id) if venue_map else None
+    tolerance_absolute = payload.price_tolerance_absolute
+    tolerance_percent = payload.price_tolerance_percent
+    if tolerance_absolute is None:
+        tolerance_absolute = Decimal(configured.price_tolerance_absolute) if configured else Decimal("0.01")
+    if tolerance_percent is None:
+        tolerance_percent = Decimal(configured.price_tolerance_percent) if configured else Decimal("1.0")
+    try: await attach_invoice(db, row, invoice, allow_reassociate=payload.allow_reassociate, tolerance_absolute=tolerance_absolute, tolerance_percent=tolerance_percent)
     except ReconciliationError as error: raise HTTPException(error.status, error.code)
     return await detail(db, row)
 

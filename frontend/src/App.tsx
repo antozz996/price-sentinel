@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -17,6 +17,9 @@ import ExcludedProducts from './components/ExcludedProducts'
 import CommercialAgreements from './components/CommercialAgreements'
 import ProductIdentityManager from './components/ProductIdentityManager'
 import OrderReconciliations from './components/OrderReconciliations'
+import DisputeManagement from './components/DisputeManagement'
+import OperationalAlerts from './components/OperationalAlerts'
+import ClientOnboarding from './components/ClientOnboarding'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -85,7 +88,11 @@ export default function App() {
         localStorage.setItem('token', data.access_token);
         setIsAuth(true);
       } else {
-        setLoginError(data.detail || 'Email o password errati.');
+        setLoginError(
+          typeof data?.detail === 'string'
+            ? data.detail
+            : 'Email o password non validi.',
+        );
       }
     } catch (err) {
       setLoginError('Impossibile connettersi al server.');
@@ -241,6 +248,9 @@ export default function App() {
       case 'skumanager': return <SkuManager />;
       case 'productidentity': return <ProductIdentityManager />;
       case 'reconciliations': return <OrderReconciliations />;
+      case 'disputes': return <DisputeManagement />;
+      case 'monitor': return <OperationalAlerts />;
+      case 'onboarding': return <ClientOnboarding />;
       case 'excludedproducts': return <ExcludedProducts />;
       case 'accordicommerciali': return <CommercialAgreements />;
       case 'settings': return <SettingsPage />;
@@ -263,6 +273,9 @@ export default function App() {
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'productidentity': return { title: 'Product Identity Layer', sub: 'Gestione catalogo canonico, alias e proposte di matching' };
       case 'reconciliations': return { title: 'Riconciliazioni ordini', sub: 'Confronto ordine, ricezione e fattura con revisione manuale' };
+      case 'disputes': return { title: 'Contestazioni e recuperi', sub: 'Comunicazioni fornitori, risposte e note di credito tracciate' };
+      case 'monitor': return { title: 'Monitor operativo', sub: 'Scadenze, anomalie importanti e integrazioni da verificare' };
+      case 'onboarding': return { title: 'Onboarding cliente', sub: 'Attivazione guidata e soglie esplicite per ogni sede' };
       case 'excludedproducts': return { title: 'Prodotti Esclusi', sub: 'Gestisci la blacklist globale dei prodotti da escludere dalle analisi' };
       case 'accordicommerciali': return { title: 'Accordi Commerciali (PFA)', sub: 'Rientri di fine anno, volumi d\'acquisto e calcolo prezzi netti' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
@@ -396,6 +409,30 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'reconciliations' ? '' : 'transparent', border: 'none' }}
           >
             <GitCompareArrows size={18} /> Riconciliazioni ordini
+          </button>
+
+          <button
+            className={`btn ${activeTab === 'disputes' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('disputes'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'disputes' ? '' : 'transparent', border: 'none' }}
+          >
+            <HandCoins size={18} /> Contestazioni
+          </button>
+
+          <button
+            className={`btn ${activeTab === 'monitor' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('monitor'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'monitor' ? '' : 'transparent', border: 'none' }}
+          >
+            <BellRing size={18} /> Monitor operativo
+          </button>
+
+          <button
+            className={`btn ${activeTab === 'onboarding' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('onboarding'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'onboarding' ? '' : 'transparent', border: 'none' }}
+          >
+            <ListChecks size={18} /> Onboarding
           </button>
 
           <button 

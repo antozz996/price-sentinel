@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
 
+    # ── Safe operational monitor ─────────────
+    AUTOMATION_ENABLED: bool = False
+    AUTOMATION_INTERVAL_SECONDS: int = Field(default=900, ge=60, le=86400)
+
     # ── Ambiente ─────────────────────────────
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
