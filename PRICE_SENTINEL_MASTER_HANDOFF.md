@@ -10,8 +10,8 @@
 |-------|-------|
 | **Project Name** | Price Sentinel |
 | **Objective** | Automated purchase audit system for a Ho.Re.Ca. multi-location group. Matches Electronic Invoices (FatturaPA / Aruba Webhook) against Master Price Lists to detect anomalies and track "Recovered Funds" via Credit Notes. |
-| **Last Updated** | 2026-05-19 |
-| **Current Milestone** | **Sprint 5 COMPLETE** — Advanced pricing optimization, credit note stornos & variance analytics active. |
+| **Last Updated** | 2026-07-28 |
+| **Current Milestone** | Contestazioni, note di credito, automazioni e onboarding operativi. |
 
 ---
 
@@ -23,11 +23,14 @@
 |-----------|-----------|-------|
 | `ps_db` | PostgreSQL 15-alpine | Internal network only (`ps_internal`) |
 | `ps_backend` | FastAPI / Python 3.11-slim | Async SQLAlchemy + Alembic; hot-reload via Uvicorn |
-| `ps_nginx` | Nginx | SSL termination, reverse proxy, rate limiting; self-signed certs in `nginx/ssl/` |
+| `ps_nginx` | Nginx | HTTP interno su loopback, contenuti statici, reverse proxy e rate limiting; TLS terminato da Caddy |
 | **Frontend** | React + TypeScript + Vite | Deployed on **Vercel** (CDN), communicates with backend via `vercel.json` rewrite rules |
 
-**Backend host (production):** `http://46.225.81.66` (raw server IP — Nginx listens on 80/443)
-**Frontend URL:** Deployed via Vercel; `vercel.json` proxies `/api/*` → `http://46.225.81.66/api/*`
+**API canonica di produzione:** `https://guadagnarefacileonline.it/api/v1`
+**TLS pubblico:** Caddy serve certificati Let's Encrypt distinti e validi per
+`guadagnarefacileonline.it` e `www.guadagnarefacileonline.it`; `www` reindirizza al
+dominio root. L'accesso diretto all'IP è un endpoint legacy separato, firmato dalla CA
+interna di Caddy, e non deve essere usato da browser o integrazioni pubbliche.
 
 ### 2. Backend Stack
 

@@ -20,6 +20,18 @@ richiedono una conferma umana.
 - Bridge LiquidStock: riceve eventi firmati e idempotenti nella inbox.
 - Monitor operativo: genera avvisi deduplicati senza compiere azioni economiche.
 
+## TLS di produzione
+
+Caddy termina il TLS pubblico per `guadagnarefacileonline.it` e
+`www.guadagnarefacileonline.it` usando certificati Let's Encrypt gestiti e rinnovati
+automaticamente. `www` reindirizza al dominio root. Nginx è raggiungibile soltanto su
+loopback e non espone certificati.
+
+L'API canonica è `https://guadagnarefacileonline.it/api/v1`. L'accesso HTTPS diretto
+all'IP è un endpoint legacy distinto, firmato dalla CA privata di Caddy, e non è un
+endpoint pubblico supportato. Dettagli, seriali e validità sono registrati in
+`docs/TLS_PRODUCTION_STATUS.md`.
+
 ## Flusso ordine-fattura
 
 1. LiquidStock registra un evento nella propria outbox.
