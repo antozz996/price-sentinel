@@ -1,6 +1,7 @@
-# Environment
+# Environment and runtime secrets
 .env
-*.env.local
+.env.*
+!.env.example
 
 # Python
 __pycache__/
@@ -20,10 +21,11 @@ env/
 # Docker
 docker-compose.override.yml
 
-# SSL Certificates
-nginx/ssl/*.pem
-nginx/ssl/*.key
-nginx/ssl/*.crt
+# TLS private material and legacy runtime directories
+*.key
+**/privkey.pem
+**/ssl/**
+**/ssl_*/**
 
 # Database dumps
 backups/
@@ -47,6 +49,5 @@ build/
 # Excel files
 *.xlsx
 !backend/data/import_samples/*.xlsx
-
 
 

@@ -1,0 +1,34 @@
+{
+	admin 127.0.0.1:2019
+}
+
+# Caddy gestisce automaticamente certificati distinti per root e www;
+# www viene sempre reindirizzato a root.
+guadagnarefacileonline.it, www.guadagnarefacileonline.it {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	@www host www.guadagnarefacileonline.it
+	redir @www https://guadagnarefacileonline.it{uri} permanent
+
+	# Tutte le API Price Sentinel usano il certificato pubblico del dominio.
+	# Questo endpoint è anche il target HTTPS del rewrite Vercel.
+	handle /api/v1/* {
+		reverse_proxy 127.0.0.1:8082
+	}
+
+	# Mantiene l'accesso code-server esistente.
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}
+
+# Price Sentinel resta raggiungibile sull'IP; Caddy gestisce anche questa chiave
+# fuori dal repository mediante la propria CA interna.
+http://46.225.81.66 {
+	redir https://46.225.81.66{uri} permanent
+}
+
+https://46.225.81.66 {
+	tls internal
+	reverse_proxy 127.0.0.1:8082
+}

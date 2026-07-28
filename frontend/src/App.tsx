@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -16,6 +16,7 @@ import PriceTrendAnalyzer from './components/PriceTrendAnalyzer'
 import ExcludedProducts from './components/ExcludedProducts'
 import CommercialAgreements from './components/CommercialAgreements'
 import ProductIdentityManager from './components/ProductIdentityManager'
+import OrderReconciliations from './components/OrderReconciliations'
 import { API_BASE, getHeaders } from './api'
 
 export default function App() {
@@ -239,6 +240,7 @@ export default function App() {
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
       case 'productidentity': return <ProductIdentityManager />;
+      case 'reconciliations': return <OrderReconciliations />;
       case 'excludedproducts': return <ExcludedProducts />;
       case 'accordicommerciali': return <CommercialAgreements />;
       case 'settings': return <SettingsPage />;
@@ -260,6 +262,7 @@ export default function App() {
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'productidentity': return { title: 'Product Identity Layer', sub: 'Gestione catalogo canonico, alias e proposte di matching' };
+      case 'reconciliations': return { title: 'Riconciliazioni ordini', sub: 'Confronto ordine, ricezione e fattura con revisione manuale' };
       case 'excludedproducts': return { title: 'Prodotti Esclusi', sub: 'Gestisci la blacklist globale dei prodotti da escludere dalle analisi' };
       case 'accordicommerciali': return { title: 'Accordi Commerciali (PFA)', sub: 'Rientri di fine anno, volumi d\'acquisto e calcolo prezzi netti' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
@@ -289,7 +292,7 @@ export default function App() {
             <h2 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 700, letterSpacing: '1px' }}>PRICE SENTINEL</h2>
           </div>
           {/* Mobile Close Drawer Button */}
-          <button 
+          <button
             className="mobile-sidebar-close" 
             onClick={() => setMobileSidebarOpen(false)}
             style={{ display: 'none' }}
@@ -385,6 +388,14 @@ export default function App() {
             style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'ordini' ? '' : 'transparent', border: 'none' }}
           >
             <ShoppingCart size={18} /> Ottimizzatore Ordini
+          </button>
+
+          <button
+            className={`btn ${activeTab === 'reconciliations' ? 'btn-primary' : ''}`}
+            onClick={() => { setActiveTab('reconciliations'); setMobileSidebarOpen(false); }}
+            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'reconciliations' ? '' : 'transparent', border: 'none' }}
+          >
+            <GitCompareArrows size={18} /> Riconciliazioni ordini
           </button>
 
           <button 

@@ -12,16 +12,16 @@ from sqlalchemy.orm import sessionmaker
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
 from app.models.listino import ListinoMaster
 from app.models.fornitori import Fornitore
+from app.config import settings
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-DATABASE_URL = "postgresql+asyncpg://sentinel:REMOVED_DB_CREDENTIAL@db:5432/price_sentinel"
 OUTPUT_PATH = "/app/storico_prezzi_navas.xlsx"
 
 async def main():
-    engine = create_async_engine(DATABASE_URL, echo=False)
+    engine = create_async_engine(settings.database_url, echo=False)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     
     async with async_session() as db:

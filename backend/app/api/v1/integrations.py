@@ -7,14 +7,17 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.fatture import Fattura
 from app.models.fornitori import Fornitore
 from app.models.liquidstock_integration import LiquidStockIntegrationEvent
 from app.models.products import Product
+from app.models.liquidstock_integration import LiquidStockSupplierOrder
+from app.models.purchase_order_reconciliation import PurchaseOrderReconciliation, PurchaseOrderReconciliationAnomaly
 from app.schemas.liquidstock_integration import (
     CatalogSearchRequest,
     IntegrationEventResponse,
@@ -22,6 +25,7 @@ from app.schemas.liquidstock_integration import (
     ProductCatalogItem,
     SupplierCatalogItem,
 )
+from app.schemas.purchase_order_reconciliation import ReconciliationStatusRequest, ReconciliationStatusResponse
 from app.services.liquidstock_auth import verify_liquidstock_request
 from app.services.liquidstock_projection import (
     ProjectionError,
@@ -260,3 +264,47 @@ async def search_liquidstock_products(
         )
         for item in products
     ]
+
+
+@router.post(
+    "/liquidstock/reconciliations/status",
+    response_model=ReconciliationStatusResponse,
+    summary="Return a signed reconciliation status snapshot",
+)
+async def reconciliation_status(request: Request, db: AsyncSession = Depends(get_db)):
+    raw_body = await request.body()
+    verify_liquidstock_request(request, raw_body)
+    try:
+        query = ReconciliationStatusRequest.model_validate_json(raw_body)
+    except ValidationError:
+        return JSONResponse(status_code=422, content={"error": "status_request_rejected"})
+    order = await db.scalar(select(LiquidStockSupplierOrder).where(
+        LiquidStockSupplierOrder.liquidstock_supplier_order_id == query.liquidstock_supplier_order_id
+    ))
+    if not order:
+        return JSONResponse(status_code=404, content={"error": "order_not_found"})
+    reconciliation = await db.scalar(select(PurchaseOrderReconciliation).where(
+        PurchaseOrderReconciliation.liquidstock_supplier_order_id == query.liquidstock_supplier_order_id
+    ))
+    if not reconciliation:
+        return ReconciliationStatusResponse(
+            liquidstock_supplier_order_id=query.liquidstock_supplier_order_id,
+            status="awaiting_invoice",
+            updated_at=order.updated_at,
+        )
+    invoice = await db.get(Fattura, reconciliation.fattura_id) if reconciliation.fattura_id else None
+    anomaly_count, disputed = (await db.execute(select(
+        func.count(PurchaseOrderReconciliationAnomaly.id),
+        func.coalesce(func.sum(PurchaseOrderReconciliationAnomaly.disputed_amount), 0),
+    ).where(PurchaseOrderReconciliationAnomaly.reconciliation_id == reconciliation.id))).one()
+    return ReconciliationStatusResponse(
+        liquidstock_supplier_order_id=query.liquidstock_supplier_order_id,
+        reconciliation_id=reconciliation.id,
+        status=reconciliation.status,
+        invoice_id=reconciliation.fattura_id,
+        invoice_number=invoice.numero_documento if invoice else None,
+        invoice_date=invoice.data_documento if invoice else None,
+        anomalies_count=anomaly_count,
+        disputed_amount=disputed or None,
+        updated_at=reconciliation.updated_at,
+    )
