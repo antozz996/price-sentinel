@@ -290,7 +290,21 @@ async def list_candidates(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user)
 ):
-    stmt = select(MatchCandidate).where(MatchCandidate.status == "pending").order_by(MatchCandidate.score.desc())
+    # I candidati associati a righe già risolte sono suggerimenti obsoleti e non
+    # devono ricomparire nell'area di lavoro. I candidati da listino, che non hanno
+    # invoice_line_id, restano invece visibili fino alla loro risoluzione.
+    stmt = (
+        select(MatchCandidate)
+        .outerjoin(RigaFattura, RigaFattura.id == MatchCandidate.invoice_line_id)
+        .where(
+            MatchCandidate.status == "pending",
+            or_(
+                MatchCandidate.invoice_line_id.is_(None),
+                RigaFattura.stato_matching == StatoMatching.in_parking,
+            ),
+        )
+        .order_by(MatchCandidate.score.desc())
+    )
     res = await db.execute(stmt)
     return res.scalars().all()
 
