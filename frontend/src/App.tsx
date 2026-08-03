@@ -297,7 +297,7 @@ export default function App() {
 
       {/* Sidebar Navigation */}
       <aside className={`sidebar ${mobileSidebarOpen ? 'sidebar-open' : ''}`}>
-        <div style={{ marginBottom: '40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        <div className="sidebar-header" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Activity color="white" size={20} />
@@ -314,7 +314,7 @@ export default function App() {
           </button>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <nav className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button 
             className={`btn ${activeTab === 'dashboard' ? 'btn-primary' : ''}`}
             onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
@@ -460,7 +460,7 @@ export default function App() {
           </button>
         </nav>
         
-        <div style={{ marginTop: 'auto' }}>
+        <div className="sidebar-footer">
           <button 
             className={`btn ${activeTab === 'settings' ? 'btn-primary' : ''}`}
             onClick={() => { setActiveTab('settings'); setMobileSidebarOpen(false); }}

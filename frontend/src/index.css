@@ -80,10 +80,52 @@ body {
   display: flex;
   flex-direction: column;
   padding: 24px;
-  overflow-y: auto;
+  overflow-y: hidden;
+  overflow-x: hidden;
+}
+
+.sidebar-header,
+.sidebar-footer {
+  flex: 0 0 auto;
+}
+
+.sidebar-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: scroll;
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+  padding-right: 8px;
+}
+
+.sidebar-footer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-glass);
+}
+
+.sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 161, 166, 0.7) rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(155, 161, 166, 0.7);
+  border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(248, 248, 248, 0.85);
 }
 
 .main-content {
