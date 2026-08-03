@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     AUTOMATION_INTERVAL_SECONDS: int = Field(default=900, ge=60, le=86400)
 
     # ── Ambiente ─────────────────────────────
-    ENVIRONMENT: str = "development"
-    DEBUG: bool = True
+    ENVIRONMENT: str = "production"
+    DEBUG: bool = False
 
 settings = Settings()
