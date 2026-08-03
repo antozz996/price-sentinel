@@ -65,6 +65,7 @@ def normalize_price_for_comparison(
     invoice_uom: Optional[str] = None,
     product: Optional[Product] = None,
     alias: Optional[SupplierProductAlias] = None,
+    target_comparison_unit: Optional[str] = None,
 ) -> NormalizedPriceResult:
     """
     Normalizza il prezzo di acquisto unitario per consentire il confronto con il listino.
@@ -104,8 +105,17 @@ def normalize_price_for_comparison(
             explanation="Prodotto canonico mancante",
         )
 
-    comp_unit = product_obj.comparison_unit
-    unit_count = product_obj.unit_count or 1
+    raw_comp_unit = normalize_text(str(target_comparison_unit or product_obj.comparison_unit or "piece"))
+    if raw_comp_unit in {"bottiglia", "bottiglie", "bot", "bt", "btl", "bottle"}:
+        comp_unit = "bottle"
+    elif raw_comp_unit in {"cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione", "ct", "cs", "crt"}:
+        comp_unit = "box"
+    elif raw_comp_unit in {"l", "lt", "liter", "litre", "litro", "litri"}:
+        comp_unit = "liter"
+    elif raw_comp_unit in {"kg", "chilo", "chili", "kilo"}:
+        comp_unit = "kg"
+    else:
+        comp_unit = "piece"
 
     # 1. Risolvi pack_qty
     pack_qty = None
@@ -122,15 +132,39 @@ def normalize_price_for_comparison(
     explanation = f"Normalizzazione per {comp_unit}"
     normalized_price = price
 
+    uom_normalized = normalize_text(str(uom or ""))
+    package_uoms = {
+        "cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione",
+        "confezioni", "crt", "css", "ct", "cs",
+    }
+    individual_uoms = {
+        "piece", "pieces", "pezzo", "pezzi", "pz", "unita", "unit",
+        "bottle", "bottiglia", "bottiglie", "bot", "bt", "btl", "fl",
+    }
+    is_package_uom = uom_normalized in package_uoms
+    is_individual_uom = uom_normalized in individual_uoms
+
     if comp_unit in ("piece", "bottle"):
-        # Prezzo al pezzo o bottiglia = prezzo confezione / pack_qty
-        uom_lower = (uom or "").lower()
-        is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css", "x"))
-        if is_package_uom or pack_qty > 1:
+        if is_package_uom:
             normalized_price = price / Decimal(str(pack_qty))
-        explanation = f"Prezzo unitario normalizzato su confezione da {pack_qty} {comp_unit}"
+            explanation = f"Prezzo confezione diviso per {pack_qty} {comp_unit}"
+        elif is_individual_uom:
+            explanation = f"Prezzo già espresso per {comp_unit}; pack fisico {pack_qty}"
+        elif pack_qty > 1:
+            reliable = False
+            explanation = "Unità prezzo ambigua: conversione confezione non applicata"
+        else:
+            explanation = f"Prezzo unitario per {comp_unit}"
 
     elif comp_unit == "liter":
+        if uom_normalized in {"l", "lt", "liter", "litre", "litro", "litri"}:
+            return NormalizedPriceResult(
+                normalized_unit_price=price,
+                comparison_unit=comp_unit,
+                pack_qty=pack_qty,
+                reliable=True,
+                explanation="Prezzo già espresso per litro",
+            )
         vol_ml = None
         if alias_obj and getattr(alias_obj, "volume_ml", None) is not None:
             vol_ml = alias_obj.volume_ml
@@ -140,19 +174,29 @@ def normalize_price_for_comparison(
             vol_ml = extract_volume_ml(descrizione)
 
         if vol_ml:
-            uom_lower = (uom or "").lower()
-            is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css", "piece", "pz", "fl", "bt"))
-            if is_package_uom and pack_qty > 1:
+            if is_package_uom:
                 prezzo_singolo = price / Decimal(str(pack_qty))
-            else:
+            elif is_individual_uom:
                 prezzo_singolo = price
-            normalized_price = prezzo_singolo / (Decimal(str(vol_ml)) / Decimal("1000"))
-            explanation = f"Prezzo al litro ricavato da {vol_ml}ml (confezione x{pack_qty})"
+            else:
+                prezzo_singolo = None
+                reliable = False
+            if prezzo_singolo is not None:
+                normalized_price = prezzo_singolo / (Decimal(str(vol_ml)) / Decimal("1000"))
+            explanation = f"Prezzo al litro ricavato da {vol_ml}ml (pack fisico {pack_qty})"
         else:
             reliable = False
             explanation = "Volume mancante per calcolo prezzo al litro"
 
     elif comp_unit == "kg":
+        if uom_normalized in {"kg", "chilo", "chili", "kilo"}:
+            return NormalizedPriceResult(
+                normalized_unit_price=price,
+                comparison_unit=comp_unit,
+                pack_qty=pack_qty,
+                reliable=True,
+                explanation="Prezzo già espresso per kg",
+            )
         weight_g = None
         if alias_obj and getattr(alias_obj, "weight_g", None) is not None:
             weight_g = alias_obj.weight_g
@@ -162,24 +206,27 @@ def normalize_price_for_comparison(
             weight_g = extract_weight_g(descrizione)
 
         if weight_g:
-            uom_lower = (uom or "").lower()
-            is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
-            if is_package_uom and pack_qty > 1:
+            if is_package_uom:
                 prezzo_singolo = price / Decimal(str(pack_qty))
-            else:
+            elif is_individual_uom:
                 prezzo_singolo = price
-            normalized_price = prezzo_singolo / (Decimal(str(weight_g)) / Decimal("1000"))
-            explanation = f"Prezzo al kg ricavato da {weight_g}g (confezione x{pack_qty})"
+            else:
+                prezzo_singolo = None
+                reliable = False
+            if prezzo_singolo is not None:
+                normalized_price = prezzo_singolo / (Decimal(str(weight_g)) / Decimal("1000"))
+            explanation = f"Prezzo al kg ricavato da {weight_g}g (pack fisico {pack_qty})"
         else:
             reliable = False
             explanation = "Peso mancante per calcolo prezzo al kg"
 
     elif comp_unit == "box":
-        uom_lower = (uom or "").lower()
-        is_package_uom = any(x in uom_lower for x in ("cassa", "cartone", "box", "conf", "crt", "css"))
-        if not is_package_uom and pack_qty > 1:
+        if is_individual_uom and pack_qty > 1:
             normalized_price = price * Decimal(str(pack_qty))
             explanation = f"Prezzo cassa normalizzato da pezzo singolo x{pack_qty}"
+        elif not is_package_uom and pack_qty > 1:
+            reliable = False
+            explanation = "Unità prezzo ambigua: conversione a confezione non applicata"
 
     return NormalizedPriceResult(
         normalized_unit_price=normalized_price,
@@ -415,7 +462,13 @@ async def match_riga(
     result.candidates = res_v2["candidates"]
     
     if result.decision == "auto_match" and res_v2["sku_interno"]:
-        listino = await _get_listino_attivo(db, fornitore_id, res_v2["sku_interno"], data_documento)
+        listino = await _get_listino_attivo(
+            db,
+            fornitore_id,
+            res_v2["sku_interno"],
+            data_documento,
+            supplier_alias_id=result.supplier_alias_id,
+        )
         if listino:
             result.matched = True
             result.livello = 1
@@ -435,7 +488,16 @@ async def match_riga(
                     self.unita_misura_fattura = uom
                     
             line_obj = TempInvoiceLine(descrizione, prezzo_netto_normalizzato, quantita, unita_misura_fattura)
-            norm_price_res = normalize_price_for_comparison(line_obj, product_obj)
+            alias_obj = (
+                await db.get(SupplierProductAlias, result.supplier_alias_id)
+                if result.supplier_alias_id else None
+            )
+            norm_price_res = normalize_price_for_comparison(
+                line_obj,
+                product_obj,
+                alias=alias_obj,
+                target_comparison_unit=listino.unita_misura,
+            )
             
             if norm_price_res.reliable:
                 result.prezzo_fatturato_normalizzato = norm_price_res.normalized_unit_price
@@ -462,7 +524,11 @@ async def match_riga(
 
 
 async def _get_listino_attivo(
-    db: AsyncSession, fornitore_id: int, sku_interno: str, data_documento: str
+    db: AsyncSession,
+    fornitore_id: int,
+    sku_interno: str,
+    data_documento: str,
+    supplier_alias_id: int | None = None,
 ) -> Optional[ListinoMaster]:
     """
     Trova il record ListinoMaster attivo alla data del documento.
@@ -476,19 +542,26 @@ async def _get_listino_attivo(
     else:
         doc_date = data_documento
 
-    result = await db.execute(
-        select(ListinoMaster)
-        .where(
-            and_(
-                ListinoMaster.fornitore_id == fornitore_id,
-                ListinoMaster.sku_interno == sku_interno,
-                ListinoMaster.data_inizio_validita <= doc_date,
+    def active_query(alias_id: int | None = None):
+        query = (
+            select(ListinoMaster)
+            .where(
+                and_(
+                    ListinoMaster.fornitore_id == fornitore_id,
+                    ListinoMaster.sku_interno == sku_interno,
+                    ListinoMaster.data_inizio_validita <= doc_date,
+                )
+            )
+            .where(
+                (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= doc_date)
             )
         )
-        .where(
-            (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= doc_date)
-        )
-        .order_by(ListinoMaster.data_inizio_validita.desc())
-        .limit(1)
-    )
-    return result.scalar_one_or_none()
+        if alias_id is not None:
+            query = query.where(ListinoMaster.supplier_product_alias_id == alias_id)
+        return query.order_by(ListinoMaster.data_inizio_validita.desc()).limit(1)
+
+    if supplier_alias_id is not None:
+        exact = (await db.execute(active_query(supplier_alias_id))).scalar_one_or_none()
+        if exact is not None:
+            return exact
+    return (await db.execute(active_query())).scalar_one_or_none()

@@ -22,7 +22,7 @@ interface Product {
 interface Alias {
   id: number
   supplier_id: number
-  product_id: number
+  product_id: number | null
   supplier_code: string | null
   raw_description: string
   normalized_description: string
@@ -69,6 +69,7 @@ export default function ProductIdentityManager() {
   const [importLoading, setImportLoading] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [importDryRun, setImportDryRun] = useState(true)
+  const [createMissingProducts, setCreateMissingProducts] = useState(false)
   const [previewFilter, setPreviewFilter] = useState('all')
 
   // Search & Filters
@@ -136,6 +137,14 @@ export default function ProductIdentityManager() {
   const handleImportSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!importSupplierId || !importFile) return
+
+    if (!importDryRun && createMissingProducts) {
+      const confirmed = window.confirm(
+        'IMPORTAZIONE PRIMO LISTINO\n\nLe righe senza corrispondenza esatta creeranno nuovi prodotti canonici. ' +
+        'Non verranno effettuati abbinamenti fuzzy automatici. Vuoi procedere?'
+      )
+      if (!confirmed) return
+    }
     
     setImportLoading(true)
     setImportError(null)
@@ -149,7 +158,11 @@ export default function ProductIdentityManager() {
       const fetchHeaders: any = { ...headers }
       delete fetchHeaders['Content-Type']
 
-      const res = await fetch(`${API_BASE}/product-identity/import-supplier-list/${importSupplierId}?dry_run=${importDryRun}`, {
+      const query = new URLSearchParams({
+        dry_run: String(importDryRun),
+        create_missing_products: String(createMissingProducts)
+      })
+      const res = await fetch(`${API_BASE}/product-identity/import-supplier-list/${importSupplierId}?${query}`, {
         method: 'POST',
         headers: fetchHeaders,
         body: formData
@@ -778,6 +791,24 @@ export default function ProductIdentityManager() {
                 </label>
               </div>
 
+              <div style={{ padding: '12px', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '8px', background: 'rgba(59,130,246,0.06)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    id="createMissingProductsCheckbox"
+                    checked={createMissingProducts}
+                    onChange={e => setCreateMissingProducts(e.target.checked)}
+                    style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: 'var(--accent-blue)' }}
+                  />
+                  <label htmlFor="createMissingProductsCheckbox" style={{ fontSize: '0.85rem', color: 'white', fontWeight: 600, cursor: 'pointer' }}>
+                    Primo listino: crea i prodotti mancanti
+                    <span style={{ display: 'block', marginTop: '5px', color: 'var(--text-secondary)', fontWeight: 400, lineHeight: 1.4 }}>
+                      Usa il nome esatto del fornitore. Prezzo unitario e confezione restano separati; nessun abbinamento simile viene approvato automaticamente.
+                    </span>
+                  </label>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 className="btn btn-primary"
@@ -804,7 +835,7 @@ export default function ProductIdentityManager() {
               {importResult ? (
                 <>
                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Risultato Elaborazione</h4>
-                  {importResult.is_dry_run && (
+                  {importResult.dry_run && (
                     <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '10px 14px', borderRadius: '8px', color: '#60a5fa', fontSize: '0.85rem', fontWeight: 500 }}>
                       <strong>SIMULAZIONE ATTIVA:</strong> Nessun record è stato realmente modificato o creato nel database.
                     </div>
@@ -826,6 +857,16 @@ export default function ProductIdentityManager() {
                       <span style={{ fontSize: '0.8rem', color: 'var(--status-red)' }}>Righe Scartate/Errori</span>
                       <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-red)' }}>{importResult.righe_scartate}</div>
                     </div>
+                    <div style={{ background: 'rgba(59,130,246,0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59,130,246,0.15)' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#60a5fa' }}>
+                        Prodotti {importResult.dry_run ? 'da creare (simulati)' : 'creati'}
+                      </span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#60a5fa' }}>{importResult.prodotti_creati || 0}</div>
+                    </div>
+                    <div style={{ background: 'rgba(59,130,246,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59,130,246,0.1)' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Prodotti esatti riutilizzati</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{importResult.prodotti_riutilizzati || 0}</div>
+                    </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -836,7 +877,15 @@ export default function ProductIdentityManager() {
                     <div>Prezzi Storicizzati: <strong>{importResult.prezzi_storicizzati}</strong></div>
                   </div>
 
-                  {importResult.match_candidates_creati > 0 && (
+                  {importResult.match_candidates_creati > 0 && importResult.dry_run && (
+                    <div style={{ background: 'rgba(255, 200, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 200, 0, 0.1)' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#ffb700' }}>
+                        Simulazione: nessun candidato è stato salvato. Per il primo listino attiva “crea i prodotti mancanti” e ripeti prima la prova.
+                      </span>
+                    </div>
+                  )}
+
+                  {importResult.match_candidates_creati > 0 && !importResult.dry_run && (
                     <div style={{ background: 'rgba(255, 200, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 200, 0, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.85rem', color: '#ffb700' }}>Ci sono {importResult.match_candidates_creati} nuovi candidati da abbinare manualmente.</span>
                       <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
@@ -875,6 +924,21 @@ export default function ProductIdentityManager() {
                     }}
                   >
                     Tutti
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewFilter('new_product')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      background: previewFilter === 'new_product' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '6px',
+                      color: previewFilter === 'new_product' ? 'white' : 'var(--text-secondary)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Nuovi prodotti
                   </button>
                   <button
                     type="button"
@@ -984,8 +1048,9 @@ export default function ProductIdentityManager() {
                   <tbody>
                     {importResult.preview
                       .filter((p: any) => {
-                        if (previewFilter === 'matched') return p.match_status === 'auto_match';
-                        if (previewFilter === 'parking') return p.match_status !== 'auto_match';
+                        if (previewFilter === 'matched') return ['auto_match', 'exact_product'].includes(p.match_status);
+                        if (previewFilter === 'new_product') return p.match_status === 'new_product';
+                        if (previewFilter === 'parking') return p.match_status === 'parking';
                         if (previewFilter === 'errors') return p.warning && p.warning.length > 0;
                         if (previewFilter === 'low_score') return p.score < 70;
                         if (previewFilter === 'no_price') return p.price === 0 || !p.price;
@@ -1000,7 +1065,11 @@ export default function ProductIdentityManager() {
                         <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600 }}>€ {p.price.toFixed(2)}</td>
                         <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>{p.uom} (x{p.pack_qty})</td>
                         <td style={{ padding: '10px' }}>
-                          {p.match_status === 'auto_match' ? (
+                          {p.match_status === 'new_product' ? (
+                            <span style={{ color: '#60a5fa', background: 'rgba(59,130,246,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                              Nuovo prodotto ({p.matched_sku})
+                            </span>
+                          ) : ['auto_match', 'exact_product'].includes(p.match_status) ? (
                             <span style={{ color: 'var(--status-green)', background: 'rgba(0, 200, 100, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }} title={p.match_reason === 'existing_alias' ? 'Matched via existing alias' : 'Matched via score threshold'}>
                               Auto ({p.matched_sku}) {p.score ? `(Score ${p.score.toFixed(0)}%)` : ''}
                             </span>

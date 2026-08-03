@@ -2,6 +2,7 @@ import openpyxl
 from io import BytesIO
 from decimal import Decimal
 from datetime import date
+import hashlib
 import math
 import re
 from typing import Optional, List, Dict, Any
@@ -14,6 +15,31 @@ from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.models.listino import ListinoMaster
 from app.services.normalization import normalize_text, extract_volume_ml, infer_category, extract_pack_qty, extract_weight_g
 from app.services.matching import resolve_invoice_line_product
+
+
+def normalize_price_uom(value: Any) -> str:
+    """Normalizza l'unità a cui si riferisce il prezzo, senza dedurla dal pack."""
+    normalized = normalize_text(str(value or "")).strip()
+    aliases = {
+        "liter": {"l", "lt", "litro", "litri", "liter", "litre"},
+        "kg": {"kg", "chilo", "chili", "kilo"},
+        "bottle": {"bottiglia", "bottiglie", "bot", "bt", "btl", "bottle"},
+        "box": {
+            "scatola", "scatole", "cassa", "casse", "box", "conf", "confezione",
+            "confezioni", "cartone", "cartoni", "ct", "cs", "crt",
+        },
+        "piece": {"pezzo", "pezzi", "pz", "piece", "pieces", "unita", "unit"},
+    }
+    for canonical, values in aliases.items():
+        if normalized in values:
+            return canonical
+    return "piece"
+
+
+def bootstrap_sku(normalized_description: str) -> str:
+    """SKU stabile per prodotti creati dal primo listino, privo di dati del fornitore."""
+    digest = hashlib.sha256(normalized_description.encode("utf-8")).hexdigest()[:12].upper()
+    return f"IMP-{digest}"
 
 
 def clean_price(val) -> Optional[Decimal]:
@@ -66,7 +92,7 @@ def map_excel_columns(headers: List) -> Dict[str, int]:
         "raw_description": ["prodotto", "descrizione", "articolo", "nome articolo", "nome", "descrizione articolo"],
         "supplier_code": ["codice articolo", "codice", "sku fornitore", "codice art.", "sku", "cod. art.", "cod.articolo", "cod.art"],
         "price": ["prezzo netto", "prezzo", "listino", "costo", "prezzo pattuito", "prezzo unitario"],
-        "uom": ["unità misura", "um", "u.m.", "unita misura", "unita di misura"],
+        "uom": ["unità di misura", "unità misura", "um", "u.m.", "unita misura", "unita di misura"],
         "pack_qty": ["confezione", "pack", "pz x conf", "pezzi", "formato", "quantità conf.", "quantita conf", "quantità", "quantita", "pz/conf"]
     }
     
@@ -148,7 +174,8 @@ async def import_supplier_list_excel(
     supplier_id: int,
     file_bytes: bytes,
     data_validita: Optional[date] = None,
-    dry_run: bool = False
+    dry_run: bool = False,
+    create_missing_products: bool = False,
 ) -> dict:
     if not data_validita:
         data_validita = date.today()
@@ -193,6 +220,8 @@ async def import_supplier_list_excel(
     prezzi_invariati = 0
     prezzi_storicizzati = 0
     candidati_creati = 0
+    prodotti_creati = 0
+    prodotti_riutilizzati = 0
     righe_scartate = 0
     errori_parsing = []
     preview = []
@@ -242,17 +271,8 @@ async def import_supplier_list_excel(
             if not pack_qty:
                 pack_qty = 1
 
-        # UOM standard
-        uom = "piece"
-        uom_lower = uom_raw.lower()
-        if uom_lower in ("lt", "litri", "litro", "l"):
-            uom = "liter"
-        elif uom_lower in ("kg", "chilo", "kilo"):
-            uom = "kg"
-        elif uom_lower in ("bottiglia", "bot", "bt"):
-            uom = "bottle"
-        elif uom_lower in ("scatola", "cassa", "box", "conf", "confezione"):
-            uom = "box"
+        # UOM del prezzo: rimane distinta dalla quantità fisica della confezione.
+        uom = normalize_price_uom(uom_raw)
 
         # 4. MATCHING AUTOMATICO
         # A. Verifica se esiste già un alias approvato per lo stesso fornitore e descrizione
@@ -268,7 +288,7 @@ async def import_supplier_list_excel(
             )
         )
         alias_res = await db.execute(alias_stmt)
-        alias = alias_res.scalar_one_or_none()
+        alias = alias_res.scalars().first()
 
         match_status = "parking"
         matched_sku = None
@@ -291,92 +311,159 @@ async def import_supplier_list_excel(
                     alias.volume_ml = volume_ml
                 db.add(alias)
         else:
-            # Esegui motore di matching
-            res_match = await resolve_invoice_line_product(
-                db=db,
-                fornitore_id=supplier_id,
-                raw_description=raw_desc,
-                supplier_code=supplier_code
-            )
-            
-            best_candidate = res_match["candidates"][0] if res_match.get("candidates") else None
-            if best_candidate:
-                score = best_candidate["score"]
-                block_flag = best_candidate["block"]
-                best_product_id = best_candidate["product_id"]
-                best_sku = best_candidate["sku_interno"]
-            else:
-                score = 0.0
-                block_flag = False
-                best_product_id = None
-                best_sku = None
+            # Nel bootstrap del primo listino riutilizziamo solo un prodotto canonico
+            # con nome normalizzato esattamente uguale. Nessun fuzzy match viene
+            # trasformato automaticamente in un'associazione definitiva.
+            exact_product = None
+            if create_missing_products:
+                exact_product = (
+                    await db.execute(
+                        select(Product)
+                        .where(Product.normalized_name == normalized_description)
+                        .order_by(Product.id.asc())
+                        .limit(1)
+                    )
+                ).scalars().first()
 
-            if score >= 90.0 and not block_flag and best_product_id:
-                # Match sicuro! Crea alias approvato
-                match_status = "auto_match"
-                matched_sku = best_sku
-                
-                if not dry_run:
-                    alias = SupplierProductAlias(
-                        supplier_id=supplier_id,
-                        product_id=best_product_id,
-                        supplier_code=supplier_code,
-                        raw_description=raw_desc,
-                        normalized_description=normalized_description,
-                        pack_qty=pack_qty,
-                        volume_ml=volume_ml,
-                        weight_g=weight_g,
-                        container_type=container_type,
-                        status="approved",
-                        source="import",
-                        confidence_score=score
-                    )
-                    db.add(alias)
-                alias_approvati_creati += 1
-            else:
-                # Match dubbio -> crea MatchCandidate in Parking Area
-                match_status = "parking"
-                
-                # Idempotenza: cerca se esiste già un candidato identico pending
-                cand_stmt = select(MatchCandidate).where(
-                    and_(
-                        MatchCandidate.supplier_id == supplier_id,
-                        MatchCandidate.raw_description == raw_desc,
-                        MatchCandidate.status == "pending"
-                    )
+            if create_missing_products:
+                product_was_created = exact_product is None
+                matched_sku = (
+                    exact_product.sku_interno if exact_product and exact_product.sku_interno
+                    else bootstrap_sku(normalized_description)
                 )
-                cand_res = await db.execute(cand_stmt)
-                candidate_exist = cand_res.scalars().first()
-                
-                if not candidate_exist:
-                    # Se lo score è < 70, il product_id è Null (senza aggancio certo)
-                    linked_prod_id = best_product_id if score >= 70.0 else None
-                    
-                    if not dry_run:
-                        candidate = MatchCandidate(
+                match_status = "new_product" if product_was_created else "exact_product"
+
+                if product_was_created:
+                    prodotti_creati += 1
+                else:
+                    prodotti_riutilizzati += 1
+
+                if not dry_run:
+                    product = exact_product
+                    if product is None:
+                        product = Product(
+                            sku_interno=matched_sku,
+                            canonical_name=raw_desc,
+                            normalized_name=normalized_description,
+                            category=category,
+                            volume_ml=volume_ml,
+                            weight_g=weight_g,
+                            unit_count=1,
+                            container_type=container_type,
+                            comparison_unit=uom,
+                            is_active=True,
+                        )
+                        db.add(product)
+                        await db.flush()
+
+                    if not product.sku_interno:
+                        product.sku_interno = bootstrap_sku(normalized_description)
+                        matched_sku = product.sku_interno
+
+                    if alias is None:
+                        alias = SupplierProductAlias(
                             supplier_id=supplier_id,
-                            product_id=linked_prod_id,
-                            source_type="price_list_row",
+                            product_id=product.id,
+                            supplier_code=supplier_code,
                             raw_description=raw_desc,
                             normalized_description=normalized_description,
-                            score=score,
-                            block_flag=block_flag,
-                            status="pending",
-                            reason_json={
-                                "price": float(price_val),
-                                "uom": uom,
-                                "pack_qty": pack_qty,
-                                "volume_ml": volume_ml,
-                                "category": category,
-                                "supplier_code": supplier_code
-                            }
+                            pack_qty=pack_qty,
+                            volume_ml=volume_ml,
+                            weight_g=weight_g,
+                            container_type=container_type,
+                            status="approved",
+                            source="supplier_list_bootstrap",
+                            confidence_score=1.0,
                         )
-                        db.add(candidate)
-                    candidati_creati += 1
+                    else:
+                        alias.product_id = product.id
+                        alias.supplier_code = supplier_code
+                        alias.normalized_description = normalized_description
+                        alias.pack_qty = pack_qty
+                        alias.volume_ml = volume_ml
+                        alias.weight_g = weight_g
+                        alias.container_type = container_type
+                        alias.status = "approved"
+                        alias.source = "supplier_list_bootstrap"
+                        alias.confidence_score = 1.0
+                    db.add(alias)
+                alias_approvati_creati += 1
+
+            else:
+                # Flusso normale: usa il motore di matching conservativo.
+                res_match = await resolve_invoice_line_product(
+                    db=db,
+                    fornitore_id=supplier_id,
+                    raw_description=raw_desc,
+                    supplier_code=supplier_code,
+                )
+
+                best_candidate = res_match["candidates"][0] if res_match.get("candidates") else None
+                if best_candidate:
+                    score = best_candidate["score"]
+                    block_flag = best_candidate["block"]
+                    best_product_id = best_candidate["product_id"]
+                    best_sku = best_candidate["sku_interno"]
+
+                if score >= 90.0 and not block_flag and best_product_id:
+                    match_status = "auto_match"
+                    matched_sku = best_sku
+
+                    if not dry_run:
+                        alias = SupplierProductAlias(
+                            supplier_id=supplier_id,
+                            product_id=best_product_id,
+                            supplier_code=supplier_code,
+                            raw_description=raw_desc,
+                            normalized_description=normalized_description,
+                            pack_qty=pack_qty,
+                            volume_ml=volume_ml,
+                            weight_g=weight_g,
+                            container_type=container_type,
+                            status="approved",
+                            source="import",
+                            confidence_score=score,
+                        )
+                        db.add(alias)
+                    alias_approvati_creati += 1
+                else:
+                    match_status = "parking"
+                    cand_stmt = select(MatchCandidate).where(
+                        and_(
+                            MatchCandidate.supplier_id == supplier_id,
+                            MatchCandidate.raw_description == raw_desc,
+                            MatchCandidate.status == "pending",
+                        )
+                    )
+                    candidate_exist = (await db.execute(cand_stmt)).scalars().first()
+
+                    if not candidate_exist:
+                        linked_prod_id = best_product_id if score >= 70.0 else None
+                        if not dry_run:
+                            candidate = MatchCandidate(
+                                supplier_id=supplier_id,
+                                product_id=linked_prod_id,
+                                source_type="price_list_row",
+                                raw_description=raw_desc,
+                                normalized_description=normalized_description,
+                                score=score,
+                                block_flag=block_flag,
+                                status="pending",
+                                reason_json={
+                                    "price": float(price_val),
+                                    "uom": uom,
+                                    "pack_qty": pack_qty,
+                                    "volume_ml": volume_ml,
+                                    "category": category,
+                                    "supplier_code": supplier_code,
+                                },
+                            )
+                            db.add(candidate)
+                        candidati_creati += 1
 
         # 5. SALVATAGGIO PREZZI (Solo se match_status == "auto_match")
         price_outcome = None
-        if match_status == "auto_match" and matched_sku:
+        if match_status in ("auto_match", "new_product", "exact_product") and matched_sku:
             if not dry_run:
                 # Flush to populate the alias ID if it was newly created
                 if alias and alias.id is None:
@@ -448,6 +535,12 @@ async def import_supplier_list_excel(
                 match_reason = "existing_alias"
             else:
                 match_reason = "auto_score"
+        elif match_status == "new_product":
+            preview_score = 100.0
+            match_reason = "controlled_bootstrap"
+        elif match_status == "exact_product":
+            preview_score = 100.0
+            match_reason = "exact_canonical_name"
 
         preview.append({
             "row_index": idx + header_idx + 2,
@@ -483,5 +576,8 @@ async def import_supplier_list_excel(
         "righe_scartate": righe_scartate,
         "errori_parsing": errori_parsing[:50],
         "preview": preview,
-        "dry_run": dry_run
+        "dry_run": dry_run,
+        "create_missing_products": create_missing_products,
+        "prodotti_creati": prodotti_creati,
+        "prodotti_riutilizzati": prodotti_riutilizzati,
     }

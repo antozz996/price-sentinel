@@ -867,6 +867,7 @@ async def resolve_parked_line(
             raise HTTPException(status_code=404, detail="Prodotto canonico non trovato")
             
         # Crea alias fornitore in modalità 'manual' per apprendimento futuro
+        resolved_alias = None
         if riga.codice_fornitore_raw:
             existing_alias = await db.execute(
                 select(SupplierProductAlias).where(
@@ -880,6 +881,7 @@ async def resolve_parked_line(
             if old_alias:
                 old_alias.product_id = product.id
                 old_alias.last_seen_at = datetime.utcnow()
+                resolved_alias = old_alias
             else:
                 new_alias = SupplierProductAlias(
                     supplier_id=fattura.fornitore_id,
@@ -890,6 +892,7 @@ async def resolve_parked_line(
                     source="manual",
                 )
                 db.add(new_alias)
+                resolved_alias = new_alias
         else:
             new_alias = SupplierProductAlias(
                 supplier_id=fattura.fornitore_id,
@@ -900,6 +903,7 @@ async def resolve_parked_line(
                 source="manual",
             )
             db.add(new_alias)
+            resolved_alias = new_alias
             
         # Aggiorna la riga
         riga.sku_interno = product.sku_interno
@@ -911,9 +915,20 @@ async def resolve_parked_line(
         await db.flush()
         
         # Calcola prezzo normalizzato e verifica anomalie
-        listino = await _get_listino_attivo(db, fattura.fornitore_id, product.sku_interno, str(fattura.data_documento))
+        listino = await _get_listino_attivo(
+            db,
+            fattura.fornitore_id,
+            product.sku_interno,
+            str(fattura.data_documento),
+            supplier_alias_id=resolved_alias.id if resolved_alias else None,
+        )
         if listino:
-            norm_price_res = normalize_price_for_comparison(riga, product)
+            norm_price_res = normalize_price_for_comparison(
+                riga,
+                product,
+                alias=resolved_alias,
+                target_comparison_unit=listino.unita_misura,
+            )
             if norm_price_res.reliable:
                 riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
                 delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))

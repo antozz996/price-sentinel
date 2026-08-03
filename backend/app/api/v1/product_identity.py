@@ -355,6 +355,7 @@ async def approve_candidate(
             confidence_score=1.0
         )
         db.add(alias)
+    await db.flush()
 
     # Aggiorna la riga fattura originale se presente
     if candidate.invoice_line_id:
@@ -369,9 +370,20 @@ async def approve_candidate(
             # Calcola prezzi ed eventuali anomalie
             fattura = await db.get(Fattura, riga.fattura_id)
             if fattura:
-                listino = await _get_listino_attivo(db, fattura.fornitore_id, product.sku_interno, str(fattura.data_documento))
+                listino = await _get_listino_attivo(
+                    db,
+                    fattura.fornitore_id,
+                    product.sku_interno,
+                    str(fattura.data_documento),
+                    supplier_alias_id=alias.id,
+                )
                 if listino:
-                    norm_price_res = normalize_price_for_comparison(riga, product)
+                    norm_price_res = normalize_price_for_comparison(
+                        riga,
+                        product,
+                        alias=alias,
+                        target_comparison_unit=listino.unita_misura,
+                    )
                     if norm_price_res.reliable:
                         riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
                         delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
@@ -435,12 +447,22 @@ async def import_supplier_list(
     supplier_id: int,
     file: UploadFile = File(...),
     dry_run: bool = Query(True, description="Esegue l'importazione in modalità dry run (simulazione)"),
+    create_missing_products: bool = Query(
+        False,
+        description="Crea in modo controllato i prodotti canonici mancanti durante il primo listino",
+    ),
     db: AsyncSession = Depends(get_db),
     _admin: Utente = Depends(require_admin)
 ):
     file_bytes = await file.read()
     from app.services.supplier_list_import import import_supplier_list_excel
-    res = await import_supplier_list_excel(db=db, supplier_id=supplier_id, file_bytes=file_bytes, dry_run=dry_run)
+    res = await import_supplier_list_excel(
+        db=db,
+        supplier_id=supplier_id,
+        file_bytes=file_bytes,
+        dry_run=dry_run,
+        create_missing_products=create_missing_products,
+    )
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
     return res
