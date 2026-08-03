@@ -13,6 +13,7 @@ interface Product {
   volume_ml: number | null
   weight_g: number | null
   unit_count: number
+  supplier_pack_sizes: number[]
   container_type: string | null
   comparison_unit: string
   is_commodity: boolean
@@ -519,7 +520,7 @@ export default function ProductIdentityManager() {
                       <th>Nome Canonico</th>
                       <th>Categoria</th>
                       <th>Formato / Volume</th>
-                      <th>Unità Conf</th>
+                      <th>Confezione fornitore</th>
                       <th style={{ textAlign: 'right' }}>Azioni</th>
                     </tr>
                   </thead>
@@ -542,7 +543,11 @@ export default function ProductIdentityManager() {
                           </span>
                         </td>
                         <td>{p.volume_ml ? `${p.volume_ml} ml` : p.weight_g ? `${p.weight_g} g` : 'N/D'}</td>
-                        <td>x{p.unit_count}</td>
+                        <td>
+                          {p.supplier_pack_sizes?.length
+                            ? p.supplier_pack_sizes.map(size => `x${size}`).join(' / ')
+                            : 'N/D'}
+                        </td>
                         <td style={{ textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                           <button 
                             className="btn btn-secondary" 
@@ -587,7 +592,7 @@ export default function ProductIdentityManager() {
                       supplier_code: '',
                       raw_description: '',
                       ean: '',
-                      pack_qty: selectedProduct.unit_count.toString(),
+                      pack_qty: selectedProduct.supplier_pack_sizes?.[0]?.toString() || '',
                       volume_ml: selectedProduct.volume_ml?.toString() || '',
                       weight_g: selectedProduct.weight_g?.toString() || '',
                       container_type: selectedProduct.container_type || '',
@@ -1185,7 +1190,7 @@ export default function ProductIdentityManager() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Pezzi per Confezione</label>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Unità base canonica (normalmente 1)</label>
                 <input
                   type="number"
                   value={productForm.unit_count}

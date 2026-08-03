@@ -2,7 +2,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select, delete, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -59,6 +59,7 @@ class ProductUpdate(BaseModel):
 class ProductResponse(ProductBase):
     id: int
     normalized_name: Optional[str] = None
+    supplier_pack_sizes: List[int] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -142,7 +143,7 @@ async def list_products(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user)
 ):
-    stmt = select(Product).order_by(Product.canonical_name)
+    stmt = select(Product).options(selectinload(Product.aliases)).order_by(Product.canonical_name)
     res = await db.execute(stmt)
     return res.scalars().all()
 

@@ -64,6 +64,15 @@ class Product(Base):
     def __repr__(self) -> str:
         return f"<Product {self.canonical_name}>"
 
+    @property
+    def supplier_pack_sizes(self) -> list[int]:
+        """Confezioni fisiche dichiarate dagli alias approvati dei fornitori."""
+        return sorted({
+            alias.pack_qty
+            for alias in self.aliases
+            if alias.status == "approved" and alias.pack_qty is not None and alias.pack_qty > 0
+        })
+
 
 class SupplierProductAlias(Base):
     """
