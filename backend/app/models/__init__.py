@@ -48,6 +48,14 @@ from app.models.disputes import (  # noqa: F401
 )
 from app.models.automation import AutomationAlert, AutomationRun  # noqa: F401
 from app.models.onboarding import LocationReconciliationSettings  # noqa: F401
+from app.models.purchase_policy import (  # noqa: F401
+    ProductPurchasePolicy,
+    ProductPurchasePolicyAudit,
+    ProductSupplierAssessment,
+    ProductSupplierAssessmentAudit,
+    PurchasePolicyDeviation,
+    SmartPriceSheetPreview,
+)
 
 __all__ = [
     "Base",
@@ -80,4 +88,10 @@ __all__ = [
     "AutomationAlert",
     "AutomationRun",
     "LocationReconciliationSettings",
+    "ProductPurchasePolicy",
+    "ProductPurchasePolicyAudit",
+    "ProductSupplierAssessment",
+    "ProductSupplierAssessmentAudit",
+    "PurchasePolicyDeviation",
+    "SmartPriceSheetPreview",
 ]
