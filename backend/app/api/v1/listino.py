@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin
+from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.listino import ListinoMaster, PFAScaglione, PFATipo, UoMConversione
 from app.models.utenti import Utente
@@ -44,7 +44,7 @@ async def list_listino(
     include_scaduti: bool = Query(False, description="Includi record scaduti"),
     limit: int = Query(50, ge=1, le=10000),
     offset: int = Query(0, ge=0),
-    _admin: Utente = Depends(require_admin),
+    _user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(ListinoMaster).order_by(ListinoMaster.sku_interno)

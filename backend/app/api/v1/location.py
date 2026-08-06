@@ -26,6 +26,13 @@ async def list_locations(
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Location).order_by(Location.nome_struttura)
+    if current_user.ruolo.value == "manager":
+        if current_user.location_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account manager non associato a una sede",
+            )
+        query = query.where(Location.id == current_user.location_id)
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -67,9 +74,16 @@ async def create_location(
 )
 async def get_location(
     location_id: int,
-    _user: Utente = Depends(get_current_user),
+    current_user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.ruolo.value == "manager" and (
+        current_user.location_id is None or current_user.location_id != location_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accesso alla sede non autorizzato",
+        )
     result = await db.execute(select(Location).where(Location.id == location_id))
     location = result.scalar_one_or_none()
     if not location:

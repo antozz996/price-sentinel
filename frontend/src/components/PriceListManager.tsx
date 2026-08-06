@@ -89,7 +89,7 @@ export default function PriceListManager() {
         setMessage({ text: `Errore: ${errorMsg}`, type: 'error' });
         setValidationErrors([]);
       }
-    } catch (err) {
+    } catch {
       setMessage({ text: 'Errore di rete o server non raggiungibile', type: 'error' });
       setValidationErrors([]);
     } finally {
@@ -143,7 +143,7 @@ export default function PriceListManager() {
         setMessage({ text: `Errore: ${errorMsg}`, type: 'error' });
         setValidationErrors([]);
       }
-    } catch (err) {
+    } catch {
       setMessage({ text: 'Errore di rete o server non raggiungibile', type: 'error' });
       setValidationErrors([]);
     } finally {
@@ -427,7 +427,7 @@ export default function PriceListManager() {
                       const data = await res.json();
                       alert(`Errore: ${data.detail || 'Impossibile svuotare il listino'}`);
                     }
-                  } catch (err) {
+                  } catch {
                     alert('Errore di rete');
                   }
                 }}

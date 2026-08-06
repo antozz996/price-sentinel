@@ -84,7 +84,7 @@ export default function CrossSupplierMatrix() {
             } else {
               setSelectedSupplierIds(storedActiveIds);
             }
-          } catch (e) {
+          } catch {
             setSelectedSupplierIds(filteredFornitori.map(f => f.id));
           }
         } else {
@@ -452,7 +452,7 @@ export default function CrossSupplierMatrix() {
                   const row = matrix![sku];
                   const visiblePricesList = Object.entries(row.prezzi)
                     .filter(([fid]) => selectedSupplierIds.includes(Number(fid)))
-                    .map(([_, p]) => p.prezzo);
+                    .map(([, p]) => p.prezzo);
                   const minPrice = visiblePricesList.length > 0 ? Math.min(...visiblePricesList) : null;
 
                   return (

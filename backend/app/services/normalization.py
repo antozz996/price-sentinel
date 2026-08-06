@@ -274,8 +274,25 @@ def infer_category(text: str) -> Optional[str]:
         return bool(re.search(rf"\b{pattern}\b", cleaned))
 
     # 1. Monouso has top priority (prevents bicchiere acqua / caffe categorization conflicts)
-    if any(has_word(x) for x in ["bicchiere", "tovagliolo", "cannuccia", "posate", "piatto", "monouso", "tovaglia", "vaschetta"]):
+    if any(has_word(x) for x in [
+        "bicchiere", "tovagliolo", "cannuccia", "posate", "forchetta",
+        "cucchiaio", "piatto", "monouso", "tovaglia", "vaschetta",
+        "coperchio", "insalatiera",
+    ]):
         return "monouso"
+
+    if any(has_word(x) for x in [
+        "detergente", "candeggina", "disincrostante", "sgrassatore",
+        "sapone", "scopa", "spugna", "lavapavimenti", "brillantante",
+        "igienizzante", "guanti", "vileda",
+    ]):
+        return "pulizia"
+
+    if any(has_word(x) for x in [
+        "sacco", "sacchi", "contenitore", "cartone", "scatola",
+        "pellicola", "alluminio", "bobina", "rotolo", "packaging",
+    ]):
+        return "packaging"
 
     # 2. Acqua / Beverage / Soft Drink
     if has_word("acqua"):
@@ -292,4 +309,3 @@ def infer_category(text: str) -> Optional[str]:
         return "food"
 
     return None
-
