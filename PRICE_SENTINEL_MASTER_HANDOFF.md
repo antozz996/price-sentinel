@@ -250,6 +250,19 @@ vercel --prod  # uses vercel.json config
 
 ## 📝 Change Log
 
+### [2026-08-06] Smart Price Sheet & Supplier Policy Engine
+- Nuovo **Listino Smart** con matrice canonica paginata, incolla TSV/CSV, modifica cella,
+  mapping esplicito delle ambiguità e anteprima obbligatoria.
+- Commit dei prezzi transazionale e idempotente tramite token, con versioni storiche
+  in `listino_master`; nessuna creazione implicita di prodotti o fornitori.
+- Assessment prodotto-fornitore, qualità 1–5 e policy globali/per sede con audit.
+- Motore `Decimal` che separa minimo assoluto, raccomandato e selezionato; integrazione
+  compatibile nel resolver ordini e scostamenti policy distinti dalle anomalie prezzo.
+- Migrazione additiva `smart_price_policy`, preflight read-only e guardia rollback. La
+  migrazione non è stata applicata al database reale.
+- Verifiche: 17 unit test parser/ranking, 12 test API/migrazione su PostgreSQL temporaneo,
+  build TypeScript/Vite ed ESLint senza errori.
+
 ### [2026-05-19] Sprint 5: Variance & Loss (Sprechi) Analytics ✅
 - **PostgreSQL CTE Variance Pipeline (`GET /api/v1/intelligence/variance-loss`)**: Developed a highly optimized Common Table Expression (CTE) query calculation pro-rating purchase costs against the lowest historical price recorded inside the group.
 - **Visual Variance Widget (`Dashboard.tsx`)**: Rendered a premium dark glassmorphism tabular widget showcasing top leaked items with high-precision metrics (acquisitions, min vs avg price, total waste) and proportional visual red sparkbars showing leakage severity.

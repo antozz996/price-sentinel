@@ -13,7 +13,8 @@
 
 1. Mettere il servizio in maintenance se la finestra lo richiede.
 2. Applicare le migrazioni in ordine:
-   `ls_s6_disputes`, `ls_s7_automation`, `ls_s8_onboarding`.
+   `ls_s6_disputes`, `ls_s7_automation`, `ls_s8_onboarding`,
+   `smart_price_policy`.
 3. Eseguire i preflight post-migration.
 4. Caricare il nuovo backend e riavviarlo una sola volta.
 5. Pubblicare il frontend compilato.
@@ -25,6 +26,11 @@ Variabili nuove, senza valori nel repository:
 - `AUTOMATION_ENABLED`
 - `AUTOMATION_INTERVAL_SECONDS`
 
+Prima di `smart_price_policy` eseguire in modalità sola lettura
+`backend/scripts/smart_price_sheet_preflight.sql` e verificare che la revisione corrente
+sia `ls_s8_onboarding`. Non applicare la migrazione di produzione come effetto del
+deploy applicativo: richiede autorizzazione e finestra esplicite.
+
 ## Rollback
 
 Prima di eseguire un rollback verificare l'esistenza di dati operativi. Gli script:
@@ -32,6 +38,7 @@ Prima di eseguire un rollback verificare l'esistenza di dati operativi. Gli scri
 - `backend/rollback/2026_07_28_onboarding_settings_rollback.sql`
 - `backend/rollback/2026_07_28_automation_alerts_rollback.sql`
 - `backend/rollback/2026_07_28_disputes_credit_notes_rollback.sql`
+- `backend/rollback/smart_price_sheet_policy_guard.sql`
 
 sono intenzionalmente protettivi e possono fermarsi. Non forzare la rimozione di
 contestazioni, comunicazioni, note di credito o alert attivi. Se sono presenti dati
@@ -47,6 +54,8 @@ e concordare la strategia.
 - risposta, riconoscimento e nota di credito parziale;
 - alert monitor e presa visione;
 - onboarding e salvataggio soglie;
+- matrice canonica, preview senza variazione listino e commit idempotente;
+- assessment bloccato, raccomandazione policy e storico prezzi;
 - nessuna modifica alle fatture sorgente o a `current_stock`.
 
 ## Incidenti

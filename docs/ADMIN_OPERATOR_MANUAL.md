@@ -65,3 +65,33 @@ agli importi economici.
 - non dedurre venue, fornitore o prodotto solo dal nome;
 - non usare l'apertura email/WhatsApp come prova di invio o ricezione;
 - non modificare la giacenza LiquidStock da Price Sentinel.
+
+## Usare il Listino Smart
+
+La pagina contiene quattro tab:
+
+- **Matrice**: confronta prezzi per prodotto canonico e fornitore. Il bordo blu indica
+  il minimo assoluto; “CONSIGLIATO” segue invece qualità e regole. Un fornitore bloccato
+  resta visibile ma non è selezionabile automaticamente.
+- **Incolla prezzi**: copia una matrice da Excel/Sheets con il prodotto nella prima
+  colonna e i fornitori nelle successive. Le celle vuote sono ignorate.
+- **Qualità e regole**: assegna qualità 1–5, approvato/sconsigliato/bloccato e policy.
+- **Storico e audit**: mostra versioni prezzo, modifiche alle regole e scostamenti.
+
+Per un incolla massivo:
+
+1. Incollare il blocco e scegliere data di validità e unità.
+2. Premere **Analizza senza salvare**.
+3. Associare solo le intestazioni o i prodotti non riconosciuti; quelli univoci sono
+   risolti automaticamente.
+4. Correggere tutti gli errori. Il sistema non permette il commit finché restano
+   ambiguità, prezzi invalidi o doppie righe attive.
+5. Controllare il riepilogo nuovi/aggiornati/invariati e confermare.
+
+Per una singola cella, cliccare il prezzo o **inserisci**, indicare valore e unità e
+generare l'anteprima. Anche questa scorciatoia applica la stessa conferma sicura.
+
+Una motivazione è obbligatoria per `sconsigliato` e `bloccato`. Il premium percentuale
+o assoluto consente di preferire qualità/fornitore indicato entro la soglia; con zero
+premium vince il miglior prezzo idoneo. La modalità manuale non emette una selezione
+automatica.
