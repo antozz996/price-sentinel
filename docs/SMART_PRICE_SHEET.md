@@ -21,6 +21,8 @@ questo modulo non crea automaticamente prodotti, alias o fornitori.
   `accepted_exception` o `resolved` e presa visione tracciata.
 - `smart_price_sheet_previews`: token, hash, payload validato, scadenza e risultato
   idempotente del commit.
+- `products.order_name`: nome rapido facoltativo e univoco per la ricerca durante la
+  creazione ordine; `canonical_name` e SKU restano l'identità primaria.
 
 Una configurazione con `location_id` prevale sulla corrispondente configurazione
 globale (`location_id IS NULL`). Indici univoci parziali impediscono duplicati nello
@@ -35,22 +37,27 @@ fornitori, prezzi attivi, prezzi spot, assessment e policy. Ogni riga espone:
 - `recommended_supplier_id`: migliore offerta che rispetta la policy;
 - `selected_supplier_id`: scelta automatica effettiva, assente in modalità manuale;
 - offerte con eleggibilità, motivi di esclusione, qualità e tipo contratto/spot.
+- `eligible_supplier_ids`: fornitori pertinenti, inferiti da alias approvati,
+  listini, fatture e assessment reali, estesi alle categorie già trattate.
 
-I prezzi mancanti sono celle vuote, non prodotti mancanti. Le pagine hanno massimo
-500 righe lato API e 50 nella UI predefinita per mantenere la matrice rapida.
+Le celle fuori settore non sono modificabili e vengono respinte anche dalla preview.
+Le pagine hanno massimo 500 righe lato API; il Foglio prezzi carica l'intero catalogo
+attivo, mentre la matrice di confronto resta paginata a 50 righe.
 
 ## Incolla, mapping e preview
 
-Il parser accetta TSV da Excel/Google Sheets e CSV con `;`, `,` o `|`. La prima
-colonna identifica prodotto/SKU; le altre intestazioni identificano fornitori. Sono
-supportati decimali italiani e internazionali, con massimo quattro cifre decimali.
+Il parser accetta TSV da Excel/Google Sheets e CSV con `;`, `,` o `|`. Nel formato
+nuovo la prima colonna è `Nome rapido ordine (facoltativo)`, la seconda identifica il
+prodotto reale/SKU e le successive identificano i fornitori. Il formato storico con
+prodotto nella prima colonna resta compatibile. Sono supportati decimali italiani e
+internazionali, con massimo quattro cifre decimali.
 
 La risoluzione automatica avviene solo per corrispondenza esatta e univoca. Il client
 può inviare:
 
 ```json
 {
-  "text": "Prodotto\tFornitore A\nAcqua 75cl\t1,20",
+  "text": "Nome rapido ordine\tProdotto reale / SKU\tFornitore A\nACQUA\tAcqua 75cl\t1,20",
   "supplier_mapping": {"Fornitore A": 12},
   "product_mapping": {"Acqua 75cl": 44},
   "effective_date": "2026-08-06",
@@ -63,7 +70,8 @@ La preview:
 - non inserisce né aggiorna `listino_master`;
 - riporta create/update/unchanged/error con vecchio e nuovo valore;
 - blocca prodotti/fornitori ambigui, alias approvati multipli, prezzi invalidi,
-  coppie duplicate e prezzi attivi multipli;
+  coppie duplicate, prezzi attivi multipli e fornitori fuori settore;
+- mostra separatamente le modifiche ai nomi rapidi;
 - genera un token associato all'utente, valido 30 minuti.
 
 `POST /cell-preview` usa lo stesso motore per la modifica di una singola cella.
@@ -96,6 +104,8 @@ visibile come possibile minimo assoluto, ma non viene raccomandato.
 `resolve_order_item` usa questo risultato e mantiene `best_offer` per compatibilità,
 aggiungendo minimo, raccomandato, selezionato, policy e motivazione. Le deviazioni
 policy sono eventi commerciali separati dalle anomalie contrattuali delle fatture.
+La ricerca ordine prova prima SKU e nome canonico/reale esatti, poi il nome rapido e
+infine il fuzzy matching: un nome reale vince sempre su un nome rapido omonimo.
 
 ## Permessi
 
@@ -125,8 +135,8 @@ PATCH /api/v1/smart-price-sheet/deviations/{id}
 
 ## Test
 
-- `backend/tests/smart_price_sheet_unit.py`: 18 controlli parser e ranking.
-- `backend/tests/smart_price_sheet_e2e.py`: 13 controlli API su PostgreSQL usa-e-getta.
+- `backend/tests/smart_price_sheet_unit.py`: 22 controlli parser e ranking.
+- `backend/tests/smart_price_sheet_e2e.py`: 19 controlli API su PostgreSQL usa-e-getta.
 - `backend/tests/smart_price_sheet_test_base.sql`: solo base isolata per l'E2E, mai
   eseguita in produzione.
 - `npm run build` e `npm run lint` per il frontend.

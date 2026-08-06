@@ -38,6 +38,7 @@ from app.services.purchase_recommendation import (
     rank_supplier_offers,
 )
 from app.services.smart_price_sheet import build_price_preview, commit_price_preview
+from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
 router = APIRouter()
@@ -138,7 +139,11 @@ async def matrix(
     if search:
         term = f"%{search.strip()}%"
         product_filter.append(
-            or_(Product.canonical_name.ilike(term), Product.sku_interno.ilike(term))
+            or_(
+                Product.canonical_name.ilike(term),
+                Product.order_name.ilike(term),
+                Product.sku_interno.ilike(term),
+            )
         )
     if category:
         product_filter.append(Product.category == category)
@@ -165,6 +170,9 @@ async def matrix(
     product_ids = [row.id for row in products]
     skus = [row.sku_interno for row in products if row.sku_interno]
     supplier_ids = [row.id for row in suppliers]
+    supplier_scope = await load_supplier_catalog_scope(
+        db, supplier_ids=set(supplier_ids)
+    )
     today = date.today()
 
     active_prices = []
@@ -302,6 +310,11 @@ async def matrix(
     supplier_names = {row.id: row.nome_azienda for row in suppliers}
     rows = []
     for product in products:
+        eligible_supplier_ids = supplier_scope.eligible_supplier_ids(
+            product_id=product.id,
+            category=product.category,
+            supplier_ids=set(supplier_ids),
+        )
         offers = []
         if product.sku_interno:
             for supplier in suppliers:
@@ -318,10 +331,12 @@ async def matrix(
                 "product_id": product.id,
                 "sku_interno": product.sku_interno,
                 "canonical_name": product.canonical_name,
+                "order_name": product.order_name,
                 "category": product.category,
                 "subcategory": product.subcategory,
                 "comparison_unit": product.comparison_unit,
                 "offers": {str(item["supplier_id"]): item for item in recommendation["offers"]},
+                "eligible_supplier_ids": sorted(eligible_supplier_ids),
                 "absolute_cheapest_supplier_id": (
                     recommendation["absolute_cheapest"]["supplier_id"]
                     if recommendation["absolute_cheapest"]

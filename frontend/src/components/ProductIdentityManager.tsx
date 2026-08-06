@@ -6,6 +6,7 @@ interface Product {
   id: number
   sku_interno: string | null
   canonical_name: string
+  order_name: string | null
   brand: string | null
   category: string | null
   subcategory: string | null
@@ -134,6 +135,7 @@ export default function ProductIdentityManager() {
   const [productForm, setProductForm] = useState({
     sku_interno: '',
     canonical_name: '',
+    order_name: '',
     brand: '',
     category: 'monouso',
     subcategory: '',
@@ -279,6 +281,7 @@ export default function ProductIdentityManager() {
         weight_g: productForm.weight_g ? parseInt(productForm.weight_g) : null,
         unit_count: parseInt(productForm.unit_count) || 1,
         brand: productForm.brand || null,
+        order_name: productForm.order_name || null,
         sku_interno: productForm.sku_interno || null,
         subcategory: productForm.subcategory || null,
         variant: productForm.variant || null,
@@ -421,6 +424,7 @@ export default function ProductIdentityManager() {
     setProductForm({
       sku_interno: product.sku_interno || '',
       canonical_name: product.canonical_name,
+      order_name: product.order_name || '',
       brand: product.brand || '',
       category: product.category || 'monouso',
       subcategory: product.subcategory || '',
@@ -514,6 +518,7 @@ export default function ProductIdentityManager() {
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.canonical_name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (p.order_name || '').toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sku_interno || '').toLowerCase().includes(productSearch.toLowerCase())
     const matchesCategory = !categoryFilter || p.category === categoryFilter
     return matchesSearch && matchesCategory
@@ -635,6 +640,7 @@ export default function ProductIdentityManager() {
                   setProductForm({
                     sku_interno: '',
                     canonical_name: '',
+                    order_name: '',
                     brand: '',
                     category: 'monouso',
                     subcategory: '',
@@ -864,7 +870,7 @@ export default function ProductIdentityManager() {
                           />
                         </td>
                         <td><code style={{ color: 'var(--accent-blue)' }}>{p.sku_interno || 'N/D'}</code></td>
-                        <td style={{ fontWeight: 600 }}>{p.canonical_name}</td>
+                        <td style={{ fontWeight: 600 }}>{p.canonical_name}{p.order_name && <div style={{ color: '#6ee7b7', fontSize: '0.72rem', marginTop: 3 }}>Ordine: {p.order_name}</div>}</td>
                         <td>
                           <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
                             {p.category || 'Senza categoria'}
@@ -1616,6 +1622,18 @@ export default function ProductIdentityManager() {
                   placeholder="es. Bicchiere caffè"
                   value={productForm.canonical_name}
                   onChange={e => setProductForm({ ...productForm, canonical_name: e.target.value })}
+                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Nome rapido ordine (facoltativo)</label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder="es. GUANTI"
+                  value={productForm.order_name}
+                  onChange={e => setProductForm({ ...productForm, order_name: e.target.value })}
                   style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
                 />
               </div>

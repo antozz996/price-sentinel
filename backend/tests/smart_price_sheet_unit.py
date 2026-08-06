@@ -29,6 +29,19 @@ table = parse_clipboard_table("Prodotto\tSupplier A\tSupplier B\nAcqua\t1,20\t1.
 check("TSV headers", table["supplier_headers"] == ["Supplier A", "Supplier B"])
 check("blank cells preserved", table["rows"][1]["values"] == ["", "8"])
 
+named_table = parse_clipboard_table(
+    "Nome rapido ordine (facoltativo)\tProdotto reale / SKU\tSupplier A\n"
+    "GUANTI\tGuanti in nitrile nero\t17,02"
+)
+check("optional order name detected", named_table["rows"][0]["order_name"] == "GUANTI")
+check("real product remains identity", named_table["rows"][0]["product_ref"] == "Guanti in nitrile nero")
+check("supplier columns start after identity", named_table["supplier_headers"] == ["Supplier A"])
+
+name_only_table = parse_clipboard_table(
+    "Nome rapido ordine\tProdotto reale / SKU\nGUANTI\tGuanti in nitrile nero"
+)
+check("name-only sheet supported", name_only_table["supplier_headers"] == [])
+
 csv_table = parse_clipboard_table('Prodotto;Supplier A\n"Acqua, vetro";1,25')
 check("semicolon CSV quoted value", csv_table["rows"][0]["product_ref"] == "Acqua, vetro")
 check("Italian decimal", parse_decimal_price("€ 1.234,5678") == Decimal("1234.5678"))

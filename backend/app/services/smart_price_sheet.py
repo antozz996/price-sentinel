@@ -18,6 +18,7 @@ from app.models.listino import ListinoMaster
 from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import SmartPriceSheetPreview
 from app.services.normalization import normalize_text
+from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
 MAX_ROWS = 5000
@@ -63,27 +64,42 @@ def parse_clipboard_table(text_value: str) -> dict:
         for row in csv.reader(io.StringIO(text_value), delimiter=delimiter)
         if any(cell.strip() for cell in row)
     ]
-    if len(rows) < 2 or len(rows[0]) < 2:
+    first_header = normalize_text(rows[0][0]) if rows and rows[0] else ""
+    has_order_name = first_header.startswith("nome rapido") or first_header in {
+        "nome ordine",
+        "nome semplice",
+        "order name",
+    }
+    product_column = 1 if has_order_name else 0
+    supplier_start = product_column + 1
+    minimum_columns = 2 if has_order_name else 2
+    if len(rows) < 2 or len(rows[0]) < minimum_columns:
         raise ValueError("Servono una riga intestazioni e almeno una riga prodotto")
     if len(rows) - 1 > MAX_ROWS:
         raise ValueError(f"Massimo {MAX_ROWS} prodotti per operazione")
-    if len(rows[0]) - 1 > MAX_SUPPLIERS:
+    if len(rows[0]) - supplier_start > MAX_SUPPLIERS:
         raise ValueError(f"Massimo {MAX_SUPPLIERS} fornitori per operazione")
     width = len(rows[0])
     normalized_rows = [row + [""] * (width - len(row)) for row in rows[1:]]
     if any(len(row) > width for row in normalized_rows):
         raise ValueError("Una o più righe hanno più colonne dell'intestazione")
-    supplier_headers = rows[0][1:]
+    supplier_headers = rows[0][supplier_start:]
     if any(not header for header in supplier_headers):
         raise ValueError("Le intestazioni fornitore non possono essere vuote")
     if len({normalize_text(item) for item in supplier_headers}) != len(supplier_headers):
         raise ValueError("Le intestazioni fornitore devono essere univoche")
     return {
         "delimiter": "tab" if delimiter == "\t" else delimiter,
-        "product_header": rows[0][0] or "Prodotto",
+        "order_name_header": rows[0][0] if has_order_name else None,
+        "product_header": rows[0][product_column] or "Prodotto",
         "supplier_headers": supplier_headers,
         "rows": [
-            {"row_number": index + 2, "product_ref": row[0], "values": row[1:width]}
+            {
+                "row_number": index + 2,
+                "order_name": row[0] if has_order_name else "",
+                "product_ref": row[product_column],
+                "values": row[supplier_start:width],
+            }
             for index, row in enumerate(normalized_rows)
         ],
     }
@@ -152,10 +168,13 @@ async def build_price_preview(
     ).all()
     product_by_id = {row.id: row for row in products}
     product_candidates: dict[str, list[Product]] = defaultdict(list)
+    order_name_candidates: dict[str, list[Product]] = defaultdict(list)
     for row in products:
         for value in {row.sku_interno, row.canonical_name, row.normalized_name}:
             if value:
                 product_candidates[normalize_text(value)].append(row)
+        if row.normalized_order_name:
+            order_name_candidates[row.normalized_order_name].append(row)
 
     resolved_rows: list[tuple[dict, Product]] = []
     product_report: list[dict] = []
@@ -167,6 +186,11 @@ async def build_price_preview(
             method = "explicit"
         else:
             unique = {item.id: item for item in product_candidates.get(normalize_text(ref), [])}
+            if not unique:
+                unique = {
+                    item.id: item
+                    for item in order_name_candidates.get(normalize_text(ref), [])
+                }
             product = next(iter(unique.values())) if len(unique) == 1 else None
             method = "exact_catalog" if product else "unresolved"
         if not product:
@@ -196,12 +220,69 @@ async def build_price_preview(
                 "product_id": product.id if product else None,
                 "sku_interno": product.sku_interno if product else None,
                 "canonical_name": product.canonical_name if product else None,
+                "order_name": product.order_name if product else None,
                 "method": method,
             }
         )
 
+    order_name_changes_by_product: dict[int, dict] = {}
+    proposed_name_owners: dict[str, int] = {}
+    existing_name_owners = {
+        row.normalized_order_name: row.id
+        for row in products
+        if row.normalized_order_name
+    }
+    for source_row, product in resolved_rows:
+        proposed = source_row.get("order_name", "").strip()
+        if not proposed:
+            continue
+        if len(proposed) > 120:
+            errors.append(
+                {
+                    "type": "order_name_length",
+                    "row": source_row["row_number"],
+                    "message": "Il nome rapido può contenere al massimo 120 caratteri.",
+                }
+            )
+            continue
+        normalized_proposed = normalize_text(proposed)
+        existing_owner = existing_name_owners.get(normalized_proposed)
+        proposed_owner = proposed_name_owners.get(normalized_proposed)
+        if (existing_owner is not None and existing_owner != product.id) or (
+            proposed_owner is not None and proposed_owner != product.id
+        ):
+            errors.append(
+                {
+                    "type": "duplicate_order_name",
+                    "row": source_row["row_number"],
+                    "message": f"Il nome rapido '{proposed}' è già assegnato a un altro prodotto.",
+                }
+            )
+            continue
+        proposed_name_owners[normalized_proposed] = product.id
+        previous = order_name_changes_by_product.get(product.id)
+        if previous and previous["normalized_order_name"] != normalized_proposed:
+            errors.append(
+                {
+                    "type": "conflicting_order_name",
+                    "row": source_row["row_number"],
+                    "message": "Lo stesso prodotto ha due nomi rapidi diversi nel foglio.",
+                }
+            )
+            continue
+        if normalized_proposed != (product.normalized_order_name or ""):
+            order_name_changes_by_product[product.id] = {
+                "product_id": product.id,
+                "sku_interno": product.sku_interno,
+                "canonical_name": product.canonical_name,
+                "old_order_name": product.order_name,
+                "new_order_name": proposed,
+                "normalized_order_name": normalized_proposed,
+            }
+
     product_ids = {product.id for _, product in resolved_rows}
     supplier_ids = {supplier.id for supplier in resolved_suppliers.values()}
+    supplier_scope = await load_supplier_catalog_scope(db, supplier_ids=supplier_ids)
     aliases = []
     if product_ids and supplier_ids:
         aliases = (
@@ -262,6 +343,26 @@ async def build_price_preview(
                 )
                 continue
             seen_pairs.add(pair)
+            eligible_supplier_ids = supplier_scope.eligible_supplier_ids(
+                product_id=product.id,
+                category=product.category,
+                supplier_ids={supplier.id},
+            )
+            if supplier.id not in eligible_supplier_ids:
+                errors.append(
+                    {
+                        "type": "supplier_scope",
+                        "row": source_row["row_number"],
+                        "product_id": product.id,
+                        "supplier_id": supplier.id,
+                        "column": header,
+                        "message": (
+                            f"{supplier.nome_azienda} non risulta abilitato per "
+                            f"{product.category or product.canonical_name}."
+                        ),
+                    }
+                )
+                continue
             try:
                 price = parse_decimal_price(raw_price)
             except ValueError as error:
@@ -327,17 +428,22 @@ async def build_price_preview(
     for change in changes:
         counts[change["action"]] += 1
     preview_payload = {
-        "version": 1,
+        "version": 2,
         "delimiter": parsed["delimiter"],
         "effective_date": effective_date.isoformat(),
         "default_uom": default_uom,
         "location_id": location_id,
         "supplier_mapping": mapping_report,
         "product_mapping": product_report,
+        "order_name_changes": list(order_name_changes_by_product.values()),
         "changes": changes,
         "errors": errors,
         "counts": counts,
-        "can_commit": not errors and any(item["action"] != "unchanged" for item in changes),
+        "can_commit": not errors
+        and (
+            bool(order_name_changes_by_product)
+            or any(item["action"] != "unchanged" for item in changes)
+        ),
     }
     canonical = json.dumps(preview_payload, sort_keys=True, separators=(",", ":"))
     now = datetime.now(timezone.utc)
@@ -377,7 +483,27 @@ async def commit_price_preview(
         raise HTTPException(409, "Anteprima non confermabile: correggere gli errori")
 
     effective_date = date.fromisoformat(payload["effective_date"])
-    result = {"created": 0, "updated": 0, "unchanged": 0, "listino_ids": []}
+    result = {
+        "created": 0,
+        "updated": 0,
+        "unchanged": 0,
+        "order_names_updated": 0,
+        "listino_ids": [],
+    }
+    for name_change in payload.get("order_name_changes", []):
+        product = await db.scalar(
+            select(Product)
+            .where(Product.id == name_change["product_id"])
+            .with_for_update()
+        )
+        if not product or product.order_name != name_change["old_order_name"]:
+            raise HTTPException(
+                409, "Il nome rapido è cambiato: rigenerare l'anteprima"
+            )
+        product.order_name = name_change["new_order_name"]
+        product.normalized_order_name = name_change["normalized_order_name"]
+        result["order_names_updated"] += 1
+
     for change in payload["changes"]:
         if change["action"] == "unchanged":
             result["unchanged"] += 1

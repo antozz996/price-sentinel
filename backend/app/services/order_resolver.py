@@ -46,7 +46,7 @@ async def resolve_order_item(
             "warnings": ["La stringa di ricerca è vuota."]
         }
 
-    # 1. Ricerca del prodotto canonico
+    # 1. Identità reale esatta (SKU/nome fattura-canonico) sempre prioritaria.
     stmt = select(Product).where(
         and_(
             Product.is_active == True,
@@ -57,6 +57,13 @@ async def resolve_order_item(
                 Product.canonical_name.ilike(query.strip())
             )
         )
+    ).order_by(
+        case(
+            (Product.sku_interno == query.strip(), 0),
+            (Product.normalized_name == query_norm, 1),
+            else_=2,
+        ),
+        Product.id,
     )
     res = await db.execute(stmt)
     matched_products = res.scalars().all()
@@ -64,7 +71,18 @@ async def resolve_order_item(
     matched_product = None
     if matched_products:
         matched_product = matched_products[0]
-    else:
+    if not matched_product:
+        # 2. Il nome rapido è una scorciatoia facoltativa, mai sostituisce un match reale.
+        matched_product = await db.scalar(
+            select(Product)
+            .where(
+                Product.is_active.is_(True),
+                Product.normalized_order_name == query_norm,
+            )
+            .order_by(Product.id)
+            .limit(1)
+        )
+    if not matched_product:
         # Corrispondenza fuzzy su tutti i prodotti attivi
         stmt_all = select(Product).where(Product.is_active == True)
         res_all = await db.execute(stmt_all)
@@ -73,7 +91,9 @@ async def resolve_order_item(
         for p in all_products:
             score_canon = SequenceMatcher(None, query_norm, normalize_text(p.canonical_name)).ratio()
             score_sku = SequenceMatcher(None, query_norm, normalize_text(p.sku_interno or "")).ratio()
-            score = max(score_canon, score_sku)
+            score_order = SequenceMatcher(None, query_norm, normalize_text(p.order_name or "")).ratio()
+            # A parità di confidenza prevalgono sempre identità reale e SKU.
+            score = max(score_canon, score_sku, score_order)
             if score > 0.70 and score > best_score:
                 best_score = score
                 matched_product = p
@@ -312,6 +332,7 @@ async def resolve_order_item(
             "id": matched_product.id,
             "sku_interno": matched_product.sku_interno,
             "canonical_name": matched_product.canonical_name,
+            "order_name": matched_product.order_name,
             "comparison_unit": comp_unit
         },
         "decision": decision,

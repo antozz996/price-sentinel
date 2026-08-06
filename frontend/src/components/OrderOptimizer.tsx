@@ -14,6 +14,14 @@ interface OrderItemInput {
   allow_equivalent?: boolean;
 }
 
+interface ProductSearchItem {
+  id: number;
+  sku_interno?: string | null;
+  canonical_name: string;
+  order_name?: string | null;
+  is_active: boolean;
+}
+
 interface ConfrontoPrezzoItem {
   fornitore_id: number;
   fornitore_nome: string;
@@ -48,7 +56,7 @@ interface OptimizationResult {
 
 export default function OrderOptimizer() {
   const [locations, setLocations] = useState<LocationItem[]>([]);
-  const [availableSkus, setAvailableSkus] = useState<string[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<ProductSearchItem[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<number | ''>('');
   
   // Cart state
@@ -68,9 +76,9 @@ export default function OrderOptimizer() {
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const [locRes, matrixRes] = await Promise.all([
+        const [locRes, productsRes] = await Promise.all([
           fetch(`${API_BASE}/location/`, { headers }),
-          fetch(`${API_BASE}/intelligence/cross-location`, { headers })
+          fetch(`${API_BASE}/products`, { headers })
         ]);
 
         if (locRes.ok) {
@@ -81,10 +89,10 @@ export default function OrderOptimizer() {
           }
         }
 
-        if (matrixRes.ok) {
-          const matrixData = await matrixRes.json();
-          if (matrixData) {
-            setAvailableSkus(Object.keys(matrixData));
+        if (productsRes.ok) {
+          const productsData = await productsRes.json();
+          if (Array.isArray(productsData)) {
+            setAvailableProducts(productsData.filter(item => item.is_active));
             // Default first basket item
             setBasket([{ query: '', quantita: 1, prezzo_inserito: '', allow_equivalent: false }]);
           }
@@ -279,7 +287,7 @@ export default function OrderOptimizer() {
                     <div style={{ position: 'relative' }}>
                       <input
                         type="text"
-                        placeholder="Es. BICCHIERE CAFFE o SKU..."
+                        placeholder="Cerca nome rapido, nome reale o SKU..."
                         value={row.query}
                         list={`sku-options-${index}`}
                         onChange={e => handleChangeRow(index, 'query', e.target.value)}
@@ -296,8 +304,12 @@ export default function OrderOptimizer() {
                         }}
                       />
                       <datalist id={`sku-options-${index}`}>
-                        {availableSkus.map(sku => (
-                          <option key={sku} value={sku} />
+                        {availableProducts.map(product => (
+                          <option
+                            key={product.id}
+                            value={product.order_name || product.canonical_name}
+                            label={`${product.canonical_name}${product.sku_interno ? ` · ${product.sku_interno}` : ''}`}
+                          />
                         ))}
                       </datalist>
                     </div>

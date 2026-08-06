@@ -3,7 +3,7 @@ import { AlertTriangle, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw,
 import { fetchWithAuth } from '../api'
 
 type Supplier = { id: number; name: string; vat: string }
-type Product = { id: number; sku_interno?: string | null; canonical_name: string }
+type Product = { id: number; sku_interno?: string | null; canonical_name: string; order_name?: string | null }
 type Offer = {
   supplier_id: number
   supplier_name: string
@@ -21,9 +21,11 @@ type MatrixRow = {
   product_id: number
   sku_interno?: string | null
   canonical_name: string
+  order_name?: string | null
   category?: string | null
   comparison_unit: string
   offers: Record<string, Offer>
+  eligible_supplier_ids: number[]
   absolute_cheapest_supplier_id?: number | null
   recommended_supplier_id?: number | null
   selected_supplier_id?: number | null
@@ -55,6 +57,7 @@ type Preview = {
   errors: Array<{ type: string; row?: number; header?: string; reference?: string; message: string }>
   supplier_mapping: Array<{ header: string; supplier_id?: number | null; supplier_name?: string | null; method: string }>
   product_mapping: Array<{ reference: string; product_id?: number | null; canonical_name?: string | null; method: string }>
+  order_name_changes?: Array<{ product_id: number; canonical_name: string; old_order_name?: string | null; new_order_name: string }>
 }
 
 const panel: React.CSSProperties = { padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }
@@ -75,28 +78,30 @@ function errorMessage(error: unknown) {
 }
 
 const MIN_SHEET_ROWS = 18
-const MIN_SHEET_COLUMNS = 5
+const MIN_SHEET_COLUMNS = 6
 
 function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[][] {
   return Array.from({ length: rows }, (_, rowIndex) =>
     Array.from({ length: columns }, (_, columnIndex) =>
-      rowIndex === 0 && columnIndex === 0 ? 'Prodotto / SKU' : '',
+      rowIndex === 0 && columnIndex === 0
+        ? 'Nome rapido ordine (facoltativo)'
+        : rowIndex === 0 && columnIndex === 1 ? 'Prodotto reale / SKU' : '',
     ),
   )
 }
 
-function sheetFromMatrix(matrix: MatrixResponse, selectedSupplierIds: number[]): string[][] {
-  const selected = matrix.suppliers.filter(supplier => selectedSupplierIds.includes(supplier.id))
-  const suppliers = (selected.length ? selected : matrix.suppliers).slice(0, 8)
+function sheetFromMatrix(matrix: MatrixResponse): string[][] {
+  const suppliers = matrix.suppliers
   const rows = [
-    ['Prodotto / SKU', ...suppliers.map(supplier => supplier.name)],
+    ['Nome rapido ordine (facoltativo)', 'Prodotto reale / SKU', ...suppliers.map(supplier => supplier.name)],
     ...matrix.rows.map(row => [
+      row.order_name || '',
       row.sku_interno || row.canonical_name,
       ...suppliers.map(supplier => row.offers[String(supplier.id)]?.price || ''),
     ]),
   ]
   const rowCount = Math.max(MIN_SHEET_ROWS, rows.length)
-  const columnCount = Math.max(MIN_SHEET_COLUMNS, suppliers.length + 1)
+  const columnCount = Math.max(MIN_SHEET_COLUMNS, suppliers.length + 2)
   return Array.from({ length: rowCount }, (_, rowIndex) =>
     Array.from({ length: columnCount }, (_, columnIndex) => rows[rowIndex]?.[columnIndex] || ''),
   )
@@ -131,6 +136,7 @@ function columnLabel(index: number): string {
 export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('matrix')
   const [matrix, setMatrix] = useState<MatrixResponse | null>(null)
+  const [sheetCatalog, setSheetCatalog] = useState<MatrixResponse | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
@@ -196,6 +202,21 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  async function loadFullPriceSheet() {
+    setLoading(true); setError(null)
+    try {
+      const data = await fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0') as MatrixResponse
+      setSheetCatalog(data)
+      setSheet(sheetFromMatrix(data))
+      setSheetInitialized(true)
+      setNotice(`Foglio caricato: ${data.total} prodotti, solo fornitori pertinenti per settore.`)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function loadRules() {
     try {
       const [assessmentData, policyData] = await Promise.all([
@@ -241,11 +262,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   }, [activeTab])
 
   useEffect(() => {
-    if (activeTab === 'paste' && matrix && !sheetInitialized) {
-      setSheet(sheetFromMatrix(matrix, selectedSupplierIds))
-      setSheetInitialized(true)
-    }
-  }, [activeTab, matrix, selectedSupplierIds, sheetInitialized])
+    if (activeTab === 'paste' && matrix && !sheetInitialized) void loadFullPriceSheet()
+  // Opening the tab or invalidating the committed sheet is the only trigger.
+  }, [activeTab, matrix, sheetInitialized])
 
   const visibleSuppliers = useMemo(
     () => (matrix?.suppliers || []).filter(item => selectedSupplierIds.includes(item.id)),
@@ -284,7 +303,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       const result = await fetchWithAuth('/smart-price-sheet/commit', {
         method: 'POST', body: JSON.stringify({ preview_token: preview.preview_token, confirm: true }),
       }) as any
-      setNotice(`Listino aggiornato: ${result.result.created} nuovi, ${result.result.updated} storicizzati, ${result.result.unchanged} invariati.`)
+      setNotice(`Aggiornamento completato: ${result.result.created} prezzi nuovi, ${result.result.updated} storicizzati, ${result.result.order_names_updated || 0} nomi rapidi.`)
       setPreview(null); setSheetInitialized(false); await loadMatrix()
     } catch (err) { setError(errorMessage(err)) } finally { setLoading(false) }
   }
@@ -306,27 +325,33 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       .filter((row, index, rows) => index < rows.length - 1 || row.length > 0)
       .map(row => row.split('\t'))
     if (!pastedRows.length) return
-    setSheet(current => {
-      const requiredRows = Math.max(current.length, startRow + pastedRows.length)
-      const pastedWidth = Math.max(...pastedRows.map(row => row.length))
-      const requiredColumns = Math.max(current[0]?.length || 0, startColumn + pastedWidth)
-      const next = Array.from({ length: requiredRows }, (_, rowIndex) =>
-        Array.from({ length: requiredColumns }, (_, columnIndex) => current[rowIndex]?.[columnIndex] || ''),
-      )
-      pastedRows.forEach((row, rowOffset) => row.forEach((cell, columnOffset) => {
-        next[startRow + rowOffset][startColumn + columnOffset] = cell.trim()
-      }))
-      return next
-    })
+    const requiredRows = Math.max(sheet.length, startRow + pastedRows.length)
+    const pastedWidth = Math.max(...pastedRows.map(row => row.length))
+    const requiredColumns = Math.max(sheet[0]?.length || 0, startColumn + pastedWidth)
+    const next = Array.from({ length: requiredRows }, (_, rowIndex) =>
+      Array.from({ length: requiredColumns }, (_, columnIndex) => sheet[rowIndex]?.[columnIndex] || ''),
+    )
+    let skipped = 0
+    pastedRows.forEach((row, rowOffset) => row.forEach((cell, columnOffset) => {
+      const targetRow = startRow + rowOffset
+      const targetColumn = startColumn + columnOffset
+      const value = cell.trim()
+      if (value && !isSheetCellEligibleFor(next, targetRow, targetColumn)) {
+        skipped += 1
+        return
+      }
+      next[targetRow][targetColumn] = value
+    }))
+    setSheet(next)
     setPreview(null)
-    setNotice(`Incollate ${pastedRows.length} righe nel foglio.`)
+    setNotice(skipped
+      ? `${pastedRows.length} righe incollate · ${skipped} celle fuori settore ignorate.`
+      : `Incollate ${pastedRows.length} righe nel foglio.`)
   }
 
   function reloadCurrentPrices() {
-    if (!matrix) return
-    setSheet(sheetFromMatrix(matrix, selectedSupplierIds))
-    setSheetInitialized(true)
-    setPreview(null); setError(null); setNotice('Foglio ricaricato con i prezzi correnti.')
+    setPreview(null); setError(null); setNotice('Caricamento dell’intero catalogo in corso…')
+    void loadFullPriceSheet()
   }
 
   function clearSheet() {
@@ -335,7 +360,27 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     setPreview(null); setSupplierMapping({}); setProductMapping({})
   }
 
-  const hasSheetPrices = sheet.slice(1).some(row => row.slice(1).some(cell => cell.trim()))
+  const hasSheetPrices = sheet.slice(1).some(row => row.slice(2).some(cell => cell.trim()))
+  const hasOrderNames = sheet.slice(1).some(row => row[0]?.trim())
+
+  function isSheetCellEligibleFor(grid: string[][], rowIndex: number, columnIndex: number) {
+    const catalog = sheetCatalog || matrix
+    if (rowIndex === 0 || columnIndex < 2 || !catalog) return true
+    const productRef = (grid[rowIndex]?.[1] || '').trim().toLocaleLowerCase('it-IT')
+    const supplierHeader = (grid[0]?.[columnIndex] || '').trim().toLocaleLowerCase('it-IT')
+    if (!productRef || !supplierHeader) return true
+    const product = catalog.rows.find(item =>
+      item.sku_interno?.toLocaleLowerCase('it-IT') === productRef
+      || item.canonical_name.toLocaleLowerCase('it-IT') === productRef,
+    )
+    const supplier = catalog.suppliers.find(item => item.name.toLocaleLowerCase('it-IT') === supplierHeader)
+    if (!product || !supplier) return true
+    return product.eligible_supplier_ids.includes(supplier.id)
+  }
+
+  function isSheetCellEligible(rowIndex: number, columnIndex: number) {
+    return isSheetCellEligibleFor(sheet, rowIndex, columnIndex)
+  }
 
   async function saveAssessment() {
     if (!ruleProductId || !ruleSupplierId) return setError('Seleziona prodotto e fornitore.')
@@ -377,7 +422,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <strong>Anteprima obbligatoria</strong>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            {preview.counts.create} nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.counts.errors} errori
+            {preview.counts.create} nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi · {preview.counts.errors} errori
           </span>
         </div>
         {preview.errors.map((item, index) => (
@@ -401,6 +446,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             </select>
           </label>
         ))}
+        {!!preview.order_name_changes?.length && <div style={{ padding: 12, borderRadius: 8, background: 'rgba(59,130,246,.08)', fontSize: 13 }}>
+          <strong>Nomi rapidi da aggiornare</strong>
+          {preview.order_name_changes.map(item => <div key={item.product_id} style={{ color: 'var(--text-secondary)', marginTop: 5 }}>{item.canonical_name}: {item.old_order_name || 'nessuno'} → <b style={{ color: 'white' }}>{item.new_order_name}</b></div>)}
+        </div>}
         {(preview.errors.length > 0) && <button className="btn" onClick={createPastePreview}>Ricalcola anteprima</button>}
         <div style={{ maxHeight: 280, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -432,7 +481,23 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({selectedSupplierIds.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{matrix?.suppliers.map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto canonico</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
-          <tbody>{matrix?.rows.map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}><td style={{ padding: 12 }}><strong>{row.canonical_name}</strong><div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.sku_interno || 'SKU mancante'} · {row.category || 'Senza categoria'}</div>{row.requires_manual_selection && <small style={{ color: '#fbbf24' }}>Scelta manuale richiesta</small>}</td>{visibleSuppliers.map(supplier => { const offer = row.offers[String(supplier.id)]; return <td key={supplier.id} style={{ textAlign: 'center', padding: 8, opacity: offer && !offer.eligible ? .55 : 1, background: offer?.is_recommended ? 'rgba(16,185,129,.08)' : 'transparent' }}><button disabled={!isAdmin} onClick={() => isAdmin && setEditing({ product: row, supplier, price: offer?.price || '', uom: offer?.uom || row.comparison_unit || 'piece' })} style={{ width: '100%', padding: 8, borderRadius: 8, cursor: isAdmin ? 'pointer' : 'default', color: offer?.is_recommended ? '#6ee7b7' : 'white', border: offer?.is_absolute_cheapest ? '1px solid #3b82f6' : '1px solid transparent', background: 'rgba(255,255,255,.025)' }}>{offer ? <><strong>{money(offer.price)}</strong><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{offer.source_type}{offer.is_recommended ? ' · CONSIGLIATO' : ''}{offer.assessment.status === 'blocked' ? ' · BLOCCATO' : ''}</div></> : <>{isAdmin && <Pencil size={13} />} {isAdmin ? 'inserisci' : '—'}</>}</button></td>})}</tr>)}</tbody>
+          <tbody>{matrix?.rows.map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
+            <td style={{ padding: 12 }}>
+              <strong>{row.order_name || row.canonical_name}</strong>
+              {row.order_name && <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.canonical_name}</div>}
+              <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.sku_interno || 'SKU mancante'} · {row.category || 'Senza categoria'}</div>
+              {row.requires_manual_selection && <small style={{ color: '#fbbf24' }}>Scelta manuale richiesta</small>}
+            </td>
+            {visibleSuppliers.map(supplier => {
+              const offer = row.offers[String(supplier.id)]
+              const relevant = row.eligible_supplier_ids.includes(supplier.id)
+              return <td key={supplier.id} style={{ textAlign: 'center', padding: 8, opacity: offer && !offer.eligible ? .55 : 1, background: offer?.is_recommended ? 'rgba(16,185,129,.08)' : !relevant ? 'rgba(255,255,255,.012)' : 'transparent' }}>
+                {relevant ? <button disabled={!isAdmin} onClick={() => isAdmin && setEditing({ product: row, supplier, price: offer?.price || '', uom: offer?.uom || row.comparison_unit || 'piece' })} style={{ width: '100%', padding: 8, borderRadius: 8, cursor: isAdmin ? 'pointer' : 'default', color: offer?.is_recommended ? '#6ee7b7' : 'white', border: offer?.is_absolute_cheapest ? '1px solid #3b82f6' : '1px solid transparent', background: 'rgba(255,255,255,.025)' }}>
+                  {offer ? <><strong>{money(offer.price)}</strong><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{offer.source_type}{offer.is_recommended ? ' · CONSIGLIATO' : ''}{offer.assessment.status === 'blocked' ? ' · BLOCCATO' : ''}</div></> : <>{isAdmin && <Pencil size={13} />} {isAdmin ? 'inserisci' : '—'}</>}
+                </button> : <span title="Fornitore fuori dal settore del prodotto" style={{ color: '#5f6574', fontSize: 11 }}>fuori settore</span>}
+              </td>
+            })}
+          </tr>)}</tbody>
         </table></div>}
         <div style={{ display: 'flex', justifyContent: 'space-between' }}><button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Indietro</button><button className="btn" disabled={!matrix || offset + 50 >= matrix.total} onClick={() => setOffset(offset + 50)}>Avanti</button></div>
       </div>
@@ -446,7 +511,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <div>
             <h3 style={{ margin: 0 }}>Foglio prezzi</h3>
             <p style={{ color: 'var(--text-secondary)', margin: '5px 0 0' }}>
-              Modifica le celle oppure incolla un blocco da Excel/Google Sheets partendo da qualsiasi cella. Riga 1 = intestazioni, colonna A = prodotto o SKU.
+              Colonna A = nome rapido facoltativo per gli ordini. Colonna B = prodotto reale/SKU. Da C in poi = fornitori. Incolla direttamente da Excel o Google Sheets.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -460,24 +525,30 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
               <tr>
                 <th style={{ width: 44, minWidth: 44, height: 28, position: 'sticky', left: 0, zIndex: 7, background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745' }} />
-                {sheet[0]?.map((_, columnIndex) => <th key={columnIndex} style={{ minWidth: columnIndex === 0 ? 260 : 155, height: 28, padding: '0 8px', textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745', fontWeight: 600 }}>{columnLabel(columnIndex)}</th>)}
+                {sheet[0]?.map((_, columnIndex) => <th key={columnIndex} style={{ minWidth: columnIndex === 0 ? 190 : columnIndex === 1 ? 280 : 155, height: 28, padding: '0 8px', textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745', fontWeight: 600 }}>{columnLabel(columnIndex)}</th>)}
               </tr>
             </thead>
             <tbody>
               {sheet.map((row, rowIndex) => <tr key={rowIndex}>
                 <th style={{ width: 44, minWidth: 44, height: 36, position: 'sticky', left: 0, zIndex: 4, textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #292c37', fontWeight: 500 }}>{rowIndex + 1}</th>
-                {row.map((cell, columnIndex) => <td key={columnIndex} style={{ padding: 0, minWidth: columnIndex === 0 ? 260 : 155, borderRight: '1px solid #292c37', borderBottom: '1px solid #292c37', background: rowIndex === 0 ? 'rgba(59,130,246,.10)' : columnIndex === 0 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
-                  <input
-                    aria-label={`Cella ${columnLabel(columnIndex)}${rowIndex + 1}`}
-                    value={cell}
-                    onChange={event => updateSheetCell(rowIndex, columnIndex, event.target.value)}
-                    onPaste={event => pasteIntoSheet(event, rowIndex, columnIndex)}
-                    placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Prodotto / SKU' : 'Nome fornitore') : columnIndex === 0 ? 'Prodotto o SKU' : '—'}
-                    style={{ width: '100%', minWidth: columnIndex === 0 ? 260 : 155, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: 'white', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex === 0 ? 600 : 400, textAlign: columnIndex > 0 && rowIndex > 0 ? 'right' : 'left' }}
-                    onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px #3b82f6' }}
-                    onBlur={event => { event.currentTarget.style.boxShadow = 'none' }}
-                  />
-                </td>)}
+                {row.map((cell, columnIndex) => {
+                  const eligible = isSheetCellEligible(rowIndex, columnIndex)
+                  const width = columnIndex === 0 ? 190 : columnIndex === 1 ? 280 : 155
+                  return <td key={columnIndex} style={{ padding: 0, minWidth: width, borderRight: '1px solid #292c37', borderBottom: '1px solid #292c37', background: !eligible ? 'rgba(70,70,80,.16)' : rowIndex === 0 ? 'rgba(59,130,246,.10)' : columnIndex < 2 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
+                    <input
+                      aria-label={`Cella ${columnLabel(columnIndex)}${rowIndex + 1}`}
+                      value={cell}
+                      disabled={!eligible}
+                      title={!eligible ? 'Fornitore fuori dal settore di questo prodotto' : undefined}
+                      onChange={event => updateSheetCell(rowIndex, columnIndex, event.target.value)}
+                      onPaste={event => pasteIntoSheet(event, rowIndex, columnIndex)}
+                      placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale / SKU' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale o SKU' : eligible ? '—' : 'fuori settore'}
+                      style={{ width: '100%', minWidth: width, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: eligible ? 'white' : '#5f6574', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex < 2 ? 600 : 400, textAlign: columnIndex > 1 && rowIndex > 0 ? 'right' : 'left', cursor: eligible ? 'text' : 'not-allowed' }}
+                      onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px #3b82f6' }}
+                      onBlur={event => { event.currentTarget.style.boxShadow = 'none' }}
+                    />
+                  </td>
+                })}
               </tr>)}
             </tbody>
           </table>
@@ -486,13 +557,13 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn" onClick={() => setSheet(current => [...current, Array(current[0]?.length || MIN_SHEET_COLUMNS).fill('')])}><Plus size={15} /> Riga</button>
           <button className="btn" onClick={() => setSheet(current => current.map(row => [...row, '']))}><Plus size={15} /> Fornitore</button>
-          <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>{sheet.length - 1} righe · {(sheet[0]?.length || 1) - 1} colonne fornitore</span>
+          <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>{sheet.length - 1} righe · {Math.max(0, (sheet[0]?.length || 2) - 2)} colonne fornitore</span>
         </div>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', paddingTop: 2 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Validità <input type="date" style={input} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} /></label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Unità predefinita <input style={input} value={defaultUom} onChange={event => setDefaultUom(event.target.value)} /></label>
-          <button className="btn btn-primary" disabled={!hasSheetPrices || loading} onClick={createPastePreview}><ClipboardPaste size={16} /> Controlla modifiche</button>
+          <button className="btn btn-primary" disabled={(!hasSheetPrices && !hasOrderNames) || loading} onClick={createPastePreview}><ClipboardPaste size={16} /> Controlla modifiche</button>
           <span style={{ color: 'var(--text-secondary)', fontSize: 12, alignSelf: 'center' }}>Nessun dato viene salvato prima della conferma.</span>
         </div>
       </div>
