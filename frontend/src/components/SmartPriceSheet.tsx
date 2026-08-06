@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, ClipboardPaste, History, Pencil, RefreshCw, Save, Search, Settings2, Table2 } from 'lucide-react'
+import { AlertTriangle, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Table2, Trash2 } from 'lucide-react'
 import { fetchWithAuth } from '../api'
 
 type Supplier = { id: number; name: string; vat: string }
@@ -61,7 +61,7 @@ const panel: React.CSSProperties = { padding: 20, display: 'flex', flexDirection
 const input: React.CSSProperties = { padding: '10px 12px', background: 'rgba(255,255,255,.035)', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }
 const tabs = [
   { id: 'matrix', label: 'Matrice', icon: Table2 },
-  { id: 'paste', label: 'Incolla prezzi', icon: ClipboardPaste },
+  { id: 'paste', label: 'Foglio prezzi', icon: ClipboardPaste },
   { id: 'rules', label: 'Qualità e regole', icon: Settings2 },
   { id: 'history', label: 'Storico e audit', icon: History },
 ] as const
@@ -72,6 +72,60 @@ function money(value?: string | null) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Operazione non riuscita'
+}
+
+const MIN_SHEET_ROWS = 18
+const MIN_SHEET_COLUMNS = 5
+
+function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[][] {
+  return Array.from({ length: rows }, (_, rowIndex) =>
+    Array.from({ length: columns }, (_, columnIndex) =>
+      rowIndex === 0 && columnIndex === 0 ? 'Prodotto / SKU' : '',
+    ),
+  )
+}
+
+function sheetFromMatrix(matrix: MatrixResponse, selectedSupplierIds: number[]): string[][] {
+  const selected = matrix.suppliers.filter(supplier => selectedSupplierIds.includes(supplier.id))
+  const suppliers = (selected.length ? selected : matrix.suppliers).slice(0, 8)
+  const rows = [
+    ['Prodotto / SKU', ...suppliers.map(supplier => supplier.name)],
+    ...matrix.rows.map(row => [
+      row.sku_interno || row.canonical_name,
+      ...suppliers.map(supplier => row.offers[String(supplier.id)]?.price || ''),
+    ]),
+  ]
+  const rowCount = Math.max(MIN_SHEET_ROWS, rows.length)
+  const columnCount = Math.max(MIN_SHEET_COLUMNS, suppliers.length + 1)
+  return Array.from({ length: rowCount }, (_, rowIndex) =>
+    Array.from({ length: columnCount }, (_, columnIndex) => rows[rowIndex]?.[columnIndex] || ''),
+  )
+}
+
+function sheetText(sheet: string[][]): string {
+  let lastRow = sheet.length - 1
+  while (lastRow > 0 && sheet[lastRow].every(cell => !cell.trim())) lastRow -= 1
+  let lastColumn = 0
+  for (let rowIndex = 0; rowIndex <= lastRow; rowIndex += 1) {
+    sheet[rowIndex].forEach((cell, columnIndex) => {
+      if (cell.trim()) lastColumn = Math.max(lastColumn, columnIndex)
+    })
+  }
+  return sheet
+    .slice(0, lastRow + 1)
+    .map(row => Array.from({ length: lastColumn + 1 }, (_, columnIndex) => row[columnIndex] || '').join('\t'))
+    .join('\n')
+}
+
+function columnLabel(index: number): string {
+  let value = index + 1
+  let label = ''
+  while (value > 0) {
+    value -= 1
+    label = String.fromCharCode(65 + (value % 26)) + label
+    value = Math.floor(value / 26)
+  }
+  return label
 }
 
 export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
@@ -85,7 +139,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const [pasteText, setPasteText] = useState('')
+  const [sheet, setSheet] = useState<string[][]>(() => blankSheet())
+  const [sheetInitialized, setSheetInitialized] = useState(false)
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
   const [defaultUom, setDefaultUom] = useState('piece')
   const [supplierMapping, setSupplierMapping] = useState<Record<string, number>>({})
@@ -185,6 +240,13 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
+  useEffect(() => {
+    if (activeTab === 'paste' && matrix && !sheetInitialized) {
+      setSheet(sheetFromMatrix(matrix, selectedSupplierIds))
+      setSheetInitialized(true)
+    }
+  }, [activeTab, matrix, selectedSupplierIds, sheetInitialized])
+
   const visibleSuppliers = useMemo(
     () => (matrix?.suppliers || []).filter(item => selectedSupplierIds.includes(item.id)),
     [matrix, selectedSupplierIds],
@@ -195,7 +257,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     try {
       const data = await fetchWithAuth('/smart-price-sheet/preview', {
         method: 'POST',
-        body: JSON.stringify({ text: pasteText, supplier_mapping: supplierMapping, product_mapping: productMapping, effective_date: effectiveDate, default_uom: defaultUom }),
+        body: JSON.stringify({ text: sheetText(sheet), supplier_mapping: supplierMapping, product_mapping: productMapping, effective_date: effectiveDate, default_uom: defaultUom }),
       }) as Preview
       setPreview(data)
     } catch (err) {
@@ -223,9 +285,57 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         method: 'POST', body: JSON.stringify({ preview_token: preview.preview_token, confirm: true }),
       }) as any
       setNotice(`Listino aggiornato: ${result.result.created} nuovi, ${result.result.updated} storicizzati, ${result.result.unchanged} invariati.`)
-      setPreview(null); setPasteText(''); await loadMatrix()
+      setPreview(null); setSheetInitialized(false); await loadMatrix()
     } catch (err) { setError(errorMessage(err)) } finally { setLoading(false) }
   }
+
+  function updateSheetCell(rowIndex: number, columnIndex: number, value: string) {
+    setSheet(current => current.map((row, currentRow) =>
+      currentRow === rowIndex
+        ? row.map((cell, currentColumn) => currentColumn === columnIndex ? value : cell)
+        : row,
+    ))
+    setPreview(null)
+  }
+
+  function pasteIntoSheet(event: React.ClipboardEvent<HTMLInputElement>, startRow: number, startColumn: number) {
+    const clipboard = event.clipboardData.getData('text/plain')
+    if (!clipboard) return
+    event.preventDefault()
+    const pastedRows = clipboard.replace(/\r/g, '').split('\n')
+      .filter((row, index, rows) => index < rows.length - 1 || row.length > 0)
+      .map(row => row.split('\t'))
+    if (!pastedRows.length) return
+    setSheet(current => {
+      const requiredRows = Math.max(current.length, startRow + pastedRows.length)
+      const pastedWidth = Math.max(...pastedRows.map(row => row.length))
+      const requiredColumns = Math.max(current[0]?.length || 0, startColumn + pastedWidth)
+      const next = Array.from({ length: requiredRows }, (_, rowIndex) =>
+        Array.from({ length: requiredColumns }, (_, columnIndex) => current[rowIndex]?.[columnIndex] || ''),
+      )
+      pastedRows.forEach((row, rowOffset) => row.forEach((cell, columnOffset) => {
+        next[startRow + rowOffset][startColumn + columnOffset] = cell.trim()
+      }))
+      return next
+    })
+    setPreview(null)
+    setNotice(`Incollate ${pastedRows.length} righe nel foglio.`)
+  }
+
+  function reloadCurrentPrices() {
+    if (!matrix) return
+    setSheet(sheetFromMatrix(matrix, selectedSupplierIds))
+    setSheetInitialized(true)
+    setPreview(null); setError(null); setNotice('Foglio ricaricato con i prezzi correnti.')
+  }
+
+  function clearSheet() {
+    setSheet(blankSheet())
+    setSheetInitialized(true)
+    setPreview(null); setSupplierMapping({}); setProductMapping({})
+  }
+
+  const hasSheetPrices = sheet.slice(1).some(row => row.slice(1).some(cell => cell.trim()))
 
   async function saveAssessment() {
     if (!ruleProductId || !ruleSupplierId) return setError('Seleziona prodotto e fornitore.')
@@ -330,7 +440,64 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       <PreviewPanel />
     </>}
 
-    {activeTab === 'paste' && <><div className="glass-panel" style={panel}><div><h3 style={{ margin: 0 }}>Incolla una matrice da Excel o Google Sheets</h3><p style={{ color: 'var(--text-secondary)', marginBottom: 0 }}>Prima colonna = prodotto/SKU. Le altre colonne = fornitori. Le celle vuote vengono ignorate; nessun dato cambia fino alla conferma.</p></div><textarea style={{ ...input, minHeight: 220, fontFamily: 'monospace' }} value={pasteText} onChange={event => { setPasteText(event.target.value); setPreview(null) }} placeholder={'Prodotto\tFornitore A\tFornitore B\nAcqua 75cl\t1,20\t1,18'} /><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}><label>Validità <input type="date" style={input} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} /></label><label>Unità <input style={input} value={defaultUom} onChange={event => setDefaultUom(event.target.value)} /></label><button className="btn btn-primary" disabled={!pasteText.trim() || loading} onClick={createPastePreview}><ClipboardPaste size={16} /> Analizza senza salvare</button></div></div><PreviewPanel /></>}
+    {activeTab === 'paste' && <>
+      <div className="glass-panel" style={{ ...panel, gap: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+          <div>
+            <h3 style={{ margin: 0 }}>Foglio prezzi</h3>
+            <p style={{ color: 'var(--text-secondary)', margin: '5px 0 0' }}>
+              Modifica le celle oppure incolla un blocco da Excel/Google Sheets partendo da qualsiasi cella. Riga 1 = intestazioni, colonna A = prodotto o SKU.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={reloadCurrentPrices}><RotateCcw size={15} /> Prezzi correnti</button>
+            <button className="btn" onClick={clearSheet}><Trash2 size={15} /> Svuota</button>
+          </div>
+        </div>
+
+        <div style={{ border: '1px solid var(--border-glass)', borderRadius: 10, overflow: 'auto', maxHeight: '58vh', background: 'rgba(5,7,14,.55)' }}>
+          <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', fontSize: 13 }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+              <tr>
+                <th style={{ width: 44, minWidth: 44, height: 28, position: 'sticky', left: 0, zIndex: 7, background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745' }} />
+                {sheet[0]?.map((_, columnIndex) => <th key={columnIndex} style={{ minWidth: columnIndex === 0 ? 260 : 155, height: 28, padding: '0 8px', textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745', fontWeight: 600 }}>{columnLabel(columnIndex)}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {sheet.map((row, rowIndex) => <tr key={rowIndex}>
+                <th style={{ width: 44, minWidth: 44, height: 36, position: 'sticky', left: 0, zIndex: 4, textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #292c37', fontWeight: 500 }}>{rowIndex + 1}</th>
+                {row.map((cell, columnIndex) => <td key={columnIndex} style={{ padding: 0, minWidth: columnIndex === 0 ? 260 : 155, borderRight: '1px solid #292c37', borderBottom: '1px solid #292c37', background: rowIndex === 0 ? 'rgba(59,130,246,.10)' : columnIndex === 0 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
+                  <input
+                    aria-label={`Cella ${columnLabel(columnIndex)}${rowIndex + 1}`}
+                    value={cell}
+                    onChange={event => updateSheetCell(rowIndex, columnIndex, event.target.value)}
+                    onPaste={event => pasteIntoSheet(event, rowIndex, columnIndex)}
+                    placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Prodotto / SKU' : 'Nome fornitore') : columnIndex === 0 ? 'Prodotto o SKU' : '—'}
+                    style={{ width: '100%', minWidth: columnIndex === 0 ? 260 : 155, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: 'white', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex === 0 ? 600 : 400, textAlign: columnIndex > 0 && rowIndex > 0 ? 'right' : 'left' }}
+                    onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px #3b82f6' }}
+                    onBlur={event => { event.currentTarget.style.boxShadow = 'none' }}
+                  />
+                </td>)}
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" onClick={() => setSheet(current => [...current, Array(current[0]?.length || MIN_SHEET_COLUMNS).fill('')])}><Plus size={15} /> Riga</button>
+          <button className="btn" onClick={() => setSheet(current => current.map(row => [...row, '']))}><Plus size={15} /> Fornitore</button>
+          <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>{sheet.length - 1} righe · {(sheet[0]?.length || 1) - 1} colonne fornitore</span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', paddingTop: 2 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Validità <input type="date" style={input} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} /></label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Unità predefinita <input style={input} value={defaultUom} onChange={event => setDefaultUom(event.target.value)} /></label>
+          <button className="btn btn-primary" disabled={!hasSheetPrices || loading} onClick={createPastePreview}><ClipboardPaste size={16} /> Controlla modifiche</button>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12, alignSelf: 'center' }}>Nessun dato viene salvato prima della conferma.</span>
+        </div>
+      </div>
+      <PreviewPanel />
+    </>}
 
     {activeTab === 'rules' && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(330px,1fr))', gap: 16 }}><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Qualità prodotto-fornitore</h3><select style={input} value={ruleProductId} onChange={event => setRuleProductId(Number(event.target.value) || '')}><option value="">Prodotto…</option>{products.map(item => <option key={item.id} value={item.id}>{item.canonical_name} ({item.sku_interno})</option>)}</select><select style={input} value={ruleSupplierId} onChange={event => setRuleSupplierId(Number(event.target.value) || '')}><option value="">Fornitore…</option>{matrix?.suppliers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select style={input} value={assessmentStatus} onChange={event => setAssessmentStatus(event.target.value)}><option value="approved">Approvato</option><option value="discouraged">Sconsigliato</option><option value="blocked">Bloccato</option></select><label>Qualità {quality}/5 <input type="range" min="1" max="5" value={quality} onChange={event => setQuality(Number(event.target.value))} /></label><textarea style={input} value={reason} onChange={event => setReason(event.target.value)} placeholder="Motivazione (obbligatoria se sconsigliato/bloccato)" /><button className="btn btn-primary" onClick={saveAssessment}><Save size={16} /> Salva valutazione</button></div><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Regola di acquisto</h3><p style={{ color: 'var(--text-secondary)', margin: 0 }}>Si applica al prodotto selezionato.</p><select style={input} value={selectionMode} onChange={event => setSelectionMode(event.target.value)}><option value="best_eligible_price">Miglior prezzo idoneo</option><option value="absolute_lowest">Minimo assoluto (con avvisi qualità)</option><option value="manual">Fornitore preferito manuale</option></select><select style={input} value={preferredSupplierId} onChange={event => setPreferredSupplierId(Number(event.target.value) || '')}><option value="">Nessun fornitore preferito</option>{matrix?.suppliers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><label>Qualità minima <input type="number" min="1" max="5" style={input} value={minimumQuality} onChange={event => setMinimumQuality(Number(event.target.value))} /></label><div style={{ display: 'flex', gap: 10 }}><input style={{ ...input, width: '50%' }} value={premiumPercent} onChange={event => setPremiumPercent(event.target.value)} placeholder="Premium %" /><input style={{ ...input, width: '50%' }} value={premiumAbsolute} onChange={event => setPremiumAbsolute(event.target.value)} placeholder="Premium €" /></div><label><input type="checkbox" checked={allowSpot} onChange={event => setAllowSpot(event.target.checked)} /> Consenti prezzi spot</label><button className="btn btn-primary" onClick={savePolicy}><Save size={16} /> Salva regola</button></div></div><div className="glass-panel" style={panel}><strong>Configurazioni attive: {assessments.length} valutazioni · {policies.length} policy</strong>{assessments.slice(0, 12).map(item => <div key={item.id} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.product_name} · {item.supplier_name}: <b style={{ color: item.status === 'blocked' ? '#f87171' : 'white' }}>{item.status}</b>, qualità {item.quality_score}/5</div>)}</div></>}
 
