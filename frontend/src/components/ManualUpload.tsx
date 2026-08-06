@@ -29,7 +29,7 @@ interface UnregisteredLocation {
   nome_struttura: string;
 }
 
-export default function ManualUpload() {
+export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -37,6 +37,7 @@ export default function ManualUpload() {
   const [summary, setSummary] = useState<BatchSummary | null>(null);
   const [history, setHistory] = useState<BatchHistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [adminNotice, setAdminNotice] = useState<string | null>(null);
   const [autoCataloging, setAutoCataloging] = useState(false);
 
   // Unregistered entities modal state
@@ -83,6 +84,7 @@ export default function ManualUpload() {
 
     setUploading(true);
     setError(null);
+    setAdminNotice(null);
     setSummary(null);
     setRegSuccessMessage(null);
 
@@ -133,9 +135,13 @@ export default function ManualUpload() {
         setEditLocationNames(initialLocNames);
         setLocationTypes(initialLocTypes);
 
-        setShowModal(true);
+        if (isAdmin) {
+          setShowModal(true);
+        } else {
+          setAdminNotice('Sono state rilevate nuove anagrafiche. Le fatture restano in sospeso finché un amministratore non censisce fornitori o sedi mancanti.');
+        }
       }
-    } catch (err) {
+    } catch {
       setError("Si è verificato un errore durante l'elaborazione dei file.");
     } finally {
       setUploading(false);
@@ -145,6 +151,7 @@ export default function ManualUpload() {
   const handleReprocessParked = async () => {
     setReprocessing(true);
     setError(null);
+    setAdminNotice(null);
     setSummary(null);
     setRegSuccessMessage(null);
 
@@ -188,11 +195,15 @@ export default function ManualUpload() {
         setEditLocationNames(initialLocNames);
         setLocationTypes(initialLocTypes);
 
-        setShowModal(true);
+        if (isAdmin) {
+          setShowModal(true);
+        } else {
+          setAdminNotice('Sono presenti fatture sospese con anagrafiche mancanti. È necessario l’intervento di un amministratore.');
+        }
       } else {
         alert("Ottimo! Non è stata rilevata alcuna fattura sospesa o con soggetti da censire!");
       }
-    } catch (err) {
+    } catch {
       setError("Si è verificato un errore durante la scansione delle fatture sospese.");
     } finally {
       setReprocessing(false);
@@ -229,7 +240,7 @@ export default function ManualUpload() {
         alert(msg);
       }
       loadHistory();
-    } catch (err) {
+    } catch {
       setError("Si è verificato un errore durante l'auto-inizializzazione del catalogo.");
     } finally {
       setAutoCataloging(false);
@@ -371,6 +382,13 @@ export default function ManualUpload() {
             </div>
           )}
 
+          {adminNotice && (
+            <div style={{ padding: '16px', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 'var(--border-radius-md)', display: 'flex', gap: '12px' }}>
+              <Info size={20} />
+              <span>{adminNotice}</span>
+            </div>
+          )}
+
           {summary && (
             <div style={{ padding: '20px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)' }}>
               <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -433,8 +451,8 @@ export default function ManualUpload() {
           </button>
         </div>
 
-        {/* Auto-inizializzazione Catalogo */}
-        <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+        {/* Auto-inizializzazione Catalogo: operazione riservata agli amministratori. */}
+        {isAdmin&&<div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
           <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Sparkles size={20} color="var(--accent-blue)" /> Auto-Associazione SKU
           </h3>
@@ -454,7 +472,7 @@ export default function ManualUpload() {
             {autoCataloging ? <Loader2 className="spinner" size={14} /> : <FileSpreadsheet size={14} />}
             {autoCataloging ? 'Generazione in corso...' : 'Associa SKU Automaticamente'}
           </button>
-        </div>
+        </div>}
 
         <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <History size={20} /> Storico Upload
@@ -489,7 +507,7 @@ export default function ManualUpload() {
       </div>
 
       {/* POPUP WIZARD MODAL FOR UNREGISTERED PIECE OF INFOS */}
-      {showModal && (
+      {isAdmin && showModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
           background: 'rgba(5, 5, 10, 0.85)', backdropFilter: 'blur(8px)',

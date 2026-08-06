@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_admin
+from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.fornitori import Fornitore
 from app.models.utenti import Utente
@@ -23,7 +23,7 @@ router = APIRouter()
 )
 async def list_fornitori(
     attivi: bool | None = None,
-    _admin: Utente = Depends(require_admin),
+    _user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Fornitore).order_by(Fornitore.nome_azienda)

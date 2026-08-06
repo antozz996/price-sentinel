@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from starlette.requests import Request
 
+from app.config import settings
 from app.services.liquidstock_auth import (
     signature_for,
     verify_liquidstock_request,
@@ -15,7 +16,12 @@ from app.services.liquidstock_auth import (
 
 
 CURRENT = os.environ["LIQUIDSTOCK_INTEGRATION_SECRET"]
-PREVIOUS = os.environ["LIQUIDSTOCK_INTEGRATION_PREVIOUS_SECRET"]
+PREVIOUS = os.environ.get("LIQUIDSTOCK_INTEGRATION_PREVIOUS_SECRET") or (
+    "unit-test-previous-integration-secret-0001"
+)
+# Rotation is optional in production, but the unit test must still exercise the
+# previous-key branch without requiring operators to configure an obsolete key.
+settings.LIQUIDSTOCK_INTEGRATION_PREVIOUS_SECRET = PREVIOUS
 NOW = int(time.time())
 RAW = json.dumps({"integration_version": "1.0"}, separators=(",", ":")).encode()
 EVENT_ID = str(uuid4())

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, ShoppingCart, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
 import PriceListManager from './components/PriceListManager'
@@ -20,12 +21,99 @@ import OrderReconciliations from './components/OrderReconciliations'
 import DisputeManagement from './components/DisputeManagement'
 import OperationalAlerts from './components/OperationalAlerts'
 import ClientOnboarding from './components/ClientOnboarding'
-import { API_BASE, getHeaders } from './api'
+import { API_BASE, fetchWithAuth, getHeaders } from './api'
+
+type UserProfile = {
+  id: number
+  email: string
+  ruolo: 'admin' | 'manager'
+  location_id?: number | null
+}
+
+type NavItem = {
+  id: string
+  label: string
+  icon: LucideIcon
+  adminOnly?: boolean
+}
+
+type NavSection = {
+  id: string
+  label: string
+  items: NavItem[]
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    id: 'operations',
+    label: 'Operatività',
+    items: [
+      { id: 'upload', label: 'Carica fatture', icon: FileUp },
+      { id: 'fatture', label: 'Registro fatture', icon: FileText },
+      { id: 'validation', label: 'Anomalie da validare', icon: AlertTriangle },
+      { id: 'reconciliations', label: 'Riconciliazioni', icon: GitCompareArrows },
+      { id: 'disputes', label: 'Contestazioni', icon: HandCoins },
+      { id: 'monitor', label: 'Monitor operativo', icon: BellRing },
+    ],
+  },
+  {
+    id: 'purchasing',
+    label: 'Acquisti',
+    items: [
+      { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
+      { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
+    ],
+  },
+  {
+    id: 'analytics',
+    label: 'Analisi',
+    items: [
+      { id: 'topproducts', label: 'Top prodotti', icon: Award, adminOnly: true },
+      { id: 'crosssupplier', label: 'Comparazione fornitori', icon: Grid, adminOnly: true },
+      { id: 'productconsumption', label: 'Consumi per prodotto', icon: BarChart2, adminOnly: true },
+      { id: 'priceanalysis', label: 'Oscillazioni prezzi', icon: TrendingUp },
+    ],
+  },
+  {
+    id: 'catalog',
+    label: 'Catalogo',
+    items: [
+      { id: 'productidentity', label: 'Prodotti e alias', icon: Layers, adminOnly: true },
+      { id: 'skumanager', label: 'Gestione SKU', icon: Tag, adminOnly: true },
+      { id: 'excludedproducts', label: 'Prodotti esclusi', icon: EyeOff, adminOnly: true },
+    ],
+  },
+  {
+    id: 'administration',
+    label: 'Amministrazione',
+    items: [
+      { id: 'onboarding', label: 'Configurazione sede', icon: ListChecks, adminOnly: true },
+      { id: 'settings', label: 'Impostazioni', icon: Settings, adminOnly: true },
+    ],
+  },
+]
+
+const ADMIN_ONLY_TABS = new Set(
+  [
+    ...NAV_SECTIONS.flatMap(section => section.items.filter(item => item.adminOnly).map(item => item.id)),
+    // The legacy order emitter stays implemented but is intentionally absent from
+    // navigation while LiquidStock remains the authoritative ordering system.
+    'ordini',
+  ],
+)
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isAuth, setIsAuth] = useState(false)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    operations: true,
+    purchasing: false,
+    analytics: false,
+    catalog: false,
+    administration: false,
+  })
 
   // Login form states
   const [email, setEmail] = useState('')
@@ -37,10 +125,43 @@ export default function App() {
     // Listen for unauthorized 401 events from fetchWithAuth
     const handleUnauthorized = () => {
       setIsAuth(false);
+      setProfile(null);
     };
     window.addEventListener('unauthorized', handleUnauthorized);
     return () => window.removeEventListener('unauthorized', handleUnauthorized);
   }, []);
+
+  useEffect(() => {
+    if (!isAuth) return
+
+    let cancelled = false
+    fetchWithAuth('/auth/me')
+      .then(data => {
+        if (!cancelled) setProfile(data as UserProfile)
+      })
+      .catch(() => {
+        if (!cancelled) setProfile(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isAuth])
+
+  useEffect(() => {
+    if (profile?.ruolo === 'manager' && (activeTab === 'dashboard' || ADMIN_ONLY_TABS.has(activeTab))) {
+      setActiveTab('validation')
+    }
+  }, [activeTab, profile])
+
+  useEffect(() => {
+    const activeSection = NAV_SECTIONS.find(section =>
+      section.items.some(item => item.id === activeTab),
+    )
+    if (activeSection) {
+      setOpenSections(current => ({ ...current, [activeSection.id]: true }))
+    }
+  }, [activeTab])
 
   useEffect(() => {
     async function autoLogin() {
@@ -94,7 +215,7 @@ export default function App() {
             : 'Email o password non validi.',
         );
       }
-    } catch (err) {
+    } catch {
       setLoginError('Impossibile connettersi al server.');
     } finally {
       setLoggingIn(false);
@@ -233,10 +354,14 @@ export default function App() {
         </div>
       );
     }
+
+    if (!profile) {
+      return <div style={{ color: 'var(--text-secondary)', padding: '24px' }}>Caricamento profilo…</div>
+    }
     
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
-      case 'upload': return <ManualUpload />;
+      case 'upload': return <ManualUpload isAdmin={profile.ruolo === 'admin'} />;
       case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
@@ -247,7 +372,7 @@ export default function App() {
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
       case 'productidentity': return <ProductIdentityManager />;
-      case 'reconciliations': return <OrderReconciliations />;
+      case 'reconciliations': return <OrderReconciliations isAdmin={profile?.ruolo === 'admin'} />;
       case 'disputes': return <DisputeManagement />;
       case 'monitor': return <OperationalAlerts />;
       case 'onboarding': return <ClientOnboarding />;
@@ -260,22 +385,22 @@ export default function App() {
 
   const getHeaderInfo = () => {
     switch (activeTab) {
-      case 'dashboard': return { title: 'Intelligence Overview', sub: 'Business Insights & KPI del Gruppo' };
+      case 'dashboard': return { title: 'Panoramica', sub: 'Indicatori economici e operativi del gruppo' };
       case 'upload': return { title: 'Carica Fatture', sub: 'Ingestione manuale file XML e archivi ZIP' };
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
-      case 'validation': return { title: 'Stanza di Validazione', sub: 'Controllo anomalie e gestione rincari' };
+      case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
-      case 'topproducts': return { title: 'Listino Top Prodotti', sub: 'Sviluppa e analizza il listino prezzi dei prodotti più acquistati' };
+      case 'topproducts': return { title: 'Top prodotti', sub: 'Analizza prezzi e volumi dei prodotti più acquistati' };
       case 'crosssupplier': return { title: 'Comparazione Fornitori', sub: 'Matrice incrociata dei prezzi per fornitore' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
-      case 'productidentity': return { title: 'Product Identity Layer', sub: 'Gestione catalogo canonico, alias e proposte di matching' };
+      case 'productidentity': return { title: 'Prodotti e alias', sub: 'Gestione catalogo canonico, alias e proposte di matching' };
       case 'reconciliations': return { title: 'Riconciliazioni ordini', sub: 'Confronto ordine, ricezione e fattura con revisione manuale' };
       case 'disputes': return { title: 'Contestazioni e recuperi', sub: 'Comunicazioni fornitori, risposte e note di credito tracciate' };
       case 'monitor': return { title: 'Monitor operativo', sub: 'Scadenze, anomalie importanti e integrazioni da verificare' };
-      case 'onboarding': return { title: 'Onboarding cliente', sub: 'Attivazione guidata e soglie esplicite per ogni sede' };
+      case 'onboarding': return { title: 'Configurazione sede', sub: 'Attivazione guidata e soglie esplicite per ogni sede' };
       case 'excludedproducts': return { title: 'Prodotti Esclusi', sub: 'Gestisci la blacklist globale dei prodotti da escludere dalle analisi' };
       case 'accordicommerciali': return { title: 'Accordi Commerciali (PFA)', sub: 'Rientri di fine anno, volumi d\'acquisto e calcolo prezzi netti' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
@@ -314,160 +439,65 @@ export default function App() {
           </button>
         </div>
 
-        <nav className="sidebar-nav" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button 
-            className={`btn ${activeTab === 'dashboard' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'dashboard' ? '' : 'transparent', border: 'none' }}
-          >
-            <LayoutDashboard size={18} /> Overview
-          </button>
-          
-          <button 
-            className={`btn ${activeTab === 'upload' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('upload'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'upload' ? '' : 'transparent', border: 'none' }}
-          >
-            <FileUp size={18} /> Carica Fatture
-          </button>
+        <nav className="sidebar-nav" aria-label="Navigazione principale">
+          {profile?.ruolo === 'admin' && (
+            <button
+              className={`sidebar-nav-item ${activeTab === 'dashboard' ? 'is-active' : ''}`}
+              onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
+            >
+              <LayoutDashboard size={18} /> Panoramica
+            </button>
+          )}
 
-          <button 
-            className={`btn ${activeTab === 'fatture' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('fatture'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'fatture' ? '' : 'transparent', border: 'none' }}
-          >
-            <FileText size={18} /> Registro Fatture
-          </button>
+          {NAV_SECTIONS.map(section => {
+            const visibleItems = section.items.filter(item => !item.adminOnly || profile?.ruolo === 'admin')
+            if (visibleItems.length === 0) return null
 
-          <button 
-            className={`btn ${activeTab === 'validation' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('validation'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'validation' ? '' : 'transparent', border: 'none' }}
-          >
-            <AlertTriangle size={18} /> Validazione
-          </button>
-          
-          <button 
-            className={`btn ${activeTab === 'listini' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('listini'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'listini' ? '' : 'transparent', border: 'none' }}
-          >
-            <FileSpreadsheet size={18} /> Listini Master
-          </button>
+            const isOpen = openSections[section.id]
+            const hasActiveItem = visibleItems.some(item => item.id === activeTab)
 
-          <button 
-            className={`btn ${activeTab === 'accordicommerciali' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('accordicommerciali'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'accordicommerciali' ? '' : 'transparent', border: 'none' }}
-          >
-            <Percent size={18} /> Accordi Commerciali
-          </button>
+            return (
+              <div className="sidebar-section" key={section.id}>
+                <button
+                  className={`sidebar-section-toggle ${hasActiveItem ? 'has-active-item' : ''}`}
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-controls={`nav-section-${section.id}`}
+                  onClick={() => setOpenSections(current => ({
+                    ...current,
+                    [section.id]: !current[section.id],
+                  }))}
+                >
+                  <span>{section.label}</span>
+                  <ChevronDown className={isOpen ? 'is-open' : ''} size={16} />
+                </button>
 
-          <button 
-            className={`btn ${activeTab === 'topproducts' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('topproducts'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'topproducts' ? '' : 'transparent', border: 'none' }}
-          >
-            <Award size={18} /> Listino Top Prodotti
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'crosssupplier' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('crosssupplier'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'crosssupplier' ? '' : 'transparent', border: 'none' }}
-          >
-            <Grid size={18} style={{ transform: 'rotate(90deg)' }} /> Comparazione Fornitori
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'productconsumption' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('productconsumption'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'productconsumption' ? '' : 'transparent', border: 'none' }}
-          >
-            <BarChart2 size={18} /> Analisi Consumi
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'priceanalysis' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('priceanalysis'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'priceanalysis' ? '' : 'transparent', border: 'none' }}
-          >
-            <TrendingUp size={18} /> Analisi Oscillazioni
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'ordini' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('ordini'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'ordini' ? '' : 'transparent', border: 'none' }}
-          >
-            <ShoppingCart size={18} /> Ottimizzatore Ordini
-          </button>
-
-          <button
-            className={`btn ${activeTab === 'reconciliations' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('reconciliations'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'reconciliations' ? '' : 'transparent', border: 'none' }}
-          >
-            <GitCompareArrows size={18} /> Riconciliazioni ordini
-          </button>
-
-          <button
-            className={`btn ${activeTab === 'disputes' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('disputes'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'disputes' ? '' : 'transparent', border: 'none' }}
-          >
-            <HandCoins size={18} /> Contestazioni
-          </button>
-
-          <button
-            className={`btn ${activeTab === 'monitor' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('monitor'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'monitor' ? '' : 'transparent', border: 'none' }}
-          >
-            <BellRing size={18} /> Monitor operativo
-          </button>
-
-          <button
-            className={`btn ${activeTab === 'onboarding' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('onboarding'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'onboarding' ? '' : 'transparent', border: 'none' }}
-          >
-            <ListChecks size={18} /> Onboarding
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'skumanager' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('skumanager'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'skumanager' ? '' : 'transparent', border: 'none' }}
-          >
-            <Tag size={18} /> Gestione SKU
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'productidentity' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('productidentity'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'productidentity' ? '' : 'transparent', border: 'none' }}
-          >
-            <Layers size={18} /> Product Identity
-          </button>
-
-          <button 
-            className={`btn ${activeTab === 'excludedproducts' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('excludedproducts'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'excludedproducts' ? '' : 'transparent', border: 'none' }}
-          >
-            <EyeOff size={18} /> Prodotti Esclusi
-          </button>
+                {isOpen && (
+                  <div className="sidebar-section-items" id={`nav-section-${section.id}`}>
+                    {visibleItems.map(item => {
+                      const Icon = item.icon
+                      return (
+                        <button
+                          className={`sidebar-nav-item ${activeTab === item.id ? 'is-active' : ''}`}
+                          key={item.id}
+                          onClick={() => { setActiveTab(item.id); setMobileSidebarOpen(false); }}
+                        >
+                          <Icon size={17} /> {item.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </nav>
-        
+
         <div className="sidebar-footer">
-          <button 
-            className={`btn ${activeTab === 'settings' ? 'btn-primary' : ''}`}
-            onClick={() => { setActiveTab('settings'); setMobileSidebarOpen(false); }}
-            style={{ width: '100%', justifyContent: 'flex-start', background: activeTab === 'settings' ? '' : 'transparent', border: 'none', color: activeTab === 'settings' ? 'white' : 'var(--text-secondary)' }}
-          >
-            <Settings size={18} /> Settings
-          </button>
+          <div className="sidebar-user-summary">
+            <span>{profile ? (profile.ruolo === 'admin' ? 'Amministratore' : 'Manager') : 'Profilo'}</span>
+            <small>{profile?.email || 'Profilo in caricamento…'}</small>
+          </div>
         </div>
       </aside>
 
@@ -508,11 +538,11 @@ export default function App() {
           
           <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div className="profile-info" style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 600 }}>C.E.O. Direction</div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>admin@pricesentinel.it</div>
+              <div style={{ fontWeight: 600 }}>{profile ? (profile.ruolo === 'admin' ? 'Amministratore' : 'Manager') : 'Profilo'}</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{profile?.email || 'Profilo in caricamento…'}</div>
             </div>
             <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-glass)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              A
+              {profile?.email?.charAt(0).toUpperCase() || '…'}
             </div>
           </div>
         </header>

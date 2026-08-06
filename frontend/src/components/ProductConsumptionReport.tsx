@@ -161,7 +161,7 @@ export default function ProductConsumptionReport() {
       document.body.appendChild(a);
       a.click();
       a.remove();
-    } catch (err) {
+    } catch {
       alert("Errore durante il download del report PDF");
     } finally {
       setLoadingInvoices(false);
@@ -286,7 +286,7 @@ export default function ProductConsumptionReport() {
       document.body.appendChild(a);
       a.click();
       a.remove();
-    } catch (err) {
+    } catch {
       alert("Errore durante il download del report Excel");
     } finally {
       setExporting(false);

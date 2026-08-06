@@ -37,20 +37,50 @@ interface Alias {
   source: string
 }
 
-interface MatchCandidate {
-  id: number
-  invoice_line_id: number | null
+interface WorkQueueCandidate {
+  candidate_id: number
   product_id: number
-  source_type: string
-  source_id: number | null
-  supplier_id: number | null
-  raw_description: string | null
-  normalized_description: string | null
+  sku_interno: string | null
+  canonical_name: string
   score: number
-  reason_json: any | null
-  block_flag: boolean
-  status: string
-  created_at: string
+  reason_json: Record<string, boolean | number | string>
+}
+
+interface WorkQueueItem {
+  work_key: string
+  supplier_id: number
+  supplier_name: string
+  supplier_code: string | null
+  raw_description: string
+  normalized_description: string
+  occurrence_count: number
+  invoice_count: number
+  invoice_line_ids: number[]
+  latest_invoice_date: string
+  candidate_records: number
+  recommendation: 'associate_existing' | 'create_canonical'
+  best_candidate: WorkQueueCandidate | null
+  alternatives: WorkQueueCandidate[]
+  suggested_product: {
+    canonical_name: string
+    category: string | null
+    volume_ml: number | null
+    weight_g: number | null
+    unit_count: number
+    container_type: string | null
+    comparison_unit: string
+  }
+}
+
+interface WorkQueueResponse {
+  summary: {
+    work_items: number
+    invoice_lines: number
+    reliable_suggestions: number
+    probable_new_products: number
+    weak_candidates_hidden: number
+  }
+  items: WorkQueueItem[]
 }
 
 export default function ProductIdentityManager() {
@@ -58,7 +88,7 @@ export default function ProductIdentityManager() {
   const [products, setProducts] = useState<Product[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [aliases, setAliases] = useState<Alias[]>([])
-  const [candidates, setCandidates] = useState<MatchCandidate[]>([])
+  const [workQueue, setWorkQueue] = useState<WorkQueueResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -77,6 +107,26 @@ export default function ProductIdentityManager() {
   const [productSearch, setProductSearch] = useState('')
   const [candidateSearch, setCandidateSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [queueFilter, setQueueFilter] = useState<'all' | 'new' | 'review'>('all')
+  const [selectedWorkItem, setSelectedWorkItem] = useState<WorkQueueItem | null>(null)
+  const [resolutionMode, setResolutionMode] = useState<'create_canonical' | 'associate_existing' | 'ignore'>('create_canonical')
+  const [resolutionLoading, setResolutionLoading] = useState(false)
+  const [resolutionError, setResolutionError] = useState<string | null>(null)
+  const [selectedExistingProductId, setSelectedExistingProductId] = useState('')
+  const [existingProductSearch, setExistingProductSearch] = useState('')
+  const [quickProductForm, setQuickProductForm] = useState({
+    canonical_name: '',
+    category: '',
+    subcategory: '',
+    comparison_unit: 'piece'
+  })
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([])
+  const [bulkCategoryAction, setBulkCategoryAction] = useState<'keep' | 'set' | 'clear'>('keep')
+  const [bulkSubcategoryAction, setBulkSubcategoryAction] = useState<'keep' | 'set' | 'clear'>('keep')
+  const [bulkCategory, setBulkCategory] = useState('')
+  const [bulkSubcategory, setBulkSubcategory] = useState('')
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [bulkMessage, setBulkMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
 
   // Modals / Forms
   const [showProductModal, setShowProductModal] = useState(false)
@@ -211,10 +261,10 @@ export default function ProductIdentityManager() {
 
   const fetchCandidates = async () => {
     try {
-      const res = await fetch(`${API_BASE}/match-candidates`, { headers: getHeaders() })
-      if (!res.ok) throw new Error("Errore nel recupero dei candidati")
+      const res = await fetch(`${API_BASE}/match-candidates/work-queue`, { headers: getHeaders() })
+      if (!res.ok) throw new Error("Errore nel recupero della coda prodotti")
       const data = await res.json()
-      setCandidates(data)
+      setWorkQueue(data)
     } catch (err: any) {
       console.error(err.message)
     }
@@ -296,32 +346,73 @@ export default function ProductIdentityManager() {
     }
   }
 
-  const handleApproveCandidate = async (candidateId: number) => {
-    if (!confirm("Sei sicuro di voler approvare questo matching e creare l'alias corrispondente?")) return
-    try {
-      const res = await fetch(`${API_BASE}/match-candidates/${candidateId}/approve`, {
-        method: 'POST',
-        headers: getHeaders()
-      })
-      if (!res.ok) throw new Error("Errore nell'approvazione del candidato")
-      fetchCandidates()
-      fetchProducts()
-    } catch (err: any) {
-      alert(err.message)
-    }
+  const openWorkResolution = (
+    item: WorkQueueItem,
+    mode: 'create_canonical' | 'associate_existing' | 'ignore'
+  ) => {
+    setSelectedWorkItem(item)
+    setResolutionMode(mode)
+    setResolutionError(null)
+    setSelectedExistingProductId(mode === 'associate_existing' && item.best_candidate
+      ? String(item.best_candidate.product_id)
+      : '')
+    setExistingProductSearch('')
+    setQuickProductForm({
+      canonical_name: item.suggested_product.canonical_name,
+      category: item.suggested_product.category || '',
+      subcategory: '',
+      comparison_unit: item.suggested_product.comparison_unit || 'piece'
+    })
   }
 
-  const handleRejectCandidate = async (candidateId: number) => {
-    if (!confirm("Rifiutare questo matching manderà l'articolo in Parking Area. Continuare?")) return
+  const resolveWorkItem = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedWorkItem) return
+    if (resolutionMode === 'associate_existing' && !selectedExistingProductId) {
+      setResolutionError('Seleziona il prodotto canonico da associare.')
+      return
+    }
+    if (resolutionMode === 'create_canonical' && !quickProductForm.canonical_name.trim()) {
+      setResolutionError('Inserisci il nome canonico del prodotto.')
+      return
+    }
+
+    const payload: Record<string, unknown> = {
+      invoice_line_ids: selectedWorkItem.invoice_line_ids,
+      action: resolutionMode
+    }
+    if (resolutionMode === 'associate_existing') {
+      payload.product_id = Number(selectedExistingProductId)
+    }
+    if (resolutionMode === 'create_canonical') {
+      payload.canonical_data = {
+        ...selectedWorkItem.suggested_product,
+        canonical_name: quickProductForm.canonical_name.trim(),
+        category: quickProductForm.category.trim() || null,
+        subcategory: quickProductForm.subcategory.trim() || null,
+        comparison_unit: quickProductForm.comparison_unit
+      }
+    }
+
+    setResolutionLoading(true)
+    setResolutionError(null)
     try {
-      const res = await fetch(`${API_BASE}/match-candidates/${candidateId}/reject`, {
+      const res = await fetch(`${API_BASE}/match-candidates/work-queue/resolve`, {
         method: 'POST',
-        headers: getHeaders()
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
       })
-      if (!res.ok) throw new Error("Errore nel rifiuto del candidato")
-      fetchCandidates()
+      const data = await res.json()
+      if (!res.ok) {
+        const detail = typeof data.detail === 'string' ? data.detail : data.detail?.message
+        throw new Error(detail || 'Impossibile risolvere il prodotto')
+      }
+      setSelectedWorkItem(null)
+      await Promise.all([fetchCandidates(), fetchProducts()])
     } catch (err: any) {
-      alert(err.message)
+      setResolutionError(err.message)
+    } finally {
+      setResolutionLoading(false)
     }
   }
 
@@ -345,6 +436,82 @@ export default function ProductIdentityManager() {
     setShowProductModal(true)
   }
 
+  const toggleProductSelection = (productId: number) => {
+    if (!selectedProductIds.includes(productId) && selectedProductIds.length >= 1000) {
+      setBulkMessage({ type: 'error', text: 'Puoi modificare al massimo 1.000 prodotti per operazione.' })
+      return
+    }
+    setSelectedProductIds(current => (
+      current.includes(productId) ? current.filter(id => id !== productId) : [...current, productId]
+    ))
+    setBulkMessage(null)
+  }
+
+  const handleBulkClassificationUpdate = async () => {
+    setBulkMessage(null)
+
+    if (selectedProductIds.length === 0) {
+      setBulkMessage({ type: 'error', text: 'Seleziona almeno un prodotto.' })
+      return
+    }
+    if (bulkCategoryAction === 'keep' && bulkSubcategoryAction === 'keep') {
+      setBulkMessage({ type: 'error', text: 'Scegli almeno una modifica da applicare.' })
+      return
+    }
+    if (bulkCategoryAction === 'set' && !bulkCategory.trim()) {
+      setBulkMessage({ type: 'error', text: 'Inserisci la nuova categoria.' })
+      return
+    }
+    if (bulkSubcategoryAction === 'set' && !bulkSubcategory.trim()) {
+      setBulkMessage({ type: 'error', text: 'Inserisci la nuova sottocategoria.' })
+      return
+    }
+
+    const changes: string[] = []
+    if (bulkCategoryAction === 'set') changes.push(`categoria “${bulkCategory.trim()}”`)
+    if (bulkCategoryAction === 'clear') changes.push('rimozione categoria')
+    if (bulkSubcategoryAction === 'set') changes.push(`sottocategoria “${bulkSubcategory.trim()}”`)
+    if (bulkSubcategoryAction === 'clear') changes.push('rimozione sottocategoria')
+
+    if (!window.confirm(`Applicare ${changes.join(' e ')} a ${selectedProductIds.length} prodotti?`)) return
+
+    const payload: { product_ids: number[], category?: string | null, subcategory?: string | null } = {
+      product_ids: selectedProductIds
+    }
+    if (bulkCategoryAction === 'set') payload.category = bulkCategory.trim()
+    if (bulkCategoryAction === 'clear') payload.category = null
+    if (bulkSubcategoryAction === 'set') payload.subcategory = bulkSubcategory.trim()
+    if (bulkSubcategoryAction === 'clear') payload.subcategory = null
+
+    setBulkLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/products/bulk-classification`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        const detail = typeof data.detail === 'string' ? data.detail : data.detail?.message
+        throw new Error(detail || 'Errore durante la modifica massiva')
+      }
+
+      const updatedById = new Map<number, Product>(data.products.map((product: Product) => [product.id, product]))
+      setProducts(current => current.map(product => updatedById.get(product.id) || product))
+      setSelectedProduct(current => current ? updatedById.get(current.id) || current : null)
+      setSelectedProductIds([])
+      setBulkCategoryAction('keep')
+      setBulkSubcategoryAction('keep')
+      setBulkCategory('')
+      setBulkSubcategory('')
+      setBulkMessage({ type: 'success', text: `${data.updated_count} prodotti aggiornati correttamente.` })
+    } catch (err: any) {
+      setBulkMessage({ type: 'error', text: err.message })
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.canonical_name.toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sku_interno || '').toLowerCase().includes(productSearch.toLowerCase())
@@ -352,9 +519,34 @@ export default function ProductIdentityManager() {
     return matchesSearch && matchesCategory
   })
 
-  const filteredCandidates = candidates.filter(c => {
-    return (c.raw_description || '').toLowerCase().includes(candidateSearch.toLowerCase())
+  const availableCategories = Array.from(new Set(products.map(product => product.category).filter(Boolean) as string[])).sort()
+  const availableSubcategories = Array.from(new Set(products.map(product => product.subcategory).filter(Boolean) as string[])).sort()
+  const visibleProductIds = filteredProducts.map(product => product.id)
+  const allVisibleProductsSelected = visibleProductIds.length > 0 && visibleProductIds.every(id => selectedProductIds.includes(id))
+
+  const filteredWorkItems = (workQueue?.items || []).filter(item => {
+    const search = candidateSearch.toLowerCase()
+    const matchesSearch = item.raw_description.toLowerCase().includes(search)
+      || item.supplier_name.toLowerCase().includes(search)
+      || (item.supplier_code || '').toLowerCase().includes(search)
+    const matchesType = queueFilter === 'all'
+      || (queueFilter === 'new' && item.recommendation === 'create_canonical')
+      || (queueFilter === 'review' && item.recommendation === 'associate_existing')
+    return matchesSearch && matchesType
   })
+
+  const filteredExistingProducts = products.filter(product => {
+    const search = existingProductSearch.toLowerCase()
+    return product.is_active && (
+      product.canonical_name.toLowerCase().includes(search)
+      || (product.sku_interno || '').toLowerCase().includes(search)
+    )
+  }).slice(0, 50)
+  const selectedExistingProduct = products.find(product => String(product.id) === selectedExistingProductId)
+  const matchingExistingProducts = selectedExistingProduct
+    && !filteredExistingProducts.some(product => product.id === selectedExistingProduct.id)
+    ? [selectedExistingProduct, ...filteredExistingProducts]
+    : filteredExistingProducts
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', minHeight: '80vh' }}>
@@ -396,7 +588,7 @@ export default function ProductIdentityManager() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={18} /> Match Candidates ({candidates.length})
+            <Sparkles size={18} /> Prodotti da classificare ({workQueue?.summary.work_items || 0})
           </div>
         </button>
         <button
@@ -500,13 +692,125 @@ export default function ProductIdentityManager() {
                 }}
               >
                 <option value="" style={{ background: '#13131c' }}>Tutte le Categorie</option>
-                <option value="acqua" style={{ background: '#13131c' }}>Acqua</option>
-                <option value="soft_drink" style={{ background: '#13131c' }}>Soft Drink</option>
-                <option value="monouso" style={{ background: '#13131c' }}>Monouso</option>
-                <option value="vino" style={{ background: '#13131c' }}>Vino</option>
-                <option value="spirits" style={{ background: '#13131c' }}>Spirits</option>
-                <option value="food" style={{ background: '#13131c' }}>Food</option>
+                {availableCategories.map(category => (
+                  <option key={category} value={category} style={{ background: '#13131c' }}>{category}</option>
+                ))}
               </select>
+            </div>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              padding: '16px',
+              border: '1px solid rgba(59,130,246,0.25)',
+              borderRadius: '10px',
+              background: 'rgba(59,130,246,0.06)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700 }}>
+                    <Tag size={17} color="var(--accent-blue)" /> Modifica massiva etichette e categorie
+                  </div>
+                  <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', marginTop: '4px' }}>
+                    {selectedProductIds.length} prodotti selezionati · massimo 1.000 per operazione
+                  </div>
+                </div>
+                {selectedProductIds.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setSelectedProductIds([])
+                      setBulkMessage(null)
+                    }}
+                    style={{ padding: '7px 11px', fontSize: '0.8rem' }}
+                  >
+                    Deseleziona tutto
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px', alignItems: 'end' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Azione categoria
+                  <select
+                    value={bulkCategoryAction}
+                    onChange={e => setBulkCategoryAction(e.target.value as 'keep' | 'set' | 'clear')}
+                    style={{ padding: '9px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  >
+                    <option value="keep">Non modificare</option>
+                    <option value="set">Imposta</option>
+                    <option value="clear">Rimuovi</option>
+                  </select>
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Nuova categoria
+                  <input
+                    type="text"
+                    list="bulk-category-options"
+                    maxLength={100}
+                    disabled={bulkCategoryAction !== 'set'}
+                    value={bulkCategory}
+                    onChange={e => setBulkCategory(e.target.value)}
+                    placeholder="Es. beverage"
+                    style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  />
+                  <datalist id="bulk-category-options">
+                    {availableCategories.map(category => <option key={category} value={category} />)}
+                  </datalist>
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Azione sottocategoria
+                  <select
+                    value={bulkSubcategoryAction}
+                    onChange={e => setBulkSubcategoryAction(e.target.value as 'keep' | 'set' | 'clear')}
+                    style={{ padding: '9px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  >
+                    <option value="keep">Non modificare</option>
+                    <option value="set">Imposta</option>
+                    <option value="clear">Rimuovi</option>
+                  </select>
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  Nuova sottocategoria
+                  <input
+                    type="text"
+                    list="bulk-subcategory-options"
+                    maxLength={100}
+                    disabled={bulkSubcategoryAction !== 'set'}
+                    value={bulkSubcategory}
+                    onChange={e => setBulkSubcategory(e.target.value)}
+                    placeholder="Es. bibite gassate"
+                    style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  />
+                  <datalist id="bulk-subcategory-options">
+                    {availableSubcategories.map(subcategory => <option key={subcategory} value={subcategory} />)}
+                  </datalist>
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={bulkLoading || selectedProductIds.length === 0}
+                  onClick={handleBulkClassificationUpdate}
+                  style={{ padding: '10px 14px', justifyContent: 'center', whiteSpace: 'nowrap' }}
+                >
+                  {bulkLoading ? <RefreshCw className="animate-spin" size={16} /> : <Tag size={16} />}
+                  Applica
+                </button>
+              </div>
+
+              {bulkMessage && (
+                <div style={{
+                  padding: '9px 11px',
+                  borderRadius: '8px',
+                  fontSize: '0.82rem',
+                  color: bulkMessage.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
+                  background: bulkMessage.type === 'success' ? 'rgba(16,185,129,0.08)' : 'var(--status-red-bg)'
+                }}>
+                  {bulkMessage.text}
+                </div>
+              )}
             </div>
 
             {loading ? (
@@ -516,6 +820,21 @@ export default function ProductIdentityManager() {
                 <table className="table">
                   <thead>
                     <tr>
+                      <th style={{ width: '38px' }}>
+                        <input
+                          type="checkbox"
+                          aria-label="Seleziona tutti i prodotti visibili"
+                          checked={allVisibleProductsSelected}
+                          onChange={() => {
+                            setSelectedProductIds(current => allVisibleProductsSelected
+                              ? current.filter(id => !visibleProductIds.includes(id))
+                              : Array.from(new Set([...current, ...visibleProductIds])).slice(0, 1000)
+                            )
+                            setBulkMessage(null)
+                          }}
+                          style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)', cursor: 'pointer' }}
+                        />
+                      </th>
                       <th>SKU Interno</th>
                       <th>Nome Canonico</th>
                       <th>Categoria</th>
@@ -535,12 +854,22 @@ export default function ProductIdentityManager() {
                           borderLeft: selectedProduct?.id === p.id ? '3px solid var(--accent-blue)' : ''
                         }}
                       >
+                        <td onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Seleziona ${p.canonical_name}`}
+                            checked={selectedProductIds.includes(p.id)}
+                            onChange={() => toggleProductSelection(p.id)}
+                            style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)', cursor: 'pointer' }}
+                          />
+                        </td>
                         <td><code style={{ color: 'var(--accent-blue)' }}>{p.sku_interno || 'N/D'}</code></td>
                         <td style={{ fontWeight: 600 }}>{p.canonical_name}</td>
                         <td>
                           <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
-                            {p.category}
+                            {p.category || 'Senza categoria'}
                           </span>
+                          {p.subcategory && <div style={{ marginTop: '4px', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>{p.subcategory}</div>}
                         </td>
                         <td>{p.volume_ml ? `${p.volume_ml} ml` : p.weight_g ? `${p.weight_g} g` : 'N/D'}</td>
                         <td>
@@ -561,7 +890,7 @@ export default function ProductIdentityManager() {
                     ))}
                     {filteredProducts.length === 0 && (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '40px' }}>
+                        <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '40px' }}>
                           Nessun prodotto trovato.
                         </td>
                       </tr>
@@ -645,98 +974,115 @@ export default function ProductIdentityManager() {
         </div>
       )}
 
-      {/* VIEW: Match Candidates */}
+      {/* VIEW: Smart product work queue */}
       {activeSubTab === 'candidates' && (
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Richieste di Associazione Pendenti</h3>
+          <div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Inbox prodotti da classificare</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '6px 0 0' }}>
+              Una decisione per prodotto: tutte le righe identiche vengono risolte insieme e memorizzate per le fatture future.
+            </p>
           </div>
 
-          <div style={{ position: 'relative', width: '100%' }}>
-            <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
-            <input
-              type="text"
-              placeholder="Cerca per descrizione articolo fornitore..."
-              value={candidateSearch}
-              onChange={e => setCandidateSearch(e.target.value)}
-              style={{
-                width: '100%',
-                boxSizing: 'border-box',
-                padding: '10px 12px 10px 38px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
-                outline: 'none',
-                fontSize: '0.9rem'
-              }}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
+            {[
+              ['Decisioni reali', workQueue?.summary.work_items || 0, 'var(--accent-blue)'],
+              ['Righe risolte insieme', workQueue?.summary.invoice_lines || 0, 'white'],
+              ['Nuovi prodotti probabili', workQueue?.summary.probable_new_products || 0, 'var(--status-orange)'],
+              ['Suggerimenti affidabili', workQueue?.summary.reliable_suggestions || 0, 'var(--status-green)']
+            ].map(([label, value, color]) => (
+              <div key={String(label)} style={{ padding: '14px', borderRadius: '10px', background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border-glass)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{label}</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: String(color), marginTop: '3px' }}>{value}</div>
+              </div>
+            ))}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {filteredCandidates.map(c => {
-              const matchedProd = products.find(p => p.id === c.product_id)
-              const reason = typeof c.reason_json === 'string' ? JSON.parse(c.reason_json) : c.reason_json
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input
+                type="text"
+                placeholder="Cerca descrizione, codice o fornitore..."
+                value={candidateSearch}
+                onChange={e => setCandidateSearch(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 38px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', outline: 'none' }}
+              />
+            </div>
+            {[
+              ['all', 'Tutti'],
+              ['new', 'Nuovi probabili'],
+              ['review', 'Da confermare']
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className={`btn ${queueFilter === value ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setQueueFilter(value as 'all' | 'new' | 'review')}
+                style={{ padding: '9px 12px' }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-              return (
-                <div key={c.id} className="glass-panel" style={{ padding: '20px', border: '1px solid rgba(255,255,255,0.05)', display: 'grid', gridTemplateColumns: '1fr auto', gap: '20px', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'white' }}>{c.raw_description}</span>
-                      <span className="badge" style={{
-                        background: c.score >= 90 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                        color: c.score >= 90 ? 'var(--status-green)' : 'var(--status-orange)',
-                        fontSize: '0.8rem',
-                        fontWeight: 700
-                      }}>
-                        Confidenza: {c.score.toFixed(0)}%
-                      </span>
-                    </div>
+          {(workQueue?.summary.weak_candidates_hidden || 0) > 0 && (
+            <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(16,185,129,0.07)', color: 'var(--status-green)', fontSize: '0.8rem' }}>
+              <strong>{workQueue?.summary.weak_candidates_hidden}</strong> falsi suggerimenti sotto soglia nascosti automaticamente.
+            </div>
+          )}
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <span>Sorgente: <strong style={{ color: 'white' }}>{c.source_type}</strong></span>
-                      <span>•</span>
-                      <span>Associazione proposta con:</span>
-                      <code style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>{matchedProd?.canonical_name || 'Prodotto sconosciuto'}</code>
-                    </div>
-
-                    {/* Breakdown Reasons */}
-                    {reason && (
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                        {reason.brand_match && <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', fontSize: '0.7rem' }}>Brand Ok</span>}
-                        {reason.category_match && <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', fontSize: '0.7rem' }}>Categoria Ok</span>}
-                        {reason.volume_match && <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', fontSize: '0.7rem' }}>Volume Ok</span>}
-                        {reason.weight_match && <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', fontSize: '0.7rem' }}>Peso Ok</span>}
-                        {reason.pack_match && <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', fontSize: '0.7rem' }}>Pack Ok</span>}
-                        {reason.container_match && <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', fontSize: '0.7rem' }}>Contenitore Ok</span>}
-                        {c.block_flag && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: 'var(--status-red)', fontSize: '0.7rem' }}>Bloccato</span>}
-                      </div>
-                    )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {filteredWorkItems.map(item => (
+              <div key={item.work_key} style={{ padding: '18px', border: '1px solid var(--border-glass)', borderRadius: '12px', background: 'rgba(255,255,255,0.018)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '18px', alignItems: 'center' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 750, fontSize: '1rem' }}>{item.raw_description}</span>
+                    <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)' }}>
+                      {item.occurrence_count} {item.occurrence_count === 1 ? 'riga' : 'righe'} · {item.invoice_count} {item.invoice_count === 1 ? 'fattura' : 'fatture'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '7px', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                    <span>{item.supplier_name}</span>
+                    {item.supplier_code && <><span>•</span><span>Codice: <code>{item.supplier_code}</code></span></>}
+                    <span>•</span>
+                    <span>Ultima fattura: {new Date(item.latest_invoice_date).toLocaleDateString('it-IT')}</span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button 
-                      className="btn btn-secondary" 
-                      onClick={() => handleRejectCandidate(c.id)}
-                      style={{ color: 'var(--status-red)', borderColor: 'rgba(239,68,68,0.2)', padding: '10px 14px' }}
-                    >
-                      <X size={16} /> Rifiuta
-                    </button>
-                    <button 
-                      className="btn btn-primary" 
-                      onClick={() => handleApproveCandidate(c.id)}
-                      style={{ padding: '10px 14px' }}
-                    >
-                      <Check size={16} /> Approva Match
-                    </button>
-                  </div>
+                  {item.best_candidate ? (
+                    <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(16,185,129,0.07)', color: 'var(--status-green)', fontSize: '0.82rem' }}>
+                      <Check size={14} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
+                      Possibile corrispondenza: <strong>{item.best_candidate.canonical_name}</strong> · {item.best_candidate.score.toFixed(0)}%
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(245,158,11,0.07)', color: 'var(--status-orange)', fontSize: '0.82rem' }}>
+                      Nessuna corrispondenza affidabile: probabile nuovo prodotto. I suggerimenti casuali non vengono mostrati.
+                    </div>
+                  )}
                 </div>
-              )
-            })}
 
-            {filteredCandidates.length === 0 && (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '440px' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => openWorkResolution(item, 'ignore')} style={{ padding: '9px 11px', color: 'var(--text-secondary)' }}>
+                    <X size={15} /> Ignora
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => openWorkResolution(item, 'associate_existing')} style={{ padding: '9px 12px' }}>
+                    <Search size={15} /> Associa esistente
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => openWorkResolution(item, item.best_candidate ? 'associate_existing' : 'create_canonical')}
+                    style={{ padding: '9px 13px' }}
+                  >
+                    {item.best_candidate ? <><Check size={15} /> Conferma suggerimento</> : <><Plus size={15} /> Crea e risolvi</>}
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {filteredWorkItems.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '60px', background: 'rgba(255,255,255,0.01)', borderRadius: '12px' }}>
-                Nessuna richiesta di associazione pendente al momento. Ottimo lavoro!
+                Nessun prodotto da classificare con i filtri selezionati.
               </div>
             )}
           </div>
@@ -1105,6 +1451,139 @@ export default function ProductIdentityManager() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL: Smart work queue resolution */}
+      {selectedWorkItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto', padding: '28px', display: 'flex', flexDirection: 'column', gap: '18px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
+                {resolutionMode === 'create_canonical' && 'Crea prodotto e memorizza alias'}
+                {resolutionMode === 'associate_existing' && 'Associa a un prodotto esistente'}
+                {resolutionMode === 'ignore' && 'Ignora questo articolo'}
+              </h3>
+              <p style={{ margin: '7px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                <strong style={{ color: 'white' }}>{selectedWorkItem.raw_description}</strong><br />
+                Una sola conferma risolverà {selectedWorkItem.occurrence_count} {selectedWorkItem.occurrence_count === 1 ? 'riga' : 'righe'} e insegnerà il riconoscimento per il futuro.
+              </p>
+            </div>
+
+            <form onSubmit={resolveWorkItem} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {resolutionMode === 'create_canonical' && (
+                <>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Nome canonico
+                    <input
+                      autoFocus
+                      required
+                      maxLength={255}
+                      value={quickProductForm.canonical_name}
+                      onChange={e => setQuickProductForm({ ...quickProductForm, canonical_name: e.target.value })}
+                      style={{ padding: '11px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    />
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Categoria
+                      <input
+                        list="quick-product-categories"
+                        maxLength={100}
+                        value={quickProductForm.category}
+                        onChange={e => setQuickProductForm({ ...quickProductForm, category: e.target.value })}
+                        placeholder="Es. monouso, pulizia, beverage"
+                        style={{ padding: '11px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                      />
+                      <datalist id="quick-product-categories">
+                        {availableCategories.map(category => <option key={category} value={category} />)}
+                        <option value="monouso" /><option value="pulizia" /><option value="packaging" />
+                      </datalist>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Sottocategoria facoltativa
+                      <input
+                        maxLength={100}
+                        value={quickProductForm.subcategory}
+                        onChange={e => setQuickProductForm({ ...quickProductForm, subcategory: e.target.value })}
+                        style={{ padding: '11px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                      />
+                    </label>
+                  </div>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Unità di confronto
+                    <select
+                      value={quickProductForm.comparison_unit}
+                      onChange={e => setQuickProductForm({ ...quickProductForm, comparison_unit: e.target.value })}
+                      style={{ padding: '11px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    >
+                      <option value="piece">Pezzo</option>
+                      <option value="box">Confezione / scatola</option>
+                      <option value="liter">Litro</option>
+                      <option value="kg">Chilogrammo</option>
+                      <option value="bottle">Bottiglia</option>
+                    </select>
+                  </label>
+                </>
+              )}
+
+              {resolutionMode === 'associate_existing' && (
+                <>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Cerca prodotto
+                    <div style={{ position: 'relative' }}>
+                      <Search size={15} style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                      <input
+                        autoFocus
+                        value={existingProductSearch}
+                        onChange={e => setExistingProductSearch(e.target.value)}
+                        placeholder="Nome canonico o SKU..."
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '11px 11px 11px 35px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                      />
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Prodotto canonico
+                    <select
+                      required
+                      size={Math.min(8, Math.max(3, matchingExistingProducts.length))}
+                      value={selectedExistingProductId}
+                      onChange={e => setSelectedExistingProductId(e.target.value)}
+                      style={{ padding: '8px', minHeight: '120px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    >
+                      {matchingExistingProducts.map(product => (
+                        <option key={product.id} value={product.id}>
+                          {product.canonical_name} {product.sku_interno ? `· ${product.sku_interno}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+
+              {resolutionMode === 'ignore' && (
+                <div style={{ padding: '13px', borderRadius: '8px', background: 'rgba(245,158,11,0.08)', color: 'var(--status-orange)', fontSize: '0.85rem' }}>
+                  Le {selectedWorkItem.occurrence_count} righe saranno contrassegnate come “nessun match”. Non verrà creato alcun prodotto o alias.
+                </div>
+              )}
+
+              {resolutionError && (
+                <div style={{ padding: '10px', borderRadius: '8px', background: 'var(--status-red-bg)', color: 'var(--status-red)', fontSize: '0.82rem' }}>
+                  {resolutionError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+                <button type="button" className="btn btn-secondary" disabled={resolutionLoading} onClick={() => setSelectedWorkItem(null)}>Annulla</button>
+                <button type="submit" className="btn btn-primary" disabled={resolutionLoading}>
+                  {resolutionLoading ? <RefreshCw className="animate-spin" size={16} /> : <Check size={16} />}
+                  {resolutionMode === 'create_canonical' && `Crea e risolvi ${selectedWorkItem.occurrence_count}`}
+                  {resolutionMode === 'associate_existing' && `Associa e risolvi ${selectedWorkItem.occurrence_count}`}
+                  {resolutionMode === 'ignore' && `Ignora ${selectedWorkItem.occurrence_count}`}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -200,12 +200,26 @@ async def _process_td01(
         # ── Salva Match Candidates per Review / Parking Area (Fase 1 / 6) ──
         if stato == StatoMatching.in_parking and getattr(match_result, "candidates", None):
             from app.models.products import MatchCandidate
-            for c in match_result.candidates:
+            # Le somiglianze deboli non sono proposte operative: la riga resta
+            # nella work queue come probabile nuovo prodotto, senza creare cinque
+            # falsi match da rifiutare manualmente.
+            review_candidates = [
+                candidate
+                for candidate in match_result.candidates
+                if candidate["score"] >= 70
+                and not candidate["block"]
+                and candidate["decision"] == "needs_review"
+            ][:3]
+            for c in review_candidates:
                 candidate = MatchCandidate(
                     invoice_line_id=riga_db.id,
                     product_id=c["product_id"],
+                    supplier_id=fornitore.id,
+                    raw_description=riga_parsed.descrizione,
+                    normalized_description=normalize_text(riga_parsed.descrizione),
                     score=Decimal(str(c["score"])),
                     reason_json=c["reason_json"],
+                    block_flag=c["block"],
                 )
                 db.add(candidate)
             await db.flush()

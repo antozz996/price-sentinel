@@ -11,7 +11,7 @@ type Detail = { id:string; status:string; reconciliation_version:number; supplie
 const panel: React.CSSProperties = { background:'var(--bg-glass)', border:'1px solid var(--border-glass)', borderRadius:12, padding:18 }
 const badge = (value:string) => <span style={{fontSize:11,padding:'4px 8px',borderRadius:999,background:value.includes('match')?'rgba(34,197,94,.14)':'rgba(245,158,11,.14)',color:value.includes('match')?'#4ade80':'#fbbf24'}}>{value}</span>
 
-export default function OrderReconciliations(){
+export default function OrderReconciliations({isAdmin=false}:{isAdmin?:boolean}){
   const [orders,setOrders]=useState<Order[]>([]); const [selected,setSelected]=useState<Order|null>(null)
   const [detail,setDetail]=useState<Detail|null>(null); const [invoices,setInvoices]=useState<Invoice[]>([])
   const [venue,setVenue]=useState(''); const [supplier,setSupplier]=useState(''); const [status,setStatus]=useState(''); const [dateFrom,setDateFrom]=useState(''); const [dateTo,setDateTo]=useState('')
@@ -24,7 +24,7 @@ export default function OrderReconciliations(){
   const associate=(invoice:Invoice,allowReassociate=false)=>selected&&act('Fattura associata manualmente.',async()=>fetchWithAuth(`/reconciliations/orders/${selected.liquidstock_supplier_order_id}/invoice`,{method:'POST',body:JSON.stringify({fattura_id:invoice.id,allow_reassociate:allowReassociate,price_tolerance_absolute:.01,price_tolerance_percent:1})}))
   const disputed=useMemo(()=>detail?.items.reduce((sum,item)=>sum+Number(item.disputed_amount||0),0)||0,[detail])
   return <div style={{display:'flex',flexDirection:'column',gap:18}} data-testid="order-reconciliations">
-    <SupplierEquivalencesPanel />
+    {isAdmin&&<SupplierEquivalencesPanel />}
     <div style={panel}><div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
       <input placeholder="Venue UUID" value={venue} onChange={e=>setVenue(e.target.value)} />
       <input placeholder="Fornitore ID" value={supplier} onChange={e=>setSupplier(e.target.value)} />
@@ -33,7 +33,7 @@ export default function OrderReconciliations(){
       <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Tutti gli stati</option>{['awaiting_invoice','matching','partially_matched','matched','anomalies_found','reviewed','closed'].map(v=><option key={v}>{v}</option>)}</select>
       <button className="btn btn-primary" onClick={()=>void load()} disabled={busy}><Search size={15}/> Filtra</button>
     </div></div>
-    <div style={panel}><strong>Mappatura venue esplicita</strong><p style={{color:'var(--text-secondary)',fontSize:12}}>Necessaria per bloccare associazioni cross-venue; non viene dedotta dal nome.</p><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><input placeholder="LiquidStock venue UUID" value={mappingVenue} onChange={e=>setMappingVenue(e.target.value)}/><input placeholder="Price location ID" value={locationId} onChange={e=>setLocationId(e.target.value)}/><button className="btn" onClick={()=>act('Mappatura venue salvata.',()=>fetchWithAuth('/reconciliations/venue-mappings',{method:'POST',body:JSON.stringify({liquidstock_venue_id:mappingVenue,location_id:Number(locationId)})}))}>Salva mappatura</button></div></div>
+    {isAdmin&&<div style={panel}><strong>Mappatura venue esplicita</strong><p style={{color:'var(--text-secondary)',fontSize:12}}>Necessaria per bloccare associazioni cross-venue; non viene dedotta dal nome.</p><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><input placeholder="LiquidStock venue UUID" value={mappingVenue} onChange={e=>setMappingVenue(e.target.value)}/><input placeholder="Price location ID" value={locationId} onChange={e=>setLocationId(e.target.value)}/><button className="btn" onClick={()=>act('Mappatura venue salvata.',()=>fetchWithAuth('/reconciliations/venue-mappings',{method:'POST',body:JSON.stringify({liquidstock_venue_id:mappingVenue,location_id:Number(locationId)})}))}>Salva mappatura</button></div></div>}
     {error&&<div style={{...panel,borderColor:'rgba(239,68,68,.4)',color:'#f87171'}}><AlertTriangle size={16}/> {error}</div>}{message&&<div style={{...panel,color:'#4ade80'}}><CheckCircle2 size={16}/> {message}</div>}
     <div style={{display:'grid',gridTemplateColumns:'minmax(280px,1fr) minmax(0,2fr)',gap:18}}>
       <div style={{...panel,display:'flex',flexDirection:'column',gap:8}}><h3>Ordini LiquidStock</h3>{orders.map(order=><button key={order.liquidstock_supplier_order_id} onClick={()=>void open(order)} style={{textAlign:'left',padding:12,borderRadius:9,border:selected?.liquidstock_supplier_order_id===order.liquidstock_supplier_order_id?'1px solid var(--accent-blue)':'1px solid var(--border-glass)',background:'rgba(255,255,255,.025)',color:'white'}}><strong>{order.supplier_name_snapshot}</strong><div style={{fontSize:11,color:'var(--text-secondary)',marginTop:5}}>{order.venue_name_snapshot||order.liquidstock_venue_id}</div><div style={{marginTop:6}}>{badge(order.reconciliation_status||'awaiting_invoice')}</div></button>)}</div>

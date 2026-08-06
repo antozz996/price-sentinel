@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete, and_, or_
@@ -12,8 +12,9 @@ from app.database import get_db
 from app.models.utenti import Utente
 from app.models.products import Product, SupplierProductAlias, MatchCandidate, ProductEquivalenceGroupItem
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
+from app.models.fornitori import Fornitore
 from app.models.anomalie import Anomalia, StatoValidazione
-from app.services.normalization import normalize_text
+from app.services.normalization import extract_candidate_attributes, infer_category, normalize_text
 from app.services.matching import normalize_price_for_comparison, _get_listino_attivo
 from app.services.order_resolver import resolve_order_item
 
@@ -56,6 +57,11 @@ class ProductUpdate(BaseModel):
     is_commodity: Optional[bool] = None
     is_active: Optional[bool] = None
 
+class ProductBulkClassificationUpdate(BaseModel):
+    product_ids: List[int] = Field(min_length=1, max_length=1000)
+    category: Optional[str] = Field(default=None, max_length=100)
+    subcategory: Optional[str] = Field(default=None, max_length=100)
+
 class ProductResponse(ProductBase):
     id: int
     normalized_name: Optional[str] = None
@@ -65,6 +71,10 @@ class ProductResponse(ProductBase):
 
     class Config:
         from_attributes = True
+
+class ProductBulkClassificationResponse(BaseModel):
+    updated_count: int
+    products: List[ProductResponse]
 
 class AliasCreate(BaseModel):
     supplier_id: int
@@ -122,6 +132,24 @@ class CandidateResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class WorkQueueResolutionProduct(BaseModel):
+    canonical_name: str = Field(min_length=1, max_length=255)
+    sku_interno: Optional[str] = Field(default=None, max_length=100)
+    brand: Optional[str] = Field(default=None, max_length=100)
+    category: Optional[str] = Field(default=None, max_length=100)
+    subcategory: Optional[str] = Field(default=None, max_length=100)
+    volume_ml: Optional[int] = Field(default=None, ge=1)
+    weight_g: Optional[int] = Field(default=None, ge=1)
+    unit_count: int = Field(default=1, ge=1)
+    container_type: Optional[str] = Field(default=None, max_length=50)
+    comparison_unit: str = Field(default="piece", max_length=50)
+
+class WorkQueueResolutionRequest(BaseModel):
+    invoice_line_ids: List[int] = Field(min_length=1, max_length=1000)
+    action: str
+    product_id: Optional[int] = None
+    canonical_data: Optional[WorkQueueResolutionProduct] = None
 
 class OrderItemResolveRequest(BaseModel):
     query: str
@@ -182,6 +210,57 @@ async def create_product(
     await db.flush()
     await db.refresh(product)
     return product
+
+@router.patch(
+    "/products/bulk-classification",
+    response_model=ProductBulkClassificationResponse,
+    summary="Aggiorna categoria e sottocategoria di più prodotti",
+)
+async def bulk_update_product_classification(
+    data: ProductBulkClassificationUpdate,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    fields_to_update = data.model_fields_set.intersection({"category", "subcategory"})
+    if not fields_to_update:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Indicare almeno una tra categoria e sottocategoria",
+        )
+
+    product_ids = list(dict.fromkeys(data.product_ids))
+    stmt = select(Product).where(Product.id.in_(product_ids))
+    products = list((await db.execute(stmt)).scalars().all())
+    found_ids = {product.id for product in products}
+    missing_ids = [product_id for product_id in product_ids if product_id not in found_ids]
+    if missing_ids:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "message": "Uno o più prodotti non sono stati trovati; nessuna modifica applicata",
+                "missing_product_ids": missing_ids,
+            },
+        )
+
+    for product in products:
+        if "category" in fields_to_update:
+            product.category = data.category.strip() if data.category and data.category.strip() else None
+        if "subcategory" in fields_to_update:
+            product.subcategory = data.subcategory.strip() if data.subcategory and data.subcategory.strip() else None
+
+    await db.flush()
+
+    updated_stmt = (
+        select(Product)
+        .where(Product.id.in_(product_ids))
+        .options(selectinload(Product.aliases))
+        .order_by(Product.canonical_name)
+    )
+    updated_products = list((await db.execute(updated_stmt)).scalars().all())
+    return {
+        "updated_count": len(updated_products),
+        "products": updated_products,
+    }
 
 @router.patch("/products/{product_id}", response_model=ProductResponse, summary="Aggiorna un prodotto canonico")
 async def update_product(
@@ -285,6 +364,299 @@ async def update_alias(
 # ──────────────────────────────────────────────────────────────────────
 # Endpoints: Match Candidates
 # ──────────────────────────────────────────────────────────────────────
+
+def _work_queue_signature(supplier_id: int, line: RigaFattura) -> tuple[int, str, str]:
+    supplier_code = (line.codice_fornitore_raw or "").strip().upper()
+    return (
+        supplier_id,
+        supplier_code,
+        "" if supplier_code else normalize_text(line.descrizione_fornitore_raw or ""),
+    )
+
+
+@router.get(
+    "/match-candidates/work-queue",
+    summary="Ottiene la coda prodotti raggruppata per descrizione fornitore",
+)
+async def get_match_work_queue(
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    """Una decisione operativa per prodotto, anche se ricorre su più fatture."""
+    stmt = (
+        select(RigaFattura, Fattura, Fornitore, MatchCandidate, Product)
+        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+        .join(Fornitore, Fornitore.id == Fattura.fornitore_id)
+        .outerjoin(
+            MatchCandidate,
+            and_(
+                MatchCandidate.invoice_line_id == RigaFattura.id,
+                MatchCandidate.status == "pending",
+            ),
+        )
+        .outerjoin(Product, Product.id == MatchCandidate.product_id)
+        .where(RigaFattura.stato_matching == StatoMatching.in_parking)
+        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc(), MatchCandidate.score.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    groups: dict[tuple[int, str, str], dict[str, Any]] = {}
+    weak_candidates_discarded = 0
+    for line, invoice, supplier, candidate, product in rows:
+        signature = _work_queue_signature(supplier.id, line)
+        group = groups.setdefault(
+            signature,
+            {
+                "supplier_id": supplier.id,
+                "supplier_name": supplier.nome_azienda,
+                "supplier_code": line.codice_fornitore_raw,
+                "raw_description": line.descrizione_fornitore_raw or "Prodotto senza descrizione",
+                "normalized_description": normalize_text(line.descrizione_fornitore_raw or ""),
+                "invoice_line_ids": set(),
+                "invoice_ids": set(),
+                "latest_invoice_date": invoice.data_documento,
+                "candidates": {},
+                "candidate_records": 0,
+            },
+        )
+        group["invoice_line_ids"].add(line.id)
+        group["invoice_ids"].add(invoice.id)
+        if invoice.data_documento > group["latest_invoice_date"]:
+            group["latest_invoice_date"] = invoice.data_documento
+
+        if not candidate or not product:
+            continue
+
+        group["candidate_records"] += 1
+        reason = candidate.reason_json or {}
+        is_blocked = bool(candidate.block_flag or reason.get("decision") == "parking")
+        score = float(candidate.score)
+        if score < 70 or is_blocked:
+            weak_candidates_discarded += 1
+            continue
+
+        previous = group["candidates"].get(product.id)
+        if previous is None or score > previous["score"]:
+            group["candidates"][product.id] = {
+                "candidate_id": candidate.id,
+                "product_id": product.id,
+                "sku_interno": product.sku_interno,
+                "canonical_name": product.canonical_name,
+                "score": round(score, 1),
+                "reason_json": reason,
+            }
+
+    items = []
+    for group in groups.values():
+        alternatives = sorted(group["candidates"].values(), key=lambda item: item["score"], reverse=True)[:3]
+        attributes = extract_candidate_attributes(group["raw_description"])
+        best_candidate = alternatives[0] if alternatives else None
+        items.append({
+            "work_key": f"{group['supplier_id']}:{min(group['invoice_line_ids'])}",
+            "supplier_id": group["supplier_id"],
+            "supplier_name": group["supplier_name"],
+            "supplier_code": group["supplier_code"],
+            "raw_description": group["raw_description"],
+            "normalized_description": group["normalized_description"],
+            "occurrence_count": len(group["invoice_line_ids"]),
+            "invoice_count": len(group["invoice_ids"]),
+            "invoice_line_ids": sorted(group["invoice_line_ids"]),
+            "latest_invoice_date": group["latest_invoice_date"],
+            "candidate_records": group["candidate_records"],
+            "recommendation": "associate_existing" if best_candidate else "create_canonical",
+            "best_candidate": best_candidate,
+            "alternatives": alternatives,
+            "suggested_product": {
+                "canonical_name": group["raw_description"].strip(),
+                "category": attributes.get("category") or infer_category(group["raw_description"]),
+                "volume_ml": attributes.get("volume_ml"),
+                "weight_g": attributes.get("weight_g"),
+                # Il formato 90x120 può indicare dimensioni, non 90 pezzi: il
+                # numero confezione non viene mai presunto nella creazione rapida.
+                "unit_count": 1,
+                "container_type": attributes.get("container_type"),
+                "comparison_unit": "piece",
+            },
+        })
+
+    items.sort(key=lambda item: (-item["occurrence_count"], item["raw_description"].lower()))
+    return {
+        "summary": {
+            "work_items": len(items),
+            "invoice_lines": sum(item["occurrence_count"] for item in items),
+            "reliable_suggestions": sum(1 for item in items if item["best_candidate"]),
+            "probable_new_products": sum(1 for item in items if not item["best_candidate"]),
+            "weak_candidates_hidden": weak_candidates_discarded,
+        },
+        "items": items,
+    }
+
+
+@router.post(
+    "/match-candidates/work-queue/resolve",
+    summary="Risolve insieme tutte le righe identiche della coda prodotti",
+)
+async def resolve_match_work_queue_item(
+    data: WorkQueueResolutionRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    allowed_actions = {"associate_existing", "create_canonical", "ignore"}
+    if data.action not in allowed_actions:
+        raise HTTPException(status_code=422, detail="Azione non supportata")
+    if data.action == "associate_existing" and not data.product_id:
+        raise HTTPException(status_code=422, detail="Selezionare il prodotto da associare")
+    if data.action == "create_canonical" and not data.canonical_data:
+        raise HTTPException(status_code=422, detail="Dati del nuovo prodotto mancanti")
+
+    line_ids = list(dict.fromkeys(data.invoice_line_ids))
+    line_stmt = (
+        select(RigaFattura, Fattura)
+        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+        .where(RigaFattura.id.in_(line_ids))
+    )
+    line_rows = (await db.execute(line_stmt)).all()
+    found_ids = {line.id for line, _invoice in line_rows}
+    missing_ids = [line_id for line_id in line_ids if line_id not in found_ids]
+    if missing_ids:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Alcune righe non esistono; nessuna modifica applicata", "missing_ids": missing_ids},
+        )
+    if any(line.stato_matching != StatoMatching.in_parking for line, _invoice in line_rows):
+        raise HTTPException(status_code=409, detail="La coda è cambiata: ricaricare prima di procedere")
+
+    signatures = {_work_queue_signature(invoice.fornitore_id, line) for line, invoice in line_rows}
+    if len(signatures) != 1:
+        raise HTTPException(status_code=422, detail="Le righe selezionate non rappresentano lo stesso prodotto fornitore")
+
+    representative_line, representative_invoice = line_rows[0]
+    product = None
+    created_product = False
+
+    if data.action == "ignore":
+        for line, _invoice in line_rows:
+            line.stato_matching = StatoMatching.no_match
+        await db.execute(delete(MatchCandidate).where(MatchCandidate.invoice_line_id.in_(line_ids)))
+        await db.flush()
+        return {"status": "success", "resolved_lines": len(line_rows), "action": data.action}
+
+    if data.action == "associate_existing":
+        product = await db.get(Product, data.product_id)
+        if not product or not product.is_active:
+            raise HTTPException(status_code=404, detail="Prodotto canonico attivo non trovato")
+    else:
+        canonical = data.canonical_data
+        if not canonical.canonical_name.strip():
+            raise HTTPException(status_code=422, detail="Il nome canonico non può essere vuoto")
+        sku = canonical.sku_interno.strip() if canonical.sku_interno and canonical.sku_interno.strip() else None
+        if sku:
+            duplicate = await db.scalar(select(Product.id).where(Product.sku_interno == sku))
+            if duplicate:
+                raise HTTPException(status_code=409, detail="SKU interno già esistente")
+        if not sku:
+            sku = f"CAN-{representative_invoice.fornitore_id}-{representative_line.id}-{int(datetime.utcnow().timestamp())}"
+
+        product = Product(
+            sku_interno=sku,
+            canonical_name=canonical.canonical_name.strip(),
+            normalized_name=normalize_text(canonical.canonical_name),
+            brand=canonical.brand.strip() if canonical.brand else None,
+            category=canonical.category.strip() if canonical.category else None,
+            subcategory=canonical.subcategory.strip() if canonical.subcategory else None,
+            volume_ml=canonical.volume_ml,
+            weight_g=canonical.weight_g,
+            unit_count=canonical.unit_count,
+            container_type=canonical.container_type,
+            comparison_unit=canonical.comparison_unit,
+            is_commodity=False,
+            is_active=True,
+        )
+        db.add(product)
+        await db.flush()
+        created_product = True
+
+    normalized_description = normalize_text(representative_line.descrizione_fornitore_raw or "")
+    alias_filters = [SupplierProductAlias.supplier_id == representative_invoice.fornitore_id]
+    if representative_line.codice_fornitore_raw:
+        alias_filters.append(SupplierProductAlias.supplier_code == representative_line.codice_fornitore_raw)
+    else:
+        alias_filters.append(SupplierProductAlias.normalized_description == normalized_description)
+    alias = (await db.execute(select(SupplierProductAlias).where(and_(*alias_filters)))).scalars().first()
+    attributes = extract_candidate_attributes(representative_line.descrizione_fornitore_raw or "")
+    if alias:
+        alias.product_id = product.id
+        alias.raw_description = representative_line.descrizione_fornitore_raw or ""
+        alias.normalized_description = normalized_description
+        alias.status = "approved"
+        alias.source = "manual"
+        alias.confidence_score = 1.0
+        alias.last_seen_at = datetime.utcnow()
+    else:
+        alias = SupplierProductAlias(
+            supplier_id=representative_invoice.fornitore_id,
+            product_id=product.id,
+            supplier_code=representative_line.codice_fornitore_raw,
+            raw_description=representative_line.descrizione_fornitore_raw or "",
+            normalized_description=normalized_description,
+            # La confezione incide sulla normalizzazione dei prezzi e non viene
+            # salvata automaticamente da testi potenzialmente ambigui (es. 90x120).
+            pack_qty=None,
+            volume_ml=attributes.get("volume_ml"),
+            weight_g=attributes.get("weight_g"),
+            container_type=attributes.get("container_type"),
+            status="approved",
+            source="manual",
+            confidence_score=1.0,
+        )
+        db.add(alias)
+    await db.flush()
+
+    for line, invoice in line_rows:
+        line.sku_interno = product.sku_interno
+        line.stato_matching = StatoMatching.matched
+        if not product.sku_interno:
+            continue
+        listino = await _get_listino_attivo(
+            db,
+            invoice.fornitore_id,
+            product.sku_interno,
+            str(invoice.data_documento),
+            supplier_alias_id=alias.id,
+        )
+        if not listino:
+            continue
+        normalized_price = normalize_price_for_comparison(
+            line,
+            product,
+            alias=alias,
+            target_comparison_unit=listino.unita_misura,
+        )
+        if not normalized_price.reliable:
+            continue
+        line.prezzo_netto_normalizzato = normalized_price.normalized_unit_price
+        delta = line.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
+        await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == line.id))
+        if delta > 0:
+            db.add(Anomalia(
+                riga_fattura_id=line.id,
+                delta_prezzo=delta,
+                delta_totale=delta * line.quantita,
+                prezzo_listino_snapshot=listino.prezzo_pattuito,
+                prezzo_fatturato_snapshot=line.prezzo_netto_normalizzato,
+                stato_validazione=StatoValidazione.da_verificare,
+            ))
+
+    await db.execute(delete(MatchCandidate).where(MatchCandidate.invoice_line_id.in_(line_ids)))
+    await db.flush()
+    return {
+        "status": "success",
+        "resolved_lines": len(line_rows),
+        "action": data.action,
+        "product_id": product.id,
+        "product_name": product.canonical_name,
+        "created_product": created_product,
+    }
 
 @router.get("/match-candidates", response_model=List[CandidateResponse], summary="Ottiene l'elenco dei match candidate pendenti")
 async def list_candidates(

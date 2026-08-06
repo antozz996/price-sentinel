@@ -68,8 +68,10 @@ async def list_fatture(
         .order_by(Fattura.data_documento.desc())
     )
 
-    # Manager vede solo la propria location
-    if current_user.ruolo.value == "manager" and current_user.location_id:
+    # Manager vede solo la propria location e fallisce in modo sicuro se non configurato.
+    if current_user.ruolo.value == "manager":
+        if current_user.location_id is None:
+            raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
         query = query.where(Fattura.location_id == current_user.location_id)
     elif location_id:
         query = query.where(Fattura.location_id == location_id)
@@ -138,7 +140,13 @@ async def update_marker(
             detail=f"Marker non valido. Valori ammessi: {[m.value for m in MarkerFattura]}"
         )
 
-    result = await db.execute(select(Fattura).where(Fattura.id == fattura_id))
+    query = select(Fattura).where(Fattura.id == fattura_id)
+    if current_user.ruolo.value == "manager":
+        if current_user.location_id is None:
+            raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
+        query = query.where(Fattura.location_id == current_user.location_id)
+
+    result = await db.execute(query)
     fattura = result.scalar_one_or_none()
     if not fattura:
         raise HTTPException(status_code=404, detail="Fattura non trovata")
@@ -163,7 +171,9 @@ async def get_fattura(
     query = select(Fattura).where(Fattura.id == fattura_id)
 
     # Manager vede solo la propria location
-    if current_user.ruolo.value == "manager" and current_user.location_id:
+    if current_user.ruolo.value == "manager":
+        if current_user.location_id is None:
+            raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
         query = query.where(Fattura.location_id == current_user.location_id)
 
     result = await db.execute(query)
@@ -185,10 +195,10 @@ async def list_righe_fattura(
 ):
     # Verifica accesso alla fattura
     fattura_query = select(Fattura).where(Fattura.id == fattura_id)
-    if current_user.ruolo.value == "manager" and current_user.location_id:
-        fattura_query = fattura_query.where(
-            Fattura.location_id == current_user.location_id
-        )
+    if current_user.ruolo.value == "manager":
+        if current_user.location_id is None:
+            raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
+        fattura_query = fattura_query.where(Fattura.location_id == current_user.location_id)
     fattura_result = await db.execute(fattura_query)
     fattura = fattura_result.scalar_one_or_none()
     if not fattura:
@@ -301,7 +311,9 @@ async def get_fattura_html(
         .options(selectinload(Fattura.fornitore), selectinload(Fattura.location))
         .where(Fattura.id == fattura_id)
     )
-    if current_user.ruolo.value == "manager" and current_user.location_id:
+    if current_user.ruolo.value == "manager":
+        if current_user.location_id is None:
+            raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
         query = query.where(Fattura.location_id == current_user.location_id)
 
     result = await db.execute(query)
@@ -857,6 +869,10 @@ async def resolve_parked_line(
     fattura = await db.get(Fattura, riga.fattura_id)
     if not fattura:
         raise HTTPException(status_code=404, detail="Fattura non trovata")
+    if current_user.ruolo.value == "manager" and (
+        current_user.location_id is None or fattura.location_id != current_user.location_id
+    ):
+        raise HTTPException(status_code=404, detail="Riga fattura non trovata")
         
     # Esegui l'azione richiesta
     if payload.action == "associate_existing":
@@ -1023,6 +1039,18 @@ async def list_riga_candidates(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.products import MatchCandidate
+    access_query = (
+        select(RigaFattura.id)
+        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+        .where(RigaFattura.id == riga_id)
+    )
+    if current_user.ruolo.value == "manager":
+        if current_user.location_id is None:
+            raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
+        access_query = access_query.where(Fattura.location_id == current_user.location_id)
+    if await db.scalar(access_query) is None:
+        raise HTTPException(status_code=404, detail="Riga fattura non trovata")
+
     result = await db.execute(
         select(MatchCandidate)
         .where(MatchCandidate.invoice_line_id == riga_id)

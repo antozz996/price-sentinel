@@ -97,12 +97,119 @@ body {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
   padding-right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .sidebar-footer {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border-glass);
+}
+
+.sidebar-nav-item,
+.sidebar-section-toggle {
+  width: 100%;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.sidebar-nav-item {
+  min-height: 40px;
+  padding: 9px 12px;
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.sidebar-nav-item:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-nav-item.is-active {
+  color: white;
+  background: var(--accent-blue);
+  box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.3);
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sidebar-section-toggle {
+  min-height: 34px;
+  padding: 8px 9px 5px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.sidebar-section-toggle:hover,
+.sidebar-section-toggle.has-active-item {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.sidebar-section-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+.sidebar-section-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+.sidebar-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 0 5px 7px;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  margin-left: 9px;
+}
+
+.sidebar-section-items .sidebar-nav-item {
+  min-height: 38px;
+  padding-left: 11px;
+  font-size: 0.86rem;
+}
+
+.sidebar-user-summary {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 4px;
+}
+
+.sidebar-user-summary span {
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.sidebar-user-summary small {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-nav {
