@@ -151,5 +151,6 @@ API:
 - `GET /api/v1/smart-price-sheet/history`
 - `GET /api/v1/smart-price-sheet/audit`
 - `GET|POST /api/v1/smart-price-sheet/deviations`
+- `PATCH /api/v1/smart-price-sheet/deviations/{id}`
 
 Prezzi e soglie monetarie sono calcolati con `Decimal` e serializzati come stringhe.

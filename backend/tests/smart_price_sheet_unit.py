@@ -75,10 +75,18 @@ spot = rank_supplier_offers(
 check("spot excluded by policy", spot["recommended_offer"]["supplier_id"] == 2)
 
 manual = rank_supplier_offers(
-    [offer(1, "10.00")], policy={"selection_mode": "manual"}
+    [offer(1, "10.00")],
+    policy={"selection_mode": "manual", "preferred_supplier_id": 1},
 )
-check("manual has recommendation but no selection", manual["recommended_offer"] is not None and manual["selected_offer"] is None)
-check("manual flag", manual["requires_manual_selection"] is True)
+check("manual uses configured supplier", manual["recommended_offer"]["supplier_id"] == 1 and manual["selected_offer"]["supplier_id"] == 1)
+check("valid manual policy needs no further choice", manual["requires_manual_selection"] is False)
+
+absolute_mode = rank_supplier_offers(
+    [offer(1, "8.00"), offer(2, "9.00")],
+    {1: {"status": "blocked", "quality_score": 1}},
+    {"selection_mode": "absolute_lowest"},
+)
+check("absolute mode keeps qualitative warning", absolute_mode["selected_offer"]["supplier_id"] == 1 and bool(absolute_mode["warnings"]))
 
 no_offer = rank_supplier_offers(
     [offer(1, "10.00")],

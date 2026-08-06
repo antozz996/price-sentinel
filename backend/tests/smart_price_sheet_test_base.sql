@@ -67,4 +67,9 @@ create table righe_fattura (
   prezzo_netto_normalizzato numeric(12,4),
   is_omaggio boolean default false
 );
+create table ordini (
+  id serial primary key,
+  fornitore_id integer not null references fornitori(id),
+  location_id integer not null references location(id)
+);
 create table product_equivalence_group_items (group_id integer not null, product_id integer not null);

@@ -260,7 +260,7 @@ vercel --prod  # uses vercel.json config
   compatibile nel resolver ordini e scostamenti policy distinti dalle anomalie prezzo.
 - Migrazione additiva `smart_price_policy`, preflight read-only e guardia rollback. La
   migrazione non è stata applicata al database reale.
-- Verifiche: 17 unit test parser/ranking, 12 test API/migrazione su PostgreSQL temporaneo,
+- Verifiche: 18 unit test parser/ranking, 13 test API/migrazione su PostgreSQL temporaneo,
   build TypeScript/Vite ed ESLint senza errori.
 
 ### [2026-05-19] Sprint 5: Variance & Loss (Sprechi) Analytics ✅

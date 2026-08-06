@@ -10,13 +10,15 @@ questo modulo non crea automaticamente prodotti, alias o fornitori.
 
 - `product_supplier_assessments`: valutazione di una coppia prodotto/fornitore,
   globale o specifica per sede. Stato `approved`, `discouraged` o `blocked`, qualità
-  1–5 e motivazione obbligatoria per gli ultimi due stati.
+  1–5, affidabilità consegne 0–100, validità temporale/stato attivo e motivazione
+  obbligatoria per gli ultimi due stati.
 - `product_supplier_assessment_audits`: snapshot prima/dopo, azione, attore e data.
 - `product_purchase_policies`: modalità di selezione, fornitore preferito, qualità
   minima, premium percentuale/assoluto e abilitazione spot.
 - `product_purchase_policy_audits`: audit append-only delle policy.
 - `purchase_policy_deviations`: scelta operativa difforme dalla raccomandazione,
-  deduplicata tramite `dedupe_key`.
+  deduplicata tramite `dedupe_key`, con stato `open`, `acknowledged`,
+  `accepted_exception` o `resolved` e presa visione tracciata.
 - `smart_price_sheet_previews`: token, hash, payload validato, scadenza e risultato
   idempotente del commit.
 
@@ -85,7 +87,8 @@ Il motore usa esclusivamente `Decimal`:
 2. esclude bloccati, sconsigliati, qualità sotto soglia e spot non consentiti;
 3. calcola il tetto premium rispetto al minimo idoneo;
 4. entro il tetto preferisce il fornitore esplicito, poi la qualità, poi il prezzo;
-5. in modalità manuale produce una raccomandazione ma non una selezione.
+5. in modalità manuale usa il fornitore preferito obbligatorio;
+6. in modalità minimo assoluto seleziona il minimo e mantiene gli avvisi qualitativi.
 
 Con premium zero il risultato è il miglior prezzo idoneo. Un fornitore bloccato resta
 visibile come possibile minimo assoluto, ma non viene raccomandato.
@@ -117,12 +120,13 @@ GET  /api/v1/smart-price-sheet/policies
 PUT  /api/v1/smart-price-sheet/policies
 GET  /api/v1/smart-price-sheet/deviations
 POST /api/v1/smart-price-sheet/deviations
+PATCH /api/v1/smart-price-sheet/deviations/{id}
 ```
 
 ## Test
 
-- `backend/tests/smart_price_sheet_unit.py`: 17 controlli parser e ranking.
-- `backend/tests/smart_price_sheet_e2e.py`: 12 controlli API su PostgreSQL usa-e-getta.
+- `backend/tests/smart_price_sheet_unit.py`: 18 controlli parser e ranking.
+- `backend/tests/smart_price_sheet_e2e.py`: 13 controlli API su PostgreSQL usa-e-getta.
 - `backend/tests/smart_price_sheet_test_base.sql`: solo base isolata per l'E2E, mai
   eseguita in produzione.
 - `npm run build` e `npm run lint` per il frontend.

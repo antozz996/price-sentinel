@@ -169,6 +169,7 @@ async def run() -> None:
         deviation = {
             "dedupe_key": "smart-test-order-1-product-1",
             "product_id": 1,
+            "location_id": 1,
             "recommended_supplier_id": 2,
             "selected_supplier_id": 1,
             "deviation_type": "blocked_supplier",
@@ -185,6 +186,18 @@ async def run() -> None:
             first.status_code == 200
             and first.json()["created"] is True
             and second.json()["created"] is False,
+        )
+        deviation_id = first.json()["id"]
+        response = await client.patch(
+            f"/api/v1/smart-price-sheet/deviations/{deviation_id}",
+            headers=manager,
+            json={"status": "acknowledged"},
+        )
+        check(
+            "manager acknowledges own-location deviation",
+            response.status_code == 200
+            and response.json()["status"] == "acknowledged"
+            and response.json()["acknowledged_by"] == 2,
         )
         check(
             "audit rows persisted",

@@ -27,7 +27,11 @@ def upgrade() -> None:
         sa.Column("location_id", sa.Integer(), nullable=True),
         sa.Column("status", sa.String(20), server_default="approved", nullable=False),
         sa.Column("quality_score", sa.Integer(), server_default="3", nullable=False),
+        sa.Column("delivery_reliability_score", sa.Numeric(5, 2), nullable=True),
         sa.Column("reason", sa.Text(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
+        sa.Column("valid_from", sa.Date(), server_default=sa.text("current_date"), nullable=False),
+        sa.Column("valid_to", sa.Date(), nullable=True),
         sa.Column("created_by", sa.Integer(), nullable=False),
         sa.Column("updated_by", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -43,6 +47,14 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "status = 'approved' or coalesce(length(btrim(reason)), 0) >= 3",
             name="ck_product_supplier_assessments_reason",
+        ),
+        sa.CheckConstraint(
+            "delivery_reliability_score is null or delivery_reliability_score between 0 and 100",
+            name="ck_product_supplier_assessments_reliability",
+        ),
+        sa.CheckConstraint(
+            "valid_to is null or valid_to >= valid_from",
+            name="ck_product_supplier_assessments_validity",
         ),
         sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["supplier_id"], ["fornitori.id"], ondelete="RESTRICT"),
@@ -113,7 +125,10 @@ def upgrade() -> None:
             "max_price_premium_absolute", sa.Numeric(12, 4), server_default="0", nullable=False
         ),
         sa.Column("allow_spot", sa.Boolean(), server_default=sa.true(), nullable=False),
-        sa.Column("notes", sa.Text(), nullable=True),
+        sa.Column("reason", sa.Text(), nullable=True),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
+        sa.Column("valid_from", sa.Date(), server_default=sa.text("current_date"), nullable=False),
+        sa.Column("valid_to", sa.Date(), nullable=True),
         sa.Column("created_by", sa.Integer(), nullable=False),
         sa.Column("updated_by", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -129,6 +144,14 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "max_price_premium_percent >= 0 and max_price_premium_absolute >= 0",
             name="ck_product_purchase_policies_premium",
+        ),
+        sa.CheckConstraint(
+            "selection_mode <> 'manual' or preferred_supplier_id is not null",
+            name="ck_product_purchase_policies_manual_supplier",
+        ),
+        sa.CheckConstraint(
+            "valid_to is null or valid_to >= valid_from",
+            name="ck_product_purchase_policies_validity",
         ),
         sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["location_id"], ["location.id"], ondelete="CASCADE"),
@@ -188,20 +211,40 @@ def upgrade() -> None:
         "purchase_policy_deviations",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("dedupe_key", sa.String(255), nullable=False),
+        sa.Column("invoice_line_id", sa.Integer(), nullable=True),
+        sa.Column("purchase_order_id", sa.Integer(), nullable=True),
         sa.Column("product_id", sa.Integer(), nullable=False),
         sa.Column("location_id", sa.Integer(), nullable=True),
         sa.Column("recommended_supplier_id", sa.Integer(), nullable=True),
         sa.Column("selected_supplier_id", sa.Integer(), nullable=False),
+        sa.Column("actual_supplier_id", sa.Integer(), nullable=False),
         sa.Column("deviation_type", sa.String(30), nullable=False),
+        sa.Column("status", sa.String(30), server_default="open", nullable=False),
+        sa.Column("absolute_cheapest_supplier_id", sa.Integer(), nullable=True),
+        sa.Column("actual_normalized_price", sa.Numeric(18, 6), nullable=True),
+        sa.Column("absolute_cheapest_price", sa.Numeric(18, 6), nullable=True),
+        sa.Column("recommended_price", sa.Numeric(18, 6), nullable=True),
+        sa.Column("premium_amount", sa.Numeric(18, 6), nullable=True),
+        sa.Column("premium_percent", sa.Numeric(10, 4), nullable=True),
+        sa.Column("policy_snapshot", postgresql.JSONB(), server_default="{}", nullable=False),
         sa.Column("reason", sa.Text(), nullable=False),
         sa.Column("context", postgresql.JSONB(), server_default="{}", nullable=False),
         sa.Column("actor_id", sa.Integer(), nullable=True),
+        sa.Column("acknowledged_by", sa.Integer(), nullable=True),
+        sa.Column("acknowledged_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
-            "deviation_type in ('manual_override','blocked_supplier','discouraged_supplier',"
-            "'quality_below_minimum','premium_exceeded','spot_not_allowed')",
+            "deviation_type in ('non_preferred_supplier','blocked_supplier',"
+            "'discouraged_supplier','quality_below_threshold','premium_over_limit',"
+            "'spot_not_allowed')",
             name="ck_purchase_policy_deviations_type",
         ),
+        sa.CheckConstraint(
+            "status in ('open','acknowledged','accepted_exception','resolved')",
+            name="ck_purchase_policy_deviations_status",
+        ),
+        sa.ForeignKeyConstraint(["invoice_line_id"], ["righe_fattura.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["purchase_order_id"], ["ordini.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["location_id"], ["location.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(
@@ -210,7 +253,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["selected_supplier_id"], ["fornitori.id"], ondelete="RESTRICT"
         ),
+        sa.ForeignKeyConstraint(
+            ["actual_supplier_id"], ["fornitori.id"], ondelete="RESTRICT"
+        ),
+        sa.ForeignKeyConstraint(
+            ["absolute_cheapest_supplier_id"], ["fornitori.id"], ondelete="RESTRICT"
+        ),
         sa.ForeignKeyConstraint(["actor_id"], ["utenti.id"], ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(["acknowledged_by"], ["utenti.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("dedupe_key", name="uq_purchase_policy_deviations_dedupe_key"),
     )

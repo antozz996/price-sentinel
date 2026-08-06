@@ -69,7 +69,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Analisi',
     items: [
       { id: 'topproducts', label: 'Top prodotti', icon: Award, adminOnly: true },
-      { id: 'crosssupplier', label: 'Listino Smart', icon: Grid, adminOnly: true },
+      { id: 'crosssupplier', label: 'Listino Smart', icon: Grid },
       { id: 'productconsumption', label: 'Consumi per prodotto', icon: BarChart2, adminOnly: true },
       { id: 'priceanalysis', label: 'Oscillazioni prezzi', icon: TrendingUp },
     ],
@@ -366,7 +366,7 @@ export default function App() {
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
       case 'topproducts': return <TopProductsPriceList />;
-      case 'crosssupplier': return <SmartPriceSheet />;
+      case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'ordini': return <OrderOptimizer />;

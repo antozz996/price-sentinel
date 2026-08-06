@@ -1,6 +1,6 @@
 """Supplier assessments, purchase policies and Smart Price Sheet audit data."""
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -32,6 +32,15 @@ class ProductSupplierAssessment(Base):
         CheckConstraint(
             "quality_score between 1 and 5",
             name="ck_product_supplier_assessments_quality",
+        ),
+        CheckConstraint(
+            "delivery_reliability_score is null or "
+            "delivery_reliability_score between 0 and 100",
+            name="ck_product_supplier_assessments_reliability",
+        ),
+        CheckConstraint(
+            "valid_to is null or valid_to >= valid_from",
+            name="ck_product_supplier_assessments_validity",
         ),
         CheckConstraint(
             "status = 'approved' or coalesce(length(btrim(reason)), 0) >= 3",
@@ -72,7 +81,13 @@ class ProductSupplierAssessment(Base):
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="approved")
     quality_score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="3")
+    delivery_reliability_score: Mapped[float | None] = mapped_column(
+        Numeric(5, 2), nullable=True
+    )
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    valid_from: Mapped[date] = mapped_column(nullable=False, default=date.today)
+    valid_to: Mapped[date | None] = mapped_column(nullable=True)
     created_by: Mapped[int] = mapped_column(
         Integer, ForeignKey("utenti.id", ondelete="RESTRICT"), nullable=False
     )
@@ -123,6 +138,14 @@ class ProductPurchasePolicy(Base):
             "max_price_premium_percent >= 0 and max_price_premium_absolute >= 0",
             name="ck_product_purchase_policies_premium",
         ),
+        CheckConstraint(
+            "selection_mode <> 'manual' or preferred_supplier_id is not null",
+            name="ck_product_purchase_policies_manual_supplier",
+        ),
+        CheckConstraint(
+            "valid_to is null or valid_to >= valid_from",
+            name="ck_product_purchase_policies_validity",
+        ),
         Index(
             "uq_product_purchase_policy_global",
             "product_id",
@@ -160,7 +183,10 @@ class ProductPurchasePolicy(Base):
         Numeric(12, 4), nullable=False, server_default="0"
     )
     allow_spot: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    valid_from: Mapped[date] = mapped_column(nullable=False, default=date.today)
+    valid_to: Mapped[date | None] = mapped_column(nullable=True)
     created_by: Mapped[int] = mapped_column(
         Integer, ForeignKey("utenti.id", ondelete="RESTRICT"), nullable=False
     )
@@ -200,9 +226,14 @@ class PurchasePolicyDeviation(Base):
     __tablename__ = "purchase_policy_deviations"
     __table_args__ = (
         CheckConstraint(
-            "deviation_type in ('manual_override','blocked_supplier','discouraged_supplier',"
-            "'quality_below_minimum','premium_exceeded','spot_not_allowed')",
+            "deviation_type in ('non_preferred_supplier','blocked_supplier',"
+            "'discouraged_supplier','quality_below_threshold','premium_over_limit',"
+            "'spot_not_allowed')",
             name="ck_purchase_policy_deviations_type",
+        ),
+        CheckConstraint(
+            "status in ('open','acknowledged','accepted_exception','resolved')",
+            name="ck_purchase_policy_deviations_status",
         ),
         Index(
             "ix_purchase_policy_deviations_scope",
@@ -216,6 +247,12 @@ class PurchasePolicyDeviation(Base):
         PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     dedupe_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    invoice_line_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("righe_fattura.id", ondelete="SET NULL"), nullable=True
+    )
+    purchase_order_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("ordini.id", ondelete="SET NULL"), nullable=True
+    )
     product_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("products.id", ondelete="RESTRICT"), nullable=False
     )
@@ -228,12 +265,29 @@ class PurchasePolicyDeviation(Base):
     selected_supplier_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("fornitori.id", ondelete="RESTRICT"), nullable=False
     )
+    actual_supplier_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("fornitori.id", ondelete="RESTRICT"), nullable=False
+    )
     deviation_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="open", server_default="open")
+    absolute_cheapest_supplier_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("fornitori.id", ondelete="RESTRICT"), nullable=True
+    )
+    actual_normalized_price: Mapped[float | None] = mapped_column(Numeric(18, 6), nullable=True)
+    absolute_cheapest_price: Mapped[float | None] = mapped_column(Numeric(18, 6), nullable=True)
+    recommended_price: Mapped[float | None] = mapped_column(Numeric(18, 6), nullable=True)
+    premium_amount: Mapped[float | None] = mapped_column(Numeric(18, 6), nullable=True)
+    premium_percent: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
+    policy_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     context: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     actor_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("utenti.id", ondelete="SET NULL"), nullable=True
     )
+    acknowledged_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("utenti.id", ondelete="SET NULL"), nullable=True
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

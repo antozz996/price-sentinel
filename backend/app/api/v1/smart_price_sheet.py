@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, case, func, or_, select
@@ -29,6 +30,7 @@ from app.schemas.smart_price_sheet import (
     ClipboardPreviewRequest,
     CommitPreviewRequest,
     DeviationCreateRequest,
+    DeviationUpdateRequest,
     PolicyUpsertRequest,
 )
 from app.services.purchase_recommendation import (
@@ -69,7 +71,15 @@ def _assessment_state(row: ProductSupplierAssessment) -> dict:
         "location_id": row.location_id,
         "status": row.status,
         "quality_score": row.quality_score,
+        "delivery_reliability_score": (
+            str(row.delivery_reliability_score)
+            if row.delivery_reliability_score is not None
+            else None
+        ),
         "reason": row.reason,
+        "is_active": row.is_active,
+        "valid_from": row.valid_from.isoformat(),
+        "valid_to": row.valid_to.isoformat() if row.valid_to else None,
     }
 
 
@@ -83,7 +93,10 @@ def _policy_state(row: ProductPurchasePolicy) -> dict:
         "max_price_premium_percent": str(row.max_price_premium_percent),
         "max_price_premium_absolute": str(row.max_price_premium_absolute),
         "allow_spot": row.allow_spot,
-        "notes": row.notes,
+        "reason": row.reason,
+        "is_active": row.is_active,
+        "valid_from": row.valid_from.isoformat(),
+        "valid_to": row.valid_to.isoformat() if row.valid_to else None,
     }
 
 
@@ -102,8 +115,12 @@ async def _validate_entities(
         )
         if not supplier:
             raise HTTPException(404, "Fornitore non trovato")
-    if location_id is not None and not await db.get(Location, location_id):
-        raise HTTPException(404, "Sede non trovata")
+    if location_id is not None:
+        location = await db.scalar(
+            select(Location).options(noload("*")).where(Location.id == location_id)
+        )
+        if not location:
+            raise HTTPException(404, "Sede non trovata")
 
 
 @router.get("/matrix")
@@ -209,6 +226,14 @@ async def matrix(
             await db.scalars(
                 select(ProductSupplierAssessment)
                 .where(ProductSupplierAssessment.product_id.in_(product_ids), assessment_scope)
+                .where(
+                    ProductSupplierAssessment.is_active.is_(True),
+                    ProductSupplierAssessment.valid_from <= today,
+                    or_(
+                        ProductSupplierAssessment.valid_to.is_(None),
+                        ProductSupplierAssessment.valid_to >= today,
+                    ),
+                )
                 .order_by(
                     ProductSupplierAssessment.product_id,
                     case((ProductSupplierAssessment.location_id.is_not(None), 0), else_=1),
@@ -220,6 +245,14 @@ async def matrix(
             await db.scalars(
                 select(ProductPurchasePolicy)
                 .where(ProductPurchasePolicy.product_id.in_(product_ids), policy_scope)
+                .where(
+                    ProductPurchasePolicy.is_active.is_(True),
+                    ProductPurchasePolicy.valid_from <= today,
+                    or_(
+                        ProductPurchasePolicy.valid_to.is_(None),
+                        ProductPurchasePolicy.valid_to >= today,
+                    ),
+                )
                 .order_by(
                     ProductPurchasePolicy.product_id,
                     case((ProductPurchasePolicy.location_id.is_not(None), 0), else_=1),
@@ -458,7 +491,11 @@ async def upsert_assessment(
         action = "updated"
         row.status = payload.status
         row.quality_score = payload.quality_score
+        row.delivery_reliability_score = payload.delivery_reliability_score
         row.reason = (payload.reason or "").strip() or None
+        row.is_active = payload.is_active
+        row.valid_from = payload.valid_from
+        row.valid_to = payload.valid_to
         row.updated_by = user.id
         row.updated_at = now
     else:
@@ -469,7 +506,11 @@ async def upsert_assessment(
             location_id=payload.location_id,
             status=payload.status,
             quality_score=payload.quality_score,
+            delivery_reliability_score=payload.delivery_reliability_score,
             reason=(payload.reason or "").strip() or None,
+            is_active=payload.is_active,
+            valid_from=payload.valid_from,
+            valid_to=payload.valid_to,
             created_by=user.id,
             updated_by=user.id,
             created_at=now,
@@ -632,7 +673,7 @@ async def history(
 async def audit(
     limit: int = Query(default=200, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    _: Utente = Depends(get_current_user),
+    _: Utente = Depends(require_admin),
 ):
     assessment_rows = (
         await db.scalars(
@@ -698,10 +739,21 @@ async def list_deviations(
             "location_id": row.location_id,
             "recommended_supplier_id": row.recommended_supplier_id,
             "selected_supplier_id": row.selected_supplier_id,
+            "actual_supplier_id": row.actual_supplier_id,
+            "absolute_cheapest_supplier_id": row.absolute_cheapest_supplier_id,
             "deviation_type": row.deviation_type,
+            "status": row.status,
             "reason": row.reason,
             "context": row.context,
+            "actual_normalized_price": str(row.actual_normalized_price) if row.actual_normalized_price is not None else None,
+            "absolute_cheapest_price": str(row.absolute_cheapest_price) if row.absolute_cheapest_price is not None else None,
+            "recommended_price": str(row.recommended_price) if row.recommended_price is not None else None,
+            "premium_amount": str(row.premium_amount) if row.premium_amount is not None else None,
+            "premium_percent": str(row.premium_percent) if row.premium_percent is not None else None,
+            "policy_snapshot": row.policy_snapshot,
             "actor_id": row.actor_id,
+            "acknowledged_by": row.acknowledged_by,
+            "acknowledged_at": row.acknowledged_at,
             "occurred_at": row.occurred_at,
         }
         for row in rows
@@ -730,11 +782,22 @@ async def create_deviation(
     )
     row = PurchasePolicyDeviation(
         dedupe_key=payload.dedupe_key,
+        invoice_line_id=payload.invoice_line_id,
+        purchase_order_id=payload.purchase_order_id,
         product_id=payload.product_id,
         location_id=scope,
         recommended_supplier_id=payload.recommended_supplier_id,
         selected_supplier_id=payload.selected_supplier_id,
+        actual_supplier_id=payload.selected_supplier_id,
+        absolute_cheapest_supplier_id=payload.absolute_cheapest_supplier_id,
         deviation_type=payload.deviation_type,
+        status="open",
+        actual_normalized_price=payload.actual_normalized_price,
+        absolute_cheapest_price=payload.absolute_cheapest_price,
+        recommended_price=payload.recommended_price,
+        premium_amount=payload.premium_amount,
+        premium_percent=payload.premium_percent,
+        policy_snapshot=payload.policy_snapshot,
         reason=payload.reason,
         context=payload.context,
         actor_id=user.id,
@@ -743,3 +806,34 @@ async def create_deviation(
     db.add(row)
     await db.flush()
     return {"id": str(row.id), "created": True}
+
+
+@router.patch("/deviations/{deviation_id}")
+async def update_deviation(
+    deviation_id: UUID,
+    payload: DeviationUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    row = await db.scalar(
+        select(PurchasePolicyDeviation)
+        .where(PurchasePolicyDeviation.id == deviation_id)
+        .with_for_update()
+    )
+    if not row:
+        raise HTTPException(404, "Deviazione non trovata")
+    _scope_location(user, row.location_id)
+    now = datetime.now(timezone.utc)
+    row.status = payload.status
+    if payload.reason:
+        row.reason = payload.reason.strip()
+    row.acknowledged_by = user.id
+    row.acknowledged_at = now
+    await db.flush()
+    return {
+        "id": str(row.id),
+        "status": row.status,
+        "reason": row.reason,
+        "acknowledged_by": row.acknowledged_by,
+        "acknowledged_at": row.acknowledged_at,
+    }

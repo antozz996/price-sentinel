@@ -3,6 +3,8 @@
 from copy import deepcopy
 from decimal import Decimal
 
+from datetime import date
+
 from sqlalchemy import case, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +34,15 @@ def assessment_snapshot(row: ProductSupplierAssessment) -> dict:
         "location_id": row.location_id,
         "status": row.status,
         "quality_score": row.quality_score,
+        "delivery_reliability_score": (
+            str(row.delivery_reliability_score)
+            if row.delivery_reliability_score is not None
+            else None
+        ),
         "reason": row.reason,
+        "is_active": row.is_active,
+        "valid_from": row.valid_from.isoformat(),
+        "valid_to": row.valid_to.isoformat() if row.valid_to else None,
         "scope": "location" if row.location_id is not None else "global",
     }
 
@@ -50,7 +60,10 @@ def policy_snapshot(row: ProductPurchasePolicy | None) -> dict:
         "max_price_premium_percent": decimal_value(row.max_price_premium_percent),
         "max_price_premium_absolute": decimal_value(row.max_price_premium_absolute),
         "allow_spot": row.allow_spot,
-        "notes": row.notes,
+        "reason": row.reason,
+        "is_active": row.is_active,
+        "valid_from": row.valid_from.isoformat(),
+        "valid_to": row.valid_to.isoformat() if row.valid_to else None,
         "scope": "location" if row.location_id is not None else "global",
     }
 
@@ -70,12 +83,19 @@ async def load_effective_purchase_context(
             ProductPurchasePolicy.location_id.is_(None),
         )
 
+    today = date.today()
     assessments = (
         await db.scalars(
             select(ProductSupplierAssessment)
             .where(
                 ProductSupplierAssessment.product_id == product_id,
                 assessment_filter,
+                ProductSupplierAssessment.is_active.is_(True),
+                ProductSupplierAssessment.valid_from <= today,
+                or_(
+                    ProductSupplierAssessment.valid_to.is_(None),
+                    ProductSupplierAssessment.valid_to >= today,
+                ),
             )
             .order_by(
                 case((ProductSupplierAssessment.location_id.is_not(None), 0), else_=1),
@@ -89,7 +109,16 @@ async def load_effective_purchase_context(
 
     policy = await db.scalar(
         select(ProductPurchasePolicy)
-        .where(ProductPurchasePolicy.product_id == product_id, policy_filter)
+        .where(
+            ProductPurchasePolicy.product_id == product_id,
+            policy_filter,
+            ProductPurchasePolicy.is_active.is_(True),
+            ProductPurchasePolicy.valid_from <= today,
+            or_(
+                ProductPurchasePolicy.valid_to.is_(None),
+                ProductPurchasePolicy.valid_to >= today,
+            ),
+        )
         .order_by(
             case((ProductPurchasePolicy.location_id.is_not(None), 0), else_=1),
             ProductPurchasePolicy.id.desc(),
@@ -133,7 +162,7 @@ def rank_supplier_offers(
         elif status == "discouraged":
             exclusions.append("discouraged_supplier")
         if quality < effective_policy["minimum_quality"]:
-            exclusions.append("quality_below_minimum")
+            exclusions.append("quality_below_threshold")
         if offer.get("source_type") == "spot" and not effective_policy["allow_spot"]:
             exclusions.append("spot_not_allowed")
 
@@ -148,14 +177,25 @@ def rank_supplier_offers(
     eligible = [item for item in ranked if item["eligible"]]
     recommended = None
     reason = "no_valid_offer"
+    mode = effective_policy["selection_mode"]
+    preferred_id = effective_policy.get("preferred_supplier_id")
 
-    if eligible:
+    if mode == "absolute_lowest" and absolute:
+        recommended = absolute
+        reason = "absolute_lowest"
+    elif eligible:
         cheapest_eligible = eligible[0]
-        mode = effective_policy["selection_mode"]
-        preferred_id = effective_policy.get("preferred_supplier_id")
-        if mode == "absolute_lowest":
-            recommended = cheapest_eligible
-            reason = "absolute_lowest_eligible"
+        if mode == "manual":
+            recommended = next(
+                (
+                    item
+                    for item in eligible
+                    if preferred_id is not None
+                    and int(item["supplier_id"]) == int(preferred_id)
+                ),
+                None,
+            )
+            reason = "manual_preferred_supplier" if recommended else "manual_supplier_ineligible"
         else:
             base = cheapest_eligible["_unit_price"]
             percent_cap = base * (
@@ -194,8 +234,8 @@ def rank_supplier_offers(
                 recommended = cheapest_eligible
                 reason = "best_eligible_price"
 
-    requires_manual = effective_policy["selection_mode"] == "manual"
-    selected = None if requires_manual else recommended
+    requires_manual = effective_policy["selection_mode"] == "manual" and recommended is None
+    selected = recommended
     for offer in ranked:
         offer["is_absolute_cheapest"] = absolute is offer
         offer["is_recommended"] = recommended is offer
@@ -215,5 +255,9 @@ def rank_supplier_offers(
         "policy": serializable_policy,
         "recommendation_reason": reason,
         "requires_manual_selection": requires_manual,
-        "warnings": [] if recommended else ["Nessuna offerta rispetta le regole di acquisto."],
+        "warnings": (
+            ["Il minimo assoluto viola una o più regole qualitative."]
+            if recommended and not recommended["eligible"]
+            else ([] if recommended else ["Nessuna offerta rispetta le regole di acquisto."])
+        ),
     }
