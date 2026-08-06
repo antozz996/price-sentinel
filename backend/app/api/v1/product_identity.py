@@ -893,7 +893,7 @@ async def optimize_basket(
             location_id=req.location_id
         )
 
-        if res["decision"] == "resolved":
+        if res["decision"] in {"resolved", "needs_manual_selection"} and res["best_offer"]:
             best = res["best_offer"]
             tipo_regola = "spot_ottimale" if best["source_type"] == "spot" else "concordato"
             
@@ -908,6 +908,7 @@ async def optimize_basket(
                 {
                     "fornitore_id": best["supplier_id"],
                     "fornitore_name": best["supplier_name"],
+                    "fornitore_nome": best["supplier_name"],
                     "prezzo": float(best["unit_price_normalized"])
                 }
             ]
@@ -915,6 +916,7 @@ async def optimize_basket(
                 confronto.append({
                     "fornitore_id": alt["supplier_id"],
                     "fornitore_name": alt["supplier_name"],
+                    "fornitore_nome": alt["supplier_name"],
                     "prezzo": float(alt["unit_price_normalized"])
                 })
 
@@ -927,7 +929,15 @@ async def optimize_basket(
                 "tipo_regola": tipo_regola,
                 "fornitore_id": best["supplier_id"],
                 "fornitore_name": best["supplier_name"],
+                "fornitore_nome": best["supplier_name"],
                 "is_anomalia": False,
+                "is_policy_deviation": False,
+                "requires_manual_selection": res["requires_manual_selection"],
+                "absolute_cheapest": res["absolute_cheapest"],
+                "recommended_offer": res["recommended_offer"],
+                "selected_offer": res["selected_offer"],
+                "purchase_policy": res["purchase_policy"],
+                "recommendation_reason": res["recommendation_reason"],
                 "confronto_prezzi": confronto
             })
         else:
@@ -942,7 +952,9 @@ async def optimize_basket(
                 "tipo_regola": "sconosciuto",
                 "fornitore_id": 0,
                 "fornitore_name": "Nessuno",
+                "fornitore_nome": "Nessuno",
                 "is_anomalia": True,
+                "is_policy_deviation": False,
                 "dettaglio_anomalia": "Articolo non associato al catalogo canonico",
                 "confronto_prezzi": []
             })

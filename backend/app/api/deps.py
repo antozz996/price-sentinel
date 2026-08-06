@@ -7,6 +7,7 @@ from fastapi import Depends, Header, HTTPException, status, Query
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.config import settings
 from app.database import get_db
@@ -46,7 +47,9 @@ async def get_current_user(
         raise credentials_exception
 
     # Cerca l'utente nel DB
-    result = await db.execute(select(Utente).where(Utente.id == int(user_id)))
+    result = await db.execute(
+        select(Utente).options(noload("*")).where(Utente.id == int(user_id))
+    )
     user = result.scalar_one_or_none()
 
     if user is None or not user.attivo:
@@ -78,7 +81,9 @@ async def get_current_user_from_query(
         raise credentials_exception
 
     # Cerca l'utente nel DB
-    result = await db.execute(select(Utente).where(Utente.id == int(user_id)))
+    result = await db.execute(
+        select(Utente).options(noload("*")).where(Utente.id == int(user_id))
+    )
     user = result.scalar_one_or_none()
 
     if user is None or not user.attivo:

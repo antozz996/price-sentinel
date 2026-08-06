@@ -29,6 +29,7 @@ from app.api.v1 import (
     disputes,
     automation,
     onboarding,
+    smart_price_sheet,
 )
 
 api_router = APIRouter(redirect_slashes=False)
@@ -74,4 +75,9 @@ api_router.include_router(
     onboarding.router,
     prefix="/onboarding",
     tags=["Onboarding locale"],
+)
+api_router.include_router(
+    smart_price_sheet.router,
+    prefix="/smart-price-sheet",
+    tags=["Listino Smart e Policy Acquisti"],
 )
