@@ -47,8 +47,9 @@ attivo, mentre la matrice di confronto resta paginata a 50 righe.
 ## Incolla, mapping e preview
 
 Il parser accetta TSV da Excel/Google Sheets e CSV con `;`, `,` o `|`. Nel formato
-nuovo la prima colonna è `Nome rapido ordine (facoltativo)`, la seconda identifica il
-prodotto reale/SKU e le successive identificano i fornitori. Il formato storico con
+nuovo la prima colonna è `Nome rapido ordine (facoltativo)`, la seconda mostra e
+identifica il prodotto reale leggibile e le successive identificano i fornitori. Lo
+SKU resta un identificatore tecnico interno e non viene mostrato nel foglio. Il formato storico con
 prodotto nella prima colonna resta compatibile. Sono supportati decimali italiani e
 internazionali, con massimo quattro cifre decimali.
 
@@ -57,7 +58,7 @@ può inviare:
 
 ```json
 {
-  "text": "Nome rapido ordine\tProdotto reale / SKU\tFornitore A\nACQUA\tAcqua 75cl\t1,20",
+  "text": "Nome rapido ordine\tProdotto reale\tFornitore A\nACQUA\tAcqua 75cl\t1,20",
   "supplier_mapping": {"Fornitore A": 12},
   "product_mapping": {"Acqua 75cl": 44},
   "effective_date": "2026-08-06",

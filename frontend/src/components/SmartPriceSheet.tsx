@@ -85,7 +85,7 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
     Array.from({ length: columns }, (_, columnIndex) =>
       rowIndex === 0 && columnIndex === 0
         ? 'Nome rapido ordine (facoltativo)'
-        : rowIndex === 0 && columnIndex === 1 ? 'Prodotto reale / SKU' : '',
+        : rowIndex === 0 && columnIndex === 1 ? 'Prodotto reale' : '',
     ),
   )
 }
@@ -93,10 +93,10 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
 function sheetFromMatrix(matrix: MatrixResponse): string[][] {
   const suppliers = matrix.suppliers
   const rows = [
-    ['Nome rapido ordine (facoltativo)', 'Prodotto reale / SKU', ...suppliers.map(supplier => supplier.name)],
+    ['Nome rapido ordine (facoltativo)', 'Prodotto reale', ...suppliers.map(supplier => supplier.name)],
     ...matrix.rows.map(row => [
       row.order_name || '',
-      row.sku_interno || row.canonical_name,
+      row.canonical_name,
       ...suppliers.map(supplier => row.offers[String(supplier.id)]?.price || ''),
     ]),
   ]
@@ -511,7 +511,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <div>
             <h3 style={{ margin: 0 }}>Foglio prezzi</h3>
             <p style={{ color: 'var(--text-secondary)', margin: '5px 0 0' }}>
-              Colonna A = nome rapido facoltativo per gli ordini. Colonna B = prodotto reale/SKU. Da C in poi = fornitori. Incolla direttamente da Excel o Google Sheets.
+              Colonna A = nome rapido facoltativo per gli ordini. Colonna B = nome reale e leggibile del prodotto. Da C in poi = fornitori. Incolla direttamente da Excel o Google Sheets.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -542,7 +542,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                       title={!eligible ? 'Fornitore fuori dal settore di questo prodotto' : undefined}
                       onChange={event => updateSheetCell(rowIndex, columnIndex, event.target.value)}
                       onPaste={event => pasteIntoSheet(event, rowIndex, columnIndex)}
-                      placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale / SKU' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale o SKU' : eligible ? '—' : 'fuori settore'}
+                      placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale del prodotto' : eligible ? '—' : 'fuori settore'}
                       style={{ width: '100%', minWidth: width, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: eligible ? 'white' : '#5f6574', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex < 2 ? 600 : 400, textAlign: columnIndex > 1 && rowIndex > 0 ? 'right' : 'left', cursor: eligible ? 'text' : 'not-allowed' }}
                       onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px #3b82f6' }}
                       onBlur={event => { event.currentTarget.style.boxShadow = 'none' }}
