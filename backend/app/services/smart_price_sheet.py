@@ -142,8 +142,29 @@ async def build_price_preview(
             method = "explicit"
         else:
             matches = supplier_by_name.get(normalize_text(header), [])
+            if not matches:
+                compact_header = "".join(
+                    character
+                    for character in normalize_text(header)
+                    if character.isalnum()
+                )
+                if len(compact_header) >= 3:
+                    matches = [
+                        candidate
+                        for candidate in suppliers
+                        if compact_header
+                        in "".join(
+                            character
+                            for character in normalize_text(candidate.nome_azienda)
+                            if character.isalnum()
+                        )
+                    ]
             supplier = matches[0] if len(matches) == 1 else None
-            method = "exact_name" if supplier else "unresolved"
+            method = (
+                "exact_name"
+                if supplier and supplier_by_name.get(normalize_text(header))
+                else "unique_short_name" if supplier else "unresolved"
+            )
         if not supplier:
             errors.append(
                 {
@@ -168,6 +189,7 @@ async def build_price_preview(
     ).all()
     product_by_id = {row.id: row for row in products}
     product_candidates: dict[str, list[Product]] = defaultdict(list)
+    invoice_alias_candidates: dict[str, list[Product]] = defaultdict(list)
     order_name_candidates: dict[str, list[Product]] = defaultdict(list)
     for row in products:
         for value in {row.sku_interno, row.canonical_name, row.normalized_name}:
@@ -175,8 +197,27 @@ async def build_price_preview(
                 product_candidates[normalize_text(value)].append(row)
         if row.normalized_order_name:
             order_name_candidates[row.normalized_order_name].append(row)
+    catalog_aliases = (
+        await db.scalars(
+            select(SupplierProductAlias)
+            .options(noload("*"))
+            .where(SupplierProductAlias.status == "approved")
+            .order_by(SupplierProductAlias.id)
+        )
+    ).all()
+    for alias in catalog_aliases:
+        product = product_by_id.get(alias.product_id)
+        if not product:
+            continue
+        for value in {
+            alias.raw_description,
+            alias.normalized_description,
+            alias.supplier_code,
+        }:
+            if value:
+                invoice_alias_candidates[normalize_text(value)].append(product)
 
-    resolved_rows: list[tuple[dict, Product]] = []
+    resolved_rows: list[tuple[dict, Product, str]] = []
     product_report: list[dict] = []
     for source_row in parsed["rows"]:
         ref = source_row["product_ref"]
@@ -186,20 +227,28 @@ async def build_price_preview(
             method = "explicit"
         else:
             unique = {item.id: item for item in product_candidates.get(normalize_text(ref), [])}
+            method = "exact_catalog"
+            if not unique:
+                unique = {
+                    item.id: item
+                    for item in invoice_alias_candidates.get(normalize_text(ref), [])
+                }
+                method = "exact_invoice_alias"
             if not unique:
                 unique = {
                     item.id: item
                     for item in order_name_candidates.get(normalize_text(ref), [])
                 }
+                method = "exact_order_name"
             product = next(iter(unique.values())) if len(unique) == 1 else None
-            method = "exact_catalog" if product else "unresolved"
+            method = method if product else "unresolved"
         if not product:
             errors.append(
                 {
                     "type": "product_mapping",
                     "row": source_row["row_number"],
                     "reference": ref,
-                    "message": "Prodotto non trovato o ambiguo: selezionalo dal catalogo canonico.",
+                    "message": "Descrizione mai vista o ambigua: scegli il prodotto principale una sola volta.",
                 }
             )
         elif not product.sku_interno:
@@ -212,7 +261,7 @@ async def build_price_preview(
                 }
             )
         else:
-            resolved_rows.append((source_row, product))
+            resolved_rows.append((source_row, product, method))
         product_report.append(
             {
                 "row": source_row["row_number"],
@@ -232,7 +281,7 @@ async def build_price_preview(
         for row in products
         if row.normalized_order_name
     }
-    for source_row, product in resolved_rows:
+    for source_row, product, _ in resolved_rows:
         proposed = source_row.get("order_name", "").strip()
         if not proposed:
             continue
@@ -280,7 +329,7 @@ async def build_price_preview(
                 "normalized_order_name": normalized_proposed,
             }
 
-    product_ids = {product.id for _, product in resolved_rows}
+    product_ids = {product.id for _, product, _ in resolved_rows}
     supplier_ids = {supplier.id for supplier in resolved_suppliers.values()}
     supplier_scope = await load_supplier_catalog_scope(db, supplier_ids=supplier_ids)
     aliases = []
@@ -301,7 +350,11 @@ async def build_price_preview(
     for alias in aliases:
         aliases_by_pair[(alias.product_id, alias.supplier_id)].append(alias)
 
-    skus = {product.sku_interno for _, product in resolved_rows if product.sku_interno}
+    skus = {
+        product.sku_interno
+        for _, product, _ in resolved_rows
+        if product.sku_interno
+    }
     active_prices = []
     if skus and supplier_ids:
         active_prices = (
@@ -322,7 +375,7 @@ async def build_price_preview(
 
     changes: list[dict] = []
     seen_pairs: set[tuple[int, int]] = set()
-    for source_row, product in resolved_rows:
+    for source_row, product, mapping_method in resolved_rows:
         for index, header in enumerate(parsed["supplier_headers"]):
             raw_price = source_row["values"][index]
             if not raw_price.strip():
@@ -360,6 +413,7 @@ async def build_price_preview(
                             f"{supplier.nome_azienda} non risulta abilitato per "
                             f"{product.category or product.canonical_name}."
                         ),
+                        "category": product.category,
                     }
                 )
                 continue
@@ -378,17 +432,18 @@ async def build_price_preview(
             if price is None:
                 continue
             pair_aliases = aliases_by_pair.get(pair, [])
-            if len(pair_aliases) > 1:
-                errors.append(
-                    {
-                        "type": "ambiguous_alias",
-                        "row": source_row["row_number"],
-                        "product_id": product.id,
-                        "supplier_id": supplier.id,
-                        "message": "Più alias approvati: correggere l'identità prima del prezzo.",
-                    }
-                )
-                continue
+            normalized_ref = normalize_text(source_row["product_ref"])
+            matching_alias = next(
+                (
+                    alias
+                    for alias in pair_aliases
+                    if alias.normalized_description == normalized_ref
+                    or normalize_text(alias.raw_description) == normalized_ref
+                    or normalize_text(alias.supplier_code or "") == normalized_ref
+                ),
+                None,
+            )
+            remember_alias = mapping_method == "explicit" and matching_alias is None
             current_rows = prices_by_pair.get((product.sku_interno, supplier.id), [])
             if len(current_rows) > 1:
                 errors.append(
@@ -415,7 +470,9 @@ async def build_price_preview(
                     "product_name": product.canonical_name,
                     "supplier_id": supplier.id,
                     "supplier_name": supplier.nome_azienda,
-                    "supplier_product_alias_id": pair_aliases[0].id if pair_aliases else None,
+                    "supplier_product_alias_id": matching_alias.id if matching_alias else None,
+                    "source_product_ref": source_row["product_ref"],
+                    "remember_alias": remember_alias,
                     "old_listino_id": current.id if current else None,
                     "old_price": _price_string(Decimal(str(current.prezzo_pattuito))) if current else None,
                     "new_price": _price_string(price),
@@ -443,6 +500,7 @@ async def build_price_preview(
         and (
             bool(order_name_changes_by_product)
             or any(item["action"] != "unchanged" for item in changes)
+            or any(item.get("remember_alias") for item in changes)
         ),
     }
     canonical = json.dumps(preview_payload, sort_keys=True, separators=(",", ":"))
@@ -488,6 +546,7 @@ async def commit_price_preview(
         "updated": 0,
         "unchanged": 0,
         "order_names_updated": 0,
+        "aliases_created": 0,
         "listino_ids": [],
     }
     for name_change in payload.get("order_name_changes", []):
@@ -505,6 +564,51 @@ async def commit_price_preview(
         result["order_names_updated"] += 1
 
     for change in payload["changes"]:
+        alias_id = change.get("supplier_product_alias_id")
+        if change.get("remember_alias") and not alias_id:
+            normalized_ref = normalize_text(change["source_product_ref"])
+            existing_alias = await db.scalar(
+                select(SupplierProductAlias)
+                .options(noload("*"))
+                .where(
+                    SupplierProductAlias.supplier_id == change["supplier_id"],
+                    SupplierProductAlias.normalized_description == normalized_ref,
+                    SupplierProductAlias.status == "approved",
+                )
+                .with_for_update()
+            )
+            if existing_alias and existing_alias.product_id != change["product_id"]:
+                raise HTTPException(
+                    409,
+                    "La descrizione del fornitore è stata associata a un altro prodotto: "
+                    "rigenerare l'anteprima.",
+                )
+            if existing_alias:
+                alias_id = existing_alias.id
+            else:
+                alias = SupplierProductAlias(
+                    supplier_id=change["supplier_id"],
+                    product_id=change["product_id"],
+                    supplier_code=None,
+                    raw_description=change["source_product_ref"].strip(),
+                    normalized_description=normalized_ref,
+                    ean=None,
+                    pack_qty=None,
+                    volume_ml=None,
+                    weight_g=None,
+                    container_type=None,
+                    status="approved",
+                    confidence_score=Decimal("1.00"),
+                    source="smart_price_sheet",
+                    first_seen_at=now,
+                    last_seen_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(alias)
+                await db.flush()
+                alias_id = alias.id
+                result["aliases_created"] += 1
         if change["action"] == "unchanged":
             result["unchanged"] += 1
             continue
@@ -553,7 +657,7 @@ async def commit_price_preview(
             unita_misura=change["uom"],
             data_inizio_validita=effective_date,
             data_scadenza=None,
-            supplier_product_alias_id=change["supplier_product_alias_id"],
+            supplier_product_alias_id=alias_id,
         )
         db.add(new_price)
         await db.flush()

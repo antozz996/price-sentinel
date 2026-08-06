@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from app.services.purchase_recommendation import rank_supplier_offers
 from app.services.smart_price_sheet import parse_clipboard_table, parse_decimal_price
+from app.services.supplier_catalog_scope import SupplierCatalogScope
 
 
 results: list[str] = []
@@ -106,5 +107,19 @@ no_offer = rank_supplier_offers(
     {1: {"status": "discouraged", "quality_score": 5}},
 )
 check("all ineligible requires review", no_offer["recommended_offer"] is None and bool(no_offer["warnings"]))
+
+scope = SupplierCatalogScope(
+    direct_pairs={(1, 10)},
+    categories_by_supplier={10: {"beverage"}},
+    explicit_categories={(10, "beverage"): False, (20, "beverage"): True},
+)
+check(
+    "explicit sector exclusion wins over commercial history",
+    scope.eligible_supplier_ids(product_id=1, category="beverage", supplier_ids={10}) == set(),
+)
+check(
+    "explicit sector enable works without commercial history",
+    scope.eligible_supplier_ids(product_id=1, category="beverage", supplier_ids={20}) == {20},
+)
 
 print(json.dumps({"status": "PASS", "tests": len(results), "results": results}, indent=2))

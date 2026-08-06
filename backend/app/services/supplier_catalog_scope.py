@@ -9,13 +9,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.fatture import Fattura, RigaFattura
 from app.models.listino import ListinoMaster
 from app.models.products import Product, SupplierProductAlias
-from app.models.purchase_policy import ProductSupplierAssessment
+from app.models.purchase_policy import (
+    ProductSupplierAssessment,
+    SupplierCategoryCapability,
+)
 
 
 @dataclass(frozen=True)
 class SupplierCatalogScope:
     direct_pairs: set[tuple[int, int]]
     categories_by_supplier: dict[int, set[str]]
+    explicit_categories: dict[tuple[int, str], bool]
 
     def eligible_supplier_ids(
         self,
@@ -25,16 +29,20 @@ class SupplierCatalogScope:
         supplier_ids: set[int],
     ) -> set[int]:
         normalized_category = (category or "").strip().casefold()
-        return {
-            supplier_id
-            for supplier_id in supplier_ids
-            if (product_id, supplier_id) in self.direct_pairs
-            or (
+        eligible: set[int] = set()
+        for supplier_id in supplier_ids:
+            explicit = self.explicit_categories.get(
+                (supplier_id, normalized_category)
+            ) if normalized_category else None
+            if explicit is False:
+                continue
+            if explicit is True or (product_id, supplier_id) in self.direct_pairs or (
                 normalized_category
                 and normalized_category
                 in self.categories_by_supplier.get(supplier_id, set())
-            )
-        }
+            ):
+                eligible.add(supplier_id)
+        return eligible
 
 
 async def load_supplier_catalog_scope(
@@ -80,7 +88,22 @@ async def load_supplier_catalog_scope(
             if normalized_category:
                 categories_by_supplier[supplier_id].add(normalized_category)
 
+    explicit_stmt = select(
+        SupplierCategoryCapability.supplier_id,
+        SupplierCategoryCapability.category,
+        SupplierCategoryCapability.enabled,
+    )
+    if supplier_ids:
+        explicit_stmt = explicit_stmt.where(
+            SupplierCategoryCapability.supplier_id.in_(supplier_ids)
+        )
+    explicit_categories = {
+        (supplier_id, category.strip().casefold()): enabled
+        for supplier_id, category, enabled in (await db.execute(explicit_stmt)).all()
+    }
+
     return SupplierCatalogScope(
         direct_pairs=direct_pairs,
         categories_by_supplier=dict(categories_by_supplier),
+        explicit_categories=explicit_categories,
     )

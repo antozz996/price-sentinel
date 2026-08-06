@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Table2, Trash2 } from 'lucide-react'
+import { AlertTriangle, Building2, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Table2, Trash2 } from 'lucide-react'
 import { fetchWithAuth } from '../api'
 
 type Supplier = { id: number; name: string; vat: string }
@@ -54,10 +54,19 @@ type Preview = {
     uom: string
     action: 'create' | 'update' | 'unchanged'
   }>
-  errors: Array<{ type: string; row?: number; header?: string; reference?: string; message: string }>
+  errors: Array<{ type: string; row?: number; header?: string; reference?: string; message: string; supplier_id?: number; category?: string | null }>
   supplier_mapping: Array<{ header: string; supplier_id?: number | null; supplier_name?: string | null; method: string }>
   product_mapping: Array<{ reference: string; product_id?: number | null; canonical_name?: string | null; method: string }>
   order_name_changes?: Array<{ product_id: number; canonical_name: string; old_order_name?: string | null; new_order_name: string }>
+}
+type SectorMode = 'auto' | 'enabled' | 'disabled'
+type SupplierSectorResponse = {
+  categories: string[]
+  suppliers: Array<{
+    id: number
+    name: string
+    sectors: Array<{ category: string; mode: SectorMode; inferred: boolean; effective_enabled: boolean }>
+  }>
 }
 
 const panel: React.CSSProperties = { padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }
@@ -65,6 +74,7 @@ const input: React.CSSProperties = { padding: '10px 12px', background: 'rgba(255
 const tabs = [
   { id: 'matrix', label: 'Matrice', icon: Table2 },
   { id: 'paste', label: 'Foglio prezzi', icon: ClipboardPaste },
+  { id: 'sectors', label: 'Settori fornitori', icon: Building2 },
   { id: 'rules', label: 'Qualità e regole', icon: Settings2 },
   { id: 'history', label: 'Storico e audit', icon: History },
 ] as const
@@ -152,6 +162,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [supplierMapping, setSupplierMapping] = useState<Record<string, number>>({})
   const [productMapping, setProductMapping] = useState<Record<string, number>>({})
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [sectorData, setSectorData] = useState<SupplierSectorResponse | null>(null)
+  const [sectorSupplierId, setSectorSupplierId] = useState<number | ''>('')
+  const [sectorSaving, setSectorSaving] = useState<string | null>(null)
 
   const [editing, setEditing] = useState<{ product: MatrixRow; supplier: Supplier; price: string; uom: string } | null>(null)
   const [ruleProductId, setRuleProductId] = useState<number | ''>('')
@@ -230,6 +243,46 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  async function loadSupplierSectors(preferredSupplierId?: number) {
+    setLoading(true); setError(null)
+    try {
+      const data = await fetchWithAuth('/smart-price-sheet/supplier-sectors') as SupplierSectorResponse
+      setSectorData(data)
+      setSectorSupplierId(current => {
+        const requested = preferredSupplierId || current
+        return requested && data.suppliers.some(item => item.id === requested)
+          ? requested
+          : data.suppliers[0]?.id || ''
+      })
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function saveSupplierSector(category: string, mode: SectorMode) {
+    if (!sectorSupplierId) return
+    const key = `${sectorSupplierId}:${category}`
+    setSectorSaving(key); setError(null); setNotice(null)
+    try {
+      await fetchWithAuth('/smart-price-sheet/supplier-sectors', {
+        method: 'PUT',
+        body: JSON.stringify({ supplier_id: sectorSupplierId, category, mode }),
+      })
+      await loadSupplierSectors(Number(sectorSupplierId))
+      setSheetInitialized(false)
+      await loadMatrix()
+      setNotice(mode === 'auto'
+        ? `Settore “${category}” nuovamente gestito in automatico.`
+        : `Settore “${category}” ${mode === 'enabled' ? 'abilitato' : 'escluso'} per il fornitore.`)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSectorSaving(null)
+    }
+  }
+
   async function loadHistory() {
     try {
       if (!isAdmin) {
@@ -255,6 +308,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   useEffect(() => { void loadMatrix() }, [offset])
   useEffect(() => {
     if (activeTab === 'paste' || activeTab === 'rules') void loadProducts()
+    if (activeTab === 'sectors') void loadSupplierSectors()
     if (activeTab === 'rules') void loadRules()
     if (activeTab === 'history') void loadHistory()
   // Tab activation is the only trigger; loaders handle their own cached state.
@@ -303,7 +357,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       const result = await fetchWithAuth('/smart-price-sheet/commit', {
         method: 'POST', body: JSON.stringify({ preview_token: preview.preview_token, confirm: true }),
       }) as any
-      setNotice(`Aggiornamento completato: ${result.result.created} prezzi nuovi, ${result.result.updated} storicizzati, ${result.result.order_names_updated || 0} nomi rapidi.`)
+      setNotice(`Aggiornamento completato: ${result.result.created} prezzi nuovi, ${result.result.updated} storicizzati, ${result.result.order_names_updated || 0} nomi rapidi, ${result.result.aliases_created || 0} descrizioni riconosciute per il futuro.`)
       setPreview(null); setSheetInitialized(false); await loadMatrix()
     } catch (err) { setError(errorMessage(err)) } finally { setLoading(false) }
   }
@@ -426,7 +480,15 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           </span>
         </div>
         {preview.errors.map((item, index) => (
-          <div key={index} style={{ color: '#fca5a5', fontSize: 13 }}>Riga {item.row || '—'}: {item.message}</div>
+          <div key={index} style={{ color: '#fca5a5', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>Riga {item.row || '—'}: {item.message}</span>
+            {item.type === 'supplier_scope' && item.supplier_id && item.category && <button className="btn" onClick={() => {
+              setSectorSupplierId(item.supplier_id || '')
+              setActiveTab('sectors')
+              setPreview(null)
+              void loadSupplierSectors(item.supplier_id)
+            }}><Building2 size={14} /> Configura settore</button>}
+          </div>
         ))}
         {preview.supplier_mapping.filter(item => !item.supplier_id).map(item => (
           <label key={item.header} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 2fr', gap: 12, alignItems: 'center' }}>
@@ -441,8 +503,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <label key={item.reference} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 2fr', gap: 12, alignItems: 'center' }}>
             <span>“{item.reference}”</span>
             <select style={input} value={productMapping[item.reference] || ''} onChange={event => setProductMapping(current => ({ ...current, [item.reference]: Number(event.target.value) }))}>
-              <option value="">Associa il prodotto canonico…</option>
-              {products.map(product => <option key={product.id} value={product.id}>{product.canonical_name} ({product.sku_interno})</option>)}
+              <option value="">Associa il prodotto principale…</option>
+              {products.map(product => <option key={product.id} value={product.id}>{product.order_name ? `${product.order_name} — ` : ''}{product.canonical_name}</option>)}
             </select>
           </label>
         ))}
@@ -480,7 +542,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         </div>
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({selectedSupplierIds.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{matrix?.suppliers.map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto canonico</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
+          <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
           <tbody>{matrix?.rows.map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
@@ -569,6 +631,47 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       </div>
       <PreviewPanel />
     </>}
+
+    {activeTab === 'sectors' && <div className="glass-panel" style={panel}>
+      <div>
+        <h3 style={{ margin: 0 }}>Settori del fornitore</h3>
+        <p style={{ color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: 900 }}>
+          Scegli cosa può vendere ogni fornitore. In <b>Automatico</b> il sistema usa fatture, listini e associazioni già presenti; <b>Abilitato</b> forza la visualizzazione; <b>Escluso</b> la blocca sempre, anche se esistono dati storici.
+        </p>
+      </div>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 520 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Fornitore da configurare</span>
+        <select style={input} value={sectorSupplierId} onChange={event => setSectorSupplierId(Number(event.target.value) || '')}>
+          {sectorData?.suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+        </select>
+      </label>
+      {loading && !sectorData ? <div>Caricamento settori…</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12 }}>
+        {sectorData?.suppliers.find(supplier => supplier.id === sectorSupplierId)?.sectors.map(sector => {
+          const key = `${sectorSupplierId}:${sector.category}`
+          const choices: Array<{ mode: SectorMode; label: string }> = [
+            { mode: 'auto', label: 'Automatico' },
+            { mode: 'enabled', label: 'Abilitato' },
+            { mode: 'disabled', label: 'Escluso' },
+          ]
+          return <div key={sector.category} style={{ padding: 14, border: '1px solid var(--border-glass)', borderRadius: 10, background: 'rgba(255,255,255,.018)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+              <strong>{sector.category}</strong>
+              <span style={{ fontSize: 11, color: sector.effective_enabled ? '#6ee7b7' : '#9ca3af' }}>{sector.effective_enabled ? 'VISIBILE' : 'NASCOSTO'}</span>
+            </div>
+            {sector.mode === 'auto' && <small style={{ color: 'var(--text-secondary)' }}>Decisione automatica: {sector.inferred ? 'dati commerciali trovati' : 'nessun dato trovato'}</small>}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {choices.map(choice => <button
+                key={choice.mode}
+                className={sector.mode === choice.mode ? 'btn btn-primary' : 'btn'}
+                disabled={sectorSaving === key}
+                onClick={() => void saveSupplierSector(sector.category, choice.mode)}
+                style={{ padding: '7px 10px', fontSize: 12 }}
+              >{choice.label}</button>)}
+            </div>
+          </div>
+        })}
+      </div>}
+    </div>}
 
     {activeTab === 'rules' && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(330px,1fr))', gap: 16 }}><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Qualità prodotto-fornitore</h3><select style={input} value={ruleProductId} onChange={event => setRuleProductId(Number(event.target.value) || '')}><option value="">Prodotto…</option>{products.map(item => <option key={item.id} value={item.id}>{item.canonical_name} ({item.sku_interno})</option>)}</select><select style={input} value={ruleSupplierId} onChange={event => setRuleSupplierId(Number(event.target.value) || '')}><option value="">Fornitore…</option>{matrix?.suppliers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select style={input} value={assessmentStatus} onChange={event => setAssessmentStatus(event.target.value)}><option value="approved">Approvato</option><option value="discouraged">Sconsigliato</option><option value="blocked">Bloccato</option></select><label>Qualità {quality}/5 <input type="range" min="1" max="5" value={quality} onChange={event => setQuality(Number(event.target.value))} /></label><textarea style={input} value={reason} onChange={event => setReason(event.target.value)} placeholder="Motivazione (obbligatoria se sconsigliato/bloccato)" /><button className="btn btn-primary" onClick={saveAssessment}><Save size={16} /> Salva valutazione</button></div><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Regola di acquisto</h3><p style={{ color: 'var(--text-secondary)', margin: 0 }}>Si applica al prodotto selezionato.</p><select style={input} value={selectionMode} onChange={event => setSelectionMode(event.target.value)}><option value="best_eligible_price">Miglior prezzo idoneo</option><option value="absolute_lowest">Minimo assoluto (con avvisi qualità)</option><option value="manual">Fornitore preferito manuale</option></select><select style={input} value={preferredSupplierId} onChange={event => setPreferredSupplierId(Number(event.target.value) || '')}><option value="">Nessun fornitore preferito</option>{matrix?.suppliers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><label>Qualità minima <input type="number" min="1" max="5" style={input} value={minimumQuality} onChange={event => setMinimumQuality(Number(event.target.value))} /></label><div style={{ display: 'flex', gap: 10 }}><input style={{ ...input, width: '50%' }} value={premiumPercent} onChange={event => setPremiumPercent(event.target.value)} placeholder="Premium %" /><input style={{ ...input, width: '50%' }} value={premiumAbsolute} onChange={event => setPremiumAbsolute(event.target.value)} placeholder="Premium €" /></div><label><input type="checkbox" checked={allowSpot} onChange={event => setAllowSpot(event.target.checked)} /> Consenti prezzi spot</label><button className="btn btn-primary" onClick={savePolicy}><Save size={16} /> Salva regola</button></div></div><div className="glass-panel" style={panel}><strong>Configurazioni attive: {assessments.length} valutazioni · {policies.length} policy</strong>{assessments.slice(0, 12).map(item => <div key={item.id} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.product_name} · {item.supplier_name}: <b style={{ color: item.status === 'blocked' ? '#f87171' : 'white' }}>{item.status}</b>, qualità {item.quality_score}/5</div>)}</div></>}
 

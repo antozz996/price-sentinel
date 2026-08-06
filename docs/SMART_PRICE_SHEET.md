@@ -4,7 +4,8 @@
 
 Il Listino Smart unifica confronto prezzi, aggiornamento massivo, qualità del
 fornitore e regole di acquisto. Il catalogo `products` resta la sorgente canonica:
-questo modulo non crea automaticamente prodotti, alias o fornitori.
+questo modulo non crea automaticamente prodotti o fornitori; una descrizione fattura
+associata manualmente viene invece ricordata come alias approvato del fornitore.
 
 ## Modello dati
 
@@ -23,6 +24,21 @@ questo modulo non crea automaticamente prodotti, alias o fornitori.
   idempotente del commit.
 - `products.order_name`: nome rapido facoltativo e univoco per la ricerca durante la
   creazione ordine; `canonical_name` e SKU restano l'identità primaria.
+- `supplier_category_capabilities`: eccezioni esplicite per rendere un settore
+  disponibile o indisponibile a un fornitore, senza cancellare lo storico.
+
+### Nome principale, descrizione fattura e nome rapido
+
+Il **nome canonico**, mostrato nell'interfaccia come **prodotto principale**, è la
+scheda interna unica e leggibile. Per esempio `Guanti nitrile nero 100 pezzi` è un
+solo prodotto principale anche se VEMO scrive `GUANTI NITR NERI TG.L 100PZ` e un
+altro fornitore usa una descrizione diversa. Queste diciture sono alias legati al
+fornitore; lo SKU è soltanto l'identificatore tecnico interno.
+
+Il **nome rapido ordine** (per esempio `GUANTI`) è una scorciatoia facoltativa scelta
+dall'utente. La priorità di riconoscimento è: nome principale/SKU esatto, alias
+fattura già approvato, nome rapido esatto, infine ricerca fuzzy nel flusso ordini.
+Quindi un nome reale non viene mai sostituito da un nome rapido omonimo.
 
 Una configurazione con `location_id` prevale sulla corrispondente configurazione
 globale (`location_id IS NULL`). Indici univoci parziali impediscono duplicati nello
@@ -43,6 +59,13 @@ fornitori, prezzi attivi, prezzi spot, assessment e policy. Ogni riga espone:
 Le celle fuori settore non sono modificabili e vengono respinte anche dalla preview.
 Le pagine hanno massimo 500 righe lato API; il Foglio prezzi carica l'intero catalogo
 attivo, mentre la matrice di confronto resta paginata a 50 righe.
+
+La scheda **Settori fornitori** rende questa logica modificabile senza interventi
+tecnici. Per ogni categoria sono disponibili tre modalità:
+
+- `Automatico`: deduce il settore da fatture, listini, alias e valutazioni esistenti;
+- `Abilitato`: mostra sempre il fornitore per quel settore;
+- `Escluso`: lo nasconde sempre, anche se esistono dati commerciali storici.
 
 ## Incolla, mapping e preview
 
@@ -70,7 +93,7 @@ La preview:
 
 - non inserisce né aggiorna `listino_master`;
 - riporta create/update/unchanged/error con vecchio e nuovo valore;
-- blocca prodotti/fornitori ambigui, alias approvati multipli, prezzi invalidi,
+- blocca prodotti/fornitori ambigui, prezzi invalidi,
   coppie duplicate, prezzi attivi multipli e fornitori fuori settore;
 - mostra separatamente le modifiche ai nomi rapidi;
 - genera un token associato all'utente, valido 30 minuti.
@@ -84,7 +107,9 @@ La preview:
 Se il listino è cambiato dopo la preview risponde `409` e non salva nulla.
 
 Per un aggiornamento la versione precedente riceve la data di fine e viene inserita
-una nuova riga attiva in `listino_master`, mantenendo l'alias approvato quando univoco.
+una nuova riga attiva in `listino_master`, mantenendo l'alias approvato corrispondente.
+Se l'utente ha risolto manualmente una descrizione mai vista, il commit crea anche
+l'alias fornitore-prodotto: dalle importazioni successive il riconoscimento è automatico.
 Il token passa a `committed` con il risultato: un retry restituisce lo stesso risultato
 senza una seconda versione.
 
@@ -120,6 +145,8 @@ infine il fuzzy matching: un nome reale vince sempre su un nome rapido omonimo.
 
 ```text
 GET  /api/v1/smart-price-sheet/matrix
+GET  /api/v1/smart-price-sheet/supplier-sectors
+PUT  /api/v1/smart-price-sheet/supplier-sectors
 POST /api/v1/smart-price-sheet/preview
 POST /api/v1/smart-price-sheet/cell-preview
 POST /api/v1/smart-price-sheet/commit
@@ -136,8 +163,8 @@ PATCH /api/v1/smart-price-sheet/deviations/{id}
 
 ## Test
 
-- `backend/tests/smart_price_sheet_unit.py`: 22 controlli parser e ranking.
-- `backend/tests/smart_price_sheet_e2e.py`: 19 controlli API su PostgreSQL usa-e-getta.
+- `backend/tests/smart_price_sheet_unit.py`: 24 controlli parser, ranking e precedenza settori.
+- `backend/tests/smart_price_sheet_e2e.py`: 26 controlli API su PostgreSQL usa-e-getta.
 - `backend/tests/smart_price_sheet_test_base.sql`: solo base isolata per l'E2E, mai
   eseguita in produzione.
 - `npm run build` e `npm run lint` per il frontend.
@@ -147,7 +174,7 @@ PATCH /api/v1/smart-price-sheet/deviations/{id}
 
 1. Eseguire `backend/scripts/smart_price_sheet_preflight.sql` in sola lettura.
 2. Verificare backup, hash e revisione `ls_s8_onboarding`.
-3. Con autorizzazione esplicita, applicare `alembic upgrade smart_price_policy`.
+3. Con autorizzazione esplicita, applicare `alembic upgrade smart_supplier_sectors`.
 4. Pubblicare backend e frontend, poi eseguire lo smoke test del runbook.
 
 Per il rollback eseguire prima

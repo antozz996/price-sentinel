@@ -29,6 +29,13 @@ class CommitPreviewRequest(BaseModel):
     confirm: bool
 
 
+class SupplierSectorUpdateRequest(BaseModel):
+    supplier_id: int = Field(gt=0)
+    category: str = Field(min_length=1, max_length=100)
+    mode: Literal["auto", "enabled", "disabled"]
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class AssessmentUpsertRequest(BaseModel):
     product_id: int = Field(gt=0)
     supplier_id: int = Field(gt=0)

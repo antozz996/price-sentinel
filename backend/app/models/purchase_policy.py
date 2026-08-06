@@ -14,12 +14,41 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+
+
+class SupplierCategoryCapability(Base):
+    __tablename__ = "supplier_category_capabilities"
+    __table_args__ = (
+        UniqueConstraint(
+            "supplier_id", "category", name="uq_supplier_category_capability"
+        ),
+        Index(
+            "ix_supplier_category_capabilities_supplier", "supplier_id", "enabled"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    supplier_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("fornitori.id", ondelete="CASCADE"), nullable=False
+    )
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(
+        Integer, ForeignKey("utenti.id", ondelete="RESTRICT"), nullable=False
+    )
+    updated_by: Mapped[int] = mapped_column(
+        Integer, ForeignKey("utenti.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class ProductSupplierAssessment(Base):

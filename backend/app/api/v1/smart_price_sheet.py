@@ -22,6 +22,7 @@ from app.models.purchase_policy import (
     ProductSupplierAssessment,
     ProductSupplierAssessmentAudit,
     PurchasePolicyDeviation,
+    SupplierCategoryCapability,
 )
 from app.models.utenti import Utente
 from app.schemas.smart_price_sheet import (
@@ -32,6 +33,7 @@ from app.schemas.smart_price_sheet import (
     DeviationCreateRequest,
     DeviationUpdateRequest,
     PolicyUpsertRequest,
+    SupplierSectorUpdateRequest,
 )
 from app.services.purchase_recommendation import (
     policy_snapshot,
@@ -368,6 +370,141 @@ async def matrix(
         ],
         "supplier_names": supplier_names,
         "rows": rows,
+    }
+
+
+@router.get("/supplier-sectors")
+async def supplier_sectors(
+    db: AsyncSession = Depends(get_db),
+    _: Utente = Depends(require_admin),
+):
+    suppliers = (
+        await db.scalars(
+            select(Fornitore)
+            .options(noload("*"))
+            .where(Fornitore.attivo_whitelist.is_(True))
+            .order_by(Fornitore.nome_azienda, Fornitore.id)
+        )
+    ).all()
+    categories = [
+        category
+        for category in (
+            await db.scalars(
+                select(Product.category)
+                .where(
+                    Product.is_active.is_(True),
+                    Product.category.is_not(None),
+                    func.length(func.btrim(Product.category)) > 0,
+                )
+                .distinct()
+                .order_by(Product.category)
+            )
+        ).all()
+    ]
+    scope = await load_supplier_catalog_scope(
+        db, supplier_ids={supplier.id for supplier in suppliers}
+    )
+    return {
+        "categories": categories,
+        "suppliers": [
+            {
+                "id": supplier.id,
+                "name": supplier.nome_azienda,
+                "sectors": [
+                    {
+                        "category": category,
+                        "mode": (
+                            "auto"
+                            if (supplier.id, category.strip().casefold())
+                            not in scope.explicit_categories
+                            else (
+                                "enabled"
+                                if scope.explicit_categories[
+                                    (supplier.id, category.strip().casefold())
+                                ]
+                                else "disabled"
+                            )
+                        ),
+                        "inferred": category.strip().casefold()
+                        in scope.categories_by_supplier.get(supplier.id, set()),
+                        "effective_enabled": supplier.id
+                        in scope.eligible_supplier_ids(
+                            product_id=-1,
+                            category=category,
+                            supplier_ids={supplier.id},
+                        ),
+                    }
+                    for category in categories
+                ],
+            }
+            for supplier in suppliers
+        ],
+    }
+
+
+@router.put("/supplier-sectors")
+async def update_supplier_sector(
+    payload: SupplierSectorUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(require_admin),
+):
+    supplier = await db.scalar(
+        select(Fornitore)
+        .options(noload("*"))
+        .where(Fornitore.id == payload.supplier_id)
+    )
+    if not supplier:
+        raise HTTPException(404, "Fornitore non trovato")
+    categories = (
+        await db.scalars(
+            select(Product.category).where(
+                Product.is_active.is_(True), Product.category.is_not(None)
+            )
+        )
+    ).all()
+    category_by_key = {
+        category.strip().casefold(): category.strip()
+        for category in categories
+        if category and category.strip()
+    }
+    category = category_by_key.get(payload.category.strip().casefold())
+    if not category:
+        raise HTTPException(422, "Categoria prodotto non riconosciuta")
+    capability = await db.scalar(
+        select(SupplierCategoryCapability).where(
+            SupplierCategoryCapability.supplier_id == supplier.id,
+            func.lower(func.btrim(SupplierCategoryCapability.category))
+            == category.casefold(),
+        )
+    )
+    now = datetime.now(timezone.utc)
+    if payload.mode == "auto":
+        if capability:
+            await db.delete(capability)
+    elif capability:
+        capability.category = category
+        capability.enabled = payload.mode == "enabled"
+        capability.reason = payload.reason.strip() if payload.reason else None
+        capability.updated_by = user.id
+        capability.updated_at = now
+    else:
+        capability = SupplierCategoryCapability(
+            supplier_id=supplier.id,
+            category=category,
+            enabled=payload.mode == "enabled",
+            reason=payload.reason.strip() if payload.reason else None,
+            created_by=user.id,
+            updated_by=user.id,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(capability)
+    await db.flush()
+    return {
+        "supplier_id": supplier.id,
+        "supplier_name": supplier.nome_azienda,
+        "category": category,
+        "mode": payload.mode,
     }
 
 

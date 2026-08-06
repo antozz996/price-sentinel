@@ -61,6 +61,7 @@ def seed() -> None:
                   (1,1,'WATER-75','Water A',9,'piece','2026-01-01',1),
                   (2,2,'WATER-75','Water B',10,'piece','2026-01-01',2)
                 on conflict do nothing;
+                select setval(pg_get_serial_sequence('supplier_product_aliases','id'), 2, true);
                 select setval(pg_get_serial_sequence('listino_master','id'), 2, true);
                 """
             )
@@ -116,6 +117,86 @@ async def run() -> None:
             and any(item["type"] == "supplier_scope" for item in response.json()["errors"]),
         )
 
+        response = await client.get(
+            "/api/v1/smart-price-sheet/supplier-sectors", headers=admin
+        )
+        supplier_c = next(
+            item for item in response.json()["suppliers"] if item["id"] == 3
+        )
+        beverage = next(
+            item for item in supplier_c["sectors"] if item["category"] == "beverage"
+        )
+        check(
+            "supplier sectors expose automatic inference",
+            response.status_code == 200
+            and beverage["mode"] == "auto"
+            and beverage["effective_enabled"] is False,
+        )
+        response = await client.put(
+            "/api/v1/smart-price-sheet/supplier-sectors",
+            headers=admin,
+            json={"supplier_id": 3, "category": "beverage", "mode": "enabled"},
+        )
+        check("supplier sector can be enabled", response.status_code == 200)
+
+        response = await client.post(
+            "/api/v1/smart-price-sheet/preview",
+            headers=admin,
+            json={
+                "text": "Prodotto\tSupplier C\nVendor Water XL\t12,00",
+                "product_mapping": {"Vendor Water XL": 1},
+                "effective_date": "2026-08-06",
+                "default_uom": "piece",
+            },
+        )
+        alias_preview = response.json()
+        check(
+            "short supplier name and manual product mapping accepted",
+            response.status_code == 200 and alias_preview["can_commit"] is True,
+        )
+        response = await client.post(
+            "/api/v1/smart-price-sheet/commit",
+            headers=admin,
+            json={"preview_token": alias_preview["preview_token"], "confirm": True},
+        )
+        check(
+            "manual product mapping is remembered as invoice alias",
+            response.status_code == 200
+            and response.json()["result"]["aliases_created"] == 1,
+        )
+        response = await client.post(
+            "/api/v1/smart-price-sheet/preview",
+            headers=admin,
+            json={
+                "text": "Prodotto\tSupplier C\nVendor Water XL\t12,00",
+                "effective_date": "2026-08-06",
+                "default_uom": "piece",
+            },
+        )
+        check(
+            "remembered invoice alias resolves automatically",
+            response.status_code == 200
+            and response.json()["product_mapping"][0]["method"] == "exact_invoice_alias"
+            and not response.json()["errors"],
+        )
+        response = await client.put(
+            "/api/v1/smart-price-sheet/supplier-sectors",
+            headers=admin,
+            json={"supplier_id": 3, "category": "beverage", "mode": "disabled"},
+        )
+        response = await client.get("/api/v1/smart-price-sheet/matrix", headers=admin)
+        check(
+            "explicit sector exclusion wins over saved price and alias",
+            response.status_code == 200
+            and 3 not in response.json()["rows"][0]["eligible_supplier_ids"],
+        )
+        response = await client.put(
+            "/api/v1/smart-price-sheet/supplier-sectors",
+            headers=admin,
+            json={"supplier_id": 3, "category": "beverage", "mode": "auto"},
+        )
+        check("supplier sector can return to automatic", response.status_code == 200)
+
         response = await client.post(
             "/api/v1/smart-price-sheet/commit",
             headers=admin,
@@ -125,7 +206,7 @@ async def run() -> None:
             "commit creates version",
             response.status_code == 200
             and response.json()["result"]["updated"] == 1
-            and scalar("select count(*) from listino_master") == before + 1,
+            and scalar("select count(*) from listino_master") == before + 2,
         )
         response = await client.post(
             "/api/v1/smart-price-sheet/commit",
@@ -134,7 +215,7 @@ async def run() -> None:
         )
         check(
             "commit retry idempotent",
-            response.status_code == 200 and scalar("select count(*) from listino_master") == before + 1,
+            response.status_code == 200 and scalar("select count(*) from listino_master") == before + 2,
         )
 
         response = await client.post(
