@@ -59,7 +59,11 @@ create table listino_master (
   pfa_tipo pfa_tipo, pfa_valore numeric(10,4),
   supplier_product_alias_id integer references supplier_product_aliases(id) on delete set null
 );
-create table fatture (id serial primary key, fornitore_id integer not null references fornitori(id));
+create table fatture (
+  id serial primary key,
+  fornitore_id integer not null references fornitori(id),
+  location_id integer references location(id)
+);
 create table righe_fattura (
   id serial primary key,
   fattura_id integer not null references fatture(id),

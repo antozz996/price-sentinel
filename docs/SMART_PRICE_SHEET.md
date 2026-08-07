@@ -164,7 +164,8 @@ PATCH /api/v1/smart-price-sheet/deviations/{id}
 ## Test
 
 - `backend/tests/smart_price_sheet_unit.py`: 24 controlli parser, ranking e precedenza settori.
-- `backend/tests/smart_price_sheet_e2e.py`: 26 controlli API su PostgreSQL usa-e-getta.
+- `backend/tests/smart_price_sheet_e2e.py`: 31 controlli API su PostgreSQL usa-e-getta,
+  inclusi aggiornamento sede e archiviazione/ripristino sicuro del fornitore.
 - `backend/tests/smart_price_sheet_test_base.sql`: solo base isolata per l'E2E, mai
   eseguita in produzione.
 - `npm run build` e `npm run lint` per il frontend.

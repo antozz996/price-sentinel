@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   /* Modern Premium Dark Palette */
   --bg-primary: #0a0a0f;
   --bg-secondary: #13131c;
@@ -27,6 +28,34 @@
   --border-radius-sm: 6px;
   
   --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/*
+ * Native select menus are rendered by the browser/OS in a separate popup.
+ * Without an explicit color scheme Chromium can combine our white text with
+ * a white system popup, making most options appear blank. Keep this global so
+ * every current and future select inherits a readable dark menu.
+ */
+select {
+  color-scheme: dark;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+select option,
+select optgroup {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+select option:checked {
+  background-color: var(--accent-blue);
+  color: #fff;
+}
+
+select:disabled {
+  color: var(--text-secondary);
+  opacity: 0.65;
 }
 
 * {

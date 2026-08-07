@@ -2,6 +2,8 @@
 Price Sentinel — Schemas Fornitori.
 """
 
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -24,5 +26,6 @@ class FornitoreUpdate(BaseModel):
 
 class FornitoreResponse(FornitoreBase):
     id: int
+    archived_at: datetime | None = None
 
     model_config = {"from_attributes": True}

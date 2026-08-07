@@ -83,6 +83,27 @@ async def run() -> None:
         )
         check("manager cross-location blocked", response.status_code == 403)
 
+        response = await client.patch(
+            "/api/v1/location/1",
+            headers=admin,
+            json={"nome_struttura": "Test Venue PATCH", "tipologia": "ristorante"},
+        )
+        check(
+            "location PATCH remains supported",
+            response.status_code == 200
+            and response.json()["nome_struttura"] == "Test Venue PATCH",
+        )
+        response = await client.put(
+            "/api/v1/location/1",
+            headers=admin,
+            json={"nome_struttura": "Test Venue", "tipologia": "ristorante"},
+        )
+        check(
+            "location PUT updates company name",
+            response.status_code == 200
+            and response.json()["nome_struttura"] == "Test Venue",
+        )
+
         before = scalar("select count(*) from listino_master")
         response = await client.post(
             "/api/v1/smart-price-sheet/preview",
@@ -363,6 +384,45 @@ async def run() -> None:
             "audit rows persisted",
             scalar("select count(*) from product_supplier_assessment_audits") == 1
             and scalar("select count(*) from product_purchase_policy_audits") == 1,
+        )
+
+        supplier_c_prices = scalar(
+            "select count(*) from listino_master where fornitore_id=3"
+        )
+        supplier_c_aliases = scalar(
+            "select count(*) from supplier_product_aliases where supplier_id=3"
+        )
+        response = await client.delete("/api/v1/fornitori/3", headers=admin)
+        check(
+            "supplier deletion safely archives",
+            response.status_code == 204
+            and scalar("select archived_at is not null from fornitori where id=3") is True,
+        )
+        response = await client.get("/api/v1/fornitori/", headers=admin)
+        check(
+            "archived supplier hidden while history remains",
+            response.status_code == 200
+            and 3 not in {item["id"] for item in response.json()}
+            and scalar("select count(*) from listino_master where fornitore_id=3")
+            == supplier_c_prices
+            and scalar("select count(*) from supplier_product_aliases where supplier_id=3")
+            == supplier_c_aliases,
+        )
+        response = await client.post(
+            "/api/v1/fornitori/",
+            headers=admin,
+            json={
+                "partita_iva": "10000000003",
+                "nome_azienda": "Supplier C Restored",
+                "attivo_whitelist": True,
+                "email_contatto": None,
+            },
+        )
+        check(
+            "same VAT restores archived supplier",
+            response.status_code == 201
+            and response.json()["id"] == 3
+            and response.json()["archived_at"] is None,
         )
 
     print(json.dumps({"status": "PASS", "tests": len(results), "results": results}, indent=2))
