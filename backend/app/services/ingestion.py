@@ -177,18 +177,14 @@ async def _process_td01(
             data_documento=parsed.data_documento,
         )
 
-        if match_result.livello == 4:
-            # Parking Area — Spec §3.1 Livello 4
-            stato = StatoMatching.in_parking
-            stats["righe_parking"] += 1
-        elif match_result.livello == 3:
-            # Fuzzy — proposta all'operatore
-            stato = StatoMatching.in_parking
-            stats["righe_parking"] += 1
-        else:
-            # Match confermato (Livello 1 o 2)
+        if match_result.matched and match_result.livello in (1, 2) and match_result.decision == "auto_match":
+            # Match confermato con listino attivo (Livello 1 o 2)
             stato = StatoMatching.matched
             stats["righe_matched"] += 1
+        else:
+            # Parking Area / Needs Review / No Listino — Spec §3.1 Livello 3 o 4
+            stato = StatoMatching.in_parking
+            stats["righe_parking"] += 1
 
         # ── Crea Riga Fattura ──
         riga_db = _create_riga_fattura(
