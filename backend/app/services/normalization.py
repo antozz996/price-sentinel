@@ -291,6 +291,7 @@ def infer_category(text: str) -> str:
         "spiedino", "spiedini", "stecchino", "stecchini", "calice", "calici", "flute",
         "tumbler", "vetri", "forni", "cappe", "piastre", "disinfettante", "gel",
         "igienica", "jumbo", "biboo", "coprimacchia", "imbustati", "kraft", "avana",
+        "busta", "buste", "sottovuoto", "biberon", "flacone", "dosatore", "goffrate",
     ]):
         return "Materiali di consumo"
 
