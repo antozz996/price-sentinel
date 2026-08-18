@@ -27,7 +27,7 @@ MAX_SUPPLIERS = 100
 
 def parse_decimal_price(raw: object) -> Decimal | None:
     value = str(raw or "").strip().replace("€", "").replace(" ", "")
-    if not value or value.lower() in {"-", "n/a", "nd", "n.d."}:
+    if not value or value.lower() in {"-", "n/a", "nd", "n.d.", "0", "0.0", "0,0", "0.00", "0,00", "0.000", "0,000", "0.0000", "0,0000"}:
         return None
     if "," in value and "." in value:
         if value.rfind(",") > value.rfind("."):
@@ -40,7 +40,9 @@ def parse_decimal_price(raw: object) -> Decimal | None:
         parsed = Decimal(value)
     except InvalidOperation as error:
         raise ValueError(f"Prezzo non valido: {raw}") from error
-    if parsed <= 0 or parsed >= Decimal("100000000"):
+    if parsed <= 0:
+        return None
+    if parsed >= Decimal("100000000"):
         raise ValueError(f"Prezzo fuori intervallo: {raw}")
     if parsed.as_tuple().exponent < -4:
         raise ValueError(f"Sono ammessi al massimo 4 decimali: {raw}")
@@ -419,7 +421,7 @@ async def build_price_preview(
         prices_by_pair[(price.sku_interno, price.fornitore_id)].append(price)
 
     changes: list[dict] = []
-    seen_pairs: set[tuple[int, int]] = set()
+    seen_pairs: dict[tuple, int] = {}
     for source_row, product, mapping_method in resolved_rows:
         for index, header in enumerate(parsed["supplier_headers"]):
             raw_price = source_row["values"][index]
@@ -428,45 +430,7 @@ async def build_price_preview(
             supplier = resolved_suppliers.get(header)
             if not supplier:
                 continue
-            pair = (
-                getattr(product, "id", None) or product.sku_interno or product.canonical_name,
-                supplier.id,
-            )
-            if pair in seen_pairs:
-                errors.append(
-                    {
-                        "type": "duplicate_cell",
-                        "row": source_row["row_number"],
-                        "product_id": getattr(product, "id", None),
-                        "supplier_id": supplier.id,
-                        "message": "La stessa coppia prodotto/fornitore compare più volte.",
-                    }
-                )
-                continue
-            seen_pairs.add(pair)
 
-            # Verifica se il settore è esplicitamente escluso per questo fornitore
-            norm_cat = (product.category or "").strip().casefold()
-            is_explicitly_disabled = bool(
-                norm_cat
-                and supplier_scope.explicit_categories.get((supplier.id, norm_cat)) is False
-            )
-            if is_explicitly_disabled:
-                errors.append(
-                    {
-                        "type": "supplier_scope",
-                        "row": source_row["row_number"],
-                        "product_id": getattr(product, "id", None),
-                        "supplier_id": supplier.id,
-                        "column": header,
-                        "message": (
-                            f"{supplier.nome_azienda} è escluso esplicitamente per il settore "
-                            f"“{product.category or product.canonical_name}”."
-                        ),
-                        "category": product.category,
-                    }
-                )
-                continue
             try:
                 price = parse_decimal_price(raw_price)
             except ValueError as error:
@@ -481,7 +445,36 @@ async def build_price_preview(
                 continue
             if price is None:
                 continue
-            pair_aliases = aliases_by_pair.get(pair, [])
+
+            # Verifica se il settore è esplicitamente escluso per questo fornitore
+            norm_cat = (product.category or "").strip().casefold()
+            is_explicitly_disabled = bool(
+                norm_cat
+                and getattr(supplier, "id", None)
+                and supplier_scope.explicit_categories.get((supplier.id, norm_cat)) is False
+            )
+            if is_explicitly_disabled:
+                errors.append(
+                    {
+                        "type": "supplier_scope",
+                        "row": source_row["row_number"],
+                        "product_id": getattr(product, "id", None),
+                        "supplier_id": getattr(supplier, "id", None),
+                        "column": header,
+                        "message": (
+                            f"{supplier.nome_azienda} è escluso esplicitamente per il settore "
+                            f"“{product.category or product.canonical_name}”."
+                        ),
+                        "category": product.category,
+                    }
+                )
+                continue
+
+            prod_key = getattr(product, "id", None) or getattr(product, "sku_interno", None) or product.canonical_name
+            supp_key = getattr(supplier, "id", None) or getattr(supplier, "partita_iva", None) or supplier.nome_azienda
+            pair = (prod_key, supp_key)
+
+            pair_aliases = aliases_by_pair.get((getattr(product, "id", None), getattr(supplier, "id", None)), [])
             normalized_ref = normalize_text(source_row["product_ref"])
             matching_alias = next(
                 (
@@ -494,14 +487,14 @@ async def build_price_preview(
                 None,
             )
             remember_alias = mapping_method == "explicit" and matching_alias is None
-            current_rows = prices_by_pair.get((product.sku_interno, supplier.id), [])
+            current_rows = prices_by_pair.get((product.sku_interno, getattr(supplier, "id", None)), []) if product.sku_interno and getattr(supplier, "id", None) else []
             if len(current_rows) > 1:
                 errors.append(
                     {
                         "type": "multiple_active_prices",
                         "row": source_row["row_number"],
-                        "product_id": product.id,
-                        "supplier_id": supplier.id,
+                        "product_id": getattr(product, "id", None),
+                        "supplier_id": getattr(supplier, "id", None),
                         "message": "Esistono più prezzi attivi: revisione manuale obbligatoria.",
                     }
                 )
@@ -520,24 +513,31 @@ async def build_price_preview(
                 and Decimal(str(current.prezzo_pattuito)) == price
                 and current.unita_misura == row_uom
             )
-            changes.append(
-                {
-                    "row": source_row["row_number"],
-                    "product_id": product.id,
-                    "sku_interno": product.sku_interno,
-                    "product_name": product.canonical_name,
-                    "supplier_id": supplier.id,
-                    "supplier_name": supplier.nome_azienda,
-                    "supplier_product_alias_id": matching_alias.id if matching_alias else None,
-                    "source_product_ref": source_row["product_ref"],
-                    "remember_alias": remember_alias,
-                    "old_listino_id": current.id if current else None,
-                    "old_price": _price_string(Decimal(str(current.prezzo_pattuito))) if current else None,
-                    "new_price": _price_string(price),
-                    "uom": row_uom,
-                    "action": "unchanged" if same else ("update" if current else "create"),
-                }
-            )
+
+            change_entry = {
+                "row": source_row["row_number"],
+                "product_id": getattr(product, "id", None),
+                "sku_interno": product.sku_interno,
+                "product_name": product.canonical_name,
+                "supplier_id": getattr(supplier, "id", None),
+                "supplier_name": supplier.nome_azienda,
+                "supplier_product_alias_id": matching_alias.id if matching_alias else None,
+                "source_product_ref": source_row["product_ref"],
+                "remember_alias": remember_alias,
+                "old_listino_id": current.id if current else None,
+                "old_price": _price_string(Decimal(str(current.prezzo_pattuito))) if current else None,
+                "new_price": _price_string(price),
+                "uom": row_uom,
+                "action": "unchanged" if same else ("update" if current else "create"),
+            }
+
+            if pair in seen_pairs:
+                # Se la stessa combinazione compare più volte nel foglio, aggiorna l'entry esistente con l'ultimo prezzo
+                existing_idx = seen_pairs[pair]
+                changes[existing_idx] = change_entry
+            else:
+                seen_pairs[pair] = len(changes)
+                changes.append(change_entry)
 
     counts = {"create": 0, "update": 0, "unchanged": 0, "errors": len(errors)}
     for change in changes:
