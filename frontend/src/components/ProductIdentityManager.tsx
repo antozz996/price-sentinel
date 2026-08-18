@@ -1542,7 +1542,32 @@ export default function ProductIdentityManager() {
                       <input
                         autoFocus
                         value={existingProductSearch}
-                        onChange={e => setExistingProductSearch(e.target.value)}
+                        onChange={e => {
+                          const newSearch = e.target.value
+                          setExistingProductSearch(newSearch)
+                          // Auto-select when results narrow to exactly 1 product.
+                          // Without this, the browser visually highlights the single
+                          // option but onChange on the <select> never fires, leaving
+                          // selectedExistingProductId as '' and triggering the
+                          // validation error on submit.
+                          const filtered = products.filter(p => {
+                            const q = newSearch.toLowerCase()
+                            return p.is_active && (
+                              p.canonical_name.toLowerCase().includes(q)
+                              || (p.sku_interno || '').toLowerCase().includes(q)
+                            )
+                          }).slice(0, 50)
+                          if (filtered.length === 1) {
+                            setSelectedExistingProductId(String(filtered[0].id))
+                            setResolutionError(null)
+                          } else if (filtered.length !== 1) {
+                            // Only clear the auto-selection if the user is actively
+                            // changing the search and the previously auto-selected
+                            // product is no longer in the filtered list.
+                            const stillPresent = filtered.some(p => String(p.id) === selectedExistingProductId)
+                            if (!stillPresent) setSelectedExistingProductId('')
+                          }
+                        }}
                         placeholder="Nome canonico o SKU..."
                         style={{ width: '100%', boxSizing: 'border-box', padding: '11px 11px 11px 35px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
                       />
@@ -1554,11 +1579,14 @@ export default function ProductIdentityManager() {
                       required
                       size={Math.min(8, Math.max(3, matchingExistingProducts.length))}
                       value={selectedExistingProductId}
-                      onChange={e => setSelectedExistingProductId(e.target.value)}
+                      onChange={e => {
+                        setSelectedExistingProductId(String(e.target.value))
+                        setResolutionError(null)
+                      }}
                       style={{ padding: '8px', minHeight: '120px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
                     >
                       {matchingExistingProducts.map(product => (
-                        <option key={product.id} value={product.id}>
+                        <option key={product.id} value={String(product.id)}>
                           {product.canonical_name} {product.sku_interno ? `· ${product.sku_interno}` : ''}
                         </option>
                       ))}
