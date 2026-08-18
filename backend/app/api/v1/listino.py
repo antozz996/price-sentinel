@@ -24,7 +24,11 @@ from app.schemas.listino import (
     UoMConversioneCreate,
     UoMConversioneResponse,
 )
-from app.services.excel_import import generate_template_excel, parse_listino_excel
+from app.services.excel_import import (
+    generate_template_excel,
+    generate_extracted_listino_excel,
+    parse_listino_excel,
+)
 
 router = APIRouter()
 
@@ -353,6 +357,261 @@ async def import_multi_supplier(
         "errors_count": 0,
     }
 
+
+# ─────────────────────────────────────────────
+# Estrazione Listino da Storico Fatture
+# ─────────────────────────────────────────────
+
+@router.get(
+    "/extract-from-invoices/{fornitore_id}",
+    summary="Estrai Listino da Storico Fatture",
+    description="Aggrega gli articoli fatturati dal fornitore ed estrae i prezzi (ultimo, minimo, medio).",
+)
+async def extract_listino_from_invoices(
+    fornitore_id: int,
+    price_strategy: str = Query("latest", regex="^(latest|min|avg)$", description="latest, min o avg"),
+    format: str = Query("json", regex="^(json|excel)$", description="json o excel"),
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.fornitori import Fornitore
+    from app.models.fatture import Fattura, RigaFattura, TipoDocumento
+    from decimal import Decimal
+
+    fornitore = await db.get(Fornitore, fornitore_id)
+    if not fornitore:
+        raise HTTPException(status_code=404, detail="Fornitore non trovato")
+
+    stmt = (
+        select(
+            RigaFattura.codice_fornitore_raw,
+            RigaFattura.descrizione_fornitore_raw,
+            RigaFattura.unita_misura_fattura,
+            RigaFattura.prezzo_netto_normalizzato,
+            RigaFattura.quantita,
+            RigaFattura.sku_interno,
+            Fattura.data_documento,
+            Fattura.numero_documento,
+        )
+        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+        .where(
+            Fattura.fornitore_id == fornitore_id,
+            Fattura.tipo_documento == TipoDocumento.TD01,
+            RigaFattura.is_omaggio.is_(False),
+            RigaFattura.descrizione_fornitore_raw.is_not(None),
+        )
+        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    grouped = {}
+    for code, desc, uom, price, qty, sku, doc_date, doc_num in rows:
+        clean_desc = (desc or "").strip()
+        if not clean_desc:
+            continue
+        clean_code = (code or "").strip()
+        key = (clean_code.upper(), clean_desc.upper(), (uom or "Pz").upper())
+
+        if key not in grouped:
+            supp_prefix = "".join(c for c in fornitore.nome_azienda[:3] if c.isalnum()).upper() or "SKU"
+            clean_sku = sku or (f"{supp_prefix}-{clean_code}" if clean_code else f"{supp_prefix}-{clean_desc[:12].replace(' ', '-').upper()}")
+            grouped[key] = {
+                "sku_interno": clean_sku,
+                "descrizione": clean_desc,
+                "codice_fornitore": clean_code or None,
+                "unita_misura": uom or "Pz",
+                "prices": [],
+                "quantities": [],
+                "dates": [],
+                "latest_price": price or Decimal("0"),
+                "latest_date": doc_date,
+                "latest_doc": doc_num,
+            }
+
+        grouped[key]["prices"].append(Decimal(str(price or 0)))
+        grouped[key]["quantities"].append(Decimal(str(qty or 1)))
+        if doc_date:
+            grouped[key]["dates"].append(doc_date)
+
+    items = []
+    for g in grouped.values():
+        prices = g["prices"]
+        qtys = g["quantities"]
+
+        if price_strategy == "min":
+            chosen_price = min(prices) if prices else Decimal("0")
+        elif price_strategy == "avg":
+            total_spend = sum(p * q for p, q in zip(prices, qtys))
+            total_qty = sum(qtys)
+            chosen_price = (total_spend / total_qty).quantize(Decimal("0.0001")) if total_qty > 0 else (sum(prices) / len(prices)).quantize(Decimal("0.0001"))
+        else:
+            chosen_price = g["latest_price"]
+
+        items.append({
+            "sku_interno": g["sku_interno"],
+            "descrizione": g["descrizione"],
+            "codice_fornitore": g["codice_fornitore"],
+            "prezzo_pattuito": float(chosen_price),
+            "unita_misura": g["unita_misura"],
+            "data_inizio_validita": g["latest_date"].strftime("%d/%m/%Y") if g["latest_date"] else date.today().strftime("%d/%m/%Y"),
+            "ultima_data": g["latest_date"].strftime("%d/%m/%Y") if g["latest_date"] else "",
+            "totale_acquistato": float(sum(qtys)),
+            "occorrenze": len(prices),
+        })
+
+    items.sort(key=lambda x: x["descrizione"])
+
+    if format == "excel":
+        excel_bytes = generate_extracted_listino_excel(fornitore.nome_azienda, items)
+        safe_name = "".join(c for c in fornitore.nome_azienda if c.isalnum() or c in " _-").strip().replace(" ", "_")
+        filename = f"listino_estratto_{safe_name}_{date.today().strftime('%Y%m%d')}.xlsx"
+        return Response(
+            content=excel_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    return {
+        "fornitore_id": fornitore.id,
+        "fornitore_nome": fornitore.nome_azienda,
+        "total_items": len(items),
+        "price_strategy": price_strategy,
+        "items": items,
+    }
+
+
+@router.post(
+    "/import-from-invoices/{fornitore_id}",
+    summary="Importa direttamente a Listino Master da Fatture",
+    description="Crea o aggiorna le voci di Listino Master a partire dallo storico fatture.",
+)
+async def import_from_invoices_direct(
+    fornitore_id: int,
+    price_strategy: str = Query("latest", regex="^(latest|min|avg)$"),
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.fornitori import Fornitore
+    from app.models.fatture import Fattura, RigaFattura, TipoDocumento
+    from decimal import Decimal
+
+    fornitore = await db.get(Fornitore, fornitore_id)
+    if not fornitore:
+        raise HTTPException(status_code=404, detail="Fornitore non trovato")
+
+    # Fetch and aggregate
+    stmt = (
+        select(
+            RigaFattura.codice_fornitore_raw,
+            RigaFattura.descrizione_fornitore_raw,
+            RigaFattura.unita_misura_fattura,
+            RigaFattura.prezzo_netto_normalizzato,
+            RigaFattura.quantita,
+            RigaFattura.sku_interno,
+            Fattura.data_documento,
+        )
+        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+        .where(
+            Fattura.fornitore_id == fornitore_id,
+            Fattura.tipo_documento == TipoDocumento.TD01,
+            RigaFattura.is_omaggio.is_(False),
+            RigaFattura.descrizione_fornitore_raw.is_not(None),
+        )
+        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc())
+    )
+    rows = (await db.execute(stmt)).all()
+
+    grouped = {}
+    for code, desc, uom, price, qty, sku, doc_date in rows:
+        clean_desc = (desc or "").strip()
+        if not clean_desc:
+            continue
+        clean_code = (code or "").strip()
+        key = (clean_code.upper(), clean_desc.upper(), (uom or "Pz").upper())
+
+        if key not in grouped:
+            supp_prefix = "".join(c for c in fornitore.nome_azienda[:3] if c.isalnum()).upper() or "SKU"
+            clean_sku = sku or (f"{supp_prefix}-{clean_code}" if clean_code else f"{supp_prefix}-{clean_desc[:12].replace(' ', '-').upper()}")
+            grouped[key] = {
+                "sku_interno": clean_sku,
+                "descrizione": clean_desc,
+                "unita_misura": uom or "Pz",
+                "prices": [],
+                "quantities": [],
+                "latest_price": price or Decimal("0"),
+                "latest_date": doc_date,
+            }
+
+        grouped[key]["prices"].append(Decimal(str(price or 0)))
+        grouped[key]["quantities"].append(Decimal(str(qty or 1)))
+
+    inserted = 0
+    updated = 0
+    skipped = 0
+    today = date.today()
+
+    for g in grouped.values():
+        prices = g["prices"]
+        qtys = g["quantities"]
+
+        if price_strategy == "min":
+            chosen_price = min(prices) if prices else Decimal("0")
+        elif price_strategy == "avg":
+            total_spend = sum(p * q for p, q in zip(prices, qtys))
+            total_qty = sum(qtys)
+            chosen_price = (total_spend / total_qty).quantize(Decimal("0.0001")) if total_qty > 0 else (sum(prices) / len(prices)).quantize(Decimal("0.0001"))
+        else:
+            chosen_price = g["latest_price"]
+
+        sku = g["sku_interno"]
+        desc = g["descrizione"]
+        uom = g["unita_misura"]
+
+        # Check if already in listino
+        existing = await db.execute(
+            select(ListinoMaster).where(
+                and_(
+                    ListinoMaster.fornitore_id == fornitore_id,
+                    ListinoMaster.sku_interno == sku,
+                    ListinoMaster.data_scadenza.is_(None),
+                )
+            )
+        )
+        existing_listino = existing.scalar_one_or_none()
+
+        if existing_listino:
+            if float(existing_listino.prezzo_pattuito) == float(chosen_price):
+                skipped += 1
+                continue
+            existing_listino.data_scadenza = today
+            updated += 1
+        else:
+            inserted += 1
+
+        listino = ListinoMaster(
+            fornitore_id=fornitore_id,
+            sku_interno=sku,
+            descrizione=desc,
+            prezzo_pattuito=chosen_price,
+            unita_misura=uom,
+            data_inizio_validita=g["latest_date"] or today,
+            data_scadenza=None,
+            pfa_tipo=None,
+            pfa_valore=None,
+        )
+        db.add(listino)
+
+    await db.flush()
+
+    return {
+        "status": "ok",
+        "fornitore": fornitore.nome_azienda,
+        "total_extracted": len(grouped),
+        "inserted": inserted,
+        "updated": updated,
+        "skipped": skipped,
+        "message": f"Listino generato da fatture: {inserted} inseriti, {updated} aggiornati, {skipped} invariati.",
+    }
 
 
 @router.delete(

@@ -109,6 +109,92 @@ def generate_template_excel(fornitore_nome: str = "NomeFornitore") -> bytes:
     return buffer.getvalue()
 
 
+def generate_extracted_listino_excel(
+    fornitore_nome: str,
+    items: list[dict],
+) -> bytes:
+    """
+    Genera un file Excel precompilato con gli articoli estrapolati dalle fatture del fornitore.
+    È pronto per essere ricaricato direttamente nel Listino Master.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Listino da Fatture"
+
+    # Istruzioni
+    ws.merge_cells("A1:I1")
+    ws["A1"] = f"📋 PRICE SENTINEL — Listino Estratto da Fatture: {fornitore_nome}"
+    ws["A1"].font = Font(name="Calibri", bold=True, size=13, color="1B2A4A")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    ws.merge_cells("A2:I2")
+    ws["A2"] = (
+        "Articoli estrapolati automaticamente dallo storico fatture. "
+        "Verifica i prezzi pattuiti (Colonna C) e la data di validità (Colonna E). "
+        "Puoi ricaricare questo file in 'Acquisti → Listini Master → Importa Excel'."
+    )
+    ws["A2"].font = Font(name="Calibri", size=9.5, italic=True, color="555555")
+    ws["A2"].alignment = Alignment(wrap_text=True)
+    ws.row_dimensions[2].height = 28
+
+    # Header
+    columns = [
+        ("sku_interno", "Codice SKU Interno", 22),
+        ("descrizione", "Descrizione Prodotto", 42),
+        ("prezzo_pattuito", "Prezzo Pattuito (€)", 20),
+        ("unita_misura", "Unità di Misura", 16),
+        ("data_inizio_validita", "Data Inizio Validità", 20),
+        ("pfa_tipo", "PFA Tipo", 16),
+        ("pfa_valore", "PFA Valore", 14),
+        ("ultima_data", "Ultima Fattura", 16),
+        ("totale_acquistato", "Tot. Acquistato", 16),
+    ]
+
+    for col_idx, (_, label, width) in enumerate(columns, start=1):
+        cell = ws.cell(row=4, column=col_idx, value=label)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.border = THIN_BORDER
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        ws.column_dimensions[get_column_letter(col_idx)].width = width
+
+    ws.row_dimensions[4].height = 24
+
+    for row_idx, item in enumerate(items, start=5):
+        row_data = [
+            item.get("sku_interno") or "",
+            item.get("descrizione") or "",
+            float(item.get("prezzo_pattuito") or 0),
+            item.get("unita_misura") or "Pz",
+            item.get("data_inizio_validita") or date.today().strftime("%d/%m/%Y"),
+            item.get("pfa_tipo") or "",
+            item.get("pfa_valore") or "",
+            item.get("ultima_data") or "",
+            float(item.get("totale_acquistato") or 0),
+        ]
+        for col_idx, val in enumerate(row_data, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.font = DATA_FONT
+            cell.border = THIN_BORDER
+            if col_idx == 3:
+                cell.number_format = "#,##0.0000"
+                cell.alignment = Alignment(horizontal="right")
+            elif col_idx in (4, 5, 8):
+                cell.alignment = Alignment(horizontal="center")
+            elif col_idx == 9:
+                cell.number_format = "#,##0.00"
+                cell.alignment = Alignment(horizontal="right")
+
+    ws.freeze_panes = "A5"
+    if len(items) > 0:
+        ws.auto_filter.ref = f"A4:I{len(items) + 4}"
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
 # ─────────────────────────────────────────────
 # Parser / Validator Excel → Listino Records
 # ─────────────────────────────────────────────

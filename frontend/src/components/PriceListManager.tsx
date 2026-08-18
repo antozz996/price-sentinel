@@ -1,10 +1,30 @@
 import { useState, useEffect } from 'react';
-import { FileSpreadsheet, Download, CheckCircle2, AlertCircle } from 'lucide-react';
+import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, Sparkles, RefreshCw, Check, ArrowDownToLine, Zap } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface Fornitore {
   id: number;
   nome_azienda: string;
+}
+
+interface ExtractedItem {
+  sku_interno: string;
+  descrizione: string;
+  codice_fornitore: string | null;
+  prezzo_pattuito: number;
+  unita_misura: string;
+  data_inizio_validita: string;
+  ultima_data: string;
+  totale_acquistato: number;
+  occorrenze: number;
+}
+
+interface ExtractedResult {
+  fornitore_id: number;
+  fornitore_nome: string;
+  total_items: number;
+  price_strategy: string;
+  items: ExtractedItem[];
 }
 
 export default function PriceListManager() {
@@ -13,9 +33,16 @@ export default function PriceListManager() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadingMulti, setUploadingMulti] = useState(false);
-  const [activeTab, setActiveTab] = useState<'standard' | 'multi'>('standard');
+  const [activeTab, setActiveTab] = useState<'standard' | 'multi' | 'extract'>('extract');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ row: number, column: string, message: string }[]>([]);
+
+  // Extraction states
+  const [extractSupplier, setExtractSupplier] = useState<string>('');
+  const [priceStrategy, setPriceStrategy] = useState<'latest' | 'min' | 'avg'>('latest');
+  const [extractLoading, setExtractLoading] = useState(false);
+  const [importingDirect, setImportingDirect] = useState(false);
+  const [extractedData, setExtractedData] = useState<ExtractedResult | null>(null);
 
   const loadFornitori = async (signal?: AbortSignal) => {
     try {
@@ -176,18 +203,114 @@ export default function PriceListManager() {
     }
   };
 
+  const handleExtractPreview = async () => {
+    if (!extractSupplier) {
+      setMessage({ text: 'Seleziona un fornitore per estrarre il listino', type: 'error' });
+      return;
+    }
+
+    setExtractLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/listino/extract-from-invoices/${extractSupplier}?price_strategy=${priceStrategy}&format=json`, {
+        headers: getHeaders()
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Errore durante l'estrazione degli articoli dalle fatture");
+      }
+      const data = await res.json();
+      setExtractedData(data);
+      if (data.total_items === 0) {
+        setMessage({ text: 'Nessun articolo trovato nelle fatture di questo fornitore.', type: 'error' });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ text: err.message || "Errore durante l'estrazione", type: 'error' });
+    } finally {
+      setExtractLoading(false);
+    }
+  };
+
+  const handleDownloadExtractedExcel = async () => {
+    if (!extractSupplier) return;
+    try {
+      const res = await fetch(`${API_BASE}/listino/extract-from-invoices/${extractSupplier}?price_strategy=${priceStrategy}&format=excel`, {
+        headers: getHeaders()
+      });
+      if (!res.ok) throw new Error("Errore durante la generazione del file Excel");
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const fornName = fornitori.find(f => f.id === Number(extractSupplier))?.nome_azienda || 'Fornitore';
+      a.download = `listino_estratto_${fornName.replace(/ /g, '_').toLowerCase()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Impossibile scaricare il file Excel');
+    }
+  };
+
+  const handleImportExtractedDirect = async () => {
+    if (!extractSupplier) return;
+    if (!window.confirm("Vuoi importare direttamente questi articoli nel Listino Master? Eventuali prezzi già presenti verranno aggiornati.")) return;
+
+    setImportingDirect(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/listino/import-from-invoices/${extractSupplier}?price_strategy=${priceStrategy}`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Errore durante l'importazione diretta");
+
+      setMessage({ text: data.message || 'Listino importato con successo!', type: 'success' });
+    } catch (err: any) {
+      setMessage({ text: err.message, type: 'error' });
+    } finally {
+      setImportingDirect(false);
+    }
+  };
+
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '32px', maxWidth: '1200px', margin: '0 auto' }}>
       
-      {/* Colonna Sinistra: Importazione */}
+      {/* Colonna Sinistra: Importazione & Estrazione */}
       <div className="glass-panel" style={{ padding: '32px' }}>
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <h2 style={{ marginBottom: '12px' }}>Importa Listino Master</h2>
-          <p style={{ color: 'var(--text-secondary)' }}>Carica il listino concordato in formato Excel per attivare l'audit automatico.</p>
+          <h2 style={{ marginBottom: '12px' }}>Gestione Listini Prezzi</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>Estrai i listini direttamente dalle fatture caricate o importa file Excel concordati.</p>
         </div>
 
         {/* Tabs per tipologia di listino */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-glass)', marginBottom: '24px' }}>
+          <button
+            onClick={() => { setActiveTab('extract'); setMessage(null); setFile(null); }}
+            style={{
+              flex: 1,
+              padding: '12px',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === 'extract' ? '2px solid var(--accent-blue)' : 'none',
+              color: activeTab === 'extract' ? 'white' : 'var(--text-secondary)',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontSize: '0.88rem',
+              outline: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <Sparkles size={15} style={{ color: '#f59e0b' }} />
+            Estrai da Fatture
+          </button>
           <button
             onClick={() => { setActiveTab('standard'); setMessage(null); setFile(null); }}
             style={{
@@ -199,7 +322,7 @@ export default function PriceListManager() {
               color: activeTab === 'standard' ? 'white' : 'var(--text-secondary)',
               fontWeight: 600,
               cursor: 'pointer',
-              fontSize: '0.9rem',
+              fontSize: '0.88rem',
               outline: 'none'
             }}
           >
@@ -216,7 +339,7 @@ export default function PriceListManager() {
               color: activeTab === 'multi' ? 'white' : 'var(--text-secondary)',
               fontWeight: 600,
               cursor: 'pointer',
-              fontSize: '0.9rem',
+              fontSize: '0.88rem',
               outline: 'none'
             }}
           >
@@ -226,6 +349,182 @@ export default function PriceListManager() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
+          {activeTab === 'extract' && (
+            <>
+              <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <Sparkles size={18} style={{ color: '#f59e0b' }} />
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Estrai Listino Prezzi da Fatture Caricate</h4>
+                </div>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
+                  Price Sentinel analizza tutte le fatture caricate del fornitore (es. <em>LINEA CATERING</em>) e genera automaticamente l'elenco degli articoli con i prezzi netti effettivi.
+                </p>
+              </div>
+
+              {/* Seleziona Fornitore */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 600 }}>1. Seleziona Fornitore</label>
+                <select 
+                  value={extractSupplier} 
+                  onChange={(e) => { setExtractSupplier(e.target.value); setExtractedData(null); }}
+                  style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)', color: 'white', outline: 'none' }}
+                >
+                  <option value="">-- Scegli fornitore per estrazione --</option>
+                  {fornitori.map(f => (
+                    <option key={f.id} value={f.id}>{f.nome_azienda} (ID: {f.id})</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Strategia di prezzo */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', fontWeight: 600 }}>2. Criterio di Calcolo Prezzo</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => { setPriceStrategy('latest'); setExtractedData(null); }}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: priceStrategy === 'latest' ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                      background: priceStrategy === 'latest' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
+                      color: priceStrategy === 'latest' ? '#3b82f6' : 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.82rem',
+                      fontWeight: priceStrategy === 'latest' ? 600 : 400,
+                      textAlign: 'left'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Zap size={14} /> Ultimo Prezzo</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Fattura più recente</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setPriceStrategy('min'); setExtractedData(null); }}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: priceStrategy === 'min' ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                      background: priceStrategy === 'min' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
+                      color: priceStrategy === 'min' ? '#3b82f6' : 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.82rem',
+                      fontWeight: priceStrategy === 'min' ? 600 : 400,
+                      textAlign: 'left'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><ArrowDownToLine size={14} /> Prezzo Minimo</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Miglior prezzo storico</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setPriceStrategy('avg'); setExtractedData(null); }}
+                    style={{
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: priceStrategy === 'avg' ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
+                      background: priceStrategy === 'avg' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
+                      color: priceStrategy === 'avg' ? '#3b82f6' : 'white',
+                      cursor: 'pointer',
+                      fontSize: '0.82rem',
+                      fontWeight: priceStrategy === 'avg' ? 600 : 400,
+                      textAlign: 'left'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><RefreshCw size={14} /> Prezzo Medio</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Media ponderata volumi</div>
+                  </button>
+                </div>
+              </div>
+
+              <button 
+                className="btn btn-primary" 
+                disabled={extractLoading || !extractSupplier}
+                onClick={handleExtractPreview}
+                style={{ width: '100%', padding: '14px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (extractLoading || !extractSupplier) ? 0.6 : 1 }}
+              >
+                {extractLoading ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {extractLoading ? 'Estrazione in corso...' : 'Analizza e Mostra Articoli da Fatture'}
+              </button>
+
+              {/* Risultato Estrazione */}
+              {extractedData && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'white', fontSize: '0.9rem' }}>
+                        {extractedData.total_items} articoli estrapolati per {extractedData.fornitore_nome}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Criterio attivo: <strong>{extractedData.price_strategy.toUpperCase()}</strong>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '0.85rem', color: '#3b82f6', fontWeight: 700 }}>
+                      ✓ Pronto all'uso
+                    </span>
+                  </div>
+
+                  {/* Tabella Anteprima */}
+                  <div style={{ maxHeight: '260px', overflowY: 'auto', border: '1px solid var(--border-glass)', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', textAlign: 'left' }}>
+                      <thead style={{ background: '#101018', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                          <th style={{ padding: '8px 12px' }}>Articolo</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prezzo (€)</th>
+                          <th style={{ padding: '8px 8px', textAlign: 'center' }}>UoM</th>
+                          <th style={{ padding: '8px 8px', textAlign: 'center' }}>Fatture</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {extractedData.items.map((it, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td style={{ padding: '8px 12px' }}>
+                              <div style={{ fontWeight: 500, color: 'white' }}>{it.descrizione}</div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SKU: {it.sku_interno}</div>
+                            </td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                              € {it.prezzo_pattuito.toFixed(4)}
+                            </td>
+                            <td style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                              {it.unita_misura}
+                            </td>
+                            <td style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                              {it.occorrenze}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pulsanti Azione */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={handleDownloadExtractedExcel}
+                      style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem' }}
+                    >
+                      <Download size={16} /> Scarica Excel (.xlsx)
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={importingDirect}
+                      onClick={handleImportExtractedDirect}
+                      style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem' }}
+                    >
+                      {importingDirect ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
+                      {importingDirect ? 'Importazione...' : 'Importa a Listino'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           {activeTab === 'standard' ? (
             <>
               {/* Step 1: Scarica Template */}

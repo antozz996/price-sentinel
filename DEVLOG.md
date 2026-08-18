@@ -121,4 +121,42 @@ Necessità di un'area gestionale dedicata per definire il catalogo delle categor
 
 ---
 
+### [2026-08-18] Feature: "Estrai Listino da Fatture" per Fornitori (es. LINEA CATERING)
+
+**Branch:** `main`
+**File toccati:**
+- `backend/app/services/excel_import.py`
+- `backend/app/api/v1/listino.py`
+- `frontend/src/components/PriceListManager.tsx`
+- `DEVLOG.md`
+**Tipo:** Feature
+**Autore:** AI (antigravity) + utente
+
+#### Problema / Obiettivo
+Quando vengono caricate molteplici fatture elettroniche di un fornitore senza avere a priori il listino prezzi pattuito (es. 20 fatture caricate di LINEA CATERING), l'utente ha bisogno di estrapolare in automatico tutti gli articoli acquistati, calcolare i prezzi e generare il Listino Master in 1 clic o scaricarlo in Excel.
+
+#### Soluzione implementata
+1. **Backend Service & API (`/api/v1/listino`):**
+   - `GET /extract-from-invoices/{fornitore_id}`:
+     - Aggrega tutte le righe fattura per codice/descrizione/UoM.
+     - Calcola il prezzo pattuito secondo 3 strategie selezionabili:
+       - ⚡ `latest` (prezzo della fattura più recente)
+       - 📉 `min` (miglior prezzo storico pagato)
+       - 📊 `avg` (prezzo medio ponderato sui volumi)
+     - Genera SKU intelligenti con prefisso fornitore.
+     - Supporto parametro `format=excel` che genera e scarica al volo un file `.xlsx` precompilato e formattato.
+   - `POST /import-from-invoices/{fornitore_id}`:
+     - Esegue l'importazione diretta delle voci nel database (`ListinoMaster`), aggiornando prezzi o inserendo nuovi record con data inizio validità.
+
+2. **Frontend (`PriceListManager.tsx`):**
+   - Aggiunta scheda primaria **"✨ Estrai da Fatture"** in cima a *Listini Master*.
+   - Selettore fornitore con caricamento real-time.
+   - Toggle criterio di prezzo (Ultimo / Minimo / Medio).
+   - Tabella anteprima prodotti con conteggio fatture, prezzo unitario e UoM.
+   - Due azioni rapide:
+     - 📥 **Scarica Excel (.xlsx)**
+     - 🚀 **Importa subito a Listino**
+
+---
+
 *Fine delle entry per questa data.*
