@@ -273,15 +273,24 @@ def infer_category(text: str) -> str:
     def has_word(pattern: str) -> bool:
         return bool(re.search(rf"\b{pattern}\b", cleaned))
 
-    # 1. Materiali di consumo (Monouso, Pulizia, Packaging, Tovagliato, Detergenza)
+    # 1. Materiali di consumo (Monouso, Pulizia, Packaging, Tovagliato, Detergenza, Attrezzature/Accessori Bar)
     if any(has_word(x) for x in [
-        "bicchiere", "tovagliolo", "cannuccia", "posate", "forchetta", "coltello",
-        "cucchiaio", "piatto", "monouso", "tovaglia", "vaschetta", "vaschette",
-        "coperchio", "insalatiera", "detergente", "candeggina", "disincrostante",
-        "sgrassatore", "sapone", "scopa", "spugna", "lavapavimenti", "brillantante",
-        "igienizzante", "guanti", "vileda", "sacco", "sacchi", "sacchetto",
-        "contenitore", "cartone", "scatola", "pellicola", "alluminio", "bobina",
-        "rotolo", "packaging", "asporto", "carta", "asciugamani", "salviette",
+        "bicchiere", "bicchieri", "tovagliolo", "tovaglioli", "cannuccia", "cannucce",
+        "posate", "posata", "forchetta", "forchette", "coltello", "coltelli",
+        "cucchiaio", "cucchiai", "cucchiaino", "cucchiaini", "piatto", "piatti",
+        "monouso", "tovaglia", "tovaglie", "tovaglietta", "tovagliette", "vaschetta", "vaschette",
+        "coperchio", "coperchi", "insalatiera", "insalatiere", "detergente", "detergenti",
+        "candeggina", "disincrostante", "sgrassatore", "sapone", "saponi", "lavamani",
+        "scopa", "scope", "spugna", "spugne", "spugnetta", "spugnette", "retina", "retine",
+        "lavapavimenti", "brillantante", "igienizzante", "guanti", "guanto", "vileda",
+        "sacco", "sacchi", "sacchetto", "sacchetti", "contenitore", "contenitori",
+        "cartone", "cartoni", "scatola", "scatole", "pellicola", "alluminio", "bobina",
+        "bobine", "rotolo", "rotoli", "rotoloni", "packaging", "asporto", "carta",
+        "asciugamani", "salviette", "salvietta", "panno", "panni", "paletta", "manico",
+        "deodorante", "smacchiatore", "sanitec", "cif", "svelto", "vesuvio", "bulkysoft",
+        "spiedino", "spiedini", "stecchino", "stecchini", "calice", "calici", "flute",
+        "tumbler", "vetri", "forni", "cappe", "piastre", "disinfettante", "gel",
+        "igienica", "jumbo", "biboo", "coprimacchia", "imbustati", "kraft", "avana",
     ]):
         return "Materiali di consumo"
 
@@ -293,7 +302,7 @@ def infer_category(text: str) -> str:
         "pomodoro", "pelati", "riso", "lievito", "frutta", "verdura",
         "patate", "patatine", "surgelato", "gelato", "croissant", "brioche",
         "dolce", "dessert", "snack", "noccioline", "olive", "salsa",
-        "maionese", "ketchup",
+        "maionese", "ketchup", "spezie", "origano", "pepe", "aceto",
     ]):
         return "Food"
 
@@ -307,7 +316,7 @@ def infer_category(text: str) -> str:
         "rum", "rhum", "amaro", "whisky", "whiskey", "bourbon", "liqueur", "liquore",
         "tequila", "mezcal", "brandy", "cognac", "grappa", "aperol", "campari",
         "limoncello", "sambuca", "birra", "beer", "draught", "fusto", "caffe",
-        "caffetteria", "orzo", "ginseng", "sciroppo", "purea", "pure", "mixer",
+        "caffetteria", "orzo", "sciroppo", "purea", "pure", "mixer",
         "elder flower", "strawberry", "sweet & sour", "sour", "cordial",
     ]):
         return "Beverage"

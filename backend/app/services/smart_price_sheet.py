@@ -548,6 +548,7 @@ async def build_price_preview(
                 "old_price": _price_string(Decimal(str(current.prezzo_pattuito))) if current else None,
                 "new_price": _price_string(price),
                 "uom": row_uom,
+                "category": category or product.category or "Beverage",
                 "action": "unchanged" if same else ("update" if current else "create"),
             }
 
@@ -672,6 +673,8 @@ async def commit_price_preview(
                 db.add(product)
                 await db.flush()
                 result["products_created"] += 1
+            elif change.get("category") and product.category != change["category"]:
+                product.category = change["category"]
             change["product_id"] = product.id
 
         # Risoluzione o creazione del fornitore (se provvisorio)
