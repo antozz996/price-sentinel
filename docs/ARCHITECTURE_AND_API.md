@@ -111,3 +111,46 @@ L'esecuzione periodica è controllata da:
 - Login, API e webhook protetti da rate limit Nginx.
 - Segreti forniti solo tramite ambiente; nessun segreto deve entrare in Git.
 - Migrazioni e rollback sono separati e testati su database usa-e-getta.
+
+## Listino Smart e policy acquisti
+
+La voce **Listino Smart** usa il catalogo canonico come asse delle righe e i fornitori
+esistenti come colonne. Non crea automaticamente prodotti, alias o fornitori. I prezzi
+contrattuali provengono da `listino_master`; lo spot storico resta una sorgente distinta.
+
+Il flusso di scrittura è sempre `preview -> commit`:
+
+1. TSV/CSV o singola cella vengono validati e risolti contro ID esistenti.
+2. La preview è conservata in `smart_price_sheet_previews` per 30 minuti e non modifica
+   il listino.
+3. Il commit blocca token e versioni correnti, rifiuta dati cambiati e crea una nuova
+   versione prezzo.
+4. Un retry dello stesso token restituisce lo stesso risultato senza duplicare righe.
+
+Le decisioni di acquisto espongono sempre `absolute_cheapest`, `recommended_offer` e
+`selected_offer`. Le valutazioni `blocked`/`discouraged`, la qualità minima, lo spot, il
+fornitore preferito e i premium ammessi determinano l'eleggibilità. Le regole di sede
+prevalgono su quelle globali. Lo scostamento da una policy è registrato separatamente
+da un'anomalia contrattuale di fattura.
+
+Entità additive:
+
+- `product_supplier_assessments` e relativo audit;
+- `product_purchase_policies` e relativo audit;
+- `purchase_policy_deviations` con chiave di deduplicazione;
+- `smart_price_sheet_previews` per commit idempotenti.
+
+API:
+
+- `GET /api/v1/smart-price-sheet/matrix`
+- `POST /api/v1/smart-price-sheet/preview`
+- `POST /api/v1/smart-price-sheet/cell-preview`
+- `POST /api/v1/smart-price-sheet/commit`
+- `GET|PUT /api/v1/smart-price-sheet/assessments`
+- `GET|PUT /api/v1/smart-price-sheet/policies`
+- `GET /api/v1/smart-price-sheet/history`
+- `GET /api/v1/smart-price-sheet/audit`
+- `GET|POST /api/v1/smart-price-sheet/deviations`
+- `PATCH /api/v1/smart-price-sheet/deviations/{id}`
+
+Prezzi e soglie monetarie sono calcolati con `Decimal` e serializzati come stringhe.

@@ -27,6 +27,7 @@ router = APIRouter()
 class ProductBase(BaseModel):
     sku_interno: Optional[str] = None
     canonical_name: str
+    order_name: Optional[str] = Field(default=None, max_length=120)
     brand: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
@@ -45,6 +46,7 @@ class ProductCreate(ProductBase):
 class ProductUpdate(BaseModel):
     sku_interno: Optional[str] = None
     canonical_name: Optional[str] = None
+    order_name: Optional[str] = Field(default=None, max_length=120)
     brand: Optional[str] = None
     category: Optional[str] = None
     subcategory: Optional[str] = None
@@ -65,6 +67,7 @@ class ProductBulkClassificationUpdate(BaseModel):
 class ProductResponse(ProductBase):
     id: int
     normalized_name: Optional[str] = None
+    normalized_order_name: Optional[str] = None
     supplier_pack_sizes: List[int] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
@@ -189,11 +192,21 @@ async def create_product(
         existing = (await db.execute(stmt)).scalar_one_or_none()
         if existing:
             raise HTTPException(status_code=400, detail="SKU interno già esistente")
+    if data.order_name and data.order_name.strip():
+        existing_order_name = await db.scalar(
+            select(Product).where(
+                Product.normalized_order_name == normalize_text(data.order_name)
+            )
+        )
+        if existing_order_name:
+            raise HTTPException(status_code=400, detail="Nome rapido già assegnato")
 
     product = Product(
         sku_interno=data.sku_interno,
         canonical_name=data.canonical_name,
         normalized_name=norm_name,
+        order_name=data.order_name.strip() if data.order_name and data.order_name.strip() else None,
+        normalized_order_name=normalize_text(data.order_name) if data.order_name and data.order_name.strip() else None,
         brand=data.brand,
         category=data.category,
         subcategory=data.subcategory,
@@ -276,6 +289,19 @@ async def update_product(
     update_dict = data.model_dump(exclude_unset=True)
     if "canonical_name" in update_dict:
         update_dict["normalized_name"] = normalize_text(update_dict["canonical_name"])
+    if "order_name" in update_dict:
+        order_name = update_dict["order_name"]
+        update_dict["order_name"] = order_name.strip() if order_name and order_name.strip() else None
+        update_dict["normalized_order_name"] = normalize_text(order_name) if order_name and order_name.strip() else None
+        if update_dict["normalized_order_name"]:
+            existing_order_name = await db.scalar(
+                select(Product).where(
+                    Product.normalized_order_name == update_dict["normalized_order_name"],
+                    Product.id != product_id,
+                )
+            )
+            if existing_order_name:
+                raise HTTPException(status_code=400, detail="Nome rapido già assegnato")
 
     for k, v in update_dict.items():
         setattr(product, k, v)
@@ -893,7 +919,7 @@ async def optimize_basket(
             location_id=req.location_id
         )
 
-        if res["decision"] == "resolved":
+        if res["decision"] in {"resolved", "needs_manual_selection"} and res["best_offer"]:
             best = res["best_offer"]
             tipo_regola = "spot_ottimale" if best["source_type"] == "spot" else "concordato"
             
@@ -908,6 +934,7 @@ async def optimize_basket(
                 {
                     "fornitore_id": best["supplier_id"],
                     "fornitore_name": best["supplier_name"],
+                    "fornitore_nome": best["supplier_name"],
                     "prezzo": float(best["unit_price_normalized"])
                 }
             ]
@@ -915,6 +942,7 @@ async def optimize_basket(
                 confronto.append({
                     "fornitore_id": alt["supplier_id"],
                     "fornitore_name": alt["supplier_name"],
+                    "fornitore_nome": alt["supplier_name"],
                     "prezzo": float(alt["unit_price_normalized"])
                 })
 
@@ -927,7 +955,15 @@ async def optimize_basket(
                 "tipo_regola": tipo_regola,
                 "fornitore_id": best["supplier_id"],
                 "fornitore_name": best["supplier_name"],
+                "fornitore_nome": best["supplier_name"],
                 "is_anomalia": False,
+                "is_policy_deviation": False,
+                "requires_manual_selection": res["requires_manual_selection"],
+                "absolute_cheapest": res["absolute_cheapest"],
+                "recommended_offer": res["recommended_offer"],
+                "selected_offer": res["selected_offer"],
+                "purchase_policy": res["purchase_policy"],
+                "recommendation_reason": res["recommendation_reason"],
                 "confronto_prezzi": confronto
             })
         else:
@@ -942,7 +978,9 @@ async def optimize_basket(
                 "tipo_regola": "sconosciuto",
                 "fornitore_id": 0,
                 "fornitore_name": "Nessuno",
+                "fornitore_nome": "Nessuno",
                 "is_anomalia": True,
+                "is_policy_deviation": False,
                 "dettaglio_anomalia": "Articolo non associato al catalogo canonico",
                 "confronto_prezzi": []
             })

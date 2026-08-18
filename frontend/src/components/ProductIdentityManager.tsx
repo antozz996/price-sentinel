@@ -6,6 +6,7 @@ interface Product {
   id: number
   sku_interno: string | null
   canonical_name: string
+  order_name: string | null
   brand: string | null
   category: string | null
   subcategory: string | null
@@ -134,6 +135,7 @@ export default function ProductIdentityManager() {
   const [productForm, setProductForm] = useState({
     sku_interno: '',
     canonical_name: '',
+    order_name: '',
     brand: '',
     category: 'monouso',
     subcategory: '',
@@ -279,6 +281,7 @@ export default function ProductIdentityManager() {
         weight_g: productForm.weight_g ? parseInt(productForm.weight_g) : null,
         unit_count: parseInt(productForm.unit_count) || 1,
         brand: productForm.brand || null,
+        order_name: productForm.order_name || null,
         sku_interno: productForm.sku_interno || null,
         subcategory: productForm.subcategory || null,
         variant: productForm.variant || null,
@@ -421,6 +424,7 @@ export default function ProductIdentityManager() {
     setProductForm({
       sku_interno: product.sku_interno || '',
       canonical_name: product.canonical_name,
+      order_name: product.order_name || '',
       brand: product.brand || '',
       category: product.category || 'monouso',
       subcategory: product.subcategory || '',
@@ -514,6 +518,7 @@ export default function ProductIdentityManager() {
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.canonical_name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (p.order_name || '').toLowerCase().includes(productSearch.toLowerCase()) ||
       (p.sku_interno || '').toLowerCase().includes(productSearch.toLowerCase())
     const matchesCategory = !categoryFilter || p.category === categoryFilter
     return matchesSearch && matchesCategory
@@ -635,6 +640,7 @@ export default function ProductIdentityManager() {
                   setProductForm({
                     sku_interno: '',
                     canonical_name: '',
+                    order_name: '',
                     brand: '',
                     category: 'monouso',
                     subcategory: '',
@@ -864,7 +870,7 @@ export default function ProductIdentityManager() {
                           />
                         </td>
                         <td><code style={{ color: 'var(--accent-blue)' }}>{p.sku_interno || 'N/D'}</code></td>
-                        <td style={{ fontWeight: 600 }}>{p.canonical_name}</td>
+                        <td style={{ fontWeight: 600 }}>{p.canonical_name}{p.order_name && <div style={{ color: '#6ee7b7', fontSize: '0.72rem', marginTop: 3 }}>Ordine: {p.order_name}</div>}</td>
                         <td>
                           <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
                             {p.category || 'Senza categoria'}
@@ -1536,28 +1542,105 @@ export default function ProductIdentityManager() {
                       <input
                         autoFocus
                         value={existingProductSearch}
-                        onChange={e => setExistingProductSearch(e.target.value)}
+                        onChange={e => {
+                          const newSearch = e.target.value
+                          setExistingProductSearch(newSearch)
+                          // Auto-select when results narrow to exactly 1 product.
+                          // Without this, the browser visually highlights the single
+                          // option but onChange on the <select> never fires, leaving
+                          // selectedExistingProductId as '' and triggering the
+                          // validation error on submit.
+                          const filtered = products.filter(p => {
+                            const q = newSearch.toLowerCase()
+                            return p.is_active && (
+                              p.canonical_name.toLowerCase().includes(q)
+                              || (p.sku_interno || '').toLowerCase().includes(q)
+                            )
+                          }).slice(0, 50)
+                          if (filtered.length === 1) {
+                            setSelectedExistingProductId(String(filtered[0].id))
+                            setResolutionError(null)
+                          } else if (filtered.length !== 1) {
+                            // Only clear the auto-selection if the user is actively
+                            // changing the search and the previously auto-selected
+                            // product is no longer in the filtered list.
+                            const stillPresent = filtered.some(p => String(p.id) === selectedExistingProductId)
+                            if (!stillPresent) setSelectedExistingProductId('')
+                          }
+                        }}
                         placeholder="Nome canonico o SKU..."
                         style={{ width: '100%', boxSizing: 'border-box', padding: '11px 11px 11px 35px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
                       />
                     </div>
                   </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Prodotto canonico
-                    <select
-                      required
-                      size={Math.min(8, Math.max(3, matchingExistingProducts.length))}
-                      value={selectedExistingProductId}
-                      onChange={e => setSelectedExistingProductId(e.target.value)}
-                      style={{ padding: '8px', minHeight: '120px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  {/* Custom listbox — replaces <select size required> whose onChange
+                      does NOT fire when a single option appears visually selected by the
+                      browser, because no real click interaction occurred. The required
+                      attribute also triggers native browser validation before our React
+                      onSubmit handler runs. Using plain div + onClick avoids all of this. */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Prodotto canonico</span>
+                    <div
+                      role="listbox"
+                      aria-label="Prodotto canonico"
+                      style={{
+                        minHeight: '120px',
+                        maxHeight: '220px',
+                        overflowY: 'auto',
+                        background: '#13131c',
+                        border: `1px solid ${selectedExistingProductId ? '#3b82f6' : 'var(--border-glass)'}`,
+                        borderRadius: '8px',
+                      }}
                     >
-                      {matchingExistingProducts.map(product => (
-                        <option key={product.id} value={product.id}>
-                          {product.canonical_name} {product.sku_interno ? `· ${product.sku_interno}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      {matchingExistingProducts.length === 0 && (
+                        <div style={{ padding: '12px 14px', color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '0.82rem' }}>
+                          Nessun prodotto trovato
+                        </div>
+                      )}
+                      {matchingExistingProducts.map(product => {
+                        const isSelected = String(product.id) === selectedExistingProductId
+                        return (
+                          <div
+                            key={product.id}
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => {
+                              setSelectedExistingProductId(String(product.id))
+                              setResolutionError(null)
+                            }}
+                            style={{
+                              padding: '9px 14px',
+                              cursor: 'pointer',
+                              fontSize: '0.85rem',
+                              background: isSelected ? 'rgba(59,130,246,0.35)' : 'transparent',
+                              color: isSelected ? 'white' : '#e2e8f0',
+                              fontWeight: isSelected ? 600 : 400,
+                              borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
+                              transition: 'background 0.1s',
+                              userSelect: 'none',
+                            }}
+                            onMouseEnter={e => {
+                              if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'
+                            }}
+                            onMouseLeave={e => {
+                              if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent'
+                            }}
+                          >
+                            {product.canonical_name}
+                            {product.sku_interno
+                              ? <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontWeight: 400 }}>· {product.sku_interno}</span>
+                              : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {selectedExistingProductId && (() => {
+                      const sel = products.find(p => String(p.id) === selectedExistingProductId)
+                      return sel
+                        ? <div style={{ fontSize: '0.75rem', color: '#3b82f6', marginTop: '3px' }}>✓ Selezionato: {sel.canonical_name}</div>
+                        : null
+                    })()}
+                  </div>
                 </>
               )}
 
@@ -1616,6 +1699,18 @@ export default function ProductIdentityManager() {
                   placeholder="es. Bicchiere caffè"
                   value={productForm.canonical_name}
                   onChange={e => setProductForm({ ...productForm, canonical_name: e.target.value })}
+                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Nome rapido ordine (facoltativo)</label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder="es. GUANTI"
+                  value={productForm.order_name}
+                  onChange={e => setProductForm({ ...productForm, order_name: e.target.value })}
                   style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
                 />
               </div>

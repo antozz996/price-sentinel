@@ -158,7 +158,7 @@ export default function SettingsPage() {
 
     try {
       const res = await fetch(`${API_BASE}/location/${locationId}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: {
           ...headers,
           'Content-Type': 'application/json'
@@ -238,7 +238,7 @@ export default function SettingsPage() {
   };
 
   const handleDeleteFornitore = async (fornitoreId: number) => {
-    if (!window.confirm("Sei sicuro di voler eliminare questo fornitore? Questa azione è irreversibile.")) {
+    if (!window.confirm("Archiviare questo fornitore? Sparirà dalle funzioni operative, mentre fatture, ordini e prezzi storici resteranno disponibili.")) {
       return;
     }
 
@@ -253,7 +253,7 @@ export default function SettingsPage() {
         throw new Error(errData.detail || 'Impossibile eliminare il fornitore.');
       }
 
-      setMessage({ text: 'Fornitore eliminato correttamente!', type: 'success' });
+      setMessage({ text: 'Fornitore archiviato correttamente. Lo storico è stato conservato.', type: 'success' });
       loadData();
     } catch (err: any) {
       setMessage({ text: err.message || 'Errore durante l\'eliminazione.', type: 'error' });
@@ -488,7 +488,7 @@ export default function SettingsPage() {
                   <button 
                     onClick={() => handleDeleteFornitore(f.id)}
                     style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
-                    title="Elimina fornitore"
+                    title="Archivia fornitore"
                     onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                     onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
                   >

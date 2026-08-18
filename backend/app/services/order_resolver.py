@@ -7,12 +7,17 @@ import json
 
 from sqlalchemy import select, or_, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
 
 from app.models.products import Product, SupplierProductAlias, ProductEquivalenceGroupItem
+from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.services.normalization import normalize_text
 from app.services.matching import normalize_price_for_comparison
+from app.services.purchase_recommendation import (
+    load_effective_purchase_context,
+    rank_supplier_offers,
+)
 
 
 async def resolve_order_item(
@@ -41,7 +46,7 @@ async def resolve_order_item(
             "warnings": ["La stringa di ricerca è vuota."]
         }
 
-    # 1. Ricerca del prodotto canonico
+    # 1. Identità reale esatta (SKU/nome fattura-canonico) sempre prioritaria.
     stmt = select(Product).where(
         and_(
             Product.is_active == True,
@@ -52,6 +57,13 @@ async def resolve_order_item(
                 Product.canonical_name.ilike(query.strip())
             )
         )
+    ).order_by(
+        case(
+            (Product.sku_interno == query.strip(), 0),
+            (Product.normalized_name == query_norm, 1),
+            else_=2,
+        ),
+        Product.id,
     )
     res = await db.execute(stmt)
     matched_products = res.scalars().all()
@@ -59,7 +71,18 @@ async def resolve_order_item(
     matched_product = None
     if matched_products:
         matched_product = matched_products[0]
-    else:
+    if not matched_product:
+        # 2. Il nome rapido è una scorciatoia facoltativa, mai sostituisce un match reale.
+        matched_product = await db.scalar(
+            select(Product)
+            .where(
+                Product.is_active.is_(True),
+                Product.normalized_order_name == query_norm,
+            )
+            .order_by(Product.id)
+            .limit(1)
+        )
+    if not matched_product:
         # Corrispondenza fuzzy su tutti i prodotti attivi
         stmt_all = select(Product).where(Product.is_active == True)
         res_all = await db.execute(stmt_all)
@@ -68,7 +91,9 @@ async def resolve_order_item(
         for p in all_products:
             score_canon = SequenceMatcher(None, query_norm, normalize_text(p.canonical_name)).ratio()
             score_sku = SequenceMatcher(None, query_norm, normalize_text(p.sku_interno or "")).ratio()
-            score = max(score_canon, score_sku)
+            score_order = SequenceMatcher(None, query_norm, normalize_text(p.order_name or "")).ratio()
+            # A parità di confidenza prevalgono sempre identità reale e SKU.
+            score = max(score_canon, score_sku, score_order)
             if score > 0.70 and score > best_score:
                 best_score = score
                 matched_product = p
@@ -124,8 +149,12 @@ async def resolve_order_item(
     alias_stmt = (
         select(SupplierProductAlias)
         .options(
-            selectinload(SupplierProductAlias.supplier),
-            selectinload(SupplierProductAlias.product)
+            selectinload(SupplierProductAlias.supplier).options(
+                noload(Fornitore.alias),
+                noload(Fornitore.fatture),
+                noload(Fornitore.listini),
+            ),
+            selectinload(SupplierProductAlias.product).options(noload("*"))
         )
         .where(
             and_(
@@ -146,7 +175,7 @@ async def resolve_order_item(
         supplier = alias.supplier
 
         # Cerca prezzo contrattuale attivo (specifico per alias o generico per SKU)
-        listino_stmt = select(ListinoMaster).where(
+        listino_stmt = select(ListinoMaster).options(noload("*")).where(
             and_(
                 ListinoMaster.fornitore_id == alias.supplier_id,
                 ListinoMaster.sku_interno == prod.sku_interno,
@@ -266,30 +295,54 @@ async def resolve_order_item(
             "is_equivalent": prod.id != matched_product.id
         })
 
-    # Ordina per prezzo unitario normalizzato crescente
-    offers.sort(key=lambda x: Decimal(x["unit_price_normalized"]))
-
-    if offers:
-        best_offer = offers[0]
-        alternatives = offers[1:]
+    assessments, policy = await load_effective_purchase_context(
+        db, matched_product.id, location_id
+    )
+    recommendation = rank_supplier_offers(offers, assessments, policy)
+    recommended_offer = recommendation["recommended_offer"]
+    selected_offer = recommendation["selected_offer"]
+    best_offer = selected_offer or recommended_offer
+    alternatives = [
+        offer
+        for offer in recommendation["offers"]
+        if best_offer is None
+        or (
+            offer["supplier_id"],
+            offer.get("supplier_code"),
+        )
+        != (
+            best_offer["supplier_id"],
+            best_offer.get("supplier_code"),
+        )
+    ]
+    if best_offer and not recommendation["requires_manual_selection"]:
         decision = "resolved"
+    elif best_offer:
+        decision = "needs_manual_selection"
+        warnings.append("La policy richiede la selezione manuale del fornitore.")
     else:
-        best_offer = None
-        alternatives = []
         decision = "needs_review"
-        warnings.append("Nessun fornitore disponibile con tariffe valide.")
+        warnings.extend(recommendation["warnings"])
 
     return {
         "query": query,
         "requested_qty": float(requested_qty),
         "requested_unit": requested_unit,
         "matched_product": {
+            "id": matched_product.id,
             "sku_interno": matched_product.sku_interno,
             "canonical_name": matched_product.canonical_name,
+            "order_name": matched_product.order_name,
             "comparison_unit": comp_unit
         },
         "decision": decision,
         "best_offer": best_offer,
         "alternatives": alternatives,
+        "absolute_cheapest": recommendation["absolute_cheapest"],
+        "recommended_offer": recommended_offer,
+        "selected_offer": selected_offer,
+        "purchase_policy": recommendation["policy"],
+        "recommendation_reason": recommendation["recommendation_reason"],
+        "requires_manual_selection": recommendation["requires_manual_selection"],
         "warnings": warnings
     }

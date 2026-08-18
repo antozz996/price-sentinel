@@ -6,6 +6,7 @@ CRUD Location — Admin per scrittura, tutti per lettura.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
@@ -25,7 +26,7 @@ async def list_locations(
     current_user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Location).order_by(Location.nome_struttura)
+    query = select(Location).options(noload("*")).order_by(Location.nome_struttura)
     if current_user.ruolo.value == "manager":
         if current_user.location_id is None:
             raise HTTPException(
@@ -49,7 +50,9 @@ async def create_location(
     db: AsyncSession = Depends(get_db),
 ):
     # Verifica P.IVA duplicata
-    query = select(Location).where(Location.piva_riferimento == payload.piva_riferimento)
+    query = select(Location).options(noload("*")).where(
+        Location.piva_riferimento == payload.piva_riferimento
+    )
     existing = (await db.execute(query)).scalar_one_or_none()
     if existing:
         raise HTTPException(
@@ -63,7 +66,6 @@ async def create_location(
     )
     db.add(loc)
     await db.commit()
-    await db.refresh(loc)
     return loc
 
 
@@ -84,13 +86,20 @@ async def get_location(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Accesso alla sede non autorizzato",
         )
-    result = await db.execute(select(Location).where(Location.id == location_id))
+    result = await db.execute(
+        select(Location).options(noload("*")).where(Location.id == location_id)
+    )
     location = result.scalar_one_or_none()
     if not location:
         raise HTTPException(status_code=404, detail="Location non trovata")
     return location
 
 
+@router.patch(
+    "/{location_id}",
+    response_model=LocationResponse,
+    summary="Aggiorna location",
+)
 @router.put(
     "/{location_id}",
     response_model=LocationResponse,
@@ -102,14 +111,14 @@ async def update_location(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Location).where(Location.id == location_id)
+    query = select(Location).options(noload("*")).where(Location.id == location_id)
     loc = (await db.execute(query)).scalar_one_or_none()
     if not loc:
         raise HTTPException(status_code=404, detail="Location non trovata")
 
     if payload.piva_riferimento is not None:
         # Verifica duplicati
-        dup_query = select(Location).where(
+        dup_query = select(Location).options(noload("*")).where(
             Location.piva_riferimento == payload.piva_riferimento,
             Location.id != location_id,
         )
@@ -127,7 +136,6 @@ async def update_location(
         loc.tipologia = payload.tipologia
 
     await db.commit()
-    await db.refresh(loc)
     return loc
 
 
@@ -141,7 +149,9 @@ async def delete_location(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Location).where(Location.id == location_id))
+    result = await db.execute(
+        select(Location).options(noload("*")).where(Location.id == location_id)
+    )
     location = result.scalar_one_or_none()
     if not location:
         raise HTTPException(status_code=404, detail="Location non trovata")

@@ -29,6 +29,8 @@ class Product(Base):
     sku_interno: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     canonical_name: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_name: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    order_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    normalized_order_name: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     subcategory: Mapped[str | None] = mapped_column(String(100), nullable=True)

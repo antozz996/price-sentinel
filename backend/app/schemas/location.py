@@ -17,6 +17,7 @@ class LocationCreate(LocationBase):
 
 class LocationUpdate(BaseModel):
     nome_struttura: str | None = None
+    piva_riferimento: str | None = Field(default=None, min_length=11, max_length=11)
     tipologia: str | None = None
 
 

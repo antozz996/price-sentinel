@@ -11,7 +11,7 @@ import OrderOptimizer from './components/OrderOptimizer'
 import SkuManager from './components/SkuManager'
 import SentinelCopilot from './components/SentinelCopilot'
 import ProductConsumptionReport from './components/ProductConsumptionReport'
-import CrossSupplierMatrix from './components/CrossSupplierMatrix'
+import SmartPriceSheet from './components/SmartPriceSheet'
 import TopProductsPriceList from './components/TopProductsPriceList'
 import PriceTrendAnalyzer from './components/PriceTrendAnalyzer'
 import ExcludedProducts from './components/ExcludedProducts'
@@ -69,7 +69,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Analisi',
     items: [
       { id: 'topproducts', label: 'Top prodotti', icon: Award, adminOnly: true },
-      { id: 'crosssupplier', label: 'Comparazione fornitori', icon: Grid, adminOnly: true },
+      { id: 'crosssupplier', label: 'Listino Smart', icon: Grid },
       { id: 'productconsumption', label: 'Consumi per prodotto', icon: BarChart2, adminOnly: true },
       { id: 'priceanalysis', label: 'Oscillazioni prezzi', icon: TrendingUp },
     ],
@@ -366,7 +366,7 @@ export default function App() {
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
       case 'topproducts': return <TopProductsPriceList />;
-      case 'crosssupplier': return <CrossSupplierMatrix />;
+      case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'ordini': return <OrderOptimizer />;
@@ -391,7 +391,7 @@ export default function App() {
       case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
       case 'topproducts': return { title: 'Top prodotti', sub: 'Analizza prezzi e volumi dei prodotti più acquistati' };
-      case 'crosssupplier': return { title: 'Comparazione Fornitori', sub: 'Matrice incrociata dei prezzi per fornitore' };
+      case 'crosssupplier': return { title: 'Listino Smart', sub: 'Prezzi, qualità fornitori e regole di acquisto in un’unica matrice' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };

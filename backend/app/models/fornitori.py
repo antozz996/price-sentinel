@@ -3,7 +3,9 @@ Price Sentinel — Modello Fornitori.
 Spec §5.1: Tabella Fornitori con whitelist attiva.
 """
 
-from sqlalchemy import Boolean, Integer, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -31,6 +33,12 @@ class Fornitore(Base):
         String(255),
         nullable=True,
         comment="Per generazione reclami",
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+        comment="Archiviazione logica: preserva fatture, ordini e storico prezzi",
     )
 
     # ── Relationships ────────────────────────
