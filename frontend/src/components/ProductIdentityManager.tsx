@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Tag, ShieldAlert, Sparkles, Check, X, RefreshCw, Layers, Edit } from 'lucide-react'
+import { Plus, Search, Tag, ShieldAlert, Sparkles, Check, X, RefreshCw, Layers, Edit, Loader2 } from 'lucide-react'
 import { API_BASE, getHeaders } from '../api'
 
 interface Product {
@@ -109,6 +109,9 @@ export default function ProductIdentityManager() {
   const [candidateSearch, setCandidateSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [queueFilter, setQueueFilter] = useState<'all' | 'new' | 'review'>('all')
+  const [selectedWorkKeys, setSelectedWorkKeys] = useState<string[]>([])
+  const [bulkResolving, setBulkResolving] = useState(false)
+  const [bulkNotice, setBulkNotice] = useState<string | null>(null)
   const [selectedWorkItem, setSelectedWorkItem] = useState<WorkQueueItem | null>(null)
   const [resolutionMode, setResolutionMode] = useState<'create_canonical' | 'associate_existing' | 'ignore'>('create_canonical')
   const [resolutionLoading, setResolutionLoading] = useState(false)
@@ -416,6 +419,50 @@ export default function ProductIdentityManager() {
       setResolutionError(err.message)
     } finally {
       setResolutionLoading(false)
+    }
+  }
+
+  const toggleWorkKey = (workKey: string) => {
+    setSelectedWorkKeys(prev =>
+      prev.includes(workKey) ? prev.filter(k => k !== workKey) : [...prev, workKey]
+    )
+  }
+
+  const handleBulkConfirmSuggestions = async () => {
+    if (!workQueue || selectedWorkKeys.length === 0) return
+    const itemsToResolve = workQueue.items.filter(
+      item => selectedWorkKeys.includes(item.work_key) && item.best_candidate
+    )
+    if (itemsToResolve.length === 0) return
+
+    setBulkResolving(true)
+    setError(null)
+    setBulkNotice(null)
+
+    const payload = {
+      items: itemsToResolve.map(item => ({
+        invoice_line_ids: item.invoice_line_ids,
+        action: 'associate_existing',
+        product_id: item.best_candidate!.product_id,
+      }))
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/match-candidates/work-queue/resolve-bulk`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Errore durante la risoluzione massiva')
+
+      setBulkNotice(`✅ ${data.resolved_items} prodotti (${data.resolved_lines} righe fattura) associati con successo!`)
+      setSelectedWorkKeys([])
+      await Promise.all([fetchCandidates(), fetchProducts()])
+    } catch (err: any) {
+      setError(err.message || 'Errore durante la conferma massiva')
+    } finally {
+      setBulkResolving(false)
     }
   }
 
@@ -1030,7 +1077,111 @@ export default function ProductIdentityManager() {
                 {label}
               </button>
             ))}
+
+            {/* Pulsante Seleziona tutti con suggerimento */}
+            {filteredWorkItems.some(item => item.best_candidate) && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  const itemsWithCand = filteredWorkItems.filter(item => item.best_candidate)
+                  const allSelected = itemsWithCand.length > 0 && itemsWithCand.every(item => selectedWorkKeys.includes(item.work_key))
+                  if (allSelected) {
+                    setSelectedWorkKeys([])
+                  } else {
+                    setSelectedWorkKeys(itemsWithCand.map(item => item.work_key))
+                  }
+                }}
+                style={{ 
+                  padding: '9px 14px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  background: selectedWorkKeys.length > 0 ? 'rgba(59, 130, 246, 0.15)' : undefined,
+                  borderColor: selectedWorkKeys.length > 0 ? 'var(--accent-blue)' : undefined,
+                  color: selectedWorkKeys.length > 0 ? 'var(--accent-blue)' : 'white'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    filteredWorkItems.filter(item => item.best_candidate).length > 0 &&
+                    filteredWorkItems.filter(item => item.best_candidate).every(item => selectedWorkKeys.includes(item.work_key))
+                  }
+                  onChange={() => {}}
+                  style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)', cursor: 'pointer' }}
+                />
+                <span>Seleziona tutti ({filteredWorkItems.filter(item => item.best_candidate).length})</span>
+              </button>
+            )}
           </div>
+
+          {bulkNotice && (
+            <div style={{ padding: '12px 16px', borderRadius: '8px', background: 'rgba(16,185,129,0.12)', color: 'var(--status-green)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{bulkNotice}</span>
+              <button type="button" onClick={() => setBulkNotice(null)} style={{ background: 'transparent', border: 'none', color: 'var(--status-green)', cursor: 'pointer' }}>✕</button>
+            </div>
+          )}
+
+          {/* Barra Flottante / Sticky Azione Massiva */}
+          {selectedWorkKeys.length > 0 && (
+            <div style={{
+              position: 'sticky',
+              top: '10px',
+              zIndex: 100,
+              padding: '14px 20px',
+              background: 'rgba(15, 23, 42, 0.95)',
+              border: '1px solid var(--accent-blue)',
+              borderRadius: '12px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '16px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(10px)',
+              animation: 'fadeIn 0.2s ease-in-out'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, color: 'white', fontSize: '0.95rem' }}>
+                  ⚡ {selectedWorkKeys.length} prodotti selezionati
+                </span>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                  ({filteredWorkItems.filter(it => selectedWorkKeys.includes(it.work_key)).reduce((sum, it) => sum + it.occurrence_count, 0)} righe fattura complessive)
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setSelectedWorkKeys([])}
+                  style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+                >
+                  Deseleziona
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={bulkResolving}
+                  onClick={handleBulkConfirmSuggestions}
+                  style={{
+                    padding: '9px 20px',
+                    fontSize: '0.9rem',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    borderColor: '#10b981',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)'
+                  }}
+                >
+                  {bulkResolving ? <Loader2 className="spinner" size={16} /> : <Check size={16} />}
+                  {bulkResolving ? 'Associazione in corso...' : `✓ Conferma ${selectedWorkKeys.length} associazioni`}
+                </button>
+              </div>
+            </div>
+          )}
 
           {(workQueue?.summary.weak_candidates_hidden || 0) > 0 && (
             <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(16,185,129,0.07)', color: 'var(--status-green)', fontSize: '0.8rem' }}>
@@ -1039,52 +1190,82 @@ export default function ProductIdentityManager() {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {filteredWorkItems.map(item => (
-              <div key={item.work_key} style={{ padding: '18px', border: '1px solid var(--border-glass)', borderRadius: '12px', background: 'rgba(255,255,255,0.018)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '18px', alignItems: 'center' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 750, fontSize: '1rem' }}>{item.raw_description}</span>
-                    <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)' }}>
-                      {item.occurrence_count} {item.occurrence_count === 1 ? 'riga' : 'righe'} · {item.invoice_count} {item.invoice_count === 1 ? 'fattura' : 'fatture'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '7px', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
-                    <span>{item.supplier_name}</span>
-                    {item.supplier_code && <><span>•</span><span>Codice: <code>{item.supplier_code}</code></span></>}
-                    <span>•</span>
-                    <span>Ultima fattura: {new Date(item.latest_invoice_date).toLocaleDateString('it-IT')}</span>
+            {filteredWorkItems.map(item => {
+              const isSelected = selectedWorkKeys.includes(item.work_key);
+              return (
+                <div 
+                  key={item.work_key} 
+                  style={{ 
+                    padding: '18px', 
+                    border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)', 
+                    borderRadius: '12px', 
+                    background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255,255,255,0.018)', 
+                    display: 'grid', 
+                    gridTemplateColumns: 'auto minmax(0, 1fr) auto', 
+                    gap: '16px', 
+                    alignItems: 'center',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {/* Checkbox di selezione */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {item.best_candidate ? (
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleWorkKey(item.work_key)}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--accent-blue)' }}
+                      />
+                    ) : (
+                      <div style={{ width: '18px' }} />
+                    )}
                   </div>
 
-                  {item.best_candidate ? (
-                    <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(16,185,129,0.07)', color: 'var(--status-green)', fontSize: '0.82rem' }}>
-                      <Check size={14} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
-                      Possibile corrispondenza: <strong>{item.best_candidate.canonical_name}</strong> · {item.best_candidate.score.toFixed(0)}%
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 750, fontSize: '1rem' }}>{item.raw_description}</span>
+                      <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)' }}>
+                        {item.occurrence_count} {item.occurrence_count === 1 ? 'riga' : 'righe'} · {item.invoice_count} {item.invoice_count === 1 ? 'fattura' : 'fatture'}
+                      </span>
                     </div>
-                  ) : (
-                    <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(245,158,11,0.07)', color: 'var(--status-orange)', fontSize: '0.82rem' }}>
-                      Nessuna corrispondenza affidabile: probabile nuovo prodotto. I suggerimenti casuali non vengono mostrati.
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '7px', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
+                      <span>{item.supplier_name}</span>
+                      {item.supplier_code && <><span>•</span><span>Codice: <code>{item.supplier_code}</code></span></>}
+                      <span>•</span>
+                      <span>Ultima fattura: {new Date(item.latest_invoice_date).toLocaleDateString('it-IT')}</span>
                     </div>
-                  )}
-                </div>
 
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '440px' }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => openWorkResolution(item, 'ignore')} style={{ padding: '9px 11px', color: 'var(--text-secondary)' }}>
-                    <X size={15} /> Ignora
-                  </button>
-                  <button type="button" className="btn btn-secondary" onClick={() => openWorkResolution(item, 'associate_existing')} style={{ padding: '9px 12px' }}>
-                    <Search size={15} /> Associa esistente
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => openWorkResolution(item, item.best_candidate ? 'associate_existing' : 'create_canonical')}
-                    style={{ padding: '9px 13px' }}
-                  >
-                    {item.best_candidate ? <><Check size={15} /> Conferma suggerimento</> : <><Plus size={15} /> Crea e risolvi</>}
-                  </button>
+                    {item.best_candidate ? (
+                      <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(16,185,129,0.07)', color: 'var(--status-green)', fontSize: '0.82rem' }}>
+                        <Check size={14} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
+                        Possibile corrispondenza: <strong>{item.best_candidate.canonical_name}</strong> · {item.best_candidate.score.toFixed(0)}%
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(245,158,11,0.07)', color: 'var(--status-orange)', fontSize: '0.82rem' }}>
+                        Nessuna corrispondenza affidabile: probabile nuovo prodotto. I suggerimenti casuali non vengono mostrati.
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '440px' }}>
+                    <button type="button" className="btn btn-secondary" onClick={() => openWorkResolution(item, 'ignore')} style={{ padding: '9px 11px', color: 'var(--text-secondary)' }}>
+                      <X size={15} /> Ignora
+                    </button>
+                    <button type="button" className="btn btn-secondary" onClick={() => openWorkResolution(item, 'associate_existing')} style={{ padding: '9px 12px' }}>
+                      <Search size={15} /> Associa esistente
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => openWorkResolution(item, item.best_candidate ? 'associate_existing' : 'create_canonical')}
+                      style={{ padding: '9px 13px' }}
+                    >
+                      {item.best_candidate ? <><Check size={15} /> Conferma suggerimento</> : <><Plus size={15} /> Crea e risolvi</>}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {filteredWorkItems.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '60px', background: 'rgba(255,255,255,0.01)', borderRadius: '12px' }}>

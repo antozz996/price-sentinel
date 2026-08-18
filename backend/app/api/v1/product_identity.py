@@ -154,6 +154,9 @@ class WorkQueueResolutionRequest(BaseModel):
     product_id: Optional[int] = None
     canonical_data: Optional[WorkQueueResolutionProduct] = None
 
+class BulkWorkQueueResolutionRequest(BaseModel):
+    items: List[WorkQueueResolutionRequest] = Field(min_length=1, max_length=500)
+
 class OrderItemResolveRequest(BaseModel):
     query: str
     requested_qty: Optional[Decimal] = Decimal("1")
@@ -522,11 +525,7 @@ async def get_match_work_queue(
     "/match-candidates/work-queue/resolve",
     summary="Risolve insieme tutte le righe identiche della coda prodotti",
 )
-async def resolve_match_work_queue_item(
-    data: WorkQueueResolutionRequest,
-    db: AsyncSession = Depends(get_db),
-    _admin: Utente = Depends(require_admin),
-):
+async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionRequest) -> dict:
     allowed_actions = {"associate_existing", "create_canonical", "ignore"}
     if data.action not in allowed_actions:
         raise HTTPException(status_code=422, detail="Azione non supportata")
@@ -625,8 +624,6 @@ async def resolve_match_work_queue_item(
             supplier_code=representative_line.codice_fornitore_raw,
             raw_description=representative_line.descrizione_fornitore_raw or "",
             normalized_description=normalized_description,
-            # La confezione incide sulla normalizzazione dei prezzi e non viene
-            # salvata automaticamente da testi potenzialmente ambigui (es. 90x120).
             pack_qty=None,
             volume_ml=attributes.get("volume_ml"),
             weight_g=attributes.get("weight_g"),
@@ -682,6 +679,50 @@ async def resolve_match_work_queue_item(
         "product_id": product.id,
         "product_name": product.canonical_name,
         "created_product": created_product,
+    }
+
+
+@router.post(
+    "/match-candidates/work-queue/resolve",
+    summary="Risolve insieme tutte le righe identiche della coda prodotti",
+)
+async def resolve_match_work_queue_item(
+    data: WorkQueueResolutionRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    res = await _resolve_single_work_item(db, data)
+    await db.commit()
+    return res
+
+
+@router.post(
+    "/match-candidates/work-queue/resolve-bulk",
+    summary="Risolve massivamente più voci della coda prodotti",
+)
+async def resolve_match_work_queue_bulk(
+    payload: BulkWorkQueueResolutionRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    resolved_items = 0
+    resolved_lines = 0
+    errors = []
+
+    for item in payload.items:
+        try:
+            res = await _resolve_single_work_item(db, item)
+            resolved_items += 1
+            resolved_lines += res.get("resolved_lines", 0)
+        except Exception as e:
+            errors.append(str(e))
+
+    await db.commit()
+    return {
+        "status": "success",
+        "resolved_items": resolved_items,
+        "resolved_lines": resolved_lines,
+        "errors": errors,
     }
 
 @router.get("/match-candidates", response_model=List[CandidateResponse], summary="Ottiene l'elenco dei match candidate pendenti")
