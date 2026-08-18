@@ -527,10 +527,22 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     if (!preview) return null
     const autoCreateCount = preview.product_mapping.filter(m => m.method === 'auto_create').length
     const autoSuppliersCount = preview.supplier_mapping.filter(m => m.method === 'auto_create').length
+    const isReady = preview.can_commit && preview.errors.length === 0
     return (
-      <div className="glass-panel" style={{ ...panel, border: `1px solid ${preview.errors.length ? '#ef4444' : '#10b981'}` }}>
+      <div className="glass-panel" style={{ ...panel, border: `1px solid ${preview.errors.length ? '#ef4444' : '#10b981'}`, background: preview.errors.length ? 'rgba(239,68,68,0.03)' : 'rgba(16,185,129,0.03)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <strong>Anteprima obbligatoria</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <strong>Anteprima modifiche</strong>
+            {isReady ? (
+              <span style={{ fontSize: 12, background: 'rgba(16,185,129,0.18)', color: '#6ee7b7', border: '1px solid #10b981', padding: '3px 10px', borderRadius: 12, fontWeight: 700 }}>
+                ✅ Elaborazione completata al 100% · Pronto per la conferma
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, background: 'rgba(239,68,68,0.18)', color: '#fca5a5', border: '1px solid #ef4444', padding: '3px 10px', borderRadius: 12, fontWeight: 700 }}>
+                ⚠️ Errori da risolvere prima di confermare
+              </span>
+            )}
+          </div>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
             {preview.counts.create} prezzi nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi
             {autoCreateCount > 0 && <span style={{ color: '#60a5fa', fontWeight: 600 }}> · {autoCreateCount} nuovi prodotti da creare</span>}
@@ -581,7 +593,14 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             </tr>)}</tbody>
           </table>
         </div>
-        <button className="btn btn-primary" disabled={!preview.can_commit || loading} onClick={commitPreview}><Check size={16} /> Conferma e aggiorna listino</button>
+        <button
+          className="btn btn-primary"
+          disabled={!preview.can_commit || loading}
+          onClick={commitPreview}
+          style={{ padding: '12px 24px', fontSize: 14, fontWeight: 700 }}
+        >
+          {loading ? '⏳ Salvataggio nel database in corso…' : '✓ Conferma e aggiorna listino'}
+        </button>
       </div>
     )
   }
