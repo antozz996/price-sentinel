@@ -367,6 +367,21 @@ async def matrix(
     )
     category_counts = {str(cat): count for cat, count in category_counts_res.all() if cat}
 
+    filtered_suppliers = suppliers
+    if category:
+        norm_cat = category.strip().casefold()
+        eligible_supplier_ids_for_cat = {
+            s_id for r in rows for s_id in r["eligible_supplier_ids"]
+        } | {
+            s.id for s in suppliers
+            if supplier_scope.explicit_categories.get((s.id, norm_cat)) is True
+            or (
+                supplier_scope.explicit_categories.get((s.id, norm_cat)) is not False
+                and norm_cat in supplier_scope.categories_by_supplier.get(s.id, set())
+            )
+        }
+        filtered_suppliers = [s for s in suppliers if s.id in eligible_supplier_ids_for_cat]
+
     return {
         "total": total or 0,
         "limit": limit,
@@ -375,9 +390,9 @@ async def matrix(
         "category_counts": category_counts,
         "suppliers": [
             {"id": row.id, "name": row.nome_azienda, "vat": row.partita_iva}
-            for row in suppliers
+            for row in filtered_suppliers
         ],
-        "supplier_names": supplier_names,
+        "supplier_names": [s.nome_azienda for s in filtered_suppliers],
         "rows": rows,
     }
 

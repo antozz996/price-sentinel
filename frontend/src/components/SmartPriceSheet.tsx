@@ -221,8 +221,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       setSelectedSupplierIds(current => {
         const valid = current.filter(id => data.suppliers.some(item => item.id === id))
         if (valid.length) return valid
-        const used = data.suppliers.filter(supplier => data.rows.some(row => row.offers[String(supplier.id)])).slice(0, 8)
-        return (used.length ? used : data.suppliers.slice(0, 8)).map(item => item.id)
+        return data.suppliers.map(item => item.id)
       })
     } catch (err) {
       setError(errorMessage(err))
@@ -384,7 +383,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   }, [activeTab, matrix, sheetInitialized])
 
   const visibleSuppliers = useMemo(
-    () => (matrix?.suppliers || []).filter(item => selectedSupplierIds.includes(item.id)),
+    () => (matrix?.suppliers || []).filter(item => {
+      if (!selectedSupplierIds.includes(item.id)) return false
+      return (matrix?.rows || []).some(row => row.eligible_supplier_ids.includes(item.id) || row.offers[String(item.id)])
+    }),
     [matrix, selectedSupplierIds],
   )
 
@@ -679,7 +681,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             )
           })}
         </div>
-        <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({selectedSupplierIds.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{matrix?.suppliers.map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
+        <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({visibleSuppliers.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{matrix?.suppliers.filter(supplier => (matrix?.rows || []).some(row => row.eligible_supplier_ids.includes(supplier.id) || row.offers[String(supplier.id)])).map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
           <tbody>{(matrix?.rows || []).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
