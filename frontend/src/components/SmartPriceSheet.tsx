@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Building2, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Save, Search, Settings2, Table2, Trash2 } from 'lucide-react'
+import { AlertTriangle, Building2, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Search, Table2, Trash2 } from 'lucide-react'
 import { fetchWithAuth } from '../api'
 
 type Supplier = { id: number; name: string; vat: string }
@@ -31,6 +31,11 @@ type MatrixRow = {
   selected_supplier_id?: number | null
   recommendation_reason: string
   requires_manual_selection: boolean
+  policy?: {
+    selection_mode: 'manual' | 'best_eligible_price' | 'absolute_lowest'
+    preferred_supplier_id?: number | null
+    reason?: string | null
+  } | null
 }
 type MatrixResponse = {
   total: number
@@ -75,7 +80,6 @@ const tabs = [
   { id: 'matrix', label: 'Matrice', icon: Table2 },
   { id: 'paste', label: 'Foglio prezzi', icon: ClipboardPaste },
   { id: 'sectors', label: 'Settori fornitori', icon: Building2 },
-  { id: 'rules', label: 'Qualità e regole', icon: Settings2 },
   { id: 'history', label: 'Storico e audit', icon: History },
 ] as const
 
@@ -197,19 +201,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [sectorSaving, setSectorSaving] = useState<string | null>(null)
 
   const [editing, setEditing] = useState<{ product: MatrixRow; supplier: Supplier; price: string; uom: string } | null>(null)
-  const [ruleProductId, setRuleProductId] = useState<number | ''>('')
-  const [ruleSupplierId, setRuleSupplierId] = useState<number | ''>('')
-  const [assessmentStatus, setAssessmentStatus] = useState('approved')
-  const [quality, setQuality] = useState(3)
-  const [reason, setReason] = useState('')
-  const [selectionMode, setSelectionMode] = useState('best_eligible_price')
-  const [preferredSupplierId, setPreferredSupplierId] = useState<number | ''>('')
-  const [minimumQuality, setMinimumQuality] = useState(1)
-  const [premiumPercent, setPremiumPercent] = useState('0')
-  const [premiumAbsolute, setPremiumAbsolute] = useState('0')
-  const [allowSpot, setAllowSpot] = useState(true)
-  const [assessments, setAssessments] = useState<any[]>([])
-  const [policies, setPolicies] = useState<any[]>([])
+  const [forceLabel, setForceLabel] = useState('')
   const [historyRows, setHistoryRows] = useState<any[]>([])
   const [auditRows, setAuditRows] = useState<any[]>([])
   const [deviations, setDeviations] = useState<any[]>([])
@@ -260,16 +252,46 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  async function loadRules() {
+  async function handleSetForcedSupplier(productId: number, supplierId: number | null, labelText?: string | null) {
+    setLoading(true); setError(null)
     try {
-      const [assessmentData, policyData] = await Promise.all([
-        fetchWithAuth('/smart-price-sheet/assessments'),
-        fetchWithAuth('/smart-price-sheet/policies'),
-      ])
-      setAssessments(assessmentData as any[])
-      setPolicies(policyData as any[])
+      if (supplierId) {
+        await fetchWithAuth('/smart-price-sheet/policies', {
+          method: 'PUT',
+          body: JSON.stringify({
+            product_id: productId,
+            selection_mode: 'manual',
+            preferred_supplier_id: supplierId,
+            reason: (labelText || 'Fornitore forzato').trim(),
+            minimum_quality: 1,
+            max_price_premium_percent: 0,
+            max_price_premium_absolute: 0,
+            allow_spot: true,
+          }),
+        })
+        setNotice(`⭐ Acquisto forzato con successo da questo fornitore!`)
+      } else {
+        await fetchWithAuth('/smart-price-sheet/policies', {
+          method: 'PUT',
+          body: JSON.stringify({
+            product_id: productId,
+            selection_mode: 'best_eligible_price',
+            preferred_supplier_id: null,
+            reason: null,
+            minimum_quality: 1,
+            max_price_premium_percent: 0,
+            max_price_premium_absolute: 0,
+            allow_spot: true,
+          }),
+        })
+        setNotice(`🔄 Forzatura rimossa. Acquisto ripristinato in automatico al miglior prezzo.`)
+      }
+      setEditing(null)
+      await loadMatrix()
     } catch (err) {
       setError(errorMessage(err))
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -337,9 +359,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void loadMatrix() }, [offset])
   useEffect(() => {
-    if (activeTab === 'paste' || activeTab === 'rules') void loadProducts()
+    if (activeTab === 'paste') void loadProducts()
     if (activeTab === 'sectors') void loadSupplierSectors()
-    if (activeTab === 'rules') void loadRules()
     if (activeTab === 'history') void loadHistory()
   // Tab activation is the only trigger; loaders handle their own cached state.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -485,27 +506,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     return isSheetCellEligibleFor(sheet, rowIndex, columnIndex)
   }
 
-  async function saveAssessment() {
-    if (!ruleProductId || !ruleSupplierId) return setError('Seleziona prodotto e fornitore.')
-    setLoading(true); setError(null)
-    try {
-      await fetchWithAuth('/smart-price-sheet/assessments', {
-        method: 'PUT', body: JSON.stringify({ product_id: ruleProductId, supplier_id: ruleSupplierId, status: assessmentStatus, quality_score: quality, reason: reason.trim() || null }),
-      })
-      setNotice('Valutazione salvata e registrata nell’audit.'); await loadRules(); await loadMatrix()
-    } catch (err) { setError(errorMessage(err)) } finally { setLoading(false) }
-  }
 
-  async function savePolicy() {
-    if (!ruleProductId) return setError('Seleziona il prodotto.')
-    setLoading(true); setError(null)
-    try {
-      await fetchWithAuth('/smart-price-sheet/policies', {
-        method: 'PUT', body: JSON.stringify({ product_id: ruleProductId, selection_mode: selectionMode, preferred_supplier_id: preferredSupplierId || null, minimum_quality: minimumQuality, max_price_premium_percent: premiumPercent, max_price_premium_absolute: premiumAbsolute, allow_spot: allowSpot }),
-      })
-      setNotice('Regola di acquisto salvata e attiva.'); await loadRules(); await loadMatrix()
-    } catch (err) { setError(errorMessage(err)) } finally { setLoading(false) }
-  }
 
   async function updateDeviation(id: string, status: 'acknowledged' | 'accepted_exception') {
     setLoading(true); setError(null)
@@ -662,9 +663,64 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             {visibleSuppliers.map(supplier => {
               const offer = row.offers[String(supplier.id)]
               const relevant = row.eligible_supplier_ids.includes(supplier.id)
-              return <td key={supplier.id} style={{ textAlign: 'center', padding: 8, opacity: offer && !offer.eligible ? .55 : 1, background: offer?.is_recommended ? 'rgba(16,185,129,.08)' : !relevant ? 'rgba(255,255,255,.012)' : 'transparent' }}>
-                {relevant ? <button disabled={!isAdmin} onClick={() => isAdmin && setEditing({ product: row, supplier, price: offer?.price || '', uom: offer?.uom || row.comparison_unit || 'piece' })} style={{ width: '100%', padding: 8, borderRadius: 8, cursor: isAdmin ? 'pointer' : 'default', color: offer?.is_recommended ? '#6ee7b7' : 'white', border: offer?.is_absolute_cheapest ? '1px solid #3b82f6' : '1px solid transparent', background: 'rgba(255,255,255,.025)' }}>
-                  {offer ? <><strong>{money(offer.price)}</strong><div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{offer.source_type}{offer.is_recommended ? ' · CONSIGLIATO' : ''}{offer.assessment.status === 'blocked' ? ' · BLOCCATO' : ''}</div></> : <>{isAdmin && <Pencil size={13} />} {isAdmin ? 'inserisci' : '—'}</>}
+              const isForced = row.policy?.selection_mode === 'manual' && row.policy?.preferred_supplier_id === supplier.id
+              const isAutoRecommended = (!row.policy || row.policy.selection_mode !== 'manual') && Boolean(offer?.is_recommended)
+              const isOtherWhenForced = row.policy?.selection_mode === 'manual' && row.policy?.preferred_supplier_id !== supplier.id
+
+              let borderStyle = '1px solid transparent'
+              let bgStyle = 'rgba(255,255,255,.025)'
+              let textColor = 'white'
+
+              if (isForced) {
+                borderStyle = '2px solid #f59e0b'
+                bgStyle = 'rgba(245,158,11,0.15)'
+                textColor = '#fde68a'
+              } else if (isAutoRecommended) {
+                borderStyle = '1px solid #10b981'
+                bgStyle = 'rgba(16,185,129,.10)'
+                textColor = '#6ee7b7'
+              }
+
+              return <td key={supplier.id} style={{ textAlign: 'center', padding: 8, opacity: offer && !offer.eligible ? .55 : 1, background: !relevant ? 'rgba(255,255,255,.012)' : 'transparent' }}>
+                {relevant ? <button
+                  disabled={!isAdmin}
+                  onClick={() => {
+                    if (isAdmin) {
+                      setEditing({ product: row, supplier, price: offer?.price || '', uom: offer?.uom || row.comparison_unit || 'piece' })
+                      setForceLabel(row.policy?.preferred_supplier_id === supplier.id ? (row.policy?.reason || '') : '')
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    cursor: isAdmin ? 'pointer' : 'default',
+                    color: textColor,
+                    border: borderStyle,
+                    background: bgStyle,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 3,
+                    boxShadow: isForced ? '0 0 12px rgba(245,158,11,0.25)' : 'none'
+                  }}
+                >
+                  {offer ? <>
+                    <strong>{money(offer.price)}</strong>
+                    <div style={{ fontSize: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                      {isForced ? (
+                        <span style={{ color: '#fbbf24', fontWeight: 700, background: 'rgba(0,0,0,0.4)', padding: '1px 5px', borderRadius: 4 }}>
+                          ⭐ SCELTO {row.policy?.reason ? `· ${row.policy.reason}` : ''}
+                        </span>
+                      ) : isAutoRecommended ? (
+                        <span style={{ color: '#6ee7b7', fontWeight: 600 }}>✓ CONSIGLIATO</span>
+                      ) : isOtherWhenForced ? (
+                        <span style={{ color: 'var(--text-secondary)' }}>alternativo</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-secondary)' }}>{offer.source_type}</span>
+                      )}
+                    </div>
+                  </> : <>{isAdmin && <Pencil size={13} />} {isAdmin ? 'inserisci' : '—'}</>}
                 </button> : <span title="Fornitore fuori dal settore del prodotto" style={{ color: '#5f6574', fontSize: 11 }}>fuori settore</span>}
               </td>
             })}
@@ -672,7 +728,92 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         </table></div>}
         <div style={{ display: 'flex', justifyContent: 'space-between' }}><button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Indietro</button><button className="btn" disabled={!matrix || offset + 50 >= matrix.total} onClick={() => setOffset(offset + 50)}>Avanti</button></div>
       </div>
-      {editing && <div className="glass-panel" style={panel}><strong>Modifica sicura: {editing.product.canonical_name} · {editing.supplier.name}</strong><div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><input autoFocus style={input} value={editing.price} onChange={event => setEditing({ ...editing, price: event.target.value })} placeholder="Prezzo" /><input style={input} value={editing.uom} onChange={event => setEditing({ ...editing, uom: event.target.value })} placeholder="Unità" /><button className="btn btn-primary" onClick={createCellPreview}>Genera anteprima</button><button className="btn" onClick={() => setEditing(null)}>Annulla</button></div></div>}
+
+      {editing && (
+        <div className="glass-panel" style={{ ...panel, border: '1px solid #3b82f6', background: 'rgba(15,23,42,0.95)', boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>Configurazione Prodotto & Fornitore</div>
+              <h3 style={{ margin: '4px 0 0', fontSize: 17 }}>{editing.product.canonical_name} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>con</span> <span style={{ color: '#60a5fa' }}>{editing.supplier.name}</span></h3>
+            </div>
+            <button className="btn" onClick={() => setEditing(null)}>Chiudi</button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
+            {/* Sezione 1: Modifica Prezzo */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid var(--border-glass)' }}>
+              <strong>💰 Aggiorna Prezzo Listino</strong>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                  Prezzo (€)
+                  <input autoFocus style={input} value={editing.price} onChange={event => setEditing({ ...editing, price: event.target.value })} placeholder="Es. 4.50" />
+                </label>
+                <label style={{ width: 100, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                  Unità (UoM)
+                  <input style={input} value={editing.uom} onChange={event => setEditing({ ...editing, uom: event.target.value })} placeholder="Pz, Lt, Kg" />
+                </label>
+              </div>
+              <button className="btn btn-primary" onClick={createCellPreview} style={{ alignSelf: 'flex-start' }}><Check size={15} /> Aggiorna Prezzo</button>
+            </div>
+
+            {/* Sezione 2: Forza Acquisto & Etichetta */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'rgba(245,158,11,0.03)', borderRadius: 8, border: '1px solid rgba(245,158,11,0.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ color: '#f59e0b' }}>⭐ Forza Acquisto & Etichetta</strong>
+                {editing.product.policy?.selection_mode === 'manual' && editing.product.policy?.preferred_supplier_id === editing.supplier.id && (
+                  <span style={{ fontSize: 11, background: 'rgba(245,158,11,0.2)', color: '#fbbf24', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>ATTUALMENTE FORZATO</span>
+                )}
+              </div>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
+                Forzando questo fornitore, il sistema lo sceglierà sempre per questo prodotto con la relativa etichetta.
+              </p>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                Etichetta / Motivazione:
+                <input
+                  style={input}
+                  value={forceLabel}
+                  onChange={e => setForceLabel(e.target.value)}
+                  placeholder="Es. Scelto da Direzione, Qualità top, Consegna rapida"
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {['⭐ Scelto da Direzione', '🏆 Qualità Top', '🚀 Consegna Rapida', '📦 Formato Esclusivo'].map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className="btn"
+                    onClick={() => setForceLabel(preset)}
+                    style={{ fontSize: 11, padding: '4px 8px', background: 'rgba(255,255,255,0.04)' }}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => handleSetForcedSupplier(editing.product.product_id, editing.supplier.id, forceLabel)}
+                  style={{ background: '#f59e0b', color: '#111', fontWeight: 700, border: 'none', padding: '8px 14px' }}
+                >
+                  ⭐ Forza Acquisto da {editing.supplier.name}
+                </button>
+                {editing.product.policy?.selection_mode === 'manual' && editing.product.policy?.preferred_supplier_id === editing.supplier.id && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => handleSetForcedSupplier(editing.product.product_id, null, null)}
+                    style={{ color: '#fca5a5' }}
+                  >
+                    🔄 Ripristina Automatico
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <PreviewPanel />
     </>}
 
@@ -831,8 +972,6 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         })}
       </div>}
     </div>}
-
-    {activeTab === 'rules' && <><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(330px,1fr))', gap: 16 }}><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Qualità prodotto-fornitore</h3><select style={input} value={ruleProductId} onChange={event => setRuleProductId(Number(event.target.value) || '')}><option value="">Prodotto…</option>{products.map(item => <option key={item.id} value={item.id}>{item.canonical_name} ({item.sku_interno})</option>)}</select><select style={input} value={ruleSupplierId} onChange={event => setRuleSupplierId(Number(event.target.value) || '')}><option value="">Fornitore…</option>{matrix?.suppliers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><select style={input} value={assessmentStatus} onChange={event => setAssessmentStatus(event.target.value)}><option value="approved">Approvato</option><option value="discouraged">Sconsigliato</option><option value="blocked">Bloccato</option></select><label>Qualità {quality}/5 <input type="range" min="1" max="5" value={quality} onChange={event => setQuality(Number(event.target.value))} /></label><textarea style={input} value={reason} onChange={event => setReason(event.target.value)} placeholder="Motivazione (obbligatoria se sconsigliato/bloccato)" /><button className="btn btn-primary" onClick={saveAssessment}><Save size={16} /> Salva valutazione</button></div><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Regola di acquisto</h3><p style={{ color: 'var(--text-secondary)', margin: 0 }}>Si applica al prodotto selezionato.</p><select style={input} value={selectionMode} onChange={event => setSelectionMode(event.target.value)}><option value="best_eligible_price">Miglior prezzo idoneo</option><option value="absolute_lowest">Minimo assoluto (con avvisi qualità)</option><option value="manual">Fornitore preferito manuale</option></select><select style={input} value={preferredSupplierId} onChange={event => setPreferredSupplierId(Number(event.target.value) || '')}><option value="">Nessun fornitore preferito</option>{matrix?.suppliers.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><label>Qualità minima <input type="number" min="1" max="5" style={input} value={minimumQuality} onChange={event => setMinimumQuality(Number(event.target.value))} /></label><div style={{ display: 'flex', gap: 10 }}><input style={{ ...input, width: '50%' }} value={premiumPercent} onChange={event => setPremiumPercent(event.target.value)} placeholder="Premium %" /><input style={{ ...input, width: '50%' }} value={premiumAbsolute} onChange={event => setPremiumAbsolute(event.target.value)} placeholder="Premium €" /></div><label><input type="checkbox" checked={allowSpot} onChange={event => setAllowSpot(event.target.checked)} /> Consenti prezzi spot</label><button className="btn btn-primary" onClick={savePolicy}><Save size={16} /> Salva regola</button></div></div><div className="glass-panel" style={panel}><strong>Configurazioni attive: {assessments.length} valutazioni · {policies.length} policy</strong>{assessments.slice(0, 12).map(item => <div key={item.id} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.product_name} · {item.supplier_name}: <b style={{ color: item.status === 'blocked' ? '#f87171' : 'white' }}>{item.status}</b>, qualità {item.quality_score}/5</div>)}</div></>}
 
     {activeTab === 'history' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 16 }}><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Versioni prezzo</h3><div style={{ maxHeight: 520, overflow: 'auto' }}>{historyRows.map(item => <div key={item.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border-glass)', fontSize: 13 }}><strong>{item.description}</strong> · {item.supplier_name}<div style={{ color: 'var(--text-secondary)' }}>{money(item.price)} / {item.uom} · {item.valid_from} → {item.valid_to || 'attivo'}</div></div>)}</div></div><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Audit regole</h3><div style={{ maxHeight: 300, overflow: 'auto' }}>{auditRows.map((item, index) => <div key={`${item.entity_type}-${item.entity_id}-${index}`} style={{ padding: '10px 0', borderBottom: '1px solid var(--border-glass)', fontSize: 13 }}>{item.entity_type} #{item.entity_id} · {item.action}<div style={{ color: 'var(--text-secondary)' }}>{new Date(item.occurred_at).toLocaleString('it-IT')} · utente #{item.actor_id}</div></div>)}</div><h3>Scostamenti policy ({deviations.length})</h3>{deviations.slice(0, 20).map(item => <div key={item.id} style={{ color: '#fbbf24', fontSize: 13, padding: '8px 0' }}><div>{item.deviation_type}: {item.reason} · <b>{item.status}</b></div>{item.status === 'open' && <div style={{ display: 'flex', gap: 8, marginTop: 6 }}><button className="btn" onClick={() => updateDeviation(item.id, 'acknowledged')}>Presa in carico</button><button className="btn" onClick={() => updateDeviation(item.id, 'accepted_exception')}>Accetta eccezione</button></div>}</div>)}</div></div>}
   </div>
