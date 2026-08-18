@@ -486,12 +486,16 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   function PreviewPanel() {
     if (!preview) return null
     const autoCreateCount = preview.product_mapping.filter(m => m.method === 'auto_create').length
+    const autoSuppliersCount = preview.supplier_mapping.filter(m => m.method === 'auto_create').length
     return (
       <div className="glass-panel" style={{ ...panel, border: `1px solid ${preview.errors.length ? '#ef4444' : '#10b981'}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <strong>Anteprima obbligatoria</strong>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            {preview.counts.create} prezzi nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi · {autoCreateCount > 0 && <span style={{ color: '#60a5fa', fontWeight: 600 }}>{autoCreateCount} nuovi prodotti da creare · </span>} {preview.counts.errors > 0 ? `${preview.counts.errors} errori` : 'Nessun errore'}
+            {preview.counts.create} prezzi nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi
+            {autoCreateCount > 0 && <span style={{ color: '#60a5fa', fontWeight: 600 }}> · {autoCreateCount} nuovi prodotti da creare</span>}
+            {autoSuppliersCount > 0 && <span style={{ color: '#a78bfa', fontWeight: 600 }}> · {autoSuppliersCount} nuovi fornitori provvisori</span>}
+            {' · '}{preview.counts.errors > 0 ? `${preview.counts.errors} errori` : 'Nessun errore'}
           </span>
         </div>
         {preview.errors.map((item, index) => (
@@ -505,11 +509,12 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             }}><Building2 size={14} /> Configura settore</button>}
           </div>
         ))}
-        {preview.supplier_mapping.filter(item => !item.supplier_id).map(item => (
+        {preview.supplier_mapping.filter(item => !item.supplier_id && item.method !== 'auto_create').map(item => (
           <label key={item.header} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 2fr', gap: 12, alignItems: 'center' }}>
             <span>Colonna “{item.header}”</span>
-            <select style={input} value={supplierMapping[item.header] || ''} onChange={event => setSupplierMapping(current => ({ ...current, [item.header]: Number(event.target.value) }))}>
-              <option value="">Associa il fornitore…</option>
+            <select style={input} value={supplierMapping[item.header] ?? ''} onChange={event => setSupplierMapping(current => ({ ...current, [item.header]: Number(event.target.value) }))}>
+              <option value="-1">✨ Crea come nuovo fornitore "{item.header}" (provvisorio)</option>
+              <option value="" disabled>──────────────</option>
               {matrix?.suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
             </select>
           </label>

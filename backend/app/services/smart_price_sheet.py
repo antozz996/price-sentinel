@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
@@ -149,9 +149,13 @@ async def build_price_preview(
     errors: list[dict] = []
     for header in parsed["supplier_headers"]:
         explicit_id = supplier_mapping.get(header)
-        if explicit_id is not None:
+        if explicit_id is not None and explicit_id > 0:
             supplier = supplier_by_id.get(explicit_id)
             method = "explicit"
+        elif explicit_id == -1:
+            # Forzatura esplicita per creazione fornitore provvisorio
+            supplier = None
+            method = "auto_create"
         else:
             matches = supplier_by_name.get(normalize_text(header), [])
             if not matches:
@@ -178,19 +182,30 @@ async def build_price_preview(
                 else "unique_short_name" if supplier else "unresolved"
             )
         if not supplier:
-            errors.append(
-                {
-                    "type": "supplier_mapping",
-                    "header": header,
-                    "message": "Fornitore non trovato o ambiguo: selezionalo esplicitamente.",
-                }
-            )
+            if create_missing_products or explicit_id == -1:
+                norm_header = normalize_text(header)
+                temp_piva = f"TEMP{hashlib.sha256(norm_header.encode('utf-8')).hexdigest()[:7].upper()}"
+                supplier = Fornitore(
+                    nome_azienda=header.strip(),
+                    partita_iva=temp_piva,
+                    attivo_whitelist=True,
+                )
+                method = "auto_create"
+                resolved_suppliers[header] = supplier
+            else:
+                errors.append(
+                    {
+                        "type": "supplier_mapping",
+                        "header": header,
+                        "message": "Fornitore non trovato o ambiguo: selezionalo esplicitamente o crealo come nuovo fornitore.",
+                    }
+                )
         else:
             resolved_suppliers[header] = supplier
         mapping_report.append(
             {
                 "header": header,
-                "supplier_id": supplier.id if supplier else None,
+                "supplier_id": supplier.id if getattr(supplier, "id", None) else None,
                 "supplier_name": supplier.nome_azienda if supplier else None,
                 "method": method,
             }
@@ -636,6 +651,33 @@ async def commit_price_preview(
                 await db.flush()
                 result["products_created"] += 1
             change["product_id"] = product.id
+
+        # Risoluzione o creazione del fornitore (se provvisorio)
+        supplier_id = change.get("supplier_id")
+        supplier = None
+        if supplier_id:
+            supplier = await db.get(Fornitore, supplier_id)
+        if not supplier:
+            norm_supp_name = normalize_text(change["supplier_name"])
+            supplier = await db.scalar(
+                select(Fornitore).where(
+                    or_(
+                        Fornitore.nome_azienda == change["supplier_name"].strip(),
+                        func.lower(Fornitore.nome_azienda) == norm_supp_name.lower(),
+                    )
+                )
+            )
+            if not supplier:
+                temp_piva = f"TEMP{hashlib.sha256(norm_supp_name.encode('utf-8')).hexdigest()[:7].upper()}"
+                supplier = Fornitore(
+                    nome_azienda=change["supplier_name"].strip(),
+                    partita_iva=temp_piva,
+                    attivo_whitelist=True,
+                )
+                db.add(supplier)
+                await db.flush()
+                result["suppliers_created"] = result.get("suppliers_created", 0) + 1
+            change["supplier_id"] = supplier.id
 
         alias_id = change.get("supplier_product_alias_id")
         if change.get("remember_alias") and not alias_id:
