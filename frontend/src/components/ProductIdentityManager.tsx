@@ -1573,25 +1573,74 @@ export default function ProductIdentityManager() {
                       />
                     </div>
                   </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Prodotto canonico
-                    <select
-                      required
-                      size={Math.min(8, Math.max(3, matchingExistingProducts.length))}
-                      value={selectedExistingProductId}
-                      onChange={e => {
-                        setSelectedExistingProductId(String(e.target.value))
-                        setResolutionError(null)
+                  {/* Custom listbox — replaces <select size required> whose onChange
+                      does NOT fire when a single option appears visually selected by the
+                      browser, because no real click interaction occurred. The required
+                      attribute also triggers native browser validation before our React
+                      onSubmit handler runs. Using plain div + onClick avoids all of this. */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Prodotto canonico</span>
+                    <div
+                      role="listbox"
+                      aria-label="Prodotto canonico"
+                      style={{
+                        minHeight: '120px',
+                        maxHeight: '220px',
+                        overflowY: 'auto',
+                        background: '#13131c',
+                        border: `1px solid ${selectedExistingProductId ? '#3b82f6' : 'var(--border-glass)'}`,
+                        borderRadius: '8px',
                       }}
-                      style={{ padding: '8px', minHeight: '120px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
                     >
-                      {matchingExistingProducts.map(product => (
-                        <option key={product.id} value={String(product.id)}>
-                          {product.canonical_name} {product.sku_interno ? `· ${product.sku_interno}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      {matchingExistingProducts.length === 0 && (
+                        <div style={{ padding: '12px 14px', color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '0.82rem' }}>
+                          Nessun prodotto trovato
+                        </div>
+                      )}
+                      {matchingExistingProducts.map(product => {
+                        const isSelected = String(product.id) === selectedExistingProductId
+                        return (
+                          <div
+                            key={product.id}
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => {
+                              setSelectedExistingProductId(String(product.id))
+                              setResolutionError(null)
+                            }}
+                            style={{
+                              padding: '9px 14px',
+                              cursor: 'pointer',
+                              fontSize: '0.85rem',
+                              background: isSelected ? 'rgba(59,130,246,0.35)' : 'transparent',
+                              color: isSelected ? 'white' : '#e2e8f0',
+                              fontWeight: isSelected ? 600 : 400,
+                              borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
+                              transition: 'background 0.1s',
+                              userSelect: 'none',
+                            }}
+                            onMouseEnter={e => {
+                              if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'
+                            }}
+                            onMouseLeave={e => {
+                              if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent'
+                            }}
+                          >
+                            {product.canonical_name}
+                            {product.sku_interno
+                              ? <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontWeight: 400 }}>· {product.sku_interno}</span>
+                              : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {selectedExistingProductId && (() => {
+                      const sel = products.find(p => String(p.id) === selectedExistingProductId)
+                      return sel
+                        ? <div style={{ fontSize: '0.75rem', color: '#3b82f6', marginTop: '3px' }}>✓ Selezionato: {sel.canonical_name}</div>
+                        : null
+                    })()}
+                  </div>
                 </>
               )}
 
