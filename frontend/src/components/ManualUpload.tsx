@@ -33,6 +33,8 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStep, setUploadStep] = useState<'uploading' | 'processing' | 'done' | null>(null);
   const [reprocessing, setReprocessing] = useState(false);
   const [summary, setSummary] = useState<BatchSummary | null>(null);
   const [history, setHistory] = useState<BatchHistoryItem[]>([]);
@@ -76,6 +78,8 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
       setFiles(Array.from(e.target.files));
       setSummary(null);
       setError(null);
+      setUploadProgress(null);
+      setUploadStep(null);
     }
   };
 
@@ -83,6 +87,8 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
     if (files.length === 0) return;
 
     setUploading(true);
+    setUploadProgress(0);
+    setUploadStep('uploading');
     setError(null);
     setAdminNotice(null);
     setSummary(null);
@@ -94,18 +100,46 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/ingestion/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'bypass-tunnel-reminder': 'true'
-        },
-        body: formData
+      
+      const result: any = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/ingestion/upload`);
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.setRequestHeader('bypass-tunnel-reminder', 'true');
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+            setUploadProgress(percent);
+            if (percent >= 99) {
+              setUploadStep('processing');
+            }
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              setUploadProgress(100);
+              setUploadStep('done');
+              resolve(JSON.parse(xhr.responseText));
+            } catch (e) {
+              reject(new Error('Risposta del server non valida'));
+            }
+          } else {
+            try {
+              const errObj = JSON.parse(xhr.responseText);
+              reject(new Error(errObj.detail || "Errore durante l'elaborazione dei file"));
+            } catch {
+              reject(new Error(`Errore HTTP ${xhr.status}`));
+            }
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Errore di connessione di rete'));
+        xhr.send(formData);
       });
 
-      if (!res.ok) throw new Error("Errore durante l'upload");
-
-      const result = await res.json();
       setSummary(result.riepilogo);
       setFiles([]);
       setNote('');
@@ -141,8 +175,8 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
           setAdminNotice('Sono state rilevate nuove anagrafiche. Le fatture restano in sospeso finché un amministratore non censisce fornitori o sedi mancanti.');
         }
       }
-    } catch {
-      setError("Si è verificato un errore durante l'elaborazione dei file.");
+    } catch (err: any) {
+      setError(err?.message || "Si è verificato un errore durante l'elaborazione dei file.");
     } finally {
       setUploading(false);
     }
@@ -391,6 +425,56 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
             </div>
           )}
 
+          {uploading && (
+            <div style={{
+              padding: '16px 20px',
+              background: 'rgba(15, 23, 42, 0.75)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
+              borderRadius: 'var(--border-radius-md)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                <span style={{ fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Loader2 className="spinner" size={16} color="#38bdf8" />
+                  {uploadStep === 'uploading'
+                    ? `Fase 1/2: Caricamento file in corso (${files.length} file)...`
+                    : 'Fase 2/2: Analisi righe XML e matching prodotti...'}
+                </span>
+                <span style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.9rem' }}>
+                  {uploadStep === 'uploading' ? `${uploadProgress || 0}%` : '100%'}
+                </span>
+              </div>
+              
+              {/* Progress Track */}
+              <div style={{
+                width: '100%',
+                height: '10px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                borderRadius: '5px',
+                overflow: 'hidden',
+                position: 'relative'
+              }}>
+                <div style={{
+                  height: '100%',
+                  width: uploadStep === 'uploading' ? `${uploadProgress || 0}%` : '100%',
+                  background: uploadStep === 'uploading' 
+                    ? 'linear-gradient(90deg, #3b82f6, #6366f1, #38bdf8)' 
+                    : 'linear-gradient(90deg, #10b981, #34d399, #38bdf8)',
+                  borderRadius: '5px',
+                  transition: 'width 0.3s ease',
+                  boxShadow: '0 0 12px rgba(56, 189, 248, 0.5)'
+                }} />
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                <span>{uploadStep === 'uploading' ? 'Invio pacchetto dati al server...' : 'Validazione XML, idempotenza e rilevamento anomalie...'}</span>
+                <span>Attendere...</span>
+              </div>
+            </div>
+          )}
+
           <button 
             className="btn btn-primary" 
             disabled={uploading || reprocessing || files.length === 0}
@@ -398,7 +482,7 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
             style={{ padding: '16px', fontSize: '1rem', display: 'flex', justifyContent: 'center', gap: '12px' }}
           >
             {uploading ? <Loader2 className="spinner" /> : <FileUp size={20} />}
-            {uploading ? 'Elaborazione in corso...' : 'Inizia Caricamento'}
+            {uploading ? (uploadStep === 'uploading' ? `Caricamento (${uploadProgress || 0}%)...` : 'Analisi XML in corso...') : 'Inizia Caricamento'}
           </button>
 
         </div>
