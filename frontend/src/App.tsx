@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
@@ -17,6 +17,7 @@ import PriceTrendAnalyzer from './components/PriceTrendAnalyzer'
 import ExcludedProducts from './components/ExcludedProducts'
 import CommercialAgreements from './components/CommercialAgreements'
 import ProductIdentityManager from './components/ProductIdentityManager'
+import CategorySupplierManager from './components/CategorySupplierManager'
 import OrderReconciliations from './components/OrderReconciliations'
 import DisputeManagement from './components/DisputeManagement'
 import OperationalAlerts from './components/OperationalAlerts'
@@ -78,6 +79,7 @@ const NAV_SECTIONS: NavSection[] = [
     id: 'catalog',
     label: 'Catalogo',
     items: [
+      { id: 'categories', label: 'Categorie e fornitori', icon: Boxes, adminOnly: true },
       { id: 'productidentity', label: 'Prodotti e alias', icon: Layers, adminOnly: true },
       { id: 'skumanager', label: 'Gestione SKU', icon: Tag, adminOnly: true },
       { id: 'excludedproducts', label: 'Prodotti esclusi', icon: EyeOff, adminOnly: true },
@@ -371,6 +373,7 @@ export default function App() {
       case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'ordini': return <OrderOptimizer />;
       case 'skumanager': return <SkuManager />;
+      case 'categories': return <CategorySupplierManager />;
       case 'productidentity': return <ProductIdentityManager />;
       case 'reconciliations': return <OrderReconciliations isAdmin={profile?.ruolo === 'admin'} />;
       case 'disputes': return <DisputeManagement />;
@@ -396,6 +399,7 @@ export default function App() {
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
+      case 'categories': return { title: 'Categorie & Fornitori', sub: 'Catalogo categorie merci e mappatura settori fornitori' };
       case 'productidentity': return { title: 'Prodotti e alias', sub: 'Gestione catalogo canonico, alias e proposte di matching' };
       case 'reconciliations': return { title: 'Riconciliazioni ordini', sub: 'Confronto ordine, ricezione e fattura con revisione manuale' };
       case 'disputes': return { title: 'Contestazioni e recuperi', sub: 'Comunicazioni fornitori, risposte e note di credito tracciate' };

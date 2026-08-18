@@ -10,6 +10,7 @@ from app.api.v1 import (
     alias,
     anomalie,
     auth,
+    categories,
     fatture,
     fornitori,
     intelligence,
@@ -38,6 +39,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Autenticazione"])
 api_router.include_router(utenti.router, prefix="/utenti", tags=["Utenti"])
 api_router.include_router(location.router, prefix="/location", tags=["Location"])
 api_router.include_router(fornitori.router, prefix="/fornitori", tags=["Fornitori"])
+api_router.include_router(categories.router, prefix="/categories", tags=["Categorie & Fornitori"])
 api_router.include_router(listino.router, prefix="/listino", tags=["Listino Master"])
 api_router.include_router(fatture.router, prefix="/fatture", tags=["Fatture (API private)"])
 api_router.include_router(anomalie.router, prefix="/anomalie", tags=["Anomalie Workflow"])

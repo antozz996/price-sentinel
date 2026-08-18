@@ -73,4 +73,52 @@ L'auto-selezione su singolo risultato (nel search `onChange`) è stata mantenuta
 
 ---
 
+### [2026-08-18] Feature: Nuova sezione "Categorie & Fornitori"
+
+**Branch:** `main`
+**File toccati:**
+- `backend/app/models/categories.py`
+- `backend/app/models/__init__.py`
+- `backend/app/schemas/categories.py`
+- `backend/app/api/v1/categories.py`
+- `backend/app/api/v1/router.py`
+- `frontend/src/components/CategorySupplierManager.tsx`
+- `frontend/src/App.tsx`
+- `DEVLOG.md`
+**Tipo:** Feature
+**Autore:** AI (antigravity) + utente
+
+#### Problema / Obiettivo
+Necessità di un'area gestionale dedicata per definire il catalogo delle categorie merci (settori merceologici Ho.Re.Ca.) e mappare con facilità quali categorie sono trattate/abilitate per ciascun fornitore del gruppo.
+
+#### Soluzione implementata
+1. **Modello e Database:**
+   - Creata tabella `master_categories` con id, nome, descrizione, colore, is_active, timestamp.
+   - Utilizzo della tabella `supplier_category_capabilities` per associazioni puntuali fornitore ↔ categoria con audit trail.
+
+2. **Backend API (`/api/v1/categories`):**
+   - `GET /` — Elenco categorie master con conteggi dinamici di prodotti e fornitori associati.
+   - `POST /` — Creazione categoria personalizzata con colore identificativo.
+   - `POST /seed-defaults` — Popolamento rapido di 16 categorie merceologiche standard Ho.Re.Ca. (Beverage, Birre, Alcolici, Vini, Acqua, Caffetteria, Monouso, Detergenza, Packaging, Ortofrutta, Carni, Ittico, Latticini, Surgelati, Dispensa, Attrezzature).
+   - `PUT /{id}` e `DELETE /{id}` — Modifica e cancellazione categorie master con aggiornamento a cascata.
+   - `GET /matrix` — Matrice bidimensionale completa di tutti i fornitori non archiviati × tutte le categorie con stato abilitazione.
+   - `POST /toggle` — Toggle istantaneo di abilitazione/disabilitazione categoria per fornitore.
+   - `PUT /matrix` — Aggiornamento massivo abilitazioni fornitore.
+
+3. **Frontend Component (`CategorySupplierManager.tsx`):**
+   - Integrato nel menu principale sotto **🟣 Catalogo → "Categorie e fornitori"**.
+   - Barra KPI con Categorie totali, Fornitori attivi e % di copertura mappatura.
+   - Due sotto-viste:
+     - **Mappatura Fornitori ↔ Categorie**: supporto a vista a *Schede Fornitore* con chip interattivi e toggle istantaneo, e vista a *Griglia Matrice* tabellare con scroll orizzontale e colonne fisse.
+     - **Catalogo Categorie Master**: gestione schede categorie con badge colore, conteggi prodotti/fornitori, pulsanti modifica/elimina e modal per creazione personalizzata con palette colori.
+
+4. **Integrazione di navigazione:**
+   - Aggiunto route e switch-case in `App.tsx`.
+   - Aggiornato bundle compilato in `frontend/dist/`.
+
+#### Note
+- L'abilitazione delle categorie guida direttamente le logiche di matching fattura e le raccomandazioni del Listino Smart.
+
+---
+
 *Fine delle entry per questa data.*
