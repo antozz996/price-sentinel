@@ -360,11 +360,19 @@ async def matrix(
                 "policy": recommendation["policy"],
             }
         )
+    category_counts_res = await db.execute(
+        select(Product.category, func.count(Product.id))
+        .where(Product.is_active.is_(True))
+        .group_by(Product.category)
+    )
+    category_counts = {str(cat): count for cat, count in category_counts_res.all() if cat}
+
     return {
         "total": total or 0,
         "limit": limit,
         "offset": offset,
         "location_id": scope,
+        "category_counts": category_counts,
         "suppliers": [
             {"id": row.id, "name": row.nome_azienda, "vat": row.partita_iva}
             for row in suppliers

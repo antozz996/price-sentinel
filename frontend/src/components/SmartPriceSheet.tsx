@@ -41,6 +41,7 @@ type MatrixResponse = {
   total: number
   limit: number
   offset: number
+  category_counts?: Record<string, number>
   suppliers: Supplier[]
   rows: MatrixRow[]
 }
@@ -206,12 +207,15 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [auditRows, setAuditRows] = useState<any[]>([])
   const [deviations, setDeviations] = useState<any[]>([])
 
-  async function loadMatrix() {
+  async function loadMatrix(customOffset?: number, customCategory?: string) {
     setLoading(true)
     setError(null)
     try {
-      const query = new URLSearchParams({ limit: '50', offset: String(offset) })
+      const currentOffset = customOffset !== undefined ? customOffset : offset
+      const currentCat = customCategory !== undefined ? customCategory : selectedMatrixCategory
+      const query = new URLSearchParams({ limit: '100', offset: String(currentOffset) })
       if (search.trim()) query.set('search', search.trim())
+      if (currentCat && currentCat !== 'all') query.set('category', currentCat)
       const data = await fetchWithAuth(`/smart-price-sheet/matrix?${query}`) as MatrixResponse
       setMatrix(data)
       setSelectedSupplierIds(current => {
@@ -355,9 +359,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  // Reload is intentionally driven by pagination; search runs on Enter/button.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void loadMatrix() }, [offset])
+  useEffect(() => {
+    void loadMatrix()
+  }, [offset, selectedMatrixCategory])
   useEffect(() => {
     if (activeTab === 'paste') void loadProducts()
     if (activeTab === 'sectors') void loadSupplierSectors()
@@ -598,30 +602,43 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingTop: 2 }}>
           <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>Categoria:</span>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setSelectedMatrixCategory('all')}
-            style={{
-              padding: '4px 12px',
-              fontSize: 12,
-              borderRadius: 20,
-              background: selectedMatrixCategory === 'all' ? 'var(--primary-color)' : 'rgba(255,255,255,0.05)',
-              color: selectedMatrixCategory === 'all' ? 'white' : 'var(--text-secondary)',
-              border: selectedMatrixCategory === 'all' ? '1px solid var(--primary-color)' : '1px solid var(--border-glass)'
-            }}
-          >
-            Tutte ({matrix?.total || 0})
-          </button>
+          {(() => {
+            const totalAll = matrix?.category_counts
+              ? Object.values(matrix.category_counts).reduce((a, b) => a + b, 0)
+              : (matrix?.total || 0)
+            return (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setOffset(0)
+                  setSelectedMatrixCategory('all')
+                }}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  borderRadius: 20,
+                  background: selectedMatrixCategory === 'all' ? 'var(--primary-color)' : 'rgba(255,255,255,0.05)',
+                  color: selectedMatrixCategory === 'all' ? 'white' : 'var(--text-secondary)',
+                  border: selectedMatrixCategory === 'all' ? '1px solid var(--primary-color)' : '1px solid var(--border-glass)'
+                }}
+              >
+                Tutte ({totalAll})
+              </button>
+            )
+          })()}
           {MACRO_CATEGORIES.map(cat => {
-            const count = matrix?.rows.filter(r => (r.category || '').toLowerCase() === cat.id.toLowerCase()).length || 0
+            const count = matrix?.category_counts?.[cat.id] || 0
             const isSelected = selectedMatrixCategory === cat.id
             return (
               <button
                 key={cat.id}
                 type="button"
                 className="btn"
-                onClick={() => setSelectedMatrixCategory(cat.id)}
+                onClick={() => {
+                  setOffset(0)
+                  setSelectedMatrixCategory(cat.id)
+                }}
                 style={{
                   padding: '4px 12px',
                   fontSize: 12,
@@ -632,7 +649,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   fontWeight: isSelected ? 600 : 400
                 }}
               >
-                {cat.icon} {cat.label} {count > 0 ? `(${count})` : ''}
+                {cat.icon} {cat.label} ({count})
               </button>
             )
           })}
@@ -640,7 +657,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({selectedSupplierIds.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{matrix?.suppliers.map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
-          <tbody>{(matrix?.rows || []).filter(row => selectedMatrixCategory === 'all' || (row.category || '').toLowerCase() === selectedMatrixCategory.toLowerCase()).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
+          <tbody>{(matrix?.rows || []).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
               {row.order_name && <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.canonical_name}</div>}
