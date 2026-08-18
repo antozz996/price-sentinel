@@ -246,9 +246,17 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     try {
       const data = await fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0') as MatrixResponse
       setSheetCatalog(data)
-      setSheet(sheetFromMatrix(data))
+      const beverageRows = data.rows.filter(r => (r.category || '').toLowerCase() === 'beverage')
+      const foodRows = data.rows.filter(r => (r.category || '').toLowerCase() === 'food')
+      const matConsumoRows = data.rows.filter(r => (r.category || '').toLowerCase() === 'materiali di consumo')
+
+      setCategorySheets({
+        'Beverage': beverageRows.length ? sheetFromMatrix({ ...data, rows: beverageRows }) : blankSheet(),
+        'Food': foodRows.length ? sheetFromMatrix({ ...data, rows: foodRows }) : blankSheet(),
+        'Materiali di consumo': matConsumoRows.length ? sheetFromMatrix({ ...data, rows: matConsumoRows }) : blankSheet(),
+      })
       setSheetInitialized(true)
-      setNotice(`Foglio caricato: ${data.total} prodotti, solo fornitori pertinenti per settore.`)
+      setNotice(`Fogli precaricati per settore: Beverage (${beverageRows.length}), Food (${foodRows.length}), Materiali di consumo (${matConsumoRows.length}).`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -470,11 +478,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   async function reloadCurrentPrices() {
     setLoading(true); setError(null)
     try {
-      const data = await fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0') as MatrixResponse
-      const filteredRows = data.rows.filter(r => (r.category || '').toLowerCase() === activeCategorySheet.toLowerCase())
-      const matrixForCategory = { ...data, rows: filteredRows.length ? filteredRows : data.rows }
-      setSheet(sheetFromMatrix(matrixForCategory))
-      setNotice(`Foglio "${activeCategorySheet}" caricato con ${filteredRows.length} prodotti.`)
+      const data = await fetchWithAuth(`/smart-price-sheet/matrix?limit=500&offset=0&category=${encodeURIComponent(activeCategorySheet)}`) as MatrixResponse
+      const newSheet = data.rows.length ? sheetFromMatrix(data) : blankSheet()
+      setSheet(newSheet)
+      setNotice(`Foglio "${activeCategorySheet}" caricato con ${data.rows.length} prodotti attivi.`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -484,7 +491,6 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   function clearSheet() {
     setSheet(blankSheet())
-    setSheetInitialized(true)
     setPreview(null); setSupplierMapping({}); setProductMapping({})
   }
 
@@ -860,7 +866,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <span style={{ fontSize: 13, fontWeight: 700, color: 'white', marginRight: 4 }}>Seleziona Foglio da compilare:</span>
           {MACRO_CATEGORIES.map(cat => {
             const isSelected = activeCategorySheet === cat.id
-            const rowCount = Math.max(0, (categorySheets[cat.id]?.length || 1) - 1)
+            const rowCount = categorySheets[cat.id]?.slice(1).filter(r => r[1]?.trim() || r[0]?.trim()).length || 0
             return (
               <button
                 key={cat.id}
