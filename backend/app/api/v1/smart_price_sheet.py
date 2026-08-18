@@ -523,6 +523,7 @@ async def preview_clipboard(
             product_mapping=payload.product_mapping,
             effective_date=payload.effective_date,
             default_uom=payload.default_uom,
+            create_missing_products=payload.create_missing_products,
             location_id=scope,
             actor_id=user.id,
         )

@@ -17,7 +17,7 @@ from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import SmartPriceSheetPreview
-from app.services.normalization import normalize_text
+from app.services.normalization import infer_category, normalize_text
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
@@ -128,6 +128,7 @@ async def build_price_preview(
     product_mapping: dict[str, int],
     effective_date: date,
     default_uom: str,
+    create_missing_products: bool = True,
     location_id: int | None,
     actor_id: int,
 ) -> SmartPriceSheetPreview:
@@ -237,31 +238,49 @@ async def build_price_preview(
             product = product_by_id.get(explicit_id)
             method = "explicit"
         else:
-            unique = {item.id: item for item in product_candidates.get(normalize_text(ref), [])}
+            unique = {item.id: item for item in product_candidates.get(normalize_text(ref), []) if item.id}
             method = "exact_catalog"
             if not unique:
                 unique = {
                     item.id: item
                     for item in invoice_alias_candidates.get(normalize_text(ref), [])
+                    if item.id
                 }
                 method = "exact_invoice_alias"
             if not unique:
                 unique = {
                     item.id: item
                     for item in order_name_candidates.get(normalize_text(ref), [])
+                    if item.id
                 }
                 method = "exact_order_name"
             product = next(iter(unique.values())) if len(unique) == 1 else None
             method = method if product else "unresolved"
         if not product:
-            errors.append(
-                {
-                    "type": "product_mapping",
-                    "row": source_row["row_number"],
-                    "reference": ref,
-                    "message": "Descrizione mai vista o ambigua: scegli il prodotto principale una sola volta.",
-                }
-            )
+            if create_missing_products and ref.strip():
+                norm_ref = normalize_text(ref)
+                virtual_sku = f"IMP-{hashlib.sha256(norm_ref.encode('utf-8')).hexdigest()[:10].upper()}"
+                row_uom = source_row.get("uom", "").strip() or default_uom or "Pz"
+                product = Product(
+                    sku_interno=virtual_sku,
+                    canonical_name=ref.strip(),
+                    normalized_name=norm_ref,
+                    category=infer_category(ref) or "Generico",
+                    comparison_unit=row_uom,
+                    is_active=True,
+                )
+                method = "auto_create"
+                product_candidates[norm_ref].append(product)
+                resolved_rows.append((source_row, product, method))
+            else:
+                errors.append(
+                    {
+                        "type": "product_mapping",
+                        "row": source_row["row_number"],
+                        "reference": ref,
+                        "message": "Descrizione mai vista o ambigua: scegli il prodotto principale una sola volta.",
+                    }
+                )
         elif not product.sku_interno:
             errors.append(
                 {
@@ -277,7 +296,7 @@ async def build_price_preview(
             {
                 "row": source_row["row_number"],
                 "reference": ref,
-                "product_id": product.id if product else None,
+                "product_id": product.id if getattr(product, 'id', None) else None,
                 "sku_interno": product.sku_interno if product else None,
                 "canonical_name": product.canonical_name if product else None,
                 "order_name": product.order_name if product else None,
@@ -564,6 +583,7 @@ async def commit_price_preview(
         "created": 0,
         "updated": 0,
         "unchanged": 0,
+        "products_created": 0,
         "order_names_updated": 0,
         "aliases_created": 0,
         "listino_ids": [],
@@ -583,6 +603,35 @@ async def commit_price_preview(
         result["order_names_updated"] += 1
 
     for change in payload["changes"]:
+        product_id = change.get("product_id")
+        product = None
+        if product_id:
+            product = await db.get(Product, product_id)
+        if not product:
+            norm_name = normalize_text(change["product_name"])
+            product = await db.scalar(
+                select(Product).where(
+                    or_(
+                        Product.sku_interno == change["sku_interno"],
+                        Product.canonical_name == change["product_name"],
+                        Product.normalized_name == norm_name,
+                    )
+                )
+            )
+            if not product:
+                product = Product(
+                    sku_interno=change["sku_interno"] or f"IMP-{hashlib.sha256(norm_name.encode('utf-8')).hexdigest()[:10].upper()}",
+                    canonical_name=change["product_name"].strip(),
+                    normalized_name=norm_name,
+                    category=infer_category(change["product_name"]) or "Generico",
+                    comparison_unit=change.get("uom") or "Pz",
+                    is_active=True,
+                )
+                db.add(product)
+                await db.flush()
+                result["products_created"] += 1
+            change["product_id"] = product.id
+
         alias_id = change.get("supplier_product_alias_id")
         if change.get("remember_alias") and not alias_id:
             normalized_ref = normalize_text(change["source_product_ref"])

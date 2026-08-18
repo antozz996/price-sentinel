@@ -164,6 +164,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [sheetInitialized, setSheetInitialized] = useState(false)
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
   const [defaultUom, setDefaultUom] = useState('piece')
+  const [autoCreateProducts, setAutoCreateProducts] = useState(true)
   const [supplierMapping, setSupplierMapping] = useState<Record<string, number>>({})
   const [productMapping, setProductMapping] = useState<Record<string, number>>({})
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -335,7 +336,14 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     try {
       const data = await fetchWithAuth('/smart-price-sheet/preview', {
         method: 'POST',
-        body: JSON.stringify({ text: sheetText(sheet), supplier_mapping: supplierMapping, product_mapping: productMapping, effective_date: effectiveDate, default_uom: defaultUom }),
+        body: JSON.stringify({
+          text: sheetText(sheet),
+          supplier_mapping: supplierMapping,
+          product_mapping: productMapping,
+          effective_date: effectiveDate,
+          default_uom: defaultUom,
+          create_missing_products: autoCreateProducts,
+        }),
       }) as Preview
       setPreview(data)
     } catch (err) {
@@ -362,7 +370,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       const result = await fetchWithAuth('/smart-price-sheet/commit', {
         method: 'POST', body: JSON.stringify({ preview_token: preview.preview_token, confirm: true }),
       }) as any
-      setNotice(`Aggiornamento completato: ${result.result.created} prezzi nuovi, ${result.result.updated} storicizzati, ${result.result.order_names_updated || 0} nomi rapidi, ${result.result.aliases_created || 0} descrizioni riconosciute per il futuro.`)
+      const createdProdMsg = result.result.products_created ? `${result.result.products_created} prodotti creati nel catalogo, ` : ''
+      setNotice(`Aggiornamento completato: ${createdProdMsg}${result.result.created} prezzi nuovi, ${result.result.updated} storicizzati, ${result.result.order_names_updated || 0} nomi rapidi, ${result.result.aliases_created || 0} descrizioni riconosciute per il futuro.`)
       setPreview(null); setSheetInitialized(false); await loadMatrix()
     } catch (err) { setError(errorMessage(err)) } finally { setLoading(false) }
   }
@@ -476,12 +485,13 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   function PreviewPanel() {
     if (!preview) return null
+    const autoCreateCount = preview.product_mapping.filter(m => m.method === 'auto_create').length
     return (
       <div className="glass-panel" style={{ ...panel, border: `1px solid ${preview.errors.length ? '#ef4444' : '#10b981'}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <strong>Anteprima obbligatoria</strong>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            {preview.counts.create} nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi · {preview.counts.errors} errori
+            {preview.counts.create} prezzi nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi · {autoCreateCount > 0 && <span style={{ color: '#60a5fa', fontWeight: 600 }}>{autoCreateCount} nuovi prodotti da creare · </span>} {preview.counts.errors > 0 ? `${preview.counts.errors} errori` : 'Nessun errore'}
           </span>
         </div>
         {preview.errors.map((item, index) => (
@@ -504,7 +514,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             </select>
           </label>
         ))}
-        {preview.product_mapping.filter(item => !item.product_id).map(item => (
+        {preview.product_mapping.filter(item => !item.product_id && item.method !== 'auto_create').map(item => (
           <label key={item.reference} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 2fr', gap: 12, alignItems: 'center' }}>
             <span>“{item.reference}”</span>
             <select style={input} value={productMapping[item.reference] || ''} onChange={event => setProductMapping(current => ({ ...current, [item.reference]: Number(event.target.value) }))}>
@@ -630,9 +640,13 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', paddingTop: 4 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Validità <input type="date" style={input} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} /></label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Unità fallback (nuovi) <input style={{ ...input, width: 90 }} value={defaultUom} onChange={event => setDefaultUom(event.target.value)} placeholder="Pz" /></label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer', background: autoCreateProducts ? 'rgba(59,130,246,.12)' : 'rgba(255,255,255,.03)', padding: '9px 12px', borderRadius: 8, border: autoCreateProducts ? '1px solid #3b82f6' : '1px solid var(--border-glass)', alignSelf: 'flex-end' }}>
+            <input type="checkbox" checked={autoCreateProducts} onChange={e => setAutoCreateProducts(e.target.checked)} />
+            <span style={{ color: autoCreateProducts ? '#93c5fd' : 'inherit' }}>✨ <b>Crea automaticamente</b> prodotti mancanti</span>
+          </label>
           <button className="btn btn-primary" disabled={(!hasSheetPrices && !hasOrderNames) || loading} onClick={createPastePreview} style={{ alignSelf: 'flex-end' }}><ClipboardPaste size={16} /> Controlla modifiche</button>
-          <span style={{ color: 'var(--text-secondary)', fontSize: 12, maxWidth: 450 }}>
-            L'unità di misura viene determinata riga per riga dalla colonna <b>C (Unità di misura)</b> o dall'anagrafica del prodotto.
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12, maxWidth: 350 }}>
+            L'unità di misura viene determinata dalla colonna <b>C (Unità di misura)</b> o dall'anagrafica.
           </span>
         </div>
       </div>
