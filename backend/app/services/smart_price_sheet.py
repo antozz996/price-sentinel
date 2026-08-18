@@ -71,10 +71,19 @@ def parse_clipboard_table(text_value: str) -> dict:
         "order name",
     }
     product_column = 1 if has_order_name else 0
-    supplier_start = product_column + 1
-    minimum_columns = 2 if has_order_name else 2
+    
+    # Riconoscimento colonna Unità di Misura (UoM) per singolo prodotto
+    next_col_index = product_column + 1
+    has_uom_column = False
+    if len(rows[0]) > next_col_index:
+        next_header = normalize_text(rows[0][next_col_index])
+        if next_header in {"unita di misura", "unita", "uom", "unit", "unita misura", "udm"}:
+            has_uom_column = True
+
+    supplier_start = (next_col_index + 1) if has_uom_column else next_col_index
+    minimum_columns = supplier_start + 1
     if len(rows) < 2 or len(rows[0]) < minimum_columns:
-        raise ValueError("Servono una riga intestazioni e almeno una riga prodotto")
+        raise ValueError("Servono una riga intestazioni, il prodotto e almeno una colonna fornitore")
     if len(rows) - 1 > MAX_ROWS:
         raise ValueError(f"Massimo {MAX_ROWS} prodotti per operazione")
     if len(rows[0]) - supplier_start > MAX_SUPPLIERS:
@@ -92,12 +101,14 @@ def parse_clipboard_table(text_value: str) -> dict:
         "delimiter": "tab" if delimiter == "\t" else delimiter,
         "order_name_header": rows[0][0] if has_order_name else None,
         "product_header": rows[0][product_column] or "Prodotto",
+        "uom_header": rows[0][next_col_index] if has_uom_column else None,
         "supplier_headers": supplier_headers,
         "rows": [
             {
                 "row_number": index + 2,
                 "order_name": row[0] if has_order_name else "",
                 "product_ref": row[product_column],
+                "uom": (row[next_col_index].strip() if has_uom_column and len(row) > next_col_index else "") or "",
                 "values": row[supplier_start:width],
             }
             for index, row in enumerate(normalized_rows)
@@ -457,10 +468,18 @@ async def build_price_preview(
                 )
                 continue
             current = current_rows[0] if current_rows else None
+            # Risoluzione Unità di Misura per il singolo prodotto
+            row_uom = (
+                source_row.get("uom", "").strip()
+                or product.comparison_unit
+                or default_uom
+                or "Pz"
+            )
+
             same = bool(
                 current
                 and Decimal(str(current.prezzo_pattuito)) == price
-                and current.unita_misura == default_uom
+                and current.unita_misura == row_uom
             )
             changes.append(
                 {
@@ -476,7 +495,7 @@ async def build_price_preview(
                     "old_listino_id": current.id if current else None,
                     "old_price": _price_string(Decimal(str(current.prezzo_pattuito))) if current else None,
                     "new_price": _price_string(price),
-                    "uom": default_uom,
+                    "uom": row_uom,
                     "action": "unchanged" if same else ("update" if current else "create"),
                 }
             )

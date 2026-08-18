@@ -95,7 +95,11 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
     Array.from({ length: columns }, (_, columnIndex) =>
       rowIndex === 0 && columnIndex === 0
         ? 'Nome rapido ordine (facoltativo)'
-        : rowIndex === 0 && columnIndex === 1 ? 'Prodotto reale' : '',
+        : rowIndex === 0 && columnIndex === 1
+        ? 'Prodotto reale'
+        : rowIndex === 0 && columnIndex === 2
+        ? 'Unità di misura'
+        : '',
     ),
   )
 }
@@ -103,15 +107,16 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
 function sheetFromMatrix(matrix: MatrixResponse): string[][] {
   const suppliers = matrix.suppliers
   const rows = [
-    ['Nome rapido ordine (facoltativo)', 'Prodotto reale', ...suppliers.map(supplier => supplier.name)],
+    ['Nome rapido ordine (facoltativo)', 'Prodotto reale', 'Unità di misura', ...suppliers.map(supplier => supplier.name)],
     ...matrix.rows.map(row => [
       row.order_name || '',
       row.canonical_name,
+      row.comparison_unit || 'Pz',
       ...suppliers.map(supplier => row.offers[String(supplier.id)]?.price || ''),
     ]),
   ]
   const rowCount = Math.max(MIN_SHEET_ROWS, rows.length)
-  const columnCount = Math.max(MIN_SHEET_COLUMNS, suppliers.length + 2)
+  const columnCount = Math.max(MIN_SHEET_COLUMNS, suppliers.length + 3)
   return Array.from({ length: rowCount }, (_, rowIndex) =>
     Array.from({ length: columnCount }, (_, columnIndex) => rows[rowIndex]?.[columnIndex] || ''),
   )
@@ -414,12 +419,12 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     setPreview(null); setSupplierMapping({}); setProductMapping({})
   }
 
-  const hasSheetPrices = sheet.slice(1).some(row => row.slice(2).some(cell => cell.trim()))
+  const hasSheetPrices = sheet.slice(1).some(row => row.slice(3).some(cell => cell.trim()))
   const hasOrderNames = sheet.slice(1).some(row => row[0]?.trim())
 
   function isSheetCellEligibleFor(grid: string[][], rowIndex: number, columnIndex: number) {
     const catalog = sheetCatalog || matrix
-    if (rowIndex === 0 || columnIndex < 2 || !catalog) return true
+    if (rowIndex === 0 || columnIndex < 3 || !catalog) return true
     const productRef = (grid[rowIndex]?.[1] || '').trim().toLocaleLowerCase('it-IT')
     const supplierHeader = (grid[0]?.[columnIndex] || '').trim().toLocaleLowerCase('it-IT')
     if (!productRef || !supplierHeader) return true
@@ -515,9 +520,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         {(preview.errors.length > 0) && <button className="btn" onClick={createPastePreview}>Ricalcola anteprima</button>}
         <div style={{ maxHeight: 280, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead><tr><th style={{ textAlign: 'left' }}>Prodotto</th><th>Fornitore</th><th>Prima</th><th>Dopo</th><th>Esito</th></tr></thead>
+            <thead><tr><th style={{ textAlign: 'left' }}>Prodotto</th><th>Fornitore</th><th>UoM</th><th>Prima</th><th>Dopo</th><th>Esito</th></tr></thead>
             <tbody>{preview.changes.slice(0, 300).map((item, index) => <tr key={index}>
-              <td style={{ padding: 8 }}>{item.product_name}</td><td style={{ textAlign: 'center' }}>{item.supplier_name}</td><td style={{ textAlign: 'center' }}>{money(item.old_price)}</td><td style={{ textAlign: 'center' }}>{money(item.new_price)}</td><td style={{ textAlign: 'center' }}>{item.action}</td>
+              <td style={{ padding: 8 }}>{item.product_name}</td><td style={{ textAlign: 'center' }}>{item.supplier_name}</td><td style={{ textAlign: 'center', fontWeight: 600, color: '#60a5fa' }}>{item.uom}</td><td style={{ textAlign: 'center' }}>{money(item.old_price)}</td><td style={{ textAlign: 'center' }}>{money(item.new_price)}</td><td style={{ textAlign: 'center' }}>{item.action}</td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -573,7 +578,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <div>
             <h3 style={{ margin: 0 }}>Foglio prezzi</h3>
             <p style={{ color: 'var(--text-secondary)', margin: '5px 0 0' }}>
-              Colonna A = nome rapido facoltativo per gli ordini. Colonna B = nome reale e leggibile del prodotto. Da C in poi = fornitori. Incolla direttamente da Excel o Google Sheets.
+              Colonna A = nome rapido facoltativo per gli ordini. Colonna B = nome reale e leggibile del prodotto. Colonna C = Unità di misura (UoM). Da D in poi = fornitori. Incolla direttamente da Excel o Google Sheets.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -587,7 +592,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
               <tr>
                 <th style={{ width: 44, minWidth: 44, height: 28, position: 'sticky', left: 0, zIndex: 7, background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745' }} />
-                {sheet[0]?.map((_, columnIndex) => <th key={columnIndex} style={{ minWidth: columnIndex === 0 ? 190 : columnIndex === 1 ? 280 : 155, height: 28, padding: '0 8px', textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745', fontWeight: 600 }}>{columnLabel(columnIndex)}</th>)}
+                {sheet[0]?.map((_, columnIndex) => <th key={columnIndex} style={{ minWidth: columnIndex === 0 ? 170 : columnIndex === 1 ? 260 : columnIndex === 2 ? 110 : 150, height: 28, padding: '0 8px', textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745', fontWeight: 600 }}>{columnLabel(columnIndex)}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -595,8 +600,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 <th style={{ width: 44, minWidth: 44, height: 36, position: 'sticky', left: 0, zIndex: 4, textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #292c37', fontWeight: 500 }}>{rowIndex + 1}</th>
                 {row.map((cell, columnIndex) => {
                   const eligible = isSheetCellEligible(rowIndex, columnIndex)
-                  const width = columnIndex === 0 ? 190 : columnIndex === 1 ? 280 : 155
-                  return <td key={columnIndex} style={{ padding: 0, minWidth: width, borderRight: '1px solid #292c37', borderBottom: '1px solid #292c37', background: !eligible ? 'rgba(70,70,80,.16)' : rowIndex === 0 ? 'rgba(59,130,246,.10)' : columnIndex < 2 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
+                  const width = columnIndex === 0 ? 170 : columnIndex === 1 ? 260 : columnIndex === 2 ? 110 : 150
+                  return <td key={columnIndex} style={{ padding: 0, minWidth: width, borderRight: '1px solid #292c37', borderBottom: '1px solid #292c37', background: !eligible ? 'rgba(70,70,80,.16)' : rowIndex === 0 ? 'rgba(59,130,246,.10)' : columnIndex < 3 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
                     <input
                       aria-label={`Cella ${columnLabel(columnIndex)}${rowIndex + 1}`}
                       value={cell}
@@ -604,8 +609,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                       title={!eligible ? 'Fornitore fuori dal settore di questo prodotto' : undefined}
                       onChange={event => updateSheetCell(rowIndex, columnIndex, event.target.value)}
                       onPaste={event => pasteIntoSheet(event, rowIndex, columnIndex)}
-                      placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale del prodotto' : eligible ? '—' : 'fuori settore'}
-                      style={{ width: '100%', minWidth: width, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: eligible ? 'white' : '#5f6574', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex < 2 ? 600 : 400, textAlign: columnIndex > 1 && rowIndex > 0 ? 'right' : 'left', cursor: eligible ? 'text' : 'not-allowed' }}
+                      placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale' : columnIndex === 2 ? 'Unità di misura' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale del prodotto' : columnIndex === 2 ? 'Es. Pz, Lt, Kg' : eligible ? '—' : 'fuori settore'}
+                      style={{ width: '100%', minWidth: width, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: eligible ? 'white' : '#5f6574', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex < 3 ? 600 : 400, textAlign: columnIndex > 2 && rowIndex > 0 ? 'right' : 'left', cursor: eligible ? 'text' : 'not-allowed' }}
                       onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px #3b82f6' }}
                       onBlur={event => { event.currentTarget.style.boxShadow = 'none' }}
                     />
@@ -619,14 +624,16 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn" onClick={() => setSheet(current => [...current, Array(current[0]?.length || MIN_SHEET_COLUMNS).fill('')])}><Plus size={15} /> Riga</button>
           <button className="btn" onClick={() => setSheet(current => current.map(row => [...row, '']))}><Plus size={15} /> Fornitore</button>
-          <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>{sheet.length - 1} righe · {Math.max(0, (sheet[0]?.length || 2) - 2)} colonne fornitore</span>
+          <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>{sheet.length - 1} righe · {Math.max(0, (sheet[0]?.length || 3) - 3)} colonne fornitore</span>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'end', paddingTop: 2 }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', paddingTop: 4 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Validità <input type="date" style={input} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} /></label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Unità predefinita <input style={input} value={defaultUom} onChange={event => setDefaultUom(event.target.value)} /></label>
-          <button className="btn btn-primary" disabled={(!hasSheetPrices && !hasOrderNames) || loading} onClick={createPastePreview}><ClipboardPaste size={16} /> Controlla modifiche</button>
-          <span style={{ color: 'var(--text-secondary)', fontSize: 12, alignSelf: 'center' }}>Nessun dato viene salvato prima della conferma.</span>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Unità fallback (nuovi) <input style={{ ...input, width: 90 }} value={defaultUom} onChange={event => setDefaultUom(event.target.value)} placeholder="Pz" /></label>
+          <button className="btn btn-primary" disabled={(!hasSheetPrices && !hasOrderNames) || loading} onClick={createPastePreview} style={{ alignSelf: 'flex-end' }}><ClipboardPaste size={16} /> Controlla modifiche</button>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12, maxWidth: 450 }}>
+            L'unità di misura viene determinata riga per riga dalla colonna <b>C (Unità di misura)</b> o dall'anagrafica del prodotto.
+          </span>
         </div>
       </div>
       <PreviewPanel />
