@@ -109,6 +109,7 @@ export default function ProductIdentityManager() {
   const [candidateSearch, setCandidateSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [queueFilter, setQueueFilter] = useState<'all' | 'new' | 'review'>('all')
+  const [queueSupplierFilter, setQueueSupplierFilter] = useState<string>('')
   const [selectedWorkKeys, setSelectedWorkKeys] = useState<string[]>([])
   const [bulkResolving, setBulkResolving] = useState(false)
   const [bulkNotice, setBulkNotice] = useState<string | null>(null)
@@ -576,6 +577,8 @@ export default function ProductIdentityManager() {
   const visibleProductIds = filteredProducts.map(product => product.id)
   const allVisibleProductsSelected = visibleProductIds.length > 0 && visibleProductIds.every(id => selectedProductIds.includes(id))
 
+  const queueSuppliers = Array.from(new Set((workQueue?.items || []).map(item => item.supplier_name))).sort()
+
   const filteredWorkItems = (workQueue?.items || []).filter(item => {
     const search = candidateSearch.toLowerCase()
     const matchesSearch = item.raw_description.toLowerCase().includes(search)
@@ -584,7 +587,8 @@ export default function ProductIdentityManager() {
     const matchesType = queueFilter === 'all'
       || (queueFilter === 'new' && item.recommendation === 'create_canonical')
       || (queueFilter === 'review' && item.recommendation === 'associate_existing')
-    return matchesSearch && matchesType
+    const matchesSupplier = !queueSupplierFilter || item.supplier_name === queueSupplierFilter
+    return matchesSearch && matchesType && matchesSupplier
   })
 
   const filteredExistingProducts = products.filter(product => {
@@ -1062,6 +1066,29 @@ export default function ProductIdentityManager() {
                 style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 38px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', outline: 'none' }}
               />
             </div>
+            {queueSuppliers.length > 1 && (
+              <select
+                value={queueSupplierFilter}
+                onChange={e => setQueueSupplierFilter(e.target.value)}
+                style={{
+                  padding: '9px 12px',
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  outline: 'none',
+                  fontSize: '0.85rem'
+                }}
+              >
+                <option value="" style={{ background: '#13131c' }}>Tutti i fornitori ({queueSuppliers.length})</option>
+                {queueSuppliers.map(sup => (
+                  <option key={sup} value={sup} style={{ background: '#13131c' }}>
+                    {sup}
+                  </option>
+                ))}
+              </select>
+            )}
+
             {[
               ['all', 'Tutti'],
               ['new', 'Nuovi probabili'],
