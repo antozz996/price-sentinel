@@ -253,24 +253,14 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
     setRegSuccessMessage(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/fornitori/`, {
+      await fetchWithAuth('/fornitori/', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           nome_azienda: nome,
           partita_iva: piva,
           attivo_whitelist: true
         })
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Impossibile registrare il fornitore.');
-      }
 
       setRegSuccessMessage(`Fornitore "${nome}" registrato e abilitato in Whitelist!`);
       // Remove from list
@@ -289,24 +279,14 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
     setRegSuccessMessage(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${API_BASE}/location/`, {
+      await fetchWithAuth('/location/', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({
           nome_struttura: nome,
           piva_riferimento: piva,
           tipologia: tipo
         })
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Impossibile registrare la sede.');
-      }
 
       setRegSuccessMessage(`Sede "${nome}" registrata correttamente!`);
       // Remove from list
