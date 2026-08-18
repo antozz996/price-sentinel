@@ -148,9 +148,18 @@ function columnLabel(index: number): string {
   return label
 }
 
+const MACRO_CATEGORIES = [
+  { id: 'Beverage', label: 'Beverage', icon: '🍹', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', border: '#3b82f6' },
+  { id: 'Food', label: 'Food', icon: '🍽️', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: '#f59e0b' },
+  { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: '#10b981', bg: 'rgba(16,185,129,0.15)', border: '#10b981' },
+] as const
+
+type MacroCategory = typeof MACRO_CATEGORIES[number]['id']
+
 export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('matrix')
   const [matrix, setMatrix] = useState<MatrixResponse | null>(null)
+  const [selectedMatrixCategory, setSelectedMatrixCategory] = useState<string>('all')
   const [sheetCatalog, setSheetCatalog] = useState<MatrixResponse | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
@@ -160,7 +169,22 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const [sheet, setSheet] = useState<string[][]>(() => blankSheet())
+  const [activeCategorySheet, setActiveCategorySheet] = useState<MacroCategory>('Beverage')
+  const [categorySheets, setCategorySheets] = useState<Record<string, string[][]>>({
+    'Beverage': blankSheet(),
+    'Food': blankSheet(),
+    'Materiali di consumo': blankSheet(),
+  })
+  const sheet = categorySheets[activeCategorySheet] || blankSheet()
+
+  function setSheet(updater: string[][] | ((current: string[][]) => string[][])) {
+    setCategorySheets(prev => {
+      const current = prev[activeCategorySheet] || blankSheet()
+      const next = typeof updater === 'function' ? updater(current) : updater
+      return { ...prev, [activeCategorySheet]: next }
+    })
+  }
+
   const [sheetInitialized, setSheetInitialized] = useState(false)
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
   const [defaultUom, setDefaultUom] = useState('piece')
@@ -343,6 +367,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           effective_date: effectiveDate,
           default_uom: defaultUom,
           create_missing_products: autoCreateProducts,
+          category: activeCategorySheet,
         }),
       }) as Preview
       setPreview(data)
@@ -413,13 +438,23 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     setSheet(next)
     setPreview(null)
     setNotice(skipped
-      ? `${pastedRows.length} righe incollate · ${skipped} celle fuori settore ignorate.`
-      : `Incollate ${pastedRows.length} righe nel foglio.`)
+      ? `${pastedRows.length} righe incollate nel foglio ${activeCategorySheet} · ${skipped} celle fuori settore ignorate.`
+      : `Incollate ${pastedRows.length} righe nel foglio ${activeCategorySheet}.`)
   }
 
-  function reloadCurrentPrices() {
-    setPreview(null); setError(null); setNotice('Caricamento dell’intero catalogo in corso…')
-    void loadFullPriceSheet()
+  async function reloadCurrentPrices() {
+    setLoading(true); setError(null)
+    try {
+      const data = await fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0') as MatrixResponse
+      const filteredRows = data.rows.filter(r => (r.category || '').toLowerCase() === activeCategorySheet.toLowerCase())
+      const matrixForCategory = { ...data, rows: filteredRows.length ? filteredRows : data.rows }
+      setSheet(sheetFromMatrix(matrixForCategory))
+      setNotice(`Foglio "${activeCategorySheet}" caricato con ${filteredRows.length} prodotti.`)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setLoading(false)
+    }
   }
 
   function clearSheet() {
@@ -560,14 +595,68 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <button className="btn" onClick={() => { setOffset(0); void loadMatrix() }}><RefreshCw size={16} /> Aggiorna</button>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{matrix?.total || 0} prodotti</span>
         </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingTop: 2 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>Categoria:</span>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setSelectedMatrixCategory('all')}
+            style={{
+              padding: '4px 12px',
+              fontSize: 12,
+              borderRadius: 20,
+              background: selectedMatrixCategory === 'all' ? 'var(--primary-color)' : 'rgba(255,255,255,0.05)',
+              color: selectedMatrixCategory === 'all' ? 'white' : 'var(--text-secondary)',
+              border: selectedMatrixCategory === 'all' ? '1px solid var(--primary-color)' : '1px solid var(--border-glass)'
+            }}
+          >
+            Tutte ({matrix?.total || 0})
+          </button>
+          {MACRO_CATEGORIES.map(cat => {
+            const count = matrix?.rows.filter(r => (r.category || '').toLowerCase() === cat.id.toLowerCase()).length || 0
+            const isSelected = selectedMatrixCategory === cat.id
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                className="btn"
+                onClick={() => setSelectedMatrixCategory(cat.id)}
+                style={{
+                  padding: '4px 12px',
+                  fontSize: 12,
+                  borderRadius: 20,
+                  background: isSelected ? cat.bg : 'rgba(255,255,255,0.05)',
+                  color: isSelected ? cat.color : 'var(--text-secondary)',
+                  border: isSelected ? `1px solid ${cat.border}` : '1px solid var(--border-glass)',
+                  fontWeight: isSelected ? 600 : 400
+                }}
+              >
+                {cat.icon} {cat.label} {count > 0 ? `(${count})` : ''}
+              </button>
+            )
+          })}
+        </div>
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({selectedSupplierIds.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{matrix?.suppliers.map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
-          <tbody>{matrix?.rows.map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
+          <tbody>{(matrix?.rows || []).filter(row => selectedMatrixCategory === 'all' || (row.category || '').toLowerCase() === selectedMatrixCategory.toLowerCase()).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
               {row.order_name && <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.canonical_name}</div>}
-              <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.sku_interno || 'SKU mancante'} · {row.category || 'Senza categoria'}</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+                <span>{row.sku_interno || 'SKU mancante'}</span>
+                <span>·</span>
+                <span style={{
+                  color: row.category === 'Food' ? '#f59e0b' : row.category === 'Materiali di consumo' ? '#10b981' : '#60a5fa',
+                  background: row.category === 'Food' ? 'rgba(245,158,11,0.1)' : row.category === 'Materiali di consumo' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontWeight: 600
+                }}>
+                  {row.category || 'Beverage'}
+                </span>
+              </div>
               {row.requires_manual_selection && <small style={{ color: '#fbbf24' }}>Scelta manuale richiesta</small>}
             </td>
             {visibleSuppliers.map(supplier => {
@@ -589,15 +678,59 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
     {activeTab === 'paste' && <>
       <div className="glass-panel" style={{ ...panel, gap: 14 }}>
+        {/* 3 Category Sheets Switcher */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '12px 14px', background: 'rgba(255,255,255,0.025)', borderRadius: 10, border: '1px solid var(--border-glass)', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'white', marginRight: 4 }}>Seleziona Foglio da compilare:</span>
+          {MACRO_CATEGORIES.map(cat => {
+            const isSelected = activeCategorySheet === cat.id
+            const rowCount = Math.max(0, (categorySheets[cat.id]?.length || 1) - 1)
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => {
+                  setActiveCategorySheet(cat.id as MacroCategory)
+                  setPreview(null)
+                  setError(null)
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: isSelected ? `2px solid ${cat.border}` : '1px solid rgba(255,255,255,0.08)',
+                  background: isSelected ? cat.bg : 'rgba(255,255,255,0.03)',
+                  color: isSelected ? 'white' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: isSelected ? 700 : 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  transition: 'all 0.2s ease',
+                  boxShadow: isSelected ? `0 0 16px ${cat.bg}` : 'none'
+                }}
+              >
+                <span style={{ fontSize: 16 }}>{cat.icon}</span>
+                <span>Foglio <b>{cat.label}</b></span>
+                {rowCount > 0 && <span style={{ fontSize: 11, background: 'rgba(0,0,0,0.35)', padding: '2px 7px', borderRadius: 10, color: cat.color }}>{rowCount} righe</span>}
+              </button>
+            )
+          })}
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
           <div>
-            <h3 style={{ margin: 0 }}>Foglio prezzi</h3>
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Foglio Prezzi</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? '#f59e0b' : activeCategorySheet === 'Materiali di consumo' ? '#10b981' : '#60a5fa', background: activeCategorySheet === 'Food' ? 'rgba(245,158,11,0.12)' : activeCategorySheet === 'Materiali di consumo' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--border-glass)' }}>
+                Settore: {activeCategorySheet}
+              </span>
+            </h3>
             <p style={{ color: 'var(--text-secondary)', margin: '5px 0 0' }}>
-              Colonna A = nome rapido facoltativo per gli ordini. Colonna B = nome reale e leggibile del prodotto. Colonna C = Unità di misura (UoM). Da D in poi = fornitori. Incolla direttamente da Excel o Google Sheets.
+              Colonna A = nome rapido facoltativo. Colonna B = nome reale del prodotto. Colonna C = Unità di misura (UoM). Da D in poi = fornitori.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={reloadCurrentPrices}><RotateCcw size={15} /> Prezzi correnti</button>
+            <button className="btn" onClick={reloadCurrentPrices}><RotateCcw size={15} /> Prezzi correnti {activeCategorySheet}</button>
             <button className="btn" onClick={clearSheet}><Trash2 size={15} /> Svuota</button>
           </div>
         </div>

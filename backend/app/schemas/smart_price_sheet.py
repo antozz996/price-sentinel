@@ -13,6 +13,7 @@ class ClipboardPreviewRequest(BaseModel):
     effective_date: date = Field(default_factory=date.today)
     default_uom: str = Field(default="piece", min_length=1, max_length=20)
     create_missing_products: bool = Field(default=True)
+    category: str | None = Field(default=None, max_length=100)
     location_id: int | None = Field(default=None, gt=0)
 
 

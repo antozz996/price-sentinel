@@ -264,48 +264,52 @@ def extract_candidate_attributes(text: str) -> dict:
     }
 
 
-def infer_category(text: str) -> Optional[str]:
+def infer_category(text: str) -> str:
     """
-    Inferisce la categoria base: acqua, soft_drink, monouso, beverage, food.
+    Inferisce la macro-categoria Ho.Re.Ca.: Beverage, Food, Materiali di consumo.
     """
     cleaned = normalize_text(text)
-    
+
     def has_word(pattern: str) -> bool:
         return bool(re.search(rf"\b{pattern}\b", cleaned))
 
-    # 1. Monouso has top priority (prevents bicchiere acqua / caffe categorization conflicts)
+    # 1. Materiali di consumo (Monouso, Pulizia, Packaging, Tovagliato, Detergenza)
     if any(has_word(x) for x in [
-        "bicchiere", "tovagliolo", "cannuccia", "posate", "forchetta",
-        "cucchiaio", "piatto", "monouso", "tovaglia", "vaschetta",
-        "coperchio", "insalatiera",
+        "bicchiere", "tovagliolo", "cannuccia", "posate", "forchetta", "coltello",
+        "cucchiaio", "piatto", "monouso", "tovaglia", "vaschetta", "vaschette",
+        "coperchio", "insalatiera", "detergente", "candeggina", "disincrostante",
+        "sgrassatore", "sapone", "scopa", "spugna", "lavapavimenti", "brillantante",
+        "igienizzante", "guanti", "vileda", "sacco", "sacchi", "sacchetto",
+        "contenitore", "cartone", "scatola", "pellicola", "alluminio", "bobina",
+        "rotolo", "packaging", "asporto", "carta", "asciugamani", "salviette",
     ]):
-        return "monouso"
+        return "Materiali di consumo"
 
+    # 2. Food (Alimentari, Carni, Pesce, Latticini, Ortofrutta, Surgelati, Dispensa)
     if any(has_word(x) for x in [
-        "detergente", "candeggina", "disincrostante", "sgrassatore",
-        "sapone", "scopa", "spugna", "lavapavimenti", "brillantante",
-        "igienizzante", "guanti", "vileda",
+        "pane", "pasta", "olio", "sale", "zucchero", "farina", "latte", "burro",
+        "uova", "cioccolato", "food", "cibo", "carne", "salumi", "prosciutto",
+        "pesce", "ittico", "salmone", "tonno", "formaggio", "mozzarella", "parmigiano",
+        "pomodoro", "pelati", "riso", "lievito", "frutta", "verdura",
+        "patate", "patatine", "surgelato", "gelato", "croissant", "brioche",
+        "dolce", "dessert", "snack", "noccioline", "olive", "salsa",
+        "maionese", "ketchup",
     ]):
-        return "pulizia"
+        return "Food"
 
+    # 3. Beverage (Acqua, Soft Drinks, Birre, Vini, Spirits, Caffè, Sciroppi, Succhi)
     if any(has_word(x) for x in [
-        "sacco", "sacchi", "contenitore", "cartone", "scatola",
-        "pellicola", "alluminio", "bobina", "rotolo", "packaging",
+        "acqua", "cola", "coca", "fanta", "sprite", "soda", "tonica", "aranciata",
+        "succo", "succhi", "lemon", "gassosa", "ginger", "red bull", "monster",
+        "lemonsoda", "cedrata", "chinotto", "soft drink", "the", "estathe", "te",
+        "vino", "vini", "spumante", "prosecco", "champagne", "franciacorta",
+        "chardonnay", "pinot", "merlot", "cabernet", "passito", "gin", "vodka",
+        "rum", "rhum", "amaro", "whisky", "whiskey", "bourbon", "liqueur", "liquore",
+        "tequila", "mezcal", "brandy", "cognac", "grappa", "aperol", "campari",
+        "limoncello", "sambuca", "birra", "beer", "draught", "fusto", "caffe",
+        "caffetteria", "orzo", "ginseng", "sciroppo", "purea", "pure", "mixer",
+        "elder flower", "strawberry", "sweet & sour", "sour", "cordial",
     ]):
-        return "packaging"
+        return "Beverage"
 
-    # 2. Acqua / Beverage / Soft Drink
-    if has_word("acqua"):
-        return "acqua"
-
-    if any(has_word(x) for x in ["cola", "soda", "tonica", "aranciata", "succo", "lemon", "gassosa", "ginger", "red bull", "lemonsoda", "cedrata", "chinotto", "soft drink"]):
-        return "soft_drink"
-
-    if any(has_word(x) for x in ["vino", "spumante", "prosecco", "champagne", "chardonnay", "pinot", "merlot", "cabernet", "passito", "gin", "vodka", "rum", "amaro", "whisky", "liqueur", "liquore", "tequila", "brandy", "cognac", "aperol", "campari", "limoncello", "sambuca", "birra"]):
-        return "beverage"
-
-    # 3. Food
-    if any(has_word(x) for x in ["pane", "pasta", "olio", "sale", "zucchero", "farina", "latte", "burro", "uova", "cioccolato", "food", "cibo"]):
-        return "food"
-
-    return None
+    return "Beverage"

@@ -131,6 +131,7 @@ async def build_price_preview(
     effective_date: date,
     default_uom: str,
     create_missing_products: bool = True,
+    category: str | None = None,
     location_id: int | None,
     actor_id: int,
 ) -> SmartPriceSheetPreview:
@@ -282,7 +283,7 @@ async def build_price_preview(
                     sku_interno=virtual_sku,
                     canonical_name=ref.strip(),
                     normalized_name=norm_ref,
-                    category=infer_category(ref) or "Generico",
+                    category=category or infer_category(ref) or "Beverage",
                     comparison_unit=row_uom,
                     is_active=True,
                 )
@@ -643,7 +644,7 @@ async def commit_price_preview(
                     sku_interno=change["sku_interno"] or f"IMP-{hashlib.sha256(norm_name.encode('utf-8')).hexdigest()[:10].upper()}",
                     canonical_name=change["product_name"].strip(),
                     normalized_name=norm_name,
-                    category=infer_category(change["product_name"]) or "Generico",
+                    category=change.get("category") or infer_category(change["product_name"]) or "Beverage",
                     comparison_unit=change.get("uom") or "Pz",
                     is_active=True,
                 )
