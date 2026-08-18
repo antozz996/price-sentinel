@@ -574,12 +574,7 @@ async def build_price_preview(
         "changes": changes,
         "errors": errors,
         "counts": counts,
-        "can_commit": not errors
-        and (
-            bool(order_name_changes_by_product)
-            or any(item["action"] != "unchanged" for item in changes)
-            or any(item.get("remember_alias") for item in changes)
-        ),
+        "can_commit": not errors and bool(changes or order_name_changes_by_product),
     }
     canonical = json.dumps(preview_payload, sort_keys=True, separators=(",", ":"))
     now = datetime.now(timezone.utc)
