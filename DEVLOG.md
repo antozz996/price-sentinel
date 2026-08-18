@@ -31,42 +31,45 @@ Eventuali avvertenze o cose da sapere.
 
 ---
 
-### [2026-08-18] Fix: auto-selezione prodotto nella modal "Associa a un prodotto esistente"
+### [2026-08-18] Fix: selezione prodotto nella modal "Associa a un prodotto esistente"
 
 **Branch:** `feat/smart-price-sheet-policies`
 **File toccati:** `frontend/src/components/ProductIdentityManager.tsx`
 **Tipo:** Bug Fix
-**Commit:** `09abc00`
+**Commit:** `09abc00` (tentativo 1) → `[commit push in corso]` (fix definitivo)
 
 #### Problema
-Nel modal "Associa a un prodotto esistente" del `ProductIdentityManager`, quando l'utente digitava nella barra di ricerca e i risultati si restringevano a **un solo prodotto**, il browser evidenziava visivamente quell'elemento nel `<select>` (sfondo blu) — ma il click non era mai avvenuto, quindi `onChange` del `<select>` non scattava mai.
-
-Risultato: `selectedExistingProductId` rimaneva stringa vuota `''`, e al submit il sistema mostrava:
+Nel modal "Associa a un prodotto esistente" del `ProductIdentityManager`, selezionare un prodotto dalla lista — anche cliccandoci sopra esplicitamente — non veniva registrato. Il sistema continuava a mostrare:
 > *"Seleziona il prodotto canonico da associare."*
 
-nonostante l'item fosse visivamente selezionato.
+nonostante l'item fosse visivamente evidenziato in blu.
 
-#### Causa radice
-Il comportamento è nativo del browser HTML: un `<select>` con un'unica `<option>` la mostra selezionata **visivamente** ma **non emette `onChange`** finché l'utente non interagisce esplicitamente (click o tastiera). La logica di validazione al submit controllava `!selectedExistingProductId`, che era ancora `''`.
+#### Causa radice (due problemi combinati)
 
-Secondo problema minore: le `<option>` usavano `value={product.id}` (numero), mentre lo state è una stringa — incongruenza di tipo che poteva causare mismatch sottili.
+**Problema 1 — `onChange` non scatta su single-item select:**
+Quando la ricerca restringeva i risultati a un solo prodotto, il browser evidenziava quell'opzione in blu (comportamento nativo del `<select size>`) ma non emetteva `onChange` — perché nessun click reale era avvenuto. `selectedExistingProductId` rimaneva `''`.
 
-#### Soluzione implementata
-1. **Auto-selezione nell'`onChange` del campo di ricerca testuale:**
-   - Replica della stessa logica di filtro usata nella computed `filteredExistingProducts`
-   - Se `filtered.length === 1` → chiama `setSelectedExistingProductId(String(filtered[0].id))` e azzera l'errore
-   - Se l'utente modifica la ricerca e il prodotto precedentemente auto-selezionato esce dai risultati → reset a `''`
+**Problema 2 — `required` intercetta il submit nativo:**
+Il `<select>` aveva l'attributo `required`. Il browser HTML5 esegue la validazione nativa del form **prima** che il gestore `onSubmit` di React venga chiamato. Se il valore corrente del select è `''` (stringa vuota — nessuna opzione formalmente selezionata), il browser blocca la submit silenziosamente, impedendo anche al click esplicito di funzionare correttamente in alcuni scenari.
 
-2. **`onChange` del `<select>`:**
-   - Aggiunto `setResolutionError(null)` per cancellare immediatamente il messaggio di errore quando l'utente seleziona manualmente
-   - Wrappato in `String(e.target.value)` per coerenza di tipo
+#### Soluzione — Primo tentativo (parziale)
+Auto-selezione nell'`onChange` del campo di ricerca quando i risultati si riducono a 1. Risolveva il caso "single result" ma non il click esplicito con `required`.
 
-3. **`value` delle `<option>`:**
-   - Cambiato da `value={product.id}` (number) a `value={String(product.id)}` per allineamento con lo state stringa
+#### Soluzione finale — Custom Div Listbox
+Sostituito completamente il `<select required size={N}>` con una **listbox custom** basata su `<div role="listbox">` con righe `<div role="option">` cliccabili via `onClick`.
+
+Vantaggi:
+- `onClick` è deterministico — nessuna ambiguità di browser su quando scatta
+- Nessun attributo `required` HTML5 → nessuna validazione nativa che intercetta
+- Stato `selectedExistingProductId` aggiornato immediatamente al click
+- Visual feedback chiaro: border blu sull'intero listbox quando qualcosa è selezionato, riga in blu con bordo sinistro per l'item attivo, riga di conferma `✓ Selezionato: ...` sotto la lista
+- Comportamento hover via `onMouseEnter`/`onMouseLeave` per responsività
+
+L'auto-selezione su singolo risultato (nel search `onChange`) è stata mantenuta come miglioramento UX aggiuntivo.
 
 #### Note
-- La logica di filtro replicata nell'`onChange` della ricerca è intenzionalmente identica a `filteredExistingProducts` (stessa slice a 50 elementi). Se in futuro si cambia la logica di filtro principale, va aggiornata anche qui.
-- Non è stata modificata la logica backend — il bug era interamente frontend.
+- Il `<select>` è stato rimosso interamente — nessun attributo `required` HTML5 rimane nella form. La validazione è gestita interamente da React in `resolveWorkItem()` tramite `!selectedExistingProductId`.
+- Se in futuro si cambia la logica di filtro in `filteredExistingProducts` (computed var), va aggiornata anche la replica nell'`onChange` della ricerca testuale.
 
 ---
 
