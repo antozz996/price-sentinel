@@ -413,35 +413,40 @@ async def build_price_preview(
             supplier = resolved_suppliers.get(header)
             if not supplier:
                 continue
-            pair = (product.id, supplier.id)
+            pair = (
+                getattr(product, "id", None) or product.sku_interno or product.canonical_name,
+                supplier.id,
+            )
             if pair in seen_pairs:
                 errors.append(
                     {
                         "type": "duplicate_cell",
                         "row": source_row["row_number"],
-                        "product_id": product.id,
+                        "product_id": getattr(product, "id", None),
                         "supplier_id": supplier.id,
                         "message": "La stessa coppia prodotto/fornitore compare più volte.",
                     }
                 )
                 continue
             seen_pairs.add(pair)
-            eligible_supplier_ids = supplier_scope.eligible_supplier_ids(
-                product_id=product.id,
-                category=product.category,
-                supplier_ids={supplier.id},
+
+            # Verifica se il settore è esplicitamente escluso per questo fornitore
+            norm_cat = (product.category or "").strip().casefold()
+            is_explicitly_disabled = bool(
+                norm_cat
+                and supplier_scope.explicit_categories.get((supplier.id, norm_cat)) is False
             )
-            if supplier.id not in eligible_supplier_ids:
+            if is_explicitly_disabled:
                 errors.append(
                     {
                         "type": "supplier_scope",
                         "row": source_row["row_number"],
-                        "product_id": product.id,
+                        "product_id": getattr(product, "id", None),
                         "supplier_id": supplier.id,
                         "column": header,
                         "message": (
-                            f"{supplier.nome_azienda} non risulta abilitato per "
-                            f"{product.category or product.canonical_name}."
+                            f"{supplier.nome_azienda} è escluso esplicitamente per il settore "
+                            f"“{product.category or product.canonical_name}”."
                         ),
                         "category": product.category,
                     }
