@@ -159,4 +159,32 @@ Quando vengono caricate molteplici fatture elettroniche di un fornitore senza av
 
 ---
 
+### [2026-08-18] Refactor & Feature: "Configurazione Sede" potenziata con Gestione Completa Location & Soglie
+
+**Branch:** `main`
+**File toccati:**
+- `frontend/src/components/ClientOnboarding.tsx`
+- `DEVLOG.md`
+**Tipo:** Feature / Refactor
+**Autore:** AI (antigravity) + utente
+
+#### Problema / Obiettivo
+La pagina "Configurazione sede" (ClientOnboarding) era precedentemente limitata a una semplice visualizzazione di sola lettura della checklist di avanzamento e a pochi input tecnici, senza permettere all'utente di creare, modificare o visualizzare in modo chiaro le sedi aziendali del gruppo.
+
+#### Soluzione implementata
+Riprogettato completamente il componente `ClientOnboarding.tsx` trasformandolo in un hub gestionale operativo a 2 schede:
+1. **Scheda "Gestione Sedi & Location":**
+   - KPI bar riassuntiva: Totale Sedi registrate, Fatture ricevute dalla sede attiva, Manager/Utenti associati.
+   - Griglia di schede responsive per ciascuna sede (es. *Lido Playaluna SRL*), con Partita IVA Cessionario (11 cifre), badge tipologia locale (Balneare, Ristorante, Discoteca, Eventi).
+   - Pulsante **"+ Nuova Sede"** e modale con validazione P.IVA e tipologia.
+   - Pulsanti rapidi **✏️ Modifica** ed **🗑️ Elimina** per ogni sede.
+   - Link rapido *"Configura Soglie & Diagnostica"*.
+
+2. **Scheda "Soglie di Controllo & Diagnostica":**
+   - Selettore sede attiva.
+   - Barra di avanzamento readiness e checklist 8-step dello stato operativo della sede.
+   - Form per configurare e salvare le soglie di tolleranza prezzo (€ e %), soglia anomalia grave (€), giorni limite per note di credito e solleciti, e switch notifiche.
+
+---
+
 *Fine delle entry per questa data.*
