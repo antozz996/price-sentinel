@@ -12,6 +12,7 @@ from sqlalchemy.orm import noload
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.fatture import Fattura, RigaFattura
+from app.models.categories import MasterCategory
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.location import Location
@@ -373,6 +374,50 @@ async def matrix(
     }
 
 
+async def _load_all_categories(db: AsyncSession) -> list[str]:
+    # 1. Master categories Ho.Re.Ca.
+    master_cats = (
+        await db.scalars(
+            select(MasterCategory.nome)
+            .where(MasterCategory.is_active.is_(True))
+            .order_by(MasterCategory.nome)
+        )
+    ).all()
+
+    # 2. Product categories
+    prod_cats = (
+        await db.scalars(
+            select(Product.category)
+            .where(
+                Product.is_active.is_(True),
+                Product.category.is_not(None),
+                func.length(func.btrim(Product.category)) > 0,
+            )
+            .distinct()
+        )
+    ).all()
+
+    # 3. Supplier capability categories
+    cap_cats = (
+        await db.scalars(
+            select(SupplierCategoryCapability.category)
+            .where(
+                SupplierCategoryCapability.category.is_not(None),
+                func.length(func.btrim(SupplierCategoryCapability.category)) > 0,
+            )
+            .distinct()
+        )
+    ).all()
+
+    seen = {}
+    for c in list(master_cats) + list(prod_cats) + list(cap_cats):
+        if c and c.strip():
+            k = c.strip().casefold()
+            if k not in seen:
+                seen[k] = c.strip()
+    return sorted(seen.values())
+
+
 @router.get("/supplier-sectors")
 async def supplier_sectors(
     db: AsyncSession = Depends(get_db),
@@ -386,21 +431,7 @@ async def supplier_sectors(
             .order_by(Fornitore.nome_azienda, Fornitore.id)
         )
     ).all()
-    categories = [
-        category
-        for category in (
-            await db.scalars(
-                select(Product.category)
-                .where(
-                    Product.is_active.is_(True),
-                    Product.category.is_not(None),
-                    func.length(func.btrim(Product.category)) > 0,
-                )
-                .distinct()
-                .order_by(Product.category)
-            )
-        ).all()
-    ]
+    categories = await _load_all_categories(db)
     scope = await load_supplier_catalog_scope(
         db, supplier_ids={supplier.id for supplier in suppliers}
     )
@@ -455,13 +486,7 @@ async def update_supplier_sector(
     )
     if not supplier:
         raise HTTPException(404, "Fornitore non trovato")
-    categories = (
-        await db.scalars(
-            select(Product.category).where(
-                Product.is_active.is_(True), Product.category.is_not(None)
-            )
-        )
-    ).all()
+    categories = await _load_all_categories(db)
     category_by_key = {
         category.strip().casefold(): category.strip()
         for category in categories
@@ -469,7 +494,7 @@ async def update_supplier_sector(
     }
     category = category_by_key.get(payload.category.strip().casefold())
     if not category:
-        raise HTTPException(422, "Categoria prodotto non riconosciuta")
+        category = payload.category.strip()
     capability = await db.scalar(
         select(SupplierCategoryCapability).where(
             SupplierCategoryCapability.supplier_id == supplier.id,
