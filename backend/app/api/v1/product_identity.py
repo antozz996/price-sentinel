@@ -521,10 +521,6 @@ async def get_match_work_queue(
     }
 
 
-@router.post(
-    "/match-candidates/work-queue/resolve",
-    summary="Risolve insieme tutte le righe identiche della coda prodotti",
-)
 async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionRequest) -> dict:
     allowed_actions = {"associate_existing", "create_canonical", "ignore"}
     if data.action not in allowed_actions:
