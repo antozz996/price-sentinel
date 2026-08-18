@@ -135,7 +135,8 @@ async def upload_fatture(
                     continue
                 else:
                     # Parked or error - re-process existing XML record to catch unregistered entities
-                    report = await process_xml_raw(db, xml_raw_existing.id, parsed)
+                    async with db.begin_nested():
+                        report = await process_xml_raw(db, xml_raw_existing.id, parsed)
                     status_report = report.get("status")
                     if status_report == "fornitore_non_whitelistato":
                         piva = parsed.piva_cedente
@@ -152,24 +153,24 @@ async def upload_fatture(
                     batch.anomalie_generate += report.get("anomalie_generate", 0)
                     continue
 
-            from sqlalchemy.exc import IntegrityError
             try:
-                # Salvataggio XMLRaw
-                xml_raw = XMLRaw(
-                    payload=xml_payload,
-                    nome_file=filename,
-                    hash_idempotenza=hash_id,
-                    source=SourceIngestion.upload_manuale,
-                    upload_batch_id=batch_id,
-                    uploaded_by_user_id=current_user.id,
-                    stato_ingestion=StatoIngestion.ricevuto,
-                    data_ricezione=datetime.now(timezone.utc)
-                )
-                db.add(xml_raw)
-                await db.flush()
+                async with db.begin_nested():
+                    # Salvataggio XMLRaw
+                    xml_raw = XMLRaw(
+                        payload=xml_payload,
+                        nome_file=filename,
+                        hash_idempotenza=hash_id,
+                        source=SourceIngestion.upload_manuale,
+                        upload_batch_id=batch_id,
+                        uploaded_by_user_id=current_user.id,
+                        stato_ingestion=StatoIngestion.ricevuto,
+                        data_ricezione=datetime.now(timezone.utc)
+                    )
+                    db.add(xml_raw)
+                    await db.flush()
 
-                # Pipeline Matching
-                report = await process_xml_raw(db, xml_raw.id, parsed)
+                    # Pipeline Matching
+                    report = await process_xml_raw(db, xml_raw.id, parsed)
                 
                 status_report = report.get("status")
                 if status_report == "fornitore_non_whitelistato":
@@ -186,11 +187,10 @@ async def upload_fatture(
 
                 batch.file_elaborati += 1
                 batch.anomalie_generate += report.get("anomalie_generate", 0)
-            except IntegrityError:
-                await db.rollback()
+            except Exception as nested_exc:
+                logger.info(f"File {filename} errore o già presente: {nested_exc}")
                 batch.gia_presenti += 1
                 batch.file_elaborati += 1
-                logger.info(f"File {filename} già presente (concorrenza rilevata via IntegrityError)")
                 continue
             
         except Exception as e:
@@ -294,7 +294,8 @@ async def reprocess_parked(
                 batch.file_elaborati += 1
                 continue
 
-            report = await process_xml_raw(db, xml_raw.id, parsed)
+            async with db.begin_nested():
+                report = await process_xml_raw(db, xml_raw.id, parsed)
             
             status_report = report.get("status")
             if status_report == "fornitore_non_whitelistato":
@@ -312,7 +313,7 @@ async def reprocess_parked(
             batch.file_elaborati += 1
             batch.anomalie_generate += report.get("anomalie_generate", 0)
         except Exception as e:
-            logger.error(f"Errore rielaborazione {xml_raw.id}: {e}")
+            logger.error(f"Errore rielaborazione {getattr(xml_raw, 'id', 'unknown')}: {e}")
             batch.errori_formato += 1
             batch.file_elaborati += 1
 
