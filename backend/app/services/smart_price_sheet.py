@@ -26,8 +26,17 @@ MAX_SUPPLIERS = 100
 
 
 def parse_decimal_price(raw: object) -> Decimal | None:
-    value = str(raw or "").strip().replace("€", "").replace(" ", "")
-    if not value or value.lower() in {"-", "n/a", "nd", "n.d.", "0", "0.0", "0,0", "0.00", "0,00", "0.000", "0,000", "0.0000", "0,0000"}:
+    raw_str = str(raw or "").strip().replace("€", "").strip()
+    value = raw_str.rstrip(",;.- ").strip().replace(" ", "")
+    if not value:
+        return None
+    val_lower = value.lower()
+    if val_lower in {
+        "-", "--", "---", "/", "//", "n/a", "na", "nd", "n.d.", "n/d", 
+        "no", "non", "none", "null", "assente", "non disponibile", "non trattato",
+        "fuori assortimento", "non a listino", "x", "xx", "xxx", "zero",
+        "0", "0.0", "0,0", "0.00", "0,00", "0.000", "0,000", "0.0000", "0,0000"
+    }:
         return None
     if "," in value and "." in value:
         if value.rfind(",") > value.rfind("."):
@@ -38,14 +47,14 @@ def parse_decimal_price(raw: object) -> Decimal | None:
         value = value.replace(",", ".")
     try:
         parsed = Decimal(value)
-    except InvalidOperation as error:
-        raise ValueError(f"Prezzo non valido: {raw}") from error
+    except InvalidOperation:
+        return None
     if parsed <= 0:
         return None
     if parsed >= Decimal("100000000"):
         raise ValueError(f"Prezzo fuori intervallo: {raw}")
     if parsed.as_tuple().exponent < -4:
-        raise ValueError(f"Sono ammessi al massimo 4 decimali: {raw}")
+        parsed = parsed.quantize(Decimal("0.0001"))
     return parsed
 
 
@@ -322,10 +331,10 @@ async def build_price_preview(
             }
         )
 
-    order_name_changes_by_product: dict[int, dict] = {}
-    proposed_name_owners: dict[str, int] = {}
+    order_name_changes_by_product: dict[str, dict] = {}
+    proposed_name_owners: dict[str, str] = {}
     existing_name_owners = {
-        row.normalized_order_name: row.id
+        row.normalized_order_name: str(row.id)
         for row in products
         if row.normalized_order_name
     }
@@ -343,11 +352,12 @@ async def build_price_preview(
             )
             continue
         normalized_proposed = normalize_text(proposed)
+        prod_key = str(getattr(product, "id", None) or getattr(product, "sku_interno", None) or normalize_text(product.canonical_name))
         existing_owner = existing_name_owners.get(normalized_proposed)
         proposed_owner = proposed_name_owners.get(normalized_proposed)
-        if (existing_owner is not None and existing_owner != product.id) or (
-            proposed_owner is not None and proposed_owner != product.id
-        ):
+
+        is_same_product = (existing_owner == prod_key) or (getattr(product, "id", None) is not None and existing_owner == str(product.id))
+        if existing_owner is not None and not is_same_product:
             errors.append(
                 {
                     "type": "duplicate_order_name",
@@ -356,8 +366,17 @@ async def build_price_preview(
                 }
             )
             continue
-        proposed_name_owners[normalized_proposed] = product.id
-        previous = order_name_changes_by_product.get(product.id)
+        if proposed_owner is not None and proposed_owner != prod_key:
+            errors.append(
+                {
+                    "type": "duplicate_order_name",
+                    "row": source_row["row_number"],
+                    "message": f"Il nome rapido '{proposed}' compare su più prodotti diversi nel foglio.",
+                }
+            )
+            continue
+        proposed_name_owners[normalized_proposed] = prod_key
+        previous = order_name_changes_by_product.get(prod_key)
         if previous and previous["normalized_order_name"] != normalized_proposed:
             errors.append(
                 {
@@ -368,8 +387,8 @@ async def build_price_preview(
             )
             continue
         if normalized_proposed != (product.normalized_order_name or ""):
-            order_name_changes_by_product[product.id] = {
-                "product_id": product.id,
+            order_name_changes_by_product[prod_key] = {
+                "product_id": getattr(product, "id", None),
                 "sku_interno": product.sku_interno,
                 "canonical_name": product.canonical_name,
                 "old_order_name": product.order_name,
@@ -377,7 +396,7 @@ async def build_price_preview(
                 "normalized_order_name": normalized_proposed,
             }
 
-    product_ids = {product.id for _, product, _ in resolved_rows}
+    product_ids = {product.id for _, product, _ in resolved_rows if getattr(product, "id", None) is not None}
     supplier_ids = {supplier.id for supplier in resolved_suppliers.values()}
     supplier_scope = await load_supplier_catalog_scope(db, supplier_ids=supplier_ids)
     aliases = []
@@ -610,15 +629,16 @@ async def commit_price_preview(
         "listino_ids": [],
     }
     for name_change in payload.get("order_name_changes", []):
+        prod_id = name_change.get("product_id")
+        if not prod_id:
+            continue
         product = await db.scalar(
             select(Product)
-            .where(Product.id == name_change["product_id"])
+            .where(Product.id == prod_id)
             .with_for_update()
         )
-        if not product or product.order_name != name_change["old_order_name"]:
-            raise HTTPException(
-                409, "Il nome rapido è cambiato: rigenerare l'anteprima"
-            )
+        if not product:
+            continue
         product.order_name = name_change["new_order_name"]
         product.normalized_order_name = name_change["normalized_order_name"]
         result["order_names_updated"] += 1
@@ -640,10 +660,16 @@ async def commit_price_preview(
                 )
             )
             if not product:
+                ord_name = next(
+                    (nc["new_order_name"] for nc in payload.get("order_name_changes", []) if (nc.get("sku_interno") and nc.get("sku_interno") == change.get("sku_interno")) or nc.get("canonical_name") == change.get("product_name")),
+                    None
+                )
                 product = Product(
                     sku_interno=change["sku_interno"] or f"IMP-{hashlib.sha256(norm_name.encode('utf-8')).hexdigest()[:10].upper()}",
                     canonical_name=change["product_name"].strip(),
                     normalized_name=norm_name,
+                    order_name=ord_name,
+                    normalized_order_name=normalize_text(ord_name) if ord_name else None,
                     category=change.get("category") or infer_category(change["product_name"]) or "Beverage",
                     comparison_unit=change.get("uom") or "Pz",
                     is_active=True,
