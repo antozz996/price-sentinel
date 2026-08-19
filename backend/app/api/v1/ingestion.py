@@ -49,6 +49,12 @@ async def upload_fatture(
     current_user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if current_user.ruolo != RuoloUtente.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operazione riservata all'amministratore. I responsabili possono solo visualizzare le fatture."
+        )
+
     # 1. Crea Batch
     batch_id = str(uuid.uuid4())
     batch = UploadBatch(

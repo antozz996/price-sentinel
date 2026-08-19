@@ -52,12 +52,12 @@ const NAV_SECTIONS: NavSection[] = [
     id: 'operations',
     label: 'Operatività',
     items: [
-      { id: 'upload', label: 'Carica fatture', icon: FileUp },
+      { id: 'upload', label: 'Carica fatture', icon: FileUp, adminOnly: true },
       { id: 'fatture', label: 'Registro fatture', icon: FileText },
-      { id: 'validation', label: 'Anomalie da validare', icon: AlertTriangle },
-      { id: 'reconciliations', label: 'Riconciliazioni', icon: GitCompareArrows },
-      { id: 'disputes', label: 'Contestazioni', icon: HandCoins },
-      { id: 'monitor', label: 'Monitor operativo', icon: BellRing },
+      { id: 'validation', label: 'Anomalie da validare', icon: AlertTriangle, adminOnly: true },
+      { id: 'reconciliations', label: 'Riconciliazioni', icon: GitCompareArrows, adminOnly: true },
+      { id: 'disputes', label: 'Contestazioni', icon: HandCoins, adminOnly: true },
+      { id: 'monitor', label: 'Monitor operativo', icon: BellRing, adminOnly: true },
     ],
   },
   {
@@ -105,9 +105,11 @@ export function isItemPermitted(item: NavItem, profile: UserProfile | null): boo
 
   const det = profile.ruolo_dettagliato || 'manager_sede';
   if (det.startsWith('responsabile_')) {
-    return item.id === 'sectororders' || item.id === 'crosssupplier';
+    // I responsabili possono sviluppare ordini, visualizzare il registro fatture, consultare il Listino Smart e le Oscillazioni Prezzi in sola lettura
+    return item.id === 'sectororders' || item.id === 'fatture' || item.id === 'crosssupplier' || item.id === 'priceanalysis';
   }
 
+  // Manager di sede vedono le funzioni operative non adminOnly
   return !item.adminOnly;
 }
 
