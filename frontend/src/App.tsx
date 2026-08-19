@@ -112,7 +112,15 @@ export function isItemPermitted(item: NavItem, profile: UserProfile | null): boo
 
   const det = profile.ruolo_dettagliato || 'manager_sede';
   if (det.startsWith('responsabile_')) {
-    return item.id === 'sectororders' || item.id === 'orderregistry' || item.id === 'fatture' || item.id === 'crosssupplier' || item.id === 'priceanalysis';
+    return (
+      item.id === 'sectororders' ||
+      item.id === 'orderregistry' ||
+      item.id === 'goodsreceipt' ||
+      item.id === 'productreviews' ||
+      item.id === 'fatture' ||
+      item.id === 'crosssupplier' ||
+      item.id === 'priceanalysis'
+    );
   }
 
   // Manager di sede vedono le funzioni operative non adminOnly
