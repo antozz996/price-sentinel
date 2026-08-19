@@ -88,6 +88,19 @@ class SectorOrderDraftResponse(BaseModel):
     fornitori_ordini: List[SupplierOrderBundle]
 
 
+class RigaRicezioneItem(BaseModel):
+    riga_id: int
+    quantita_ricevuta: float = Field(..., ge=0)
+    stato_riga: str = Field("conforme", pattern="^(conforme|parziale|mancante|danneggiato)$")
+    note_riga: Optional[str] = None
+
+
+class RicezioneOrdineRequest(BaseModel):
+    stato_ricezione: str = Field("ricevuto_conforme", pattern="^(ricevuto_conforme|ricevuto_parziale|ricevuto_con_riserva)$")
+    note_ricezione: Optional[str] = None
+    righe: List[RigaRicezioneItem]
+
+
 class ConfirmSectorOrderRequest(BaseModel):
     location_id: int
     settore: Optional[str] = None
@@ -719,7 +732,10 @@ async def list_ordini(
     if settore and settore != "all":
         stmt = stmt.where(Ordine.settore == settore)
     if stato and stato != "all":
-        stmt = stmt.where(Ordine.stato == stato)
+        if stato in ("da_ricevere", "ricevuto_conforme", "ricevuto_parziale", "ricevuto_con_riserva"):
+            stmt = stmt.where(Ordine.stato_ricezione == stato)
+        else:
+            stmt = stmt.where(Ordine.stato == stato)
 
     res = await db.execute(stmt)
     ordini = res.scalars().all()
@@ -753,8 +769,13 @@ async def list_ordini(
             "whatsapp_message": o.whatsapp_message,
             "spesa_totale": float(o.spesa_totale),
             "stato": o.stato,
+            "stato_ricezione": o.stato_ricezione,
+            "data_ricezione": o.data_ricezione.isoformat() if o.data_ricezione else None,
+            "ricevuto_da_nome": o.ricevuto_da.nome_completo if o.ricevuto_da else None,
+            "note_ricezione": o.note_ricezione,
             "n_righe": len(o.righe),
-            "totale_colli": sum(float(r.quantita) for r in o.righe)
+            "totale_colli": sum(float(r.quantita) for r in o.righe),
+            "totale_colli_ricevuti": sum(float(r.quantita_ricevuta or 0) for r in o.righe)
         }
         for o in ordini
     ]
@@ -762,7 +783,7 @@ async def list_ordini(
 
 @router.get(
     "/{ordine_id}",
-    summary="Dettaglio completo di un singolo ordine",
+    summary="Dettaglio completo di un singolo ordine con righe e stato ricezione",
 )
 async def get_ordine_detail(
     ordine_id: int,
@@ -783,6 +804,8 @@ async def get_ordine_detail(
         "fornitore_id": ordine.fornitore_id,
         "fornitore_nome": ordine.fornitore.nome_azienda if ordine.fornitore else f"Fornitore #{ordine.fornitore_id}",
         "fornitore_piva": ordine.fornitore.partita_iva if ordine.fornitore else None,
+        "fornitore_telefono": ordine.fornitore.telefono_contatto if ordine.fornitore else None,
+        "fornitore_email": ordine.fornitore.email_contatto if ordine.fornitore else None,
         "location_id": ordine.location_id,
         "location_nome": ordine.location.nome_struttura if ordine.location else f"Sede #{ordine.location_id}",
         "user_id": ordine.user_id,
@@ -794,6 +817,10 @@ async def get_ordine_detail(
         "whatsapp_message": ordine.whatsapp_message,
         "spesa_totale": float(ordine.spesa_totale),
         "stato": ordine.stato,
+        "stato_ricezione": ordine.stato_ricezione,
+        "data_ricezione": ordine.data_ricezione.isoformat() if ordine.data_ricezione else None,
+        "ricevuto_da_nome": ordine.ricevuto_da.nome_completo if ordine.ricevuto_da else None,
+        "note_ricezione": ordine.note_ricezione,
         "righe": [
             {
                 "id": r.id,
@@ -801,13 +828,66 @@ async def get_ordine_detail(
                 "sku_interno": r.sku_interno,
                 "descrizione": r.descrizione,
                 "quantita": float(r.quantita),
+                "quantita_ricevuta": float(r.quantita_ricevuta) if r.quantita_ricevuta is not None else float(r.quantita),
                 "uom": r.uom or "CT",
                 "prezzo_pattuito": float(r.prezzo_pattuito),
                 "prezzo_inserito": float(r.prezzo_inserito),
                 "subtotale": round(float(r.quantita) * float(r.prezzo_inserito), 2),
                 "stato_ottimizzazione": r.stato_ottimizzazione,
+                "stato_riga": r.stato_riga or "in_attesa",
+                "note_riga": r.note_riga
             }
             for r in ordine.righe
         ]
+    }
+
+
+@router.post(
+    "/{ordine_id}/ricezione",
+    summary="Valida la ricezione e scarico merci dell'ordine",
+)
+async def convalida_ricezione_ordine(
+    ordine_id: int,
+    data: RicezioneOrdineRequest,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    """
+    Registra lo scarico merci dell'ordine: salva la quantità effettivamente ricevuta per ogni riga,
+    i colli danneggiati o mancanti e aggiorna lo stato globale della consegna.
+    """
+    ordine = await db.get(Ordine, ordine_id)
+    if not ordine:
+        raise HTTPException(status_code=404, detail="Ordine non trovato")
+
+    if user.ruolo != "admin" and user.ruolo_dettagliato != "admin":
+        if user.location_id and ordine.location_id != user.location_id:
+            raise HTTPException(status_code=403, detail="Non puoi validare ordini di un'altra sede")
+
+    righe_map = {r.id: r for r in ordine.righe}
+
+    for item in data.righe:
+        if item.riga_id in righe_map:
+            r = righe_map[item.riga_id]
+            r.quantita_ricevuta = item.quantita_ricevuta
+            r.stato_riga = item.stato_riga
+            r.note_riga = item.note_riga
+
+    ordine.stato_ricezione = data.stato_ricezione
+    ordine.data_ricezione = datetime.utcnow()
+    ordine.ricevuto_da_id = user.id
+    ordine.note_ricezione = data.note_ricezione
+
+    if data.stato_ricezione == "ricevuto_conforme":
+        ordine.stato = "consegnato"
+
+    await db.commit()
+    await db.refresh(ordine)
+
+    return {
+        "status": "success",
+        "ordine_id": ordine.id,
+        "stato_ricezione": ordine.stato_ricezione,
+        "message": f"Ricezione merci dell'ordine #{ordine.id} registrata con successo!"
     }
 

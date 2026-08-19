@@ -65,15 +65,34 @@ class Ordine(Base):
         nullable=False,
         default="inviato",  # inviato, consegnato, riconciliato
     )
+    stato_ricezione: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="da_ricevere",  # da_ricevere, ricevuto_conforme, ricevuto_parziale, ricevuto_con_riserva
+    )
+    data_ricezione: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    ricevuto_da_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("utenti.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    note_ricezione: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
 
     # ── Relationships ────────────────────────
     fornitore = relationship("Fornitore", lazy="selectin")
     location = relationship("Location", lazy="selectin")
     user = relationship("Utente", foreign_keys=[user_id], lazy="selectin")
+    ricevuto_da = relationship("Utente", foreign_keys=[ricevuto_da_id], lazy="selectin")
     righe = relationship("RigaOrdine", back_populates="ordine", cascade="all, delete-orphan", lazy="selectin")
 
     def __repr__(self) -> str:
-        return f"<Ordine id={self.id} fornitore={self.fornitore_id} totale={self.spesa_totale}>"
+        return f"<Ordine id={self.id} fornitore={self.fornitore_id} totale={self.spesa_totale} stato_ricezione={self.stato_ricezione}>"
 
 
 class RigaOrdine(Base):
@@ -104,6 +123,10 @@ class RigaOrdine(Base):
         Numeric(10, 2),
         nullable=False,
     )
+    quantita_ricevuta: Mapped[float | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+    )
     uom: Mapped[str | None] = mapped_column(
         String(30),
         nullable=True,
@@ -124,10 +147,19 @@ class RigaOrdine(Base):
         nullable=False,
         default="ottimale",  # concordato, spot_ottimale, anomalo
     )
+    stato_riga: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        default="in_attesa",  # conforme, parziale, mancante, danneggiato
+    )
+    note_riga: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
 
     # ── Relationships ────────────────────────
     ordine = relationship("Ordine", back_populates="righe")
     product = relationship("Product", lazy="selectin")
 
     def __repr__(self) -> str:
-        return f"<RigaOrdine {self.sku_interno} qta={self.quantita} @ {self.prezzo_inserito}>"
+        return f"<RigaOrdine {self.sku_interno} qta={self.quantita} ricevuta={self.quantita_ricevuta} stato={self.stato_riga}>"

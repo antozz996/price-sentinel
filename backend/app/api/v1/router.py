@@ -31,9 +31,12 @@ from app.api.v1 import (
     automation,
     onboarding,
     smart_price_sheet,
+    feedbacks,
 )
 
 api_router = APIRouter(redirect_slashes=False)
+
+api_router.include_router(feedbacks.router, prefix="/feedbacks", tags=["Recensioni e Qualità Prodotti"])
 
 api_router.include_router(auth.router, prefix="/auth", tags=["Autenticazione"])
 api_router.include_router(utenti.router, prefix="/utenti", tags=["Utenti"])

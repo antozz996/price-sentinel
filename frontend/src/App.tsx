@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
@@ -23,6 +23,8 @@ import OperationalAlerts from './components/OperationalAlerts'
 import ClientOnboarding from './components/ClientOnboarding'
 import SectorOrderBuilder from './components/SectorOrderBuilder'
 import OrderRegistry from './components/OrderRegistry'
+import GoodsReceipt from './components/GoodsReceipt'
+import ProductReviewPage from './components/ProductReviewPage'
 import ProductFeedbackReviewModal from './components/ProductFeedbackReviewModal'
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
@@ -67,7 +69,9 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Acquisti',
     items: [
       { id: 'sectororders', label: 'Sviluppo ordini settore', icon: ShoppingCart },
+      { id: 'goodsreceipt', label: 'Ricezione merci', icon: PackageCheck },
       { id: 'orderregistry', label: 'Registro ordini', icon: ClipboardList },
+      { id: 'productreviews', label: 'Recensioni prodotti', icon: Star },
       { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
       { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
     ],
@@ -469,7 +473,9 @@ export default function App() {
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'sectororders': return <SectorOrderBuilder userProfile={profile} />;
+      case 'goodsreceipt': return <GoodsReceipt userProfile={profile} />;
       case 'orderregistry': return <OrderRegistry isAdmin={profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin'} />;
+      case 'productreviews': return <ProductReviewPage userProfile={profile} />;
       case 'ordini': return <SectorOrderBuilder userProfile={profile} />;
       case 'skumanager': return <SkuManager />;
       case 'categories': return <CategorySupplierManager />;
@@ -497,7 +503,9 @@ export default function App() {
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'sectororders': return { title: 'Sviluppo Ordini Settore', sub: 'Compilazione fabbisogno per responsabili, assegnazione fornitori e invio WhatsApp' };
+      case 'goodsreceipt': return { title: 'Ricezione & Scarico Merci', sub: 'Controllo quantitativo merci consegnate vs ordinate e segnalazione difformità' };
       case 'orderregistry': return { title: 'Registro Ordini', sub: 'Storico e consultazione ordini d\'acquisto, articoli e comunicazioni WhatsApp' };
+      case 'productreviews': return { title: 'Recensioni & Qualità Prodotti', sub: 'Valutazione gradimento, resa qualitativa e segnalazioni per esclusione' };
       case 'ordini': return { title: 'Sviluppo Ordini Settore', sub: 'Compilazione fabbisogno per responsabili, assegnazione fornitori e invio WhatsApp' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'categories': return { title: 'Categorie & Fornitori', sub: 'Catalogo categorie merci e mappatura settori fornitori' };

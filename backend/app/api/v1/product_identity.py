@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.utenti import Utente
-from app.models.products import Product, SupplierProductAlias, MatchCandidate, ProductEquivalenceGroupItem
+from app.models.products import Product, SupplierProductAlias, MatchCandidate, ProductEquivalenceGroupItem, ProductFeedback
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
 from app.models.fornitori import Fornitore
 from app.models.anomalie import Anomalia, StatoValidazione
@@ -1031,3 +1031,179 @@ async def optimize_basket(
             "avvisi_preventivi": avvisi_preventivi
         }
     }
+
+
+# ──────────────────────────────────────────────────────────────────────
+# FEEDBACK PRODOTTI (RESPONSABILI DI SETTORE -> ADMIN REVIEW)
+# ──────────────────────────────────────────────────────────────────────
+
+class ProductFeedbackSubmit(BaseModel):
+    feedback: str = Field(..., description="'SI' o 'NO'")
+    motivo: Optional[str] = None
+    note: Optional[str] = None
+
+
+class ProductFeedbackResolve(BaseModel):
+    action: str = Field(..., description="'escludi_prodotto' | 'archivia'")
+    admin_notes: Optional[str] = None
+
+
+@router.post(
+    "/products/{product_id}/feedback",
+    summary="Invia feedback su un prodotto (SI / NO da responsabile di settore)",
+    description="Permette ai responsabili di approvare (SI) o segnalare per eliminazione (NO) un prodotto."
+)
+async def submit_product_feedback(
+    product_id: int,
+    data: ProductFeedbackSubmit,
+    _user: Utente = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    product = await db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Prodotto non trovato")
+
+    clean_fb = data.feedback.strip().upper()
+    if clean_fb not in ["SI", "NO"]:
+        raise HTTPException(status_code=400, detail="Il feedback deve essere 'SI' o 'NO'")
+
+    # Cerca feedback esistente dell'utente per questo prodotto
+    res = await db.execute(
+        select(ProductFeedback).where(
+            ProductFeedback.product_id == product_id,
+            ProductFeedback.user_id == _user.id,
+            ProductFeedback.stato == "in_attesa"
+        )
+    )
+    fb = res.scalars().first()
+
+    if fb:
+        fb.feedback = clean_fb
+        fb.motivo = data.motivo
+        fb.note = data.note
+        fb.created_at = datetime.utcnow()
+    else:
+        fb = ProductFeedback(
+            product_id=product_id,
+            user_id=_user.id,
+            feedback=clean_fb,
+            motivo=data.motivo,
+            note=data.note,
+            stato="in_attesa"
+        )
+        db.add(fb)
+
+    await db.flush()
+    return {
+        "status": "success",
+        "message": f"Feedback '{clean_fb}' registrato correttamente per il prodotto '{product.canonical_name}'.",
+        "feedback_id": fb.id
+    }
+
+
+@router.get(
+    "/products/feedbacks/pending",
+    summary="Lista feedback prodotti in attesa per l'Amministratore",
+    description="Restituisce tutte le segnalazioni negative (NO) o da revisionare inviate dai responsabili di settore."
+)
+async def list_pending_feedbacks(
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(ProductFeedback)
+        .options(selectinload(ProductFeedback.product), selectinload(ProductFeedback.user))
+        .where(ProductFeedback.stato == "in_attesa")
+        .order_by(ProductFeedback.created_at.desc())
+    )
+    result = await db.execute(query)
+    feedbacks = result.scalars().all()
+
+    items = []
+    for f in feedbacks:
+        items.append({
+            "id": f.id,
+            "product_id": f.product_id,
+            "canonical_name": f.product.canonical_name if f.product else "N/D",
+            "order_name": f.product.order_name if f.product else None,
+            "sku_interno": f.product.sku_interno if f.product else None,
+            "category": f.product.category if f.product else None,
+            "is_active": f.product.is_active if f.product else True,
+            "user_id": f.user_id,
+            "user_email": f.user.email if f.user else "N/D",
+            "user_nome": f.user.nome_completo if f.user else (f.user.email if f.user else "Operatore"),
+            "user_ruolo": f.user.ruolo_dettagliato if f.user else "operatore",
+            "feedback": f.feedback,
+            "motivo": f.motivo,
+            "note": f.note,
+            "stato": f.stato,
+            "created_at": f.created_at.isoformat() if f.created_at else None
+        })
+
+    return {
+        "total_pending": len(items),
+        "feedbacks": items
+    }
+
+
+@router.get(
+    "/products/feedbacks/stats",
+    summary="Conteggio notifiche feedback pendenti",
+)
+async def get_feedback_stats(
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(
+        select(ProductFeedback).where(
+            ProductFeedback.stato == "in_attesa",
+            ProductFeedback.feedback == "NO"
+        )
+    )
+    count = len(res.scalars().all())
+    return {"pending_negative_feedbacks": count}
+
+
+@router.post(
+    "/products/feedbacks/{feedback_id}/resolve",
+    summary="Risolvi segnalazione feedback (Escludi prodotto o Archivia)",
+    description="Permette all'admin di disattivare il prodotto o archiviare la segnalazione."
+)
+async def resolve_product_feedback(
+    feedback_id: int,
+    data: ProductFeedbackResolve,
+    _admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    fb = await db.get(ProductFeedback, feedback_id)
+    if not fb:
+        raise HTTPException(status_code=404, detail="Segnalazione feedback non trovata")
+
+    product = await db.get(Product, fb.product_id)
+
+    action = data.action.strip().lower()
+    if action == "escludi_prodotto":
+        if product:
+            product.is_active = False
+        fb.stato = "escluso"
+        fb.admin_action = "prodotto_escluso"
+        msg = f"Prodotto '{product.canonical_name if product else ''}' escluso con successo dal catalogo."
+    elif action == "archivia":
+        fb.stato = "archiviato"
+        fb.admin_action = "archiviato"
+        msg = "Segnalazione archiviata con successo (prodotto mantenuto)."
+    else:
+        raise HTTPException(status_code=400, detail="Azione non valida. Usa 'escludi_prodotto' o 'archivia'.")
+
+    fb.resolved_at = datetime.utcnow()
+    fb.resolved_by_id = _admin.id
+    fb.admin_notes = data.admin_notes
+
+    await db.flush()
+    return {
+        "status": "success",
+        "message": msg,
+        "feedback_id": fb.id,
+        "product_is_active": product.is_active if product else False
+    }
+
