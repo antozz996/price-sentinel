@@ -318,7 +318,7 @@ export default function SectorOrderBuilder() {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/orders/settore/elabora`, {
+      const res = await fetch(`${API_BASE}/ordini/settore/elabora`, {
         method: 'POST',
         headers: {
           ...headers,
@@ -376,7 +376,7 @@ export default function SectorOrderBuilder() {
     setSavingOrders(true);
     setErrorMsg(null);
     try {
-      const res = await fetch(`${API_BASE}/orders/settore/salva`, {
+      const res = await fetch(`${API_BASE}/ordini/settore/salva`, {
         method: 'POST',
         headers: {
           ...headers,
