@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil } from 'lucide-react';
+import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil, Phone, MessageSquare, X } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface UserInfo {
@@ -26,6 +26,7 @@ interface FornitoreItem {
   partita_iva: string;
   attivo_whitelist: boolean;
   email_contatto: string | null;
+  telefono_contatto?: string | null;
 }
 
 export default function SettingsPage() {
@@ -42,6 +43,16 @@ export default function SettingsPage() {
   const [fornNome, setFornNome] = useState('');
   const [fornPiva, setFornPiva] = useState('');
   const [fornEmail, setFornEmail] = useState('');
+  const [fornTelefono, setFornTelefono] = useState('');
+
+  // Edit fornitore modal state
+  const [showEditFornModal, setShowEditFornModal] = useState(false);
+  const [editingForn, setEditingForn] = useState<FornitoreItem | null>(null);
+  const [editFornNome, setEditFornNome] = useState('');
+  const [editFornPiva, setEditFornPiva] = useState('');
+  const [editFornEmail, setEditFornEmail] = useState('');
+  const [editFornTelefono, setEditFornTelefono] = useState('');
+  const [submittingEditForn, setSubmittingEditForn] = useState(false);
 
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [submittingLoc, setSubmittingLoc] = useState(false);
@@ -217,6 +228,7 @@ export default function SettingsPage() {
           nome_azienda: fornNome,
           partita_iva: fornPiva,
           email_contatto: fornEmail !== '' ? fornEmail : null,
+          telefono_contatto: fornTelefono.trim() !== '' ? fornTelefono.trim() : null,
           attivo_whitelist: true
         })
       });
@@ -230,11 +242,55 @@ export default function SettingsPage() {
       setFornNome('');
       setFornPiva('');
       setFornEmail('');
+      setFornTelefono('');
       loadData();
     } catch (err: any) {
       setMessage({ text: err.message || 'Errore durante la creazione.', type: 'error' });
     } finally {
       setSubmittingForn(false);
+    }
+  };
+
+  const handleOpenEditFornitore = (f: FornitoreItem) => {
+    setEditingForn(f);
+    setEditFornNome(f.nome_azienda);
+    setEditFornPiva(f.partita_iva);
+    setEditFornEmail(f.email_contatto || '');
+    setEditFornTelefono(f.telefono_contatto || '');
+    setShowEditFornModal(true);
+  };
+
+  const handleSaveEditFornitore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingForn) return;
+    setSubmittingEditForn(true);
+    try {
+      const res = await fetch(`${API_BASE}/fornitori/${editingForn.id}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          nome_azienda: editFornNome,
+          partita_iva: editFornPiva,
+          email_contatto: editFornEmail.trim() !== '' ? editFornEmail.trim() : null,
+          telefono_contatto: editFornTelefono.trim() !== '' ? editFornTelefono.trim() : null
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Impossibile aggiornare il fornitore.");
+      }
+
+      setMessage({ text: `Fornitore "${editFornNome}" aggiornato con successo!`, type: 'success' });
+      setShowEditFornModal(false);
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Errore durante il salvataggio del fornitore.', type: 'error' });
+    } finally {
+      setSubmittingEditForn(false);
     }
   };
 
@@ -574,6 +630,7 @@ export default function SettingsPage() {
                 value={fornNome}
                 onChange={e => setFornNome(e.target.value)}
                 style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                required
               />
               <input
                 type="text"
@@ -581,36 +638,69 @@ export default function SettingsPage() {
                 value={fornPiva}
                 onChange={e => setFornPiva(e.target.value)}
                 style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                required
               />
             </div>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <input
                 type="email"
                 placeholder="Email Contatto (Opzionale)..."
                 value={fornEmail}
                 onChange={e => setFornEmail(e.target.value)}
-                style={{ flex: 1, padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
               />
+              <input
+                type="tel"
+                placeholder="Tel / WhatsApp (es. +39 340...)..."
+                value={fornTelefono}
+                onChange={e => setFornTelefono(e.target.value)}
+                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="submit"
                 disabled={submittingForn}
                 className="btn btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '0 16px', height: '36px', fontSize: '0.85rem' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 20px', height: '36px', fontSize: '0.85rem' }}
               >
-                <Plus size={14} /> {submittingForn ? 'Emissione...' : 'Aggiungi'}
+                <Plus size={14} /> {submittingForn ? 'Emissione...' : 'Aggiungi Fornitore'}
               </button>
             </div>
           </form>
 
           {/* List Fornitori */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '260px', overflowY: 'auto', paddingRight: '4px' }}>
             {fornitori.map(f => (
-              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{f.nome_azienda}</div>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>P.IVA: {f.partita_iva} {f.email_contatto ? `| ${f.email_contatto}` : ''}</div>
+              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)', gap: '10px' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span>{f.nome_azienda}</span>
+                    {f.telefono_contatto ? (
+                      <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                        <MessageSquare size={11} /> {f.telefono_contatto}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                        (Nessun tel/WA)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '3px' }}>
+                    <span>P.IVA: <strong>{f.partita_iva}</strong></span>
+                    {f.email_contatto && <span>• ✉️ {f.email_contatto}</span>}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <button
+                    onClick={() => handleOpenEditFornitore(f)}
+                    className="btn"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', padding: '5px 9px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    title="Modifica recapiti e telefono WhatsApp"
+                  >
+                    <Pencil size={13} /> Modifica
+                  </button>
+
                   <button
                     onClick={() => handleToggleWhitelist(f.id)}
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
@@ -1009,6 +1099,117 @@ export default function SettingsPage() {
                   className="btn btn-primary"
                 >
                   {submittingUser ? 'Salvataggio...' : (editingUserId ? 'Salva Modifiche' : 'Crea Operatore')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Modifica Fornitore (Telefono WhatsApp, Email, Nome) */}
+      {showEditFornModal && editingForn && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '520px',
+            background: '#181824',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', color: 'white' }}>
+                <Building2 size={22} color="var(--primary-color)" /> Modifica Fornitore & WhatsApp
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEditFornModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditFornitore} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Ragione Sociale</label>
+                <input
+                  type="text"
+                  value={editFornNome}
+                  onChange={e => setEditFornNome(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Partita IVA</label>
+                <input
+                  type="text"
+                  value={editFornPiva}
+                  onChange={e => setEditFornPiva(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Email Contatto Reclami / Ordini</label>
+                <input
+                  type="email"
+                  placeholder="es. ordini@fornitore.it"
+                  value={editFornEmail}
+                  onChange={e => setEditFornEmail(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#10b981', fontWeight: 600, marginBottom: '4px' }}>
+                  <Phone size={14} /> Numero di Telefono / WhatsApp per Ordini
+                </label>
+                <input
+                  type="tel"
+                  placeholder="Es. +39 340 1234567 oppure 3401234567"
+                  value={editFornTelefono}
+                  onChange={e => setEditFornTelefono(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', color: 'white' }}
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+                  Quando i responsabili elaborano un ordine, il pulsante <strong>"Invia su WhatsApp"</strong> aprirà direttamente la chat con questo numero precompilando l'ordine.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditFornModal(false)}
+                  className="btn"
+                  style={{ background: 'transparent', border: '1px solid var(--border-glass)' }}
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEditForn}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {submittingEditForn ? 'Salvataggio...' : 'Salva Modifiche Fornitore'}
                 </button>
               </div>
             </form>

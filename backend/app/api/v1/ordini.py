@@ -581,8 +581,25 @@ async def elabora_ordine_settore(
             total_amount=totale_bundle,
         )
 
+        clean_phone = None
+        if sup and getattr(sup, "telefono_contatto", None):
+            raw_phone = str(sup.telefono_contatto).strip()
+            digits = "".join(ch for ch in raw_phone if ch.isdigit() or ch == "+")
+            if digits:
+                if digits.startswith("+"):
+                    clean_phone = digits[1:]
+                elif digits.startswith("00"):
+                    clean_phone = digits[2:]
+                elif len(digits) == 10 and not digits.startswith("39"):
+                    clean_phone = "39" + digits
+                else:
+                    clean_phone = digits
+
         wa_encoded = urllib.parse.quote(wa_msg)
-        wa_url = f"https://api.whatsapp.com/send?text={wa_encoded}"
+        if clean_phone:
+            wa_url = f"https://api.whatsapp.com/send?phone={clean_phone}&text={wa_encoded}"
+        else:
+            wa_url = f"https://api.whatsapp.com/send?text={wa_encoded}"
 
         bundles.append(
             SupplierOrderBundle(
@@ -590,7 +607,7 @@ async def elabora_ordine_settore(
                 fornitore_nome=sup_name,
                 partita_iva=sup.partita_iva if sup else None,
                 email_contatto=sup.email_contatto if sup else None,
-                telefono_contatto=None,
+                telefono_contatto=sup.telefono_contatto if sup else None,
                 totale_ordine=totale_bundle,
                 numero_articoli=len(items),
                 totale_colli=totale_colli,

@@ -62,6 +62,7 @@ async def create_fornitore(
         existing_supplier.nome_azienda = data.nome_azienda
         existing_supplier.attivo_whitelist = data.attivo_whitelist
         existing_supplier.email_contatto = data.email_contatto
+        existing_supplier.telefono_contatto = data.telefono_contatto
         existing_supplier.archived_at = None
         await db.flush()
         return existing_supplier
@@ -71,6 +72,7 @@ async def create_fornitore(
         nome_azienda=data.nome_azienda,
         attivo_whitelist=data.attivo_whitelist,
         email_contatto=data.email_contatto,
+        telefono_contatto=data.telefono_contatto,
     )
     db.add(fornitore)
     await db.flush()

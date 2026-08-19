@@ -34,6 +34,11 @@ class Fornitore(Base):
         nullable=True,
         comment="Per generazione reclami",
     )
+    telefono_contatto: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Numero di telefono / WhatsApp per invio ordini",
+    )
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

@@ -12,6 +12,7 @@ class FornitoreBase(BaseModel):
     nome_azienda: str = Field(..., max_length=255)
     attivo_whitelist: bool = True
     email_contatto: EmailStr | None = None
+    telefono_contatto: str | None = None
 
 
 class FornitoreCreate(FornitoreBase):
@@ -20,8 +21,10 @@ class FornitoreCreate(FornitoreBase):
 
 class FornitoreUpdate(BaseModel):
     nome_azienda: str | None = None
+    partita_iva: str | None = None
     attivo_whitelist: bool | None = None
     email_contatto: EmailStr | None = None
+    telefono_contatto: str | None = None
 
 
 class FornitoreResponse(FornitoreBase):
