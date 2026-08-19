@@ -5,7 +5,11 @@ import { API_BASE, getHeaders } from '../api';
 interface UserInfo {
   id: number;
   email: string;
+  nome_completo?: string | null;
   ruolo: string;
+  ruolo_dettagliato?: string | null;
+  settore_abilitato?: string | null;
+  location_id?: number | null;
   attivo: boolean;
 }
 
@@ -46,6 +50,17 @@ export default function SettingsPage() {
   const [editingLocId, setEditingLocId] = useState<number | null>(null);
   const [editLocNome, setEditLocNome] = useState('');
   const [editLocTipo, setEditLocTipo] = useState('');
+
+  // User / Operator Management Modal State
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
+  const [userNome, setUserNome] = useState('');
+  const [userRuoloDettagliato, setUserRuoloDettagliato] = useState('responsabile_beverage');
+  const [userSettore, setUserSettore] = useState('Beverage');
+  const [userLocationId, setUserLocationId] = useState<number | ''>('');
+  const [submittingUser, setSubmittingUser] = useState(false);
 
   const headers = getHeaders();
 
@@ -254,6 +269,115 @@ export default function SettingsPage() {
       }
 
       setMessage({ text: 'Fornitore archiviato correttamente. Lo storico è stato conservato.', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Errore durante l\'eliminazione.', type: 'error' });
+    }
+  };
+
+  // Operator / User Management Handlers
+  const handleOpenCreateUser = () => {
+    setEditingUserId(null);
+    setUserEmail('');
+    setUserPassword('');
+    setUserNome('');
+    setUserRuoloDettagliato('responsabile_beverage');
+    setUserSettore('Beverage');
+    setUserLocationId('');
+    setShowUserModal(true);
+  };
+
+  const handleOpenEditUser = (u: UserInfo) => {
+    setEditingUserId(u.id);
+    setUserEmail(u.email);
+    setUserPassword('');
+    setUserNome(u.nome_completo || '');
+    setUserRuoloDettagliato(u.ruolo_dettagliato || (u.ruolo === 'admin' ? 'admin' : 'manager_sede'));
+    setUserSettore(u.settore_abilitato || 'all');
+    setUserLocationId(u.location_id || '');
+    setShowUserModal(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userEmail) return;
+
+    setSubmittingUser(true);
+    try {
+      const baseRuolo = userRuoloDettagliato === 'admin' ? 'admin' : 'manager';
+      const payload: any = {
+        email: userEmail.trim(),
+        nome_completo: userNome.trim() || null,
+        ruolo: baseRuolo,
+        ruolo_dettagliato: userRuoloDettagliato,
+        settore_abilitato: userSettore,
+        location_id: userLocationId ? Number(userLocationId) : null,
+      };
+
+      if (userPassword) {
+        payload.password = userPassword;
+      }
+
+      const url = editingUserId ? `${API_BASE}/utenti/${editingUserId}` : `${API_BASE}/utenti/`;
+      const method = editingUserId ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Errore durante il salvataggio dell\'operatore.');
+      }
+
+      setMessage({
+        text: editingUserId ? 'Operatore aggiornato con successo!' : 'Nuovo operatore creato con successo!',
+        type: 'success'
+      });
+      setShowUserModal(false);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Errore durante il salvataggio.');
+    } finally {
+      setSubmittingUser(false);
+    }
+  };
+
+  const handleToggleUserStatus = async (u: UserInfo) => {
+    try {
+      const res = await fetch(`${API_BASE}/utenti/${u.id}`, {
+        method: 'PATCH',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ attivo: !u.attivo })
+      });
+      if (res.ok) {
+        loadData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    if (!window.confirm("Sei sicuro di voler eliminare o disattivare questo operatore?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/utenti/${userId}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Impossibile eliminare l\'operatore.');
+      }
+      setMessage({ text: 'Operatore rimosso/disattivato con successo.', type: 'success' });
       loadData();
     } catch (err: any) {
       setMessage({ text: err.message || 'Errore durante l\'eliminazione.', type: 'error' });
@@ -528,43 +652,283 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* Users */}
+      {/* Users & Operators Management */}
       <div className="glass-panel" style={{ padding: '24px' }}>
-        <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Shield size={20} /> Utenti del Sistema
-        </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {users.map(u => (
-            <div key={u.id} style={{
-              ...cardStyle, display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 20px'
-            }}>
-              <div style={{
-                width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: u.ruolo === 'admin' ? 'rgba(239,68,68,0.15)' : 'rgba(59,130,246,0.15)',
-                color: u.ruolo === 'admin' ? '#ef4444' : '#3b82f6', fontWeight: 700, fontSize: '0.9rem'
-              }}>
-                {u.email[0].toUpperCase()}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Shield size={20} color="var(--accent-blue)" /> Gestione Utenti & Operatori di Settore
+            </h3>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Crea e gestisci le credenziali di accesso per i responsabili di reparto (Beverage, Food, Materiali) e manager di sede.
+            </p>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleOpenCreateUser}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.85rem' }}
+          >
+            <Plus size={16} /> Nuovo Operatore
+          </button>
+        </div>
+
+        {/* User Cards Grid / List */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {users.map(u => {
+            const locObj = locations.find(l => l.id === u.location_id);
+            const isAdm = u.ruolo === 'admin' || u.ruolo_dettagliato === 'admin';
+            const isBev = u.ruolo_dettagliato === 'responsabile_beverage';
+            const isMat = u.ruolo_dettagliato === 'responsabile_materiali';
+            const isFood = u.ruolo_dettagliato === 'responsabile_food';
+            const isMgr = u.ruolo_dettagliato === 'manager_sede';
+
+            const roleBadgeBg = isAdm ? 'rgba(239,68,68,0.15)' : isBev ? 'rgba(59,130,246,0.15)' : isMat ? 'rgba(16,185,129,0.15)' : isFood ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
+            const roleBadgeColor = isAdm ? '#ef4444' : isBev ? '#60a5fa' : isMat ? '#34d399' : isFood ? '#fbbf24' : '#c084fc';
+            const roleLabel = isAdm ? '👑 Amministratore' : isBev ? '🍹 Resp. Beverage' : isMat ? '📦 Resp. Materiali' : isFood ? '🍽️ Resp. Food' : isMgr ? '🏢 Store Manager' : '👤 Operatore';
+
+            return (
+              <div
+                key={u.id}
+                style={{
+                  ...cardStyle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  border: u.attivo ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(239,68,68,0.2)',
+                  opacity: u.attivo ? 1 : 0.6
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '220px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: roleBadgeBg,
+                    color: roleBadgeColor,
+                    fontWeight: 800,
+                    fontSize: '1rem'
+                  }}>
+                    {u.nome_completo ? u.nome_completo[0].toUpperCase() : u.email[0].toUpperCase()}
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ fontSize: '0.95rem', color: 'white' }}>
+                        {u.nome_completo || u.email.split('@')[0]}
+                      </strong>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        background: roleBadgeBg,
+                        color: roleBadgeColor
+                      }}>
+                        {roleLabel}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      <span>✉️ {u.email}</span>
+                      <span>•</span>
+                      <span>
+                        📍 {locObj ? locObj.nome_struttura : 'Tutte le sedi'}
+                      </span>
+                      {u.settore_abilitato && u.settore_abilitato !== 'all' && (
+                        <>
+                          <span>•</span>
+                          <span style={{ color: '#93c5fd', fontWeight: 600 }}>Settore: {u.settore_abilitato}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right controls: Active status and actions */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleUserStatus(u)}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                    title={u.attivo ? "Disattiva account" : "Attiva account"}
+                  >
+                    {u.attivo ? (
+                      <ToggleRight size={28} color="#10b981" />
+                    ) : (
+                      <ToggleLeft size={28} color="#6b7280" />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEditUser(u)}
+                    className="btn"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Pencil size={13} /> Modifica
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteUser(u.id)}
+                    className="btn"
+                    style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', padding: '6px 10px', fontSize: '0.8rem' }}
+                    title="Elimina utente"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{u.email}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{u.ruolo}</div>
-              </div>
-              <span style={{
-                padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600,
-                background: u.attivo ? 'rgba(16,185,129,0.15)' : 'rgba(107,114,128,0.15)',
-                color: u.attivo ? '#10b981' : '#6b7280'
-              }}>
-                {u.attivo ? 'Attivo' : 'Disattivato'}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Account */}
+      {/* User Creation / Edit Modal */}
+      {showUserModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', padding: '28px', borderRadius: '16px', border: '1px solid var(--border-glass)' }}>
+            <h3 style={{ margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <User size={20} color="var(--accent-blue)" /> {editingUserId ? "Modifica Operatore" : "Nuovo Operatore di Settore"}
+            </h3>
+
+            <form onSubmit={handleSaveUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Nome e Cognome *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Es. Mario Rossi"
+                  value={userNome}
+                  onChange={e => setUserNome(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Email di Accesso *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="Es. beverage.playa@pricesentinel.it"
+                  value={userEmail}
+                  onChange={e => setUserEmail(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                  {editingUserId ? "Nuova Password (lascia vuoto per non modificare)" : "Password Iniziale *"}
+                </label>
+                <input
+                  type="password"
+                  required={!editingUserId}
+                  placeholder={editingUserId ? "••••••••" : "Almeno 6 caratteri"}
+                  value={userPassword}
+                  onChange={e => setUserPassword(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Ruolo Operativo *</label>
+                  <select
+                    value={userRuoloDettagliato}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setUserRuoloDettagliato(val);
+                      if (val === 'responsabile_beverage') setUserSettore('Beverage');
+                      else if (val === 'responsabile_materiali') setUserSettore('Materiali di consumo');
+                      else if (val === 'responsabile_food') setUserSettore('Food');
+                      else if (val === 'admin') setUserSettore('all');
+                    }}
+                    style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  >
+                    <option value="responsabile_beverage">🍹 Responsabile Beverage</option>
+                    <option value="responsabile_materiali">📦 Responsabile Materiali</option>
+                    <option value="responsabile_food">🍽️ Responsabile Food</option>
+                    <option value="manager_sede">🏢 Store Manager / Sede</option>
+                    <option value="admin">👑 Amministratore / Direzione</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Settore Abilitato</label>
+                  <select
+                    value={userSettore}
+                    onChange={e => setUserSettore(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  >
+                    <option value="all">Tutti i settori</option>
+                    <option value="Beverage">Beverage</option>
+                    <option value="Materiali di consumo">Materiali di consumo</option>
+                    <option value="Food">Food</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Sede Assegnata</label>
+                <select
+                  value={userLocationId}
+                  onChange={e => setUserLocationId(e.target.value === '' ? '' : Number(e.target.value))}
+                  style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                >
+                  <option value="">Tutte le sedi (Accesso Globale)</option>
+                  {locations.map(loc => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.nome_struttura} ({loc.piva_riferimento})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowUserModal(false)}
+                  className="btn"
+                  style={{ background: 'transparent', border: '1px solid var(--border-glass)' }}
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingUser}
+                  className="btn btn-primary"
+                >
+                  {submittingUser ? 'Salvataggio...' : (editingUserId ? 'Salva Modifiche' : 'Crea Operatore')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Account Logout */}
       <div className="glass-panel" style={{ padding: '24px' }}>
         <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <User size={20} /> Account
+          <User size={20} /> Account Corrente
         </h3>
         <button className="btn" onClick={handleLogout} style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: '#ef4444', gap: '8px' }}>
           Disconnetti

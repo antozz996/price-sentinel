@@ -27,6 +27,23 @@ class Utente(Base):
         Enum(RuoloUtente, name="ruolo_utente", native_enum=True),
         nullable=False,
     )
+    nome_completo: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Nome e cognome operatore",
+    )
+    ruolo_dettagliato: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        default="admin",
+        comment="admin, manager_sede, responsabile_beverage, responsabile_food, responsabile_materiali",
+    )
+    settore_abilitato: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        default="all",
+        comment="all, Beverage, Food, Materiali di consumo",
+    )
     location_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("location.id", ondelete="SET NULL"),

@@ -148,10 +148,29 @@ export function normalizeDefaultUom(rawUom?: string | null, category?: string | 
   return 'CT';
 }
 
-export default function SectorOrderBuilder() {
+export interface SectorOrderUserProfile {
+  id: number;
+  email: string;
+  ruolo: string;
+  nome_completo?: string | null;
+  ruolo_dettagliato?: string | null;
+  settore_abilitato?: string | null;
+  location_id?: number | null;
+}
+
+interface SectorOrderBuilderProps {
+  userProfile?: SectorOrderUserProfile | null;
+}
+
+export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderProps = {}) {
   const [locations, setLocations] = useState<LocationItem[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<number | ''>('');
-  const [selectedSector, setSelectedSector] = useState<string>('all');
+  const [selectedLocation, setSelectedLocation] = useState<number | ''>(() => userProfile?.location_id || '');
+  const [selectedSector, setSelectedSector] = useState<string>(() => {
+    if (userProfile?.settore_abilitato && userProfile.settore_abilitato !== 'all') {
+      return userProfile.settore_abilitato;
+    }
+    return 'all';
+  });
   const [deliveryDate, setDeliveryDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);

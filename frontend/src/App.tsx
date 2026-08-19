@@ -27,7 +27,10 @@ import { API_BASE, fetchWithAuth, getHeaders } from './api'
 type UserProfile = {
   id: number
   email: string
+  nome_completo?: string | null
   ruolo: 'admin' | 'manager'
+  ruolo_dettagliato?: string | null
+  settore_abilitato?: string | null
   location_id?: number | null
 }
 
@@ -96,14 +99,17 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ]
 
-const ADMIN_ONLY_TABS = new Set(
-  [
-    ...NAV_SECTIONS.flatMap(section => section.items.filter(item => item.adminOnly).map(item => item.id)),
-    // The legacy order emitter stays implemented but is intentionally absent from
-    // navigation while LiquidStock remains the authoritative ordering system.
-    'ordini',
-  ],
-)
+export function isItemPermitted(item: NavItem, profile: UserProfile | null): boolean {
+  if (!profile) return false;
+  if (profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin') return true;
+
+  const det = profile.ruolo_dettagliato || 'manager_sede';
+  if (det.startsWith('responsabile_')) {
+    return item.id === 'sectororders' || item.id === 'crosssupplier';
+  }
+
+  return !item.adminOnly;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -112,7 +118,7 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     operations: true,
-    purchasing: false,
+    purchasing: true,
     analytics: false,
     catalog: false,
     administration: false,
@@ -140,7 +146,20 @@ export default function App() {
     let cancelled = false
     fetchWithAuth('/auth/me')
       .then(data => {
-        if (!cancelled) setProfile(data as UserProfile)
+        if (!cancelled) {
+          const prof = data as UserProfile;
+          setProfile(prof);
+          if (prof.ruolo_dettagliato && prof.ruolo_dettagliato.startsWith('responsabile_')) {
+            setActiveTab('sectororders');
+            setOpenSections({
+              operations: false,
+              purchasing: true,
+              analytics: false,
+              catalog: false,
+              administration: false
+            });
+          }
+        }
       })
       .catch(() => {
         if (!cancelled) setProfile(null)
@@ -152,10 +171,18 @@ export default function App() {
   }, [isAuth])
 
   useEffect(() => {
-    if (profile?.ruolo === 'manager' && (activeTab === 'dashboard' || ADMIN_ONLY_TABS.has(activeTab))) {
-      setActiveTab('validation')
+    if (profile) {
+      const isAdm = profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin';
+      const det = profile.ruolo_dettagliato || 'manager_sede';
+      if (det.startsWith('responsabile_')) {
+        if (activeTab !== 'sectororders' && activeTab !== 'crosssupplier') {
+          setActiveTab('sectororders');
+        }
+      } else if (!isAdm && (activeTab === 'dashboard' || activeTab === 'settings' || activeTab === 'listini' || activeTab === 'onboarding')) {
+        setActiveTab('validation');
+      }
     }
-  }, [activeTab, profile])
+  }, [activeTab, profile]);
 
   useEffect(() => {
     const activeSection = NAV_SECTIONS.find(section =>
@@ -168,7 +195,6 @@ export default function App() {
 
   useEffect(() => {
     async function autoLogin() {
-      // Check if we are in DEV and have the DEV login credentials set in env
       const devEmail = (import.meta as any).env?.VITE_DEV_EMAIL;
       const devPassword = (import.meta as any).env?.VITE_DEV_PASSWORD;
 
@@ -179,50 +205,92 @@ export default function App() {
             headers: getHeaders(),
             body: JSON.stringify({ email: devEmail, password: devPassword })
           });
-          const data = await res.json();
-          if (res.ok && data.access_token) {
+          if (res.ok) {
+            const data = await res.json();
             localStorage.setItem('token', data.access_token);
             setIsAuth(true);
+            setProfile({
+              id: 1,
+              email: devEmail,
+              nome_completo: data.nome_completo,
+              ruolo: data.ruolo,
+              ruolo_dettagliato: data.ruolo_dettagliato,
+              settore_abilitato: data.settore_abilitato,
+              location_id: data.location_id
+            });
+            return;
           }
-        } catch (err) {
-          console.error('DEV Auto-login failed', err);
+        } catch {
+          // fallback to manual token check
         }
       }
+
+      const token = localStorage.getItem('token')
+      if (token) {
+        setIsAuth(true)
+      }
     }
-    
-    if (!localStorage.getItem('token')) {
-      autoLogin();
-    } else {
-      setIsAuth(true);
-    }
-  }, []);
+    autoLogin()
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoggingIn(true);
-    setLoginError(null);
+    e.preventDefault()
+    setLoginError(null)
+    setLoggingIn(true)
+
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if (res.ok && data.access_token) {
-        localStorage.setItem('token', data.access_token);
-        setIsAuth(true);
-      } else {
-        setLoginError(
-          typeof data?.detail === 'string'
-            ? data.detail
-            : 'Email o password non validi.',
-        );
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Credenziali non valide')
       }
-    } catch {
-      setLoginError('Impossibile connettersi al server.');
+
+      const data = await res.json()
+      localStorage.setItem('token', data.access_token)
+      setIsAuth(true)
+      const userProf: UserProfile = {
+        id: data.id || 0,
+        email: email,
+        nome_completo: data.nome_completo,
+        ruolo: data.ruolo,
+        ruolo_dettagliato: data.ruolo_dettagliato,
+        settore_abilitato: data.settore_abilitato,
+        location_id: data.location_id
+      };
+      setProfile(userProf);
+
+      if (data.ruolo_dettagliato && data.ruolo_dettagliato.startsWith('responsabile_')) {
+        setActiveTab('sectororders');
+        setOpenSections({
+          operations: false,
+          purchasing: true,
+          analytics: false,
+          catalog: false,
+          administration: false
+        });
+      } else {
+        setActiveTab(data.ruolo === 'admin' ? 'dashboard' : 'validation');
+      }
+    } catch (err: any) {
+      setLoginError(err.message || 'Errore durante l\'accesso')
     } finally {
-      setLoggingIn(false);
+      setLoggingIn(false)
     }
+  }
+
+  const getRoleLabel = () => {
+    if (!profile) return 'Operatore';
+    if (profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin') return '👑 Amministratore';
+    if (profile.ruolo_dettagliato === 'responsabile_beverage') return '🍹 Resp. Beverage';
+    if (profile.ruolo_dettagliato === 'responsabile_materiali') return '📦 Resp. Materiali';
+    if (profile.ruolo_dettagliato === 'responsabile_food') return '🍽️ Resp. Food';
+    if (profile.ruolo_dettagliato === 'manager_sede') return '🏢 Store Manager';
+    return '👤 Operatore';
   };
 
   const renderContent = () => {
@@ -265,7 +333,7 @@ export default function App() {
                 <Activity size={32} />
               </div>
               <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '8px', letterSpacing: '-0.03em' }}>Price Sentinel</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Accedi al portale di audit fatture</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Accedi con le tue credenziali operatore</p>
             </div>
 
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -293,7 +361,7 @@ export default function App() {
                   <input
                     type="email"
                     required
-                    placeholder="admin@pricesentinel.it"
+                    placeholder="email@pricesentinel.it"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     style={{
@@ -372,8 +440,8 @@ export default function App() {
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'priceanalysis': return <PriceTrendAnalyzer />;
-      case 'sectororders': return <SectorOrderBuilder />;
-      case 'ordini': return <SectorOrderBuilder />;
+      case 'sectororders': return <SectorOrderBuilder userProfile={profile} />;
+      case 'ordini': return <SectorOrderBuilder userProfile={profile} />;
       case 'skumanager': return <SkuManager />;
       case 'categories': return <CategorySupplierManager />;
       case 'productidentity': return <ProductIdentityManager />;
@@ -417,6 +485,8 @@ export default function App() {
 
   const info = getHeaderInfo();
 
+  const isSectorResp = profile?.ruolo_dettagliato && profile.ruolo_dettagliato.startsWith('responsabile_');
+
   return (
     <div className="app-container">
       {/* Mobile Sidebar Backdrop */}
@@ -447,7 +517,7 @@ export default function App() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Navigazione principale">
-          {profile?.ruolo === 'admin' && (
+          {!isSectorResp && (profile?.ruolo === 'admin' || profile?.ruolo_dettagliato === 'admin') && (
             <button
               className={`sidebar-nav-item ${activeTab === 'dashboard' ? 'is-active' : ''}`}
               onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
@@ -457,7 +527,7 @@ export default function App() {
           )}
 
           {NAV_SECTIONS.map(section => {
-            const visibleItems = section.items.filter(item => !item.adminOnly || profile?.ruolo === 'admin')
+            const visibleItems = section.items.filter(item => isItemPermitted(item, profile))
             if (visibleItems.length === 0) return null
 
             const isOpen = openSections[section.id]
@@ -502,8 +572,8 @@ export default function App() {
 
         <div className="sidebar-footer">
           <div className="sidebar-user-summary">
-            <span>{profile ? (profile.ruolo === 'admin' ? 'Amministratore' : 'Manager') : 'Profilo'}</span>
-            <small>{profile?.email || 'Profilo in caricamento…'}</small>
+            <span style={{ fontWeight: 700, color: 'white' }}>{getRoleLabel()}</span>
+            <small>{profile?.nome_completo || profile?.email || 'Profilo in caricamento…'}</small>
           </div>
         </div>
       </aside>
@@ -545,11 +615,11 @@ export default function App() {
           
           <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div className="profile-info" style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 600 }}>{profile ? (profile.ruolo === 'admin' ? 'Amministratore' : 'Manager') : 'Profilo'}</div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{profile?.email || 'Profilo in caricamento…'}</div>
+              <div style={{ fontWeight: 600, color: 'white' }}>{getRoleLabel()}</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{profile?.nome_completo || profile?.email || 'Profilo in caricamento…'}</div>
             </div>
-            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-glass)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {profile?.email?.charAt(0).toUpperCase() || '…'}
+            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-glass)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--accent-blue)' }}>
+              {profile?.nome_completo ? profile.nome_completo.charAt(0).toUpperCase() : (profile?.email?.charAt(0).toUpperCase() || '…')}
             </div>
           </div>
         </header>

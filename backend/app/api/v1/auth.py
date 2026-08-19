@@ -52,6 +52,9 @@ async def login(
     return TokenResponse(
         access_token=token,
         ruolo=user.ruolo.value,
+        ruolo_dettagliato=user.ruolo_dettagliato or user.ruolo.value,
+        settore_abilitato=user.settore_abilitato or "all",
+        nome_completo=user.nome_completo,
         location_id=user.location_id,
     )
 
@@ -87,5 +90,8 @@ async def refresh_token(
     return TokenResponse(
         access_token=token,
         ruolo=current_user.ruolo.value,
+        ruolo_dettagliato=current_user.ruolo_dettagliato or current_user.ruolo.value,
+        settore_abilitato=current_user.settore_abilitato or "all",
+        nome_completo=current_user.nome_completo,
         location_id=current_user.location_id,
     )
