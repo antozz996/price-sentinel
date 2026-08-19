@@ -73,15 +73,23 @@ export default function SettingsPage() {
   const [userLocationId, setUserLocationId] = useState<number | ''>('');
   const [submittingUser, setSubmittingUser] = useState(false);
 
+  // Company / White-Label Settings State
+  const [companyName, setCompanyName] = useState('Price Sentinel');
+  const [companySubtitle, setCompanySubtitle] = useState('Audit & Purchasing Platform');
+  const [companySupportEmail, setCompanySupportEmail] = useState('support@pricesentinel.it');
+  const [companyCurrency, setCompanyCurrency] = useState('€');
+  const [savingCompany, setSavingCompany] = useState(false);
+
   const headers = getHeaders();
 
   const loadData = async (signal?: AbortSignal) => {
     try {
-      const [usersRes, statsRes, locRes, fornRes] = await Promise.all([
+      const [usersRes, statsRes, locRes, fornRes, compRes] = await Promise.all([
         fetch(`${API_BASE}/utenti/`, { headers, signal }),
         fetch(`${API_BASE}/health`, { headers, signal }),
         fetch(`${API_BASE}/location/`, { headers, signal }),
-        fetch(`${API_BASE}/fornitori/`, { headers, signal })
+        fetch(`${API_BASE}/fornitori/`, { headers, signal }),
+        fetch(`${API_BASE}/settings/company/`, { headers, signal })
       ]);
 
       if (usersRes.ok) {
@@ -102,6 +110,14 @@ export default function SettingsPage() {
       if (fornRes.ok) {
         const fData = await fornRes.json();
         if (Array.isArray(fData)) setFornitori(fData);
+      }
+
+      if (compRes.ok) {
+        const cData = await compRes.json();
+        if (cData.company_name) setCompanyName(cData.company_name);
+        if (cData.app_subtitle !== undefined) setCompanySubtitle(cData.app_subtitle || '');
+        if (cData.support_email !== undefined) setCompanySupportEmail(cData.support_email || '');
+        if (cData.currency_symbol) setCompanyCurrency(cData.currency_symbol);
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') console.error(e);
@@ -453,6 +469,39 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveCompanySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyName.trim()) return;
+    setSavingCompany(true);
+    try {
+      const res = await fetch(`${API_BASE}/settings/company/`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          company_name: companyName.trim(),
+          app_subtitle: companySubtitle.trim() || null,
+          support_email: companySupportEmail.trim() || null,
+          currency_symbol: companyCurrency.trim() || '€'
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Impossibile salvare il branding aziendale.');
+      }
+
+      setMessage({ text: 'Branding e profilo aziendale salvati con successo!', type: 'success' });
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || 'Errore durante il salvataggio.', type: 'error' });
+    } finally {
+      setSavingCompany(false);
+    }
+  };
+
   function handleLogout() {
     localStorage.removeItem('token');
     window.location.reload();
@@ -476,6 +525,77 @@ export default function SettingsPage() {
           {message.text}
         </div>
       )}
+
+      {/* WHITE-LABEL & COMPANY BRANDING PANEL */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Building2 size={20} color="var(--accent-blue)" /> Profilo Azienda & White-Label
+            </h3>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Personalizza il nome del tuo gruppo aziendale, il payoff e i contatti visualizzati nell'interfaccia.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveCompanySettings} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', alignItems: 'flex-end', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Nome Azienda / Gruppo</label>
+            <input
+              type="text"
+              required
+              placeholder="es. Price Sentinel / Playa Group"
+              value={companyName}
+              onChange={e => setCompanyName(e.target.value)}
+              style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Sottotitolo / Payoff Piattaforma</label>
+            <input
+              type="text"
+              placeholder="es. Audit & Purchasing Platform"
+              value={companySubtitle}
+              onChange={e => setCompanySubtitle(e.target.value)}
+              style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Email Supporto & Assistenza</label>
+            <input
+              type="email"
+              placeholder="es. supporto@tuogruppo.it"
+              value={companySupportEmail}
+              onChange={e => setCompanySupportEmail(e.target.value)}
+              style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '90px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Valuta</label>
+              <input
+                type="text"
+                value={companyCurrency}
+                onChange={e => setCompanyCurrency(e.target.value)}
+                style={{ padding: '9px 12px', textAlign: 'center', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={savingCompany}
+              style={{ flex: 1, height: '38px', alignSelf: 'flex-end', fontSize: '0.85rem', fontWeight: 700 }}
+            >
+              {savingCompany ? 'Salvataggio...' : 'Salva Branding'}
+            </button>
+          </div>
+        </form>
+      </div>
 
       {/* ANAGRAFICHE MANAGEMENT PANEL */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))', gap: '24px' }}>

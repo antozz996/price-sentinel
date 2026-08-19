@@ -32,10 +32,12 @@ from app.api.v1 import (
     onboarding,
     smart_price_sheet,
     feedbacks,
+    company_settings,
 )
 
 api_router = APIRouter(redirect_slashes=False)
 
+api_router.include_router(company_settings.router, prefix="/settings/company", tags=["Impostazioni Azienda & White-Label"])
 api_router.include_router(feedbacks.router, prefix="/feedbacks", tags=["Recensioni e Qualità Prodotti"])
 
 api_router.include_router(auth.router, prefix="/auth", tags=["Autenticazione"])

@@ -49,6 +49,7 @@ from app.models.disputes import (  # noqa: F401
 from app.models.automation import AutomationAlert, AutomationRun  # noqa: F401
 from app.models.products import ProductFeedback  # noqa: F401
 from app.models.categories import MasterCategory  # noqa: F401
+from app.models.company_settings import CompanySettings  # noqa: F401
 from app.models.onboarding import LocationReconciliationSettings  # noqa: F401
 from app.models.purchase_policy import (  # noqa: F401
     ProductPurchasePolicy,

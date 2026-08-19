@@ -138,6 +138,29 @@ export default function App() {
   const [recentOrdersCount, setRecentOrdersCount] = useState(0);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
+  // White-Label & Company Branding
+  const [companySettings, setCompanySettings] = useState<{
+    company_name: string;
+    app_subtitle?: string | null;
+    primary_color?: string;
+    support_email?: string | null;
+    currency_symbol?: string;
+  }>({
+    company_name: 'PRICE SENTINEL',
+    app_subtitle: 'Audit & Purchasing Platform',
+    primary_color: '#3b82f6',
+    currency_symbol: '€',
+  });
+
+  useEffect(() => {
+    fetch(`${API_BASE}/settings/company/`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (d && d.company_name) setCompanySettings(d);
+      })
+      .catch(() => {});
+  }, [activeTab]);
+
   const loadNotificationStats = async () => {
     try {
       const [feedRes, ordRes] = await Promise.all([
@@ -374,8 +397,8 @@ export default function App() {
               }}>
                 <Activity size={32} />
               </div>
-              <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '8px', letterSpacing: '-0.03em' }}>Price Sentinel</h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Accedi con le tue credenziali operatore</p>
+              <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '8px', letterSpacing: '-0.03em' }}>{companySettings.company_name}</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{companySettings.app_subtitle || 'Accedi con le tue credenziali operatore'}</p>
             </div>
 
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -558,7 +581,9 @@ export default function App() {
             <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Activity color="white" size={20} />
             </div>
-            <h2 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 700, letterSpacing: '1px' }}>PRICE SENTINEL</h2>
+            <h2 style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700, letterSpacing: '0.5px' }}>
+              {companySettings.company_name.toUpperCase()}
+            </h2>
           </div>
           {/* Mobile Close Drawer Button */}
           <button
