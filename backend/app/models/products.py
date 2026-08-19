@@ -269,7 +269,7 @@ class MatchCandidate(Base):
 
 class ProductFeedback(Base):
     """
-    Feedback degli operatori di settore sui prodotti (SI / NO con motivazione e gestione amministratore).
+    Feedback degli operatori di settore sui prodotti (SI / NO con motivazione, stelle e gestione amministratore).
     """
     __tablename__ = "product_feedbacks"
 
@@ -277,6 +277,8 @@ class ProductFeedback(Base):
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("utenti.id", ondelete="CASCADE"), nullable=False)
     feedback: Mapped[str] = mapped_column(String(10), nullable=False)  # 'SI' o 'NO'
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1 to 5 stars
+    ordine_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ordini.id", ondelete="SET NULL"), nullable=True)
     motivo: Mapped[str | None] = mapped_column(String(255), nullable=True)
     note: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     stato: Mapped[str] = mapped_column(String(30), nullable=False, default="in_attesa", index=True)
@@ -290,3 +292,4 @@ class ProductFeedback(Base):
     product = relationship("Product", lazy="selectin")
     user = relationship("Utente", foreign_keys=[user_id], lazy="selectin")
     resolved_by = relationship("Utente", foreign_keys=[resolved_by_id], lazy="selectin")
+    ordine = relationship("Ordine", foreign_keys=[ordine_id], lazy="selectin")

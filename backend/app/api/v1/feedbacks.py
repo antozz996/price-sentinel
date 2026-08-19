@@ -14,8 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.api.deps import get_current_user, require_admin
 from app.models.utenti import Utente
-from app.models.products import Product
-from app.models.feedbacks import ProductFeedback
+from app.models.products import Product, ProductFeedback
 from app.models.listino import ListinoMaster
 from app.models.fornitori import Fornitore
 
