@@ -1,24 +1,98 @@
 """
 Price Sentinel — Router Ordini.
 Integrazione Intelligenza di Acquisto e Ottimizzazione Ordini (Regole A, B, C).
+Modulo Sviluppo Ordini per Responsabili di Settore con invio WhatsApp.
 """
 
-from datetime import datetime
-from typing import List, Optional, Dict
+import urllib.parse
+from datetime import datetime, date
+from decimal import Decimal
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import require_admin
+from app.api.deps import require_admin, get_current_user
 from app.models.listino import ListinoMaster
 from app.models.fatture import RigaFattura, Fattura
 from app.models.fornitori import Fornitore
 from app.models.location import Location
 from app.models.ordini import Ordine, RigaOrdine
+from app.models.products import Product, SupplierProductAlias
+from app.models.utenti import Utente
 
 router = APIRouter()
+
+
+# ── Schemas per Settore & WhatsApp ───────────────────
+
+class SectorOrderItem(BaseModel):
+    product_id: int
+    sku_interno: Optional[str] = None
+    canonical_name: str
+    order_name: Optional[str] = None
+    quantita: float = Field(..., gt=0)
+    comparison_unit: Optional[str] = "piece"
+    category: Optional[str] = None
+    preferred_supplier_id: Optional[int] = None
+    prezzo_unitario: Optional[float] = None
+
+
+class SectorOrderDraftRequest(BaseModel):
+    location_id: int
+    settore: Optional[str] = None  # Beverage, Food, Materiali di consumo, etc.
+    data_consegna: Optional[str] = None
+    note: Optional[str] = None
+    items: List[SectorOrderItem] = Field(..., min_items=1)
+
+
+class SupplierOrderItemDetail(BaseModel):
+    product_id: int
+    sku_interno: Optional[str] = None
+    nome_prodotto: str
+    codice_fornitore: Optional[str] = None
+    quantita: float
+    uom: str
+    prezzo_unitario: float
+    subtotale: float
+    is_concordato: bool
+
+
+class SupplierOrderBundle(BaseModel):
+    fornitore_id: int
+    fornitore_nome: str
+    partita_iva: Optional[str] = None
+    email_contatto: Optional[str] = None
+    telefono_contatto: Optional[str] = None
+    totale_ordine: float
+    numero_articoli: int
+    totale_colli: float
+    items: List[SupplierOrderItemDetail]
+    whatsapp_message: str
+    whatsapp_url: str
+
+
+class SectorOrderDraftResponse(BaseModel):
+    location_id: int
+    location_nome: str
+    location_indirizzo: Optional[str] = None
+    settore: Optional[str] = None
+    data_consegna: Optional[str] = None
+    note: Optional[str] = None
+    totale_complessivo: float
+    totale_fornitori_coinvolti: int
+    totale_articoli: int
+    fornitori_ordini: List[SupplierOrderBundle]
+
+
+class ConfirmSectorOrderRequest(BaseModel):
+    location_id: int
+    settore: Optional[str] = None
+    data_consegna: Optional[str] = None
+    note: Optional[str] = None
+    bundles: List[SupplierOrderBundle]
 
 
 # ── Schemas ──────────────────────────────────────────
@@ -315,13 +389,246 @@ async def crea_ordine(
     return generated_ids
 
 
+def _format_whatsapp_text(
+    supplier_name: str,
+    location_name: str,
+    location_address: Optional[str],
+    delivery_date: Optional[str],
+    sector: Optional[str],
+    order_notes: Optional[str],
+    items: List[SupplierOrderItemDetail],
+    total_amount: float,
+) -> str:
+    lines = [
+        f"📦 *ORDINE D'ACQUISTO — {supplier_name.upper()}*",
+        "",
+        f"📍 *Destinazione:* {location_name}" + (f" ({location_address})" if location_address else ""),
+        f"📅 *Consegna richiesta:* {delivery_date or 'Prima possibile'}",
+    ]
+    if sector:
+        lines.append(f"🏷️ *Settore / Reparto:* {sector}")
+    
+    lines.append("")
+    lines.append("*ARTICOLI RICHIESTI:*")
+    for it in items:
+        qty = it.quantita
+        qty_str = f"{int(qty)}" if qty == int(qty) else f"{qty:.2f}"
+        name = it.nome_prodotto
+        uom = it.uom or "pz"
+        code_str = f" [Cod. {it.codice_fornitore}]" if it.codice_fornitore else ""
+        lines.append(f"• *{qty_str} {uom}* × {name}{code_str}")
+    
+    lines.append("")
+    lines.append(f"💰 *Totale stimato:* € {total_amount:.2f} + IVA")
+    if order_notes and order_notes.strip():
+        lines.append(f"📝 *Note:* {order_notes.strip()}")
+    
+    lines.append("")
+    lines.append("Si prega di confermare la ricezione e la presa in carico. Grazie!")
+    return "\n".join(lines)
+
+
+@router.post(
+    "/settore/elabora",
+    response_model=SectorOrderDraftResponse,
+    summary="Elabora il fabbisogno di settore, raggruppa per fornitore e genera i testi WhatsApp",
+)
+async def elabora_ordine_settore(
+    data: SectorOrderDraftRequest,
+    db: AsyncSession = Depends(get_db),
+    _user: Utente = Depends(get_current_user),
+) -> SectorOrderDraftResponse:
+    # 1. Recupera la location
+    loc = await db.get(Location, data.location_id)
+    if not loc:
+        raise HTTPException(status_code=404, detail="Location selezionata non trovata")
+    
+    # 2. Recupera tutti i fornitori per lookup
+    fornitori_db = (await db.scalars(select(Fornitore))).all()
+    fornitori_map = {f.id: f for f in fornitori_db}
+
+    # 3. Raggruppamento per fornitore
+    supplier_items_map: Dict[int, List[SupplierOrderItemDetail]] = {}
+    
+    today = date.today()
+    for it in data.items:
+        product = await db.get(Product, it.product_id)
+        if not product:
+            continue
+        
+        # Cerca fornitore e prezzo migliore / pattuito
+        chosen_supplier_id = it.preferred_supplier_id
+        unit_price = it.prezzo_unitario
+        uom = it.comparison_unit or product.comparison_unit or "piece"
+        is_concordato = False
+        supplier_code = None
+
+        if not chosen_supplier_id or unit_price is None:
+            # Query listino_master per il miglior prezzo attivo
+            if product.sku_interno:
+                listino_query = select(ListinoMaster).where(
+                    ListinoMaster.sku_interno == product.sku_interno,
+                    ListinoMaster.data_inizio_validita <= today,
+                    or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today)
+                ).order_by(ListinoMaster.prezzo_pattuito.asc())
+                best_listino = (await db.execute(listino_query)).scalars().first()
+                if best_listino:
+                    chosen_supplier_id = best_listino.fornitore_id
+                    unit_price = float(best_listino.prezzo_pattuito)
+                    uom = best_listino.unita_misura or uom
+                    is_concordato = True
+
+        # Fallback se ancora nullo
+        if not chosen_supplier_id:
+            chosen_supplier_id = 3 if 3 in fornitori_map else (fornitori_db[0].id if fornitori_db else 1)
+        if unit_price is None:
+            unit_price = 0.0
+
+        # Cerca codice articolo fornitore tramite alias
+        if product.id:
+            alias = (await db.scalars(
+                select(SupplierProductAlias).where(
+                    SupplierProductAlias.product_id == product.id,
+                    SupplierProductAlias.supplier_id == chosen_supplier_id,
+                    SupplierProductAlias.status == "approved"
+                )
+            )).first()
+            if alias:
+                supplier_code = alias.supplier_code
+
+        display_name = it.order_name or product.order_name or it.canonical_name or product.canonical_name
+        subtotal = round(unit_price * it.quantita, 2)
+
+        item_detail = SupplierOrderItemDetail(
+            product_id=product.id,
+            sku_interno=product.sku_interno,
+            nome_prodotto=display_name,
+            codice_fornitore=supplier_code,
+            quantita=it.quantita,
+            uom=uom,
+            prezzo_unitario=unit_price,
+            subtotale=subtotal,
+            is_concordato=is_concordato,
+        )
+
+        if chosen_supplier_id not in supplier_items_map:
+            supplier_items_map[chosen_supplier_id] = []
+        supplier_items_map[chosen_supplier_id].append(item_detail)
+
+    # 4. Costruisci i bundles fornitore con messaggi WhatsApp
+    bundles: List[SupplierOrderBundle] = []
+    totale_complessivo = 0.0
+    totale_articoli = 0
+
+    for sup_id, items in supplier_items_map.items():
+        sup = fornitori_map.get(sup_id)
+        sup_name = sup.nome_azienda if sup else f"Fornitore #{sup_id}"
+        totale_bundle = round(sum(i.subtotale for i in items), 2)
+        totale_colli = sum(i.quantita for i in items)
+        totale_complessivo += totale_bundle
+        totale_articoli += len(items)
+
+        loc_addr = getattr(loc, "indirizzo", None) or getattr(loc, "citta", None)
+
+        wa_msg = _format_whatsapp_text(
+            supplier_name=sup_name,
+            location_name=loc.nome_struttura,
+            location_address=loc_addr,
+            delivery_date=data.data_consegna,
+            sector=data.settore,
+            order_notes=data.note,
+            items=items,
+            total_amount=totale_bundle,
+        )
+
+        wa_encoded = urllib.parse.quote(wa_msg)
+        wa_url = f"https://api.whatsapp.com/send?text={wa_encoded}"
+
+        bundles.append(
+            SupplierOrderBundle(
+                fornitore_id=sup_id,
+                fornitore_nome=sup_name,
+                partita_iva=sup.partita_iva if sup else None,
+                email_contatto=sup.email_contatto if sup else None,
+                telefono_contatto=None,
+                totale_ordine=totale_bundle,
+                numero_articoli=len(items),
+                totale_colli=totale_colli,
+                items=items,
+                whatsapp_message=wa_msg,
+                whatsapp_url=wa_url,
+            )
+        )
+
+    bundles.sort(key=lambda b: b.fornitore_nome)
+
+    return SectorOrderDraftResponse(
+        location_id=loc.id,
+        location_nome=loc.nome_struttura,
+        location_indirizzo=getattr(loc, "indirizzo", None),
+        settore=data.settore,
+        data_consegna=data.data_consegna,
+        note=data.note,
+        totale_complessivo=round(totale_complessivo, 2),
+        totale_fornitori_coinvolti=len(bundles),
+        totale_articoli=totale_articoli,
+        fornitori_ordini=bundles,
+    )
+
+
+@router.post(
+    "/settore/salva",
+    summary="Salva definitivamente gli ordini di settore nel gestionale",
+)
+async def salva_ordini_settore(
+    data: ConfirmSectorOrderRequest,
+    db: AsyncSession = Depends(get_db),
+    _user: Utente = Depends(get_current_user),
+):
+    saved_ids = []
+    now = datetime.utcnow()
+
+    for bundle in data.bundles:
+        ordine = Ordine(
+            fornitore_id=bundle.fornitore_id,
+            location_id=data.location_id,
+            data_ordine=now,
+            spesa_totale=bundle.totale_ordine,
+            stato="inviato",
+        )
+        db.add(ordine)
+        await db.flush()
+
+        for it in bundle.items:
+            riga = RigaOrdine(
+                ordine_id=ordine.id,
+                sku_interno=it.sku_interno or f"PROD-{it.product_id}",
+                descrizione=it.nome_prodotto,
+                quantita=it.quantita,
+                prezzo_pattuito=it.prezzo_unitario,
+                prezzo_inserito=it.prezzo_unitario,
+                stato_ottimizzazione="concordato" if it.is_concordato else "settore",
+            )
+            db.add(riga)
+
+        saved_ids.append(ordine.id)
+
+    await db.commit()
+    return {
+        "status": "success",
+        "ordini_creati": len(saved_ids),
+        "ordini_ids": saved_ids,
+        "message": f"Salvati {len(saved_ids)} ordini d'acquisto nel gestionale con successo!",
+    }
+
+
 @router.get(
     "/",
     summary="Elenco di tutti gli ordini generati",
 )
 async def list_ordini(
     db: AsyncSession = Depends(get_db),
-    _admin = Depends(require_admin),
+    _user: Utente = Depends(get_current_user),
 ):
     """Restituisce la lista di tutti gli ordini d'acquisto preventivi memorizzati."""
     stmt = select(Ordine).order_by(Ordine.id.desc())

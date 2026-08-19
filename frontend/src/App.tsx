@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
@@ -7,7 +7,6 @@ import PriceListManager from './components/PriceListManager'
 import ManualUpload from './components/ManualUpload'
 import FattureList from './components/FattureList'
 import SettingsPage from './components/SettingsPage'
-import OrderOptimizer from './components/OrderOptimizer'
 import SkuManager from './components/SkuManager'
 import SentinelCopilot from './components/SentinelCopilot'
 import ProductConsumptionReport from './components/ProductConsumptionReport'
@@ -22,6 +21,7 @@ import OrderReconciliations from './components/OrderReconciliations'
 import DisputeManagement from './components/DisputeManagement'
 import OperationalAlerts from './components/OperationalAlerts'
 import ClientOnboarding from './components/ClientOnboarding'
+import SectorOrderBuilder from './components/SectorOrderBuilder'
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -61,6 +61,7 @@ const NAV_SECTIONS: NavSection[] = [
     id: 'purchasing',
     label: 'Acquisti',
     items: [
+      { id: 'sectororders', label: 'Sviluppo ordini settore', icon: ShoppingCart },
       { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
       { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
     ],
@@ -371,7 +372,8 @@ export default function App() {
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'priceanalysis': return <PriceTrendAnalyzer />;
-      case 'ordini': return <OrderOptimizer />;
+      case 'sectororders': return <SectorOrderBuilder />;
+      case 'ordini': return <SectorOrderBuilder />;
       case 'skumanager': return <SkuManager />;
       case 'categories': return <CategorySupplierManager />;
       case 'productidentity': return <ProductIdentityManager />;
@@ -397,7 +399,8 @@ export default function App() {
       case 'crosssupplier': return { title: 'Listino Smart', sub: 'Prezzi, qualità fornitori e regole di acquisto in un’unica matrice' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
-      case 'ordini': return { title: 'Ottimizzatore Ordini d\'Acquisto', sub: 'Routing intelligente dei fornitori, blocco contratti e spesa spot' };
+      case 'sectororders': return { title: 'Sviluppo Ordini Settore', sub: 'Compilazione fabbisogno per responsabili, assegnazione fornitori e invio WhatsApp' };
+      case 'ordini': return { title: 'Sviluppo Ordini Settore', sub: 'Compilazione fabbisogno per responsabili, assegnazione fornitori e invio WhatsApp' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'categories': return { title: 'Categorie & Fornitori', sub: 'Catalogo categorie merci e mappatura settori fornitori' };
       case 'productidentity': return { title: 'Prodotti e alias', sub: 'Gestione catalogo canonico, alias e proposte di matching' };
