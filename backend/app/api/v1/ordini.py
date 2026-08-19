@@ -891,3 +891,54 @@ async def convalida_ricezione_ordine(
         "message": f"Ricezione merci dell'ordine #{ordine.id} registrata con successo!"
     }
 
+
+@router.get(
+    "/notifications/feed",
+    summary="Feed notifiche ordini recenti per la direzione e manager",
+)
+async def get_order_notifications(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    """
+    Restituisce gli ultimi ordini emessi con indicazione esplicita dell'autore dell'ordine,
+    sede, fornitore, importo e data per il centro notifiche.
+    """
+    stmt = select(Ordine).order_by(Ordine.data_ordine.desc()).limit(limit)
+
+    if user.ruolo != "admin" and user.ruolo_dettagliato != "admin":
+        if user.location_id:
+            stmt = stmt.where(Ordine.location_id == user.location_id)
+
+    ordini = (await db.scalars(stmt)).all()
+
+    items = []
+    for o in ordini:
+        author_name = o.user.nome_completo if o.user and o.user.nome_completo else (o.user.email if o.user else "Operatore Sconosciuto")
+        author_role = o.user.ruolo_dettagliato if o.user else "manager"
+        items.append({
+            "id": o.id,
+            "fornitore_id": o.fornitore_id,
+            "fornitore_nome": o.fornitore.nome_azienda if o.fornitore else f"Fornitore #{o.fornitore_id}",
+            "location_id": o.location_id,
+            "location_nome": o.location.nome_struttura if o.location else f"Sede #{o.location_id}",
+            "user_id": o.user_id,
+            "user_nome": author_name,
+            "user_ruolo": author_role,
+            "settore": o.settore or "Generico",
+            "data_ordine": o.data_ordine.isoformat() if o.data_ordine else None,
+            "data_consegna": o.data_consegna,
+            "spesa_totale": float(o.spesa_totale),
+            "stato": o.stato,
+            "stato_ricezione": o.stato_ricezione,
+            "n_righe": len(o.righe),
+            "totale_colli": sum(float(r.quantita) for r in o.righe),
+        })
+
+    return {
+        "count": len(items),
+        "notifications": items
+    }
+
+

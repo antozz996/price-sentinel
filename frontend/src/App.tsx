@@ -25,7 +25,7 @@ import SectorOrderBuilder from './components/SectorOrderBuilder'
 import OrderRegistry from './components/OrderRegistry'
 import GoodsReceipt from './components/GoodsReceipt'
 import ProductReviewPage from './components/ProductReviewPage'
-import ProductFeedbackReviewModal from './components/ProductFeedbackReviewModal'
+import NotificationCenterModal from './components/NotificationCenterModal'
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -132,16 +132,26 @@ export default function App() {
     administration: false,
   })
 
-  // Product feedback notifications for admin
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  // Notification center & order redirect state
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
   const [pendingFeedbacksCount, setPendingFeedbacksCount] = useState(0);
+  const [recentOrdersCount, setRecentOrdersCount] = useState(0);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
 
-  const loadFeedbackStats = async () => {
+  const loadNotificationStats = async () => {
     try {
-      const res = await fetch(`${API_BASE}/products/feedbacks/stats`, { headers: getHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setPendingFeedbacksCount(data.pending_negative_feedbacks || 0);
+      const [feedRes, ordRes] = await Promise.all([
+        fetch(`${API_BASE}/feedbacks/pending-count`, { headers: getHeaders() }),
+        fetch(`${API_BASE}/ordini/notifications/feed?limit=10`, { headers: getHeaders() })
+      ]);
+
+      if (feedRes.ok) {
+        const feedData = await feedRes.json();
+        setPendingFeedbacksCount(feedData.count || 0);
+      }
+      if (ordRes.ok) {
+        const ordData = await ordRes.json();
+        setRecentOrdersCount(ordData.count || 0);
       }
     } catch {
       // ignore
@@ -149,12 +159,12 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (isAuth && (profile?.ruolo === 'admin' || profile?.ruolo_dettagliato === 'admin')) {
-      loadFeedbackStats();
-      const interval = setInterval(loadFeedbackStats, 20000);
+    if (isAuth) {
+      loadNotificationStats();
+      const interval = setInterval(loadNotificationStats, 20000);
       return () => clearInterval(interval);
     }
-  }, [isAuth, profile]);
+  }, [isAuth]);
 
   // Login form states
   const [email, setEmail] = useState('')
@@ -474,7 +484,13 @@ export default function App() {
       case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'sectororders': return <SectorOrderBuilder userProfile={profile} />;
       case 'goodsreceipt': return <GoodsReceipt userProfile={profile} />;
-      case 'orderregistry': return <OrderRegistry isAdmin={profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin'} />;
+      case 'orderregistry': return (
+        <OrderRegistry
+          isAdmin={profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin'}
+          selectedOrderId={selectedOrderId}
+          onOrderClose={() => setSelectedOrderId(null)}
+        />
+      );
       case 'productreviews': return <ProductReviewPage userProfile={profile} />;
       case 'ordini': return <SectorOrderBuilder userProfile={profile} />;
       case 'skumanager': return <SkuManager />;
@@ -652,45 +668,43 @@ export default function App() {
           </div>
           
           <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            {(profile?.ruolo === 'admin' || profile?.ruolo_dettagliato === 'admin') && (
-              <button
-                type="button"
-                onClick={() => setFeedbackModalOpen(true)}
-                title="Segnalazioni & Feedback Prodotti"
-                style={{
-                  position: 'relative',
-                  background: pendingFeedbacksCount > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255,255,255,0.03)',
-                  border: pendingFeedbacksCount > 0 ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid var(--border-glass)',
+            <button
+              type="button"
+              onClick={() => setNotificationModalOpen(true)}
+              title="Centro Notifiche: Nuovi Ordini & Segnalazioni"
+              style={{
+                position: 'relative',
+                background: (pendingFeedbacksCount > 0 || recentOrdersCount > 0) ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                border: pendingFeedbacksCount > 0 ? '1px solid rgba(239, 68, 68, 0.4)' : (recentOrdersCount > 0 ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-glass)'),
+                borderRadius: '10px',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: pendingFeedbacksCount > 0 ? '#ef4444' : (recentOrdersCount > 0 ? '#60a5fa' : 'var(--text-secondary)'),
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <Bell size={18} />
+              {(pendingFeedbacksCount > 0 || recentOrdersCount > 0) && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-4px',
+                  right: '-4px',
+                  background: pendingFeedbacksCount > 0 ? '#ef4444' : '#3b82f6',
+                  color: 'white',
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
                   borderRadius: '10px',
-                  width: '40px',
-                  height: '40px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: pendingFeedbacksCount > 0 ? '#ef4444' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <Bell size={18} />
-                {pendingFeedbacksCount > 0 && (
-                  <span style={{
-                    position: 'absolute',
-                    top: '-4px',
-                    right: '-4px',
-                    background: '#ef4444',
-                    color: 'white',
-                    fontSize: '0.68rem',
-                    fontWeight: 800,
-                    borderRadius: '10px',
-                    padding: '1px 5px',
-                    boxShadow: '0 0 10px rgba(239, 68, 68, 0.8)'
-                  }}>
-                    {pendingFeedbacksCount}
-                  </span>
-                )}
-              </button>
-            )}
+                  padding: '1px 5px',
+                  boxShadow: pendingFeedbacksCount > 0 ? '0 0 10px rgba(239, 68, 68, 0.8)' : '0 0 10px rgba(59, 130, 246, 0.8)'
+                }}>
+                  {pendingFeedbacksCount + recentOrdersCount}
+                </span>
+              )}
+            </button>
 
             <div className="profile-info" style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 600, color: 'white' }}>{getRoleLabel()}</div>
@@ -708,11 +722,17 @@ export default function App() {
         </div>
       </main>
 
-      {/* Product Feedback Review Modal */}
-      <ProductFeedbackReviewModal
-        isOpen={feedbackModalOpen}
-        onClose={() => setFeedbackModalOpen(false)}
-        onFeedbackResolved={loadFeedbackStats}
+      {/* Notification Center Modal */}
+      <NotificationCenterModal
+        isOpen={notificationModalOpen}
+        onClose={() => setNotificationModalOpen(false)}
+        onViewOrder={(orderId) => {
+          setSelectedOrderId(orderId);
+          setActiveTab('orderregistry');
+        }}
+        onViewReviews={() => setActiveTab('productreviews')}
+        onViewReceipt={() => setActiveTab('goodsreceipt')}
+        onRefreshCounts={loadNotificationStats}
       />
 
       {/* Global AI Copilot */}

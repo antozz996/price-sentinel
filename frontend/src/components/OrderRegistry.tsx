@@ -52,7 +52,7 @@ interface OrderDetailResponse extends OrderItemSummary {
   righe: OrderDetailRow[];
 }
 
-export default function OrderRegistry(_props?: { isAdmin?: boolean }) {
+export default function OrderRegistry(props?: { isAdmin?: boolean; selectedOrderId?: number | null; onOrderClose?: () => void }) {
   const [orders, setOrders] = useState<OrderItemSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -71,6 +71,12 @@ export default function OrderRegistry(_props?: { isAdmin?: boolean }) {
     loadLocations();
     loadOrders();
   }, []);
+
+  useEffect(() => {
+    if (props?.selectedOrderId) {
+      handleOpenDetail(props.selectedOrderId);
+    }
+  }, [props?.selectedOrderId]);
 
   const loadLocations = async () => {
     try {
@@ -119,6 +125,11 @@ export default function OrderRegistry(_props?: { isAdmin?: boolean }) {
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleCloseModal = () => {
+    setActiveOrderDetail(null);
+    if (props?.onOrderClose) props.onOrderClose();
   };
 
   const handleCopyMessage = (text: string) => {
@@ -634,7 +645,7 @@ export default function OrderRegistry(_props?: { isAdmin?: boolean }) {
 
               <button
                 type="button"
-                onClick={() => setActiveOrderDetail(null)}
+                onClick={handleCloseModal}
                 className="btn"
                 style={{ background: 'transparent', border: '1px solid var(--border-glass)', marginLeft: 'auto' }}
               >
