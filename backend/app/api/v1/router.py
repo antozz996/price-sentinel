@@ -34,10 +34,12 @@ from app.api.v1 import (
     feedbacks,
     company_settings,
     instances,
+    god_mode,
 )
 
 api_router = APIRouter(redirect_slashes=False)
 
+api_router.include_router(god_mode.router, prefix="/god", tags=["SuperAdmin God Mode Control Room"])
 api_router.include_router(instances.router, prefix="/instances", tags=["Gestione Istanze Aziendali"])
 api_router.include_router(company_settings.router, prefix="/settings/company", tags=["Impostazioni Azienda & White-Label"])
 api_router.include_router(feedbacks.router, prefix="/feedbacks", tags=["Recensioni e Qualità Prodotti"])

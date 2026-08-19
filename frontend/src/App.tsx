@@ -26,6 +26,7 @@ import OrderRegistry from './components/OrderRegistry'
 import GoodsReceipt from './components/GoodsReceipt'
 import ProductReviewPage from './components/ProductReviewPage'
 import NotificationCenterModal from './components/NotificationCenterModal'
+import GodModeControlRoom from './components/GodModeControlRoom'
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -129,6 +130,10 @@ export function isItemPermitted(item: NavItem, profile: UserProfile | null): boo
 }
 
 export default function App() {
+  const [isGodMode, setIsGodMode] = useState(() => {
+    return window.location.pathname === '/god' || window.location.hash === '#god' || window.location.search.includes('page=god') || window.location.search.includes('god=1');
+  });
+
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isAuth, setIsAuth] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -140,6 +145,23 @@ export default function App() {
     catalog: false,
     administration: false,
   })
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setIsGodMode(
+        window.location.pathname === '/god' || 
+        window.location.hash === '#god' || 
+        window.location.search.includes('page=god') || 
+        window.location.search.includes('god=1')
+      );
+    };
+    window.addEventListener('hashchange', handleUrlChange);
+    window.addEventListener('popstate', handleUrlChange);
+    return () => {
+      window.removeEventListener('hashchange', handleUrlChange);
+      window.removeEventListener('popstate', handleUrlChange);
+    };
+  }, []);
 
   // Notification center & order redirect state
   const [notificationModalOpen, setNotificationModalOpen] = useState(false);
@@ -368,6 +390,23 @@ export default function App() {
   };
 
   const renderContent = () => {
+    if (isGodMode || activeTab === 'god') {
+      return (
+        <GodModeControlRoom
+          onExit={() => {
+            setIsGodMode(false);
+            setActiveTab('dashboard');
+            if (window.location.hash === '#god') {
+              window.location.hash = '';
+            }
+            if (window.location.pathname === '/god') {
+              window.history.pushState({}, '', '/');
+            }
+          }}
+        />
+      );
+    }
+
     if (!isAuth) {
       return (
         <div style={{
