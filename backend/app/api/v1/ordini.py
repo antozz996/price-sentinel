@@ -653,7 +653,9 @@ async def list_ordini(
         if _user.location_id:
             stmt = stmt.where(Ordine.location_id == _user.location_id)
         if _user.settore_abilitato and _user.settore_abilitato != "all":
-            stmt = stmt.where(Ordine.settore == _user.settore_abilitato)
+            allowed_sectors = [s.strip() for s in _user.settore_abilitato.split(",") if s.strip()]
+            if allowed_sectors:
+                stmt = stmt.where(Ordine.settore.in_(allowed_sectors))
 
     # Param Filters
     if location_id:

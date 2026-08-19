@@ -58,7 +58,7 @@ export default function SettingsPage() {
   const [userPassword, setUserPassword] = useState('');
   const [userNome, setUserNome] = useState('');
   const [userRuoloDettagliato, setUserRuoloDettagliato] = useState('responsabile_beverage');
-  const [userSettore, setUserSettore] = useState('Beverage');
+  const [userSettori, setUserSettori] = useState<string[]>(['Beverage']);
   const [userLocationId, setUserLocationId] = useState<number | ''>('');
   const [submittingUser, setSubmittingUser] = useState(false);
 
@@ -282,7 +282,7 @@ export default function SettingsPage() {
     setUserPassword('');
     setUserNome('');
     setUserRuoloDettagliato('responsabile_beverage');
-    setUserSettore('Beverage');
+    setUserSettori(['Beverage']);
     setUserLocationId('');
     setShowUserModal(true);
   };
@@ -293,7 +293,14 @@ export default function SettingsPage() {
     setUserPassword('');
     setUserNome(u.nome_completo || '');
     setUserRuoloDettagliato(u.ruolo_dettagliato || (u.ruolo === 'admin' ? 'admin' : 'manager_sede'));
-    setUserSettore(u.settore_abilitato || 'all');
+    
+    const rawSec = u.settore_abilitato;
+    if (!rawSec || rawSec === 'all') {
+      setUserSettori(['Beverage', 'Materiali di consumo', 'Food']);
+    } else {
+      setUserSettori(rawSec.split(',').map(s => s.trim()).filter(Boolean));
+    }
+
     setUserLocationId(u.location_id || '');
     setShowUserModal(true);
   };
@@ -302,15 +309,21 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!userEmail) return;
 
+    if (userSettori.length === 0 && userRuoloDettagliato.startsWith('responsabile_')) {
+      alert('Seleziona almeno un settore abilitato per questo responsabile.');
+      return;
+    }
+
     setSubmittingUser(true);
     try {
       const baseRuolo = userRuoloDettagliato === 'admin' ? 'admin' : 'manager';
+      const isAll = userSettori.length === 3 || userSettori.length === 0;
       const payload: any = {
         email: userEmail.trim(),
         nome_completo: userNome.trim() || null,
         ruolo: baseRuolo,
         ruolo_dettagliato: userRuoloDettagliato,
-        settore_abilitato: userSettore,
+        settore_abilitato: isAll ? 'all' : userSettori.join(','),
         location_id: userLocationId ? Number(userLocationId) : null,
       };
 
@@ -739,10 +752,20 @@ export default function SettingsPage() {
                       <span>
                         📍 {locObj ? locObj.nome_struttura : 'Tutte le sedi'}
                       </span>
-                      {u.settore_abilitato && u.settore_abilitato !== 'all' && (
+                      {u.settore_abilitato && (
                         <>
                           <span>•</span>
-                          <span style={{ color: '#93c5fd', fontWeight: 600 }}>Settore: {u.settore_abilitato}</span>
+                          <span style={{ color: '#93c5fd', fontWeight: 600 }}>
+                            {u.settore_abilitato === 'all'
+                              ? '🌐 Tutti i settori'
+                              : u.settore_abilitato.split(',').map(s => {
+                                  const tr = s.trim();
+                                  if (tr === 'Beverage') return '🍹 Beverage';
+                                  if (tr === 'Materiali di consumo') return '📦 Materiali';
+                                  if (tr === 'Food') return '🍽️ Food';
+                                  return tr;
+                                }).join(' • ')}
+                          </span>
                         </>
                       )}
                     </div>
@@ -768,9 +791,9 @@ export default function SettingsPage() {
                     type="button"
                     onClick={() => handleOpenEditUser(u)}
                     className="btn"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', padding: '6px 10px', fontSize: '0.8rem' }}
                   >
-                    <Pencil size={13} /> Modifica
+                    <Pencil size={14} /> Modifica
                   </button>
 
                   <button
@@ -805,7 +828,7 @@ export default function SettingsPage() {
           zIndex: 9999,
           padding: '20px'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', padding: '28px', borderRadius: '16px', border: '1px solid var(--border-glass)' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '540px', padding: '28px', borderRadius: '16px', border: '1px solid var(--border-glass)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <User size={20} color="var(--accent-blue)" /> {editingUserId ? "Modifica Operatore" : "Nuovo Operatore di Settore"}
             </h3>
@@ -849,41 +872,109 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Ruolo Operativo *</label>
-                  <select
-                    value={userRuoloDettagliato}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setUserRuoloDettagliato(val);
-                      if (val === 'responsabile_beverage') setUserSettore('Beverage');
-                      else if (val === 'responsabile_materiali') setUserSettore('Materiali di consumo');
-                      else if (val === 'responsabile_food') setUserSettore('Food');
-                      else if (val === 'admin') setUserSettore('all');
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Ruolo Operativo *</label>
+                <select
+                  value={userRuoloDettagliato}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setUserRuoloDettagliato(val);
+                    if (val === 'responsabile_beverage') setUserSettori(['Beverage']);
+                    else if (val === 'responsabile_materiali') setUserSettori(['Materiali di consumo']);
+                    else if (val === 'responsabile_food') setUserSettori(['Food']);
+                    else if (val === 'admin' || val === 'manager_sede') setUserSettori(['Beverage', 'Materiali di consumo', 'Food']);
+                  }}
+                  style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                >
+                  <option value="responsabile_beverage">🍹 Responsabile Beverage</option>
+                  <option value="responsabile_materiali">📦 Responsabile Materiali</option>
+                  <option value="responsabile_food">🍽️ Responsabile Food</option>
+                  <option value="manager_sede">🏢 Store Manager / Sede</option>
+                  <option value="admin">👑 Amministratore / Direzione</option>
+                </select>
+              </div>
+
+              {/* Multi-Sector Checkboxes */}
+              <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glass)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <label style={{ fontSize: '0.82rem', color: 'white', fontWeight: 700 }}>
+                    Settori Merci Abilitati (Spunta i settori) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (userSettori.length === 3) setUserSettori([]);
+                      else setUserSettori(['Beverage', 'Materiali di consumo', 'Food']);
                     }}
-                    style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--accent-blue)',
+                      fontSize: '0.75rem',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      padding: 0
+                    }}
                   >
-                    <option value="responsabile_beverage">🍹 Responsabile Beverage</option>
-                    <option value="responsabile_materiali">📦 Responsabile Materiali</option>
-                    <option value="responsabile_food">🍽️ Responsabile Food</option>
-                    <option value="manager_sede">🏢 Store Manager / Sede</option>
-                    <option value="admin">👑 Amministratore / Direzione</option>
-                  </select>
+                    {userSettori.length === 3 ? 'Deseleziona tutti' : 'Seleziona tutti'}
+                  </button>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Settore Abilitato</label>
-                  <select
-                    value={userSettore}
-                    onChange={e => setUserSettore(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
-                  >
-                    <option value="all">Tutti i settori</option>
-                    <option value="Beverage">Beverage</option>
-                    <option value="Materiali di consumo">Materiali di consumo</option>
-                    <option value="Food">Food</option>
-                  </select>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[
+                    { id: 'Beverage', label: 'Beverage', icon: '🍹', desc: 'Vini, distillati, birre, analcolici e sciroppi', color: '#60a5fa' },
+                    { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', desc: 'Packaging, monouso, sacchetti e detergenti', color: '#10b981' },
+                    { id: 'Food', label: 'Food', icon: '🍽️', desc: 'Alimentari, freschi, secchi e surgelati', color: '#f59e0b' }
+                  ].map(cat => {
+                    const isChecked = userSettori.includes(cat.id);
+                    return (
+                      <div
+                        key={cat.id}
+                        onClick={() => {
+                          if (isChecked) {
+                            setUserSettori(userSettori.filter(s => s !== cat.id));
+                          } else {
+                            setUserSettori([...userSettori, cat.id]);
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: isChecked ? `1.5px solid ${cat.color}` : '1px solid var(--border-glass)',
+                          background: isChecked ? `${cat.color}15` : 'rgba(0,0,0,0.2)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '1.2rem' }}>{cat.icon}</span>
+                          <div>
+                            <div style={{ fontWeight: 700, color: isChecked ? 'white' : 'var(--text-secondary)', fontSize: '0.86rem' }}>
+                              {cat.label}
+                            </div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                              {cat.desc}
+                            </div>
+                          </div>
+                        </div>
+
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            accentColor: cat.color,
+                            cursor: 'pointer'
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

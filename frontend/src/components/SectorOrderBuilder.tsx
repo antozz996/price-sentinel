@@ -164,11 +164,19 @@ interface SectorOrderBuilderProps {
 }
 
 export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderProps = {}) {
+  const allowedSectors = useMemo(() => {
+    if (!userProfile?.settore_abilitato || userProfile.settore_abilitato === 'all') {
+      return ['Beverage', 'Materiali di consumo', 'Food'];
+    }
+    return userProfile.settore_abilitato.split(',').map(s => s.trim()).filter(Boolean);
+  }, [userProfile]);
+
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<number | ''>(() => userProfile?.location_id || '');
   const [selectedSector, setSelectedSector] = useState<string>(() => {
     if (userProfile?.settore_abilitato && userProfile.settore_abilitato !== 'all') {
-      return userProfile.settore_abilitato;
+      const parts = userProfile.settore_abilitato.split(',').map(s => s.trim()).filter(Boolean);
+      return parts.length === 1 ? parts[0] : (parts[0] || 'all');
     }
     return 'all';
   });
@@ -672,51 +680,56 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px' }}>
           Settore Attivo:
         </span>
-        {MACRO_CATEGORIES.map(cat => {
-          const isSelected = selectedSector === cat.id;
-          const count = cat.id === 'all' 
-            ? products.length 
-            : products.filter(p => p.category === cat.id).length;
+        {MACRO_CATEGORIES
+          .filter(cat => {
+            if (cat.id === 'all') return allowedSectors.length > 1;
+            return allowedSectors.includes(cat.id);
+          })
+          .map(cat => {
+            const isSelected = selectedSector === cat.id;
+            const count = cat.id === 'all' 
+              ? products.filter(p => allowedSectors.includes(p.category || '')).length 
+              : products.filter(p => p.category === cat.id).length;
 
-          return (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => {
-                setSelectedSector(cat.id);
-                setSelectedSubcategory('all');
-              }}
-              style={{
-                padding: '9px 18px',
-                borderRadius: '30px',
-                border: isSelected ? `2px solid ${cat.color}` : '1px solid var(--border-glass)',
-                background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                color: isSelected ? 'white' : 'var(--text-secondary)',
-                fontWeight: isSelected ? 700 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: isSelected ? `0 0 15px ${cat.color}33` : 'none',
-                transition: 'all 0.2s'
-              }}
-            >
-              <span>{cat.icon}</span>
-              <span>{cat.label}</span>
-              <span style={{ 
-                fontSize: '0.75rem', 
-                padding: '2px 7px', 
-                borderRadius: '10px', 
-                background: isSelected ? cat.color : 'rgba(255,255,255,0.08)',
-                color: isSelected ? '#000' : 'inherit',
-                fontWeight: 700
-              }}>
-                {count}
-              </span>
-            </button>
-          );
-        })}
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => {
+                  setSelectedSector(cat.id);
+                  setSelectedSubcategory('all');
+                }}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '30px',
+                  border: isSelected ? `2px solid ${cat.color}` : '1px solid var(--border-glass)',
+                  background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                  color: isSelected ? 'white' : 'var(--text-secondary)',
+                  fontWeight: isSelected ? 700 : 500,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: isSelected ? `0 0 15px ${cat.color}33` : 'none',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span>{cat.icon}</span>
+                <span>{cat.id === 'all' && allowedSectors.length < 3 ? 'Tutti i miei settori' : cat.label}</span>
+                <span style={{ 
+                  fontSize: '0.75rem', 
+                  padding: '2px 7px', 
+                  borderRadius: '10px', 
+                  background: isSelected ? cat.color : 'rgba(255,255,255,0.08)',
+                  color: isSelected ? '#000' : 'inherit',
+                  fontWeight: 700
+                }}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
       </div>
 
       {/* Search & Subcategory Bar */}
