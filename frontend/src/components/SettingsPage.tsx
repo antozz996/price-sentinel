@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil, Phone, MessageSquare, X } from 'lucide-react';
+import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil, Phone, MessageSquare, X, Key, Lock } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface UserInfo {
@@ -499,6 +499,62 @@ export default function SettingsPage() {
       setMessage({ text: err.message || 'Errore durante il salvataggio.', type: 'error' });
     } finally {
       setSavingCompany(false);
+    }
+  };
+
+  // Password Change State & Handler
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [pwdMessage, setPwdMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdMessage(null);
+
+    if (!currentPassword.trim() || !newPassword.trim()) {
+      setPwdMessage({ text: 'Compila tutti i campi della password.', type: 'error' });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPwdMessage({ text: 'La nuova password e la conferma non coincidono.', type: 'error' });
+      return;
+    }
+
+    if (newPassword.length < 4) {
+      setPwdMessage({ text: 'La nuova password deve contenere almeno 4 caratteri.', type: 'error' });
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'Errore durante la modifica della password.');
+      }
+
+      setPwdMessage({ text: 'Password aggiornata con successo!', type: 'success' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setPwdMessage({ text: err.message || 'Errore durante il cambio password.', type: 'error' });
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -1336,6 +1392,128 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* SICUREZZA & CAMBIO PASSWORD */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Key size={20} color="var(--accent-blue)" /> Sicurezza & Cambio Password
+        </h3>
+        <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+          Modifica la password di accesso per il tuo account operatore.
+        </p>
+
+        {pwdMessage && (
+          <div style={{
+            padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px',
+            background: pwdMessage.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
+            color: pwdMessage.type === 'success' ? '#10b981' : '#ef4444',
+            fontSize: '0.85rem'
+          }}>
+            {pwdMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {pwdMessage.text}
+          </div>
+        )}
+
+        <form onSubmit={handleChangePassword} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Password Attuale
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '10px 12px 10px 36px',
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem'
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Nuova Password
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '10px 12px 10px 36px',
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem'
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Conferma Nuova Password
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+              <input
+                type="password"
+                required
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '10px 12px 10px 36px',
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem'
+                }}
+              />
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={changingPassword}
+              className="btn btn-primary"
+              style={{
+                width: '100%',
+                padding: '11px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                fontSize: '0.85rem'
+              }}
+            >
+              <Key size={16} />
+              {changingPassword ? 'Aggiornamento...' : 'Aggiorna Password'}
+            </button>
+          </div>
+        </form>
+      </div>
 
       {/* Account Logout */}
       <div className="glass-panel" style={{ padding: '24px' }}>

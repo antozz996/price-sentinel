@@ -88,6 +88,7 @@ async def refresh_token(
         user_id=current_user.id,
         ruolo=current_user.ruolo.value,
         location_id=current_user.location_id,
+        tenant_id=current_user.tenant_id or 1,
     )
     return TokenResponse(
         access_token=token,
@@ -96,4 +97,45 @@ async def refresh_token(
         settore_abilitato=current_user.settore_abilitato or "all",
         nome_completo=current_user.nome_completo,
         location_id=current_user.location_id,
+        tenant_id=current_user.tenant_id or 1,
     )
+
+
+from pydantic import BaseModel
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+from app.services.auth import hash_password
+
+
+@router.post(
+    "/change-password",
+    summary="Cambio password per l'utente autenticato",
+    description="Consente a qualsiasi utente autenticato di cambiare la propria password fornendo la password attuale e la nuova password.",
+)
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: Utente = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not verify_password(data.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La password attuale non è corretta",
+        )
+
+    if len(data.new_password.strip()) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nuova password deve contenere almeno 4 caratteri",
+        )
+
+    current_user.password_hash = hash_password(data.new_password.strip())
+    await db.commit()
+
+    return {"status": "success", "message": "Password modificata con successo!"}
+
