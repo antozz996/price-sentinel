@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.api.deps import require_admin
-from app.models.utenti import Utente
+from app.models.utenti import Utente, RuoloUtente
 from app.models.tenant_instances import TenantInstance
+from app.services.auth import hash_password
 
 router = APIRouter()
 
@@ -123,6 +124,20 @@ services:
         created_at=datetime.utcnow()
     )
     db.add(new_instance)
+
+    # Crea automaticamente l'utente amministratore per l'istanza cliente se non esiste già
+    existing_user = (await db.scalars(select(Utente).where(Utente.email == data.admin_email.strip()))).first()
+    if not existing_user:
+        new_admin = Utente(
+            email=data.admin_email.strip(),
+            password_hash=hash_password(data.admin_password.strip()),
+            nome_completo=f"Admin {data.company_name.strip()}",
+            ruolo=RuoloUtente.admin,
+            ruolo_dettagliato="admin",
+            attivo=True
+        )
+        db.add(new_admin)
+
     await db.commit()
     await db.refresh(new_instance)
 

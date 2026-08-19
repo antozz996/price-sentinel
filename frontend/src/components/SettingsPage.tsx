@@ -714,17 +714,16 @@ export default function SettingsPage() {
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {inst.access_url && (
-                    <a
-                      href={inst.access_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-primary"
-                      style={{ padding: '6px 14px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
-                    >
-                      <ExternalLink size={14} /> Apri Piattaforma Cliente
-                    </a>
-                  )}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`Piattaforma: ${window.location.origin}\nEmail Admin: ${inst.admin_email}\nIstanza: ${inst.company_name}`);
+                      setMessage({ text: `Credenziali per "${inst.company_name}" copiate negli appunti! Puoi effettuare il login con email: ${inst.admin_email}`, type: 'success' });
+                    }}
+                    className="btn btn-primary"
+                    style={{ padding: '6px 14px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <ExternalLink size={14} /> Accedi / Copia Credenziali
+                  </button>
 
                   <button
                     onClick={() => handleDeleteInstance(inst)}
