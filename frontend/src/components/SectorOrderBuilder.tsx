@@ -92,6 +92,33 @@ const MACRO_CATEGORIES = [
   { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: '#10b981' }
 ];
 
+export const AVAILABLE_UOMS = [
+  { id: 'CT', label: 'CT (Cartoni)', short: 'CT' },
+  { id: 'CF', label: 'CF (Confezioni)', short: 'CF' },
+  { id: 'PZ', label: 'PZ (Pezzi)', short: 'PZ' },
+  { id: 'BT', label: 'BT (Bottiglie)', short: 'BT' },
+  { id: 'PACCO', label: 'PACCO', short: 'PACCO' },
+  { id: 'FUSTO', label: 'FUSTO', short: 'FUSTO' },
+  { id: 'KG', label: 'KG (Chilogrammi)', short: 'KG' },
+  { id: 'LT', label: 'LT (Litri)', short: 'LT' },
+  { id: 'SECCHIO', label: 'SECCHIO', short: 'SECCHIO' },
+  { id: 'ROTOLO', label: 'ROTOLO', short: 'ROTOLO' }
+];
+
+export function normalizeDefaultUom(rawUom?: string | null): string {
+  if (!rawUom) return 'CT';
+  const u = rawUom.trim().toUpperCase();
+  if (u === 'PIECE' || u === 'PZ' || u === 'PEZZO' || u === 'PEZZI') return 'PZ';
+  if (u === 'CT' || u === 'CARTONE' || u === 'CARTONI' || u === 'CRT') return 'CT';
+  if (u === 'CF' || u === 'CONFEZIONE' || u === 'CONF' || u === 'CONFEZIONI') return 'CF';
+  if (u === 'BT' || u === 'BOTTIGLIA' || u === 'BOTTIGLIE') return 'BT';
+  if (u === 'KG' || u === 'KILOGRAM' || u === 'CHILO' || u === 'CHILI') return 'KG';
+  if (u === 'LT' || u === 'L' || u === 'LITRO' || u === 'LITRI') return 'LT';
+  if (u === 'FUSTO' || u === 'FUSTI') return 'FUSTO';
+  if (u === 'PACCO' || u === 'PACCHI') return 'PACCO';
+  return u;
+}
+
 export default function SectorOrderBuilder() {
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<number | ''>('');
@@ -110,6 +137,14 @@ export default function SectorOrderBuilder() {
 
   // Quantities mapped by product_id
   const [quantities, setQuantities] = useState<Record<number, number>>({});
+
+  // Unit of Measure overrides per product_id
+  const [selectedUoms, setSelectedUoms] = useState<Record<number, string>>({});
+
+  // Helper for effective UoM
+  const getEffectiveUom = (prod: ProductItem) => {
+    return selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit);
+  };
 
   // Draft resolution state
   const [draftProcessing, setDraftProcessing] = useState<boolean>(false);
@@ -223,17 +258,18 @@ export default function SectorOrderBuilder() {
 
   // Quantities and Basket Totals
   const basketItems = useMemo(() => {
-    const items: { product: ProductItem; quantity: number }[] = [];
+    const items: { product: ProductItem; quantity: number; uom: string }[] = [];
     Object.entries(quantities).forEach(([prodIdStr, qty]) => {
       if (qty > 0) {
         const prod = products.find(p => p.id === Number(prodIdStr));
         if (prod) {
-          items.push({ product: prod, quantity: qty });
+          const uom = selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit);
+          items.push({ product: prod, quantity: qty, uom });
         }
       }
     });
     return items;
-  }, [quantities, products]);
+  }, [quantities, products, selectedUoms]);
 
   const basketStats = useMemo(() => {
     const totalItems = basketItems.length;
@@ -279,6 +315,7 @@ export default function SectorOrderBuilder() {
   const handleResetBasket = () => {
     if (basketItems.length === 0 || window.confirm("Sei sicuro di voler azzerare il carrello dell'ordine?")) {
       setQuantities({});
+      setSelectedUoms({});
       setDraftResult(null);
       setSaveSuccessMsg(null);
     }
@@ -310,7 +347,7 @@ export default function SectorOrderBuilder() {
         canonical_name: it.product.canonical_name,
         order_name: it.product.order_name,
         quantita: it.quantity,
-        comparison_unit: it.product.comparison_unit || 'piece',
+        comparison_unit: it.uom,
         category: it.product.category,
         preferred_supplier_id: it.product.fornitore_consigliato_id,
         prezzo_unitario: it.product.prezzo_listino
@@ -693,7 +730,7 @@ export default function SectorOrderBuilder() {
                         fontWeight: 800,
                         whiteSpace: 'nowrap'
                       }}>
-                        {currentQty} {prod.comparison_unit || 'pz'}
+                        {currentQty} {getEffectiveUom(prod)}
                       </span>
                     )}
                   </div>
@@ -730,7 +767,7 @@ export default function SectorOrderBuilder() {
                     {unitPrice ? (
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontWeight: 700, color: 'var(--status-green)' }}>
-                          € {unitPrice.toFixed(2)} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 400 }}>/{prod.comparison_unit || 'u'}</span>
+                          € {unitPrice.toFixed(2)} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 400 }}>/{getEffectiveUom(prod)}</span>
                         </div>
                         {hasQty && (
                           <div style={{ fontSize: '0.72rem', color: '#60a5fa', fontWeight: 700 }}>
@@ -744,15 +781,15 @@ export default function SectorOrderBuilder() {
                   </div>
                 </div>
 
-                {/* Quantity Controls & Quick Presets */}
+                {/* Quantity Controls & UoM Selector */}
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <button
                       type="button"
                       onClick={() => handleAddPreset(prod.id, -1)}
                       disabled={currentQty <= 0}
                       style={{
-                        width: '36px', height: '36px', borderRadius: '8px',
+                        width: '34px', height: '34px', borderRadius: '8px',
                         border: '1px solid var(--border-glass)',
                         background: 'rgba(255,255,255,0.05)',
                         color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -760,7 +797,7 @@ export default function SectorOrderBuilder() {
                         opacity: currentQty <= 0 ? 0.3 : 1
                       }}
                     >
-                      <Minus size={15} />
+                      <Minus size={14} />
                     </button>
 
                     <input
@@ -772,15 +809,16 @@ export default function SectorOrderBuilder() {
                       onChange={e => handleQtyChange(prod.id, parseFloat(e.target.value) || 0)}
                       style={{
                         flex: 1,
-                        padding: '7px 10px',
+                        padding: '6px 8px',
                         textAlign: 'center',
                         fontWeight: 800,
-                        fontSize: '1.05rem',
+                        fontSize: '1rem',
                         background: hasQty ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0,0,0,0.3)',
                         border: hasQty ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
                         borderRadius: '8px',
                         color: hasQty ? '#60a5fa' : 'white',
-                        outline: 'none'
+                        outline: 'none',
+                        minWidth: '40px'
                       }}
                     />
 
@@ -788,15 +826,39 @@ export default function SectorOrderBuilder() {
                       type="button"
                       onClick={() => handleAddPreset(prod.id, 1)}
                       style={{
-                        width: '36px', height: '36px', borderRadius: '8px',
+                        width: '34px', height: '34px', borderRadius: '8px',
                         border: '1px solid var(--border-glass)',
                         background: 'rgba(59, 130, 246, 0.2)',
                         color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer'
                       }}
                     >
-                      <Plus size={15} />
+                      <Plus size={14} />
                     </button>
+
+                    {/* UoM Select Dropdown */}
+                    <select
+                      value={getEffectiveUom(prod)}
+                      onChange={e => setSelectedUoms(prev => ({ ...prev, [prod.id]: e.target.value }))}
+                      title="Unità di misura"
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '8px',
+                        background: 'rgba(59, 130, 246, 0.15)',
+                        border: '1px solid rgba(59, 130, 246, 0.4)',
+                        color: '#93c5fd',
+                        fontWeight: 800,
+                        fontSize: '0.8rem',
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {AVAILABLE_UOMS.map(u => (
+                        <option key={u.id} value={u.id} style={{ background: '#13131c', color: 'white' }}>
+                          {u.short}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Quick Preset Buttons */}

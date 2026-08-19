@@ -459,7 +459,9 @@ async def elabora_ordine_settore(
         # Cerca fornitore e prezzo migliore / pattuito
         chosen_supplier_id = it.preferred_supplier_id
         unit_price = it.prezzo_unitario
-        uom = it.comparison_unit or product.comparison_unit or "piece"
+        uom = it.comparison_unit or product.comparison_unit or "CT"
+        if uom.lower() == "piece":
+            uom = "pz"
         is_concordato = False
         supplier_code = None
 
@@ -475,7 +477,8 @@ async def elabora_ordine_settore(
                 if best_listino:
                     chosen_supplier_id = best_listino.fornitore_id
                     unit_price = float(best_listino.prezzo_pattuito)
-                    uom = best_listino.unita_misura or uom
+                    if not it.comparison_unit and best_listino.unita_misura:
+                        uom = best_listino.unita_misura
                     is_concordato = True
 
         # Fallback se ancora nullo
