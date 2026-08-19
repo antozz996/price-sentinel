@@ -530,18 +530,22 @@ export default function SettingsPage() {
     }
   };
 
+  const [modalError, setModalError] = useState<string | null>(null);
+
   const handleOpenCreateInstance = () => {
     setInstCompanyName('');
     setInstSlug('');
     setInstAdminEmail('');
     setInstAdminPassword('');
+    setModalError(null);
     setShowInstanceModal(true);
   };
 
   const handleCreateInstance = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
     if (!instCompanyName.trim() || !instSlug.trim() || !instAdminEmail.trim() || !instAdminPassword.trim()) {
-      alert('Compila tutti i campi obbligatori per avviare la nuova istanza.');
+      setModalError('Compila tutti i campi obbligatori per avviare la nuova istanza.');
       return;
     }
 
@@ -587,7 +591,7 @@ export default function SettingsPage() {
       loadData();
     } catch (err: any) {
       const msg = typeof err === 'string' ? err : (err?.message || JSON.stringify(err));
-      setMessage({ text: msg, type: 'error' });
+      setModalError(msg);
     } finally {
       setSubmittingInstance(false);
     }
@@ -1645,6 +1649,23 @@ export default function SettingsPage() {
               <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.75rem', color: '#93c5fd' }}>
                 💡 Il sistema allocherà automaticamente le porte Web/DB libere, creerà il file compose e abiliterà il nuovo ambiente isolato per il cliente.
               </div>
+
+              {modalError && (
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#ef4444',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <AlertCircle size={16} />
+                  <span>{modalError}</span>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
                 <button

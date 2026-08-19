@@ -41,8 +41,8 @@ class TenantInstanceResponse(BaseModel):
 class CreateTenantInstanceRequest(BaseModel):
     company_name: str = Field(..., min_length=2, max_length=255)
     slug: str = Field(..., min_length=2, max_length=50)
-    admin_email: str = Field(..., min_length=5, max_length=255)
-    admin_password: str = Field(..., min_length=6, max_length=100)
+    admin_email: str = Field(..., min_length=3, max_length=255)
+    admin_password: str = Field(..., min_length=3, max_length=100)
 
 
 @router.get("", response_model=List[TenantInstanceResponse])
