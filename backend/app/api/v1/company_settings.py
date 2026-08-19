@@ -39,6 +39,7 @@ class CompanySettingsUpdateRequest(BaseModel):
     currency_symbol: Optional[str] = Field("€", max_length=10)
 
 
+@router.get("", response_model=CompanySettingsResponse)
 @router.get("/", response_model=CompanySettingsResponse)
 async def get_company_settings(db: AsyncSession = Depends(get_db)):
     """
@@ -60,6 +61,7 @@ async def get_company_settings(db: AsyncSession = Depends(get_db)):
     return settings
 
 
+@router.put("", response_model=CompanySettingsResponse)
 @router.put("/", response_model=CompanySettingsResponse)
 async def update_company_settings(
     data: CompanySettingsUpdateRequest,
