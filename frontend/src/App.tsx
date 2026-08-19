@@ -154,9 +154,9 @@ export default function App() {
           if (prof.ruolo_dettagliato && prof.ruolo_dettagliato.startsWith('responsabile_')) {
             setActiveTab('sectororders');
             setOpenSections({
-              operations: false,
+              operations: true,
               purchasing: true,
-              analytics: false,
+              analytics: true,
               catalog: false,
               administration: false
             });
@@ -177,7 +177,7 @@ export default function App() {
       const isAdm = profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin';
       const det = profile.ruolo_dettagliato || 'manager_sede';
       if (det.startsWith('responsabile_')) {
-        if (activeTab !== 'sectororders' && activeTab !== 'crosssupplier') {
+        if (activeTab !== 'sectororders' && activeTab !== 'crosssupplier' && activeTab !== 'fatture' && activeTab !== 'priceanalysis') {
           setActiveTab('sectororders');
         }
       } else if (!isAdm && (activeTab === 'dashboard' || activeTab === 'settings' || activeTab === 'listini' || activeTab === 'onboarding')) {
@@ -269,9 +269,9 @@ export default function App() {
       if (data.ruolo_dettagliato && data.ruolo_dettagliato.startsWith('responsabile_')) {
         setActiveTab('sectororders');
         setOpenSections({
-          operations: false,
+          operations: true,
           purchasing: true,
-          analytics: false,
+          analytics: true,
           catalog: false,
           administration: false
         });
