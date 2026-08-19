@@ -92,31 +92,60 @@ const MACRO_CATEGORIES = [
   { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: '#10b981' }
 ];
 
-export const AVAILABLE_UOMS = [
-  { id: 'CT', label: 'CT (Cartoni)', short: 'CT' },
-  { id: 'CF', label: 'CF (Confezioni)', short: 'CF' },
-  { id: 'PZ', label: 'PZ (Pezzi)', short: 'PZ' },
-  { id: 'BT', label: 'BT (Bottiglie)', short: 'BT' },
-  { id: 'PACCO', label: 'PACCO', short: 'PACCO' },
-  { id: 'FUSTO', label: 'FUSTO', short: 'FUSTO' },
-  { id: 'KG', label: 'KG (Chilogrammi)', short: 'KG' },
-  { id: 'LT', label: 'LT (Litri)', short: 'LT' },
-  { id: 'SECCHIO', label: 'SECCHIO', short: 'SECCHIO' },
-  { id: 'ROTOLO', label: 'ROTOLO', short: 'ROTOLO' }
-];
+export const SECTOR_UOMS: Record<string, { id: string; label: string; short: string }[]> = {
+  Beverage: [
+    { id: 'BT', label: 'BT (Bottiglia)', short: 'BT' },
+    { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
+    { id: 'BOX', label: 'BOX (Box)', short: 'BOX' },
+  ],
+  'Materiali di consumo': [
+    { id: 'PZ', label: 'PZ (Pezzo)', short: 'PZ' },
+    { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
+    { id: 'BUSTA', label: 'BUSTA (Busta)', short: 'BUSTA' },
+  ],
+  Food: [
+    { id: 'PZ', label: 'PZ (Pezzo)', short: 'PZ' },
+    { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
+    { id: 'KG', label: 'KG (Chilogrammo)', short: 'KG' },
+    { id: 'LT', label: 'LT (Litro)', short: 'LT' },
+  ]
+};
 
-export function normalizeDefaultUom(rawUom?: string | null): string {
+export function getSectorUoms(category?: string | null): { id: string; label: string; short: string }[] {
+  if (category && SECTOR_UOMS[category]) {
+    return SECTOR_UOMS[category];
+  }
+  return [
+    { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
+    { id: 'BT', label: 'BT (Bottiglia)', short: 'BT' },
+    { id: 'PZ', label: 'PZ (Pezzo)', short: 'PZ' },
+    { id: 'BOX', label: 'BOX (Box)', short: 'BOX' },
+    { id: 'BUSTA', label: 'BUSTA (Busta)', short: 'BUSTA' },
+  ];
+}
+
+export function normalizeDefaultUom(rawUom?: string | null, category?: string | null): string {
+  if (category === 'Beverage') {
+    if (!rawUom) return 'CT';
+    const u = rawUom.trim().toUpperCase();
+    if (u.includes('BOX')) return 'BOX';
+    if (u === 'BT' || u.includes('BOTT')) return 'BT';
+    return 'CT';
+  }
+  if (category === 'Materiali di consumo') {
+    if (!rawUom) return 'CT';
+    const u = rawUom.trim().toUpperCase();
+    if (u.includes('BUST')) return 'BUSTA';
+    if (u === 'PZ' || u === 'PIECE' || u === 'PEZZO') return 'PZ';
+    return 'CT';
+  }
   if (!rawUom) return 'CT';
   const u = rawUom.trim().toUpperCase();
-  if (u === 'PIECE' || u === 'PZ' || u === 'PEZZO' || u === 'PEZZI') return 'PZ';
-  if (u === 'CT' || u === 'CARTONE' || u === 'CARTONI' || u === 'CRT') return 'CT';
-  if (u === 'CF' || u === 'CONFEZIONE' || u === 'CONF' || u === 'CONFEZIONI') return 'CF';
-  if (u === 'BT' || u === 'BOTTIGLIA' || u === 'BOTTIGLIE') return 'BT';
-  if (u === 'KG' || u === 'KILOGRAM' || u === 'CHILO' || u === 'CHILI') return 'KG';
-  if (u === 'LT' || u === 'L' || u === 'LITRO' || u === 'LITRI') return 'LT';
-  if (u === 'FUSTO' || u === 'FUSTI') return 'FUSTO';
-  if (u === 'PACCO' || u === 'PACCHI') return 'PACCO';
-  return u;
+  if (u === 'BT' || u.includes('BOTT')) return 'BT';
+  if (u === 'PIECE' || u === 'PZ' || u === 'PEZZO') return 'PZ';
+  if (u.includes('BUST')) return 'BUSTA';
+  if (u.includes('BOX')) return 'BOX';
+  return 'CT';
 }
 
 export default function SectorOrderBuilder() {
@@ -143,7 +172,7 @@ export default function SectorOrderBuilder() {
 
   // Helper for effective UoM
   const getEffectiveUom = (prod: ProductItem) => {
-    return selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit);
+    return selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit, prod.category);
   };
 
   // Draft resolution state
@@ -848,12 +877,12 @@ export default function SectorOrderBuilder() {
                         border: '1px solid rgba(59, 130, 246, 0.4)',
                         color: '#93c5fd',
                         fontWeight: 800,
-                        fontSize: '0.8rem',
+                        fontSize: '0.82rem',
                         outline: 'none',
                         cursor: 'pointer'
                       }}
                     >
-                      {AVAILABLE_UOMS.map(u => (
+                      {getSectorUoms(prod.category).map(u => (
                         <option key={u.id} value={u.id} style={{ background: '#13131c', color: 'white' }}>
                           {u.short}
                         </option>
