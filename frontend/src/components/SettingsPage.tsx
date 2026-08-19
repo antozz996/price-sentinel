@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil, Phone, MessageSquare, X } from 'lucide-react';
+import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil, Phone, MessageSquare, X, Server, ExternalLink } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface UserInfo {
@@ -11,6 +11,19 @@ interface UserInfo {
   settore_abilitato?: string | null;
   location_id?: number | null;
   attivo: boolean;
+}
+
+interface TenantInstanceItem {
+  id: number;
+  slug: string;
+  company_name: string;
+  admin_email: string;
+  frontend_port: number;
+  backend_port: number;
+  db_port: number;
+  access_url?: string | null;
+  status: string;
+  created_at: string;
 }
 
 interface LocationItem {
@@ -80,16 +93,26 @@ export default function SettingsPage() {
   const [companyCurrency, setCompanyCurrency] = useState('€');
   const [savingCompany, setSavingCompany] = useState(false);
 
+  // Tenant Instances State
+  const [instances, setInstances] = useState<TenantInstanceItem[]>([]);
+  const [showInstanceModal, setShowInstanceModal] = useState(false);
+  const [instCompanyName, setInstCompanyName] = useState('');
+  const [instSlug, setInstSlug] = useState('');
+  const [instAdminEmail, setInstAdminEmail] = useState('');
+  const [instAdminPassword, setInstAdminPassword] = useState('');
+  const [submittingInstance, setSubmittingInstance] = useState(false);
+
   const headers = getHeaders();
 
   const loadData = async (signal?: AbortSignal) => {
     try {
-      const [usersRes, statsRes, locRes, fornRes, compRes] = await Promise.all([
+      const [usersRes, statsRes, locRes, fornRes, compRes, instRes] = await Promise.all([
         fetch(`${API_BASE}/utenti/`, { headers, signal }),
         fetch(`${API_BASE}/health`, { headers, signal }),
         fetch(`${API_BASE}/location/`, { headers, signal }),
         fetch(`${API_BASE}/fornitori/`, { headers, signal }),
-        fetch(`${API_BASE}/settings/company/`, { headers, signal })
+        fetch(`${API_BASE}/settings/company/`, { headers, signal }),
+        fetch(`${API_BASE}/instances/`, { headers, signal })
       ]);
 
       if (usersRes.ok) {
@@ -118,6 +141,11 @@ export default function SettingsPage() {
         if (cData.app_subtitle !== undefined) setCompanySubtitle(cData.app_subtitle || '');
         if (cData.support_email !== undefined) setCompanySupportEmail(cData.support_email || '');
         if (cData.currency_symbol) setCompanyCurrency(cData.currency_symbol);
+      }
+
+      if (instRes.ok) {
+        const iData = await instRes.json();
+        if (Array.isArray(iData)) setInstances(iData);
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') console.error(e);
@@ -502,6 +530,72 @@ export default function SettingsPage() {
     }
   };
 
+  const handleOpenCreateInstance = () => {
+    setInstCompanyName('');
+    setInstSlug('');
+    setInstAdminEmail('');
+    setInstAdminPassword('');
+    setShowInstanceModal(true);
+  };
+
+  const handleCreateInstance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!instCompanyName.trim() || !instSlug.trim() || !instAdminEmail.trim() || !instAdminPassword.trim()) {
+      alert('Compila tutti i campi obbligatori per avviare la nuova istanza.');
+      return;
+    }
+
+    setSubmittingInstance(true);
+    try {
+      const res = await fetch(`${API_BASE}/instances/`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          company_name: instCompanyName.trim(),
+          slug: instSlug.trim().toLowerCase(),
+          admin_email: instAdminEmail.trim(),
+          admin_password: instAdminPassword.trim()
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Impossibile creare la nuova istanza aziendale.');
+      }
+
+      const createdInst = await res.json();
+      setMessage({
+        text: `Nuova istanza "${createdInst.company_name}" creata e configurata sulla porta ${createdInst.frontend_port}!`,
+        type: 'success'
+      });
+      setShowInstanceModal(false);
+      loadData();
+    } catch (err: any) {
+      setMessage({ text: err.message || "Errore durante la creazione dell'istanza.", type: 'error' });
+    } finally {
+      setSubmittingInstance(false);
+    }
+  };
+
+  const handleDeleteInstance = async (inst: TenantInstanceItem) => {
+    if (!window.confirm(`Rimuovere la registrazione dell'istanza "${inst.company_name}" (${inst.slug})?`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/instances/${inst.id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (res.ok) {
+        setMessage({ text: `Istanza "${inst.company_name}" rimossa dal registro.`, type: 'success' });
+        loadData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   function handleLogout() {
     localStorage.removeItem('token');
     window.location.reload();
@@ -525,6 +619,109 @@ export default function SettingsPage() {
           {message.text}
         </div>
       )}
+
+      {/* MULTI-INSTANCE & CLIENT PROVISIONING PANEL */}
+      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Server size={20} color="var(--accent-blue)" /> Gestione Istanze Aziendali (Multi-Istanza Clienti)
+            </h3>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              Attiva e gestisci nuove piattaforme indipendenti per aziende clienti terze con database isolato e accesso dedicato.
+            </p>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleOpenCreateInstance}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.85rem' }}
+          >
+            <Plus size={16} /> Nuova Istanza Azienda
+          </button>
+        </div>
+
+        {instances.length === 0 ? (
+          <div style={{ padding: '30px 20px', textAlign: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+            <Server size={32} style={{ margin: '0 auto 8px', opacity: 0.4 }} />
+            <div>Nessuna istanza secondaria ancora registrata. Clicca su <strong>"Nuova Istanza Azienda"</strong> per attivare la prima piattaforma autonoma per un tuo cliente.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {instances.map(inst => (
+              <div
+                key={inst.id}
+                style={{
+                  ...cardStyle,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                  padding: '16px 20px',
+                  border: '1px solid rgba(255,255,255,0.06)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '240px' }}>
+                  <div style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    color: '#60a5fa',
+                    fontWeight: 800,
+                    fontSize: '1.1rem'
+                  }}>
+                    🏢
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ fontSize: '1rem', color: 'white' }}>{inst.company_name}</strong>
+                      <span style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, background: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                        ● {inst.status || 'Attiva'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      <span>Slug: <code>{inst.slug}</code></span>
+                      <span>•</span>
+                      <span>Admin: <strong>{inst.admin_email}</strong></span>
+                      <span>•</span>
+                      <span>Porta Web: <code>{inst.frontend_port}</code></span>
+                      <span>•</span>
+                      <span>Porta DB: <code>{inst.db_port}</code></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {inst.access_url && (
+                    <a
+                      href={inst.access_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-primary"
+                      style={{ padding: '6px 14px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none' }}
+                    >
+                      <ExternalLink size={14} /> Apri Piattaforma Cliente
+                    </a>
+                  )}
+
+                  <button
+                    onClick={() => handleDeleteInstance(inst)}
+                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px' }}
+                    title="Rimuovi dal registro"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* WHITE-LABEL & COMPANY BRANDING PANEL */}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1330,6 +1527,128 @@ export default function SettingsPage() {
                   style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
                   {submittingEditForn ? 'Salvataggio...' : 'Salva Modifiche Fornitore'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Nuova Istanza Aziendale (Multi-Tenant Client Provisioning) */}
+      {showInstanceModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '540px',
+            background: '#181824',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', color: 'white' }}>
+                <Server size={22} color="var(--accent-blue)" /> Attiva Nuova Istanza Azienda
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowInstanceModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateInstance} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Nome Azienda / Cliente</label>
+                <input
+                  type="text"
+                  placeholder="Es. Playa Resort Spa / Ristorazione 3F"
+                  value={instCompanyName}
+                  onChange={e => {
+                    setInstCompanyName(e.target.value);
+                    if (!instSlug) {
+                      setInstSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                    }
+                  }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Slug Identificativo Univoco</label>
+                <input
+                  type="text"
+                  placeholder="Es. playaresort"
+                  value={instSlug}
+                  onChange={e => setInstSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  required
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px', display: 'block' }}>
+                  Verrà utilizzato per nominare cartelle, database e container isolati.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Email Amministratore Cliente</label>
+                <input
+                  type="email"
+                  placeholder="Es. admin@playaresort.it"
+                  value={instAdminEmail}
+                  onChange={e => setInstAdminEmail(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Password Iniziale Admin</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={instAdminPassword}
+                  onChange={e => setInstAdminPassword(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  required
+                />
+              </div>
+
+              <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', fontSize: '0.75rem', color: '#93c5fd' }}>
+                💡 Il sistema allocherà automaticamente le porte Web/DB libere, creerà il file compose e abiliterà il nuovo ambiente isolato per il cliente.
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowInstanceModal(false)}
+                  className="btn"
+                  style={{ background: 'transparent', border: '1px solid var(--border-glass)' }}
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingInstance}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {submittingInstance ? 'Creazione in corso...' : 'Attiva e Avvia Nuova Istanza'}
                 </button>
               </div>
             </form>

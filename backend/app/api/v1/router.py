@@ -33,10 +33,12 @@ from app.api.v1 import (
     smart_price_sheet,
     feedbacks,
     company_settings,
+    instances,
 )
 
 api_router = APIRouter(redirect_slashes=False)
 
+api_router.include_router(instances.router, prefix="/instances", tags=["Gestione Istanze Aziendali"])
 api_router.include_router(company_settings.router, prefix="/settings/company", tags=["Impostazioni Azienda & White-Label"])
 api_router.include_router(feedbacks.router, prefix="/feedbacks", tags=["Recensioni e Qualità Prodotti"])
 
