@@ -562,8 +562,20 @@ export default function SettingsPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Impossibile creare la nuova istanza aziendale.');
+        let errDetail = 'Impossibile creare la nuova istanza aziendale.';
+        try {
+          const err = await res.json();
+          if (typeof err.detail === 'string') {
+            errDetail = err.detail;
+          } else if (Array.isArray(err.detail)) {
+            errDetail = err.detail.map((d: any) => typeof d === 'string' ? d : (d.msg || JSON.stringify(d))).join(', ');
+          } else if (err.message) {
+            errDetail = typeof err.message === 'string' ? err.message : JSON.stringify(err.message);
+          }
+        } catch {
+          errDetail = `Errore HTTP ${res.status}: ${res.statusText}`;
+        }
+        throw new Error(errDetail);
       }
 
       const createdInst = await res.json();
@@ -574,7 +586,8 @@ export default function SettingsPage() {
       setShowInstanceModal(false);
       loadData();
     } catch (err: any) {
-      setMessage({ text: err.message || "Errore durante la creazione dell'istanza.", type: 'error' });
+      const msg = typeof err === 'string' ? err : (err?.message || JSON.stringify(err));
+      setMessage({ text: msg, type: 'error' });
     } finally {
       setSubmittingInstance(false);
     }
