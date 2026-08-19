@@ -36,6 +36,7 @@ type UserProfile = {
   ruolo_dettagliato?: string | null
   settore_abilitato?: string | null
   location_id?: number | null
+  tenant_id?: number | null
 }
 
 type NavItem = {
@@ -538,9 +539,21 @@ export default function App() {
     }
   }
 
+  const getAccountDisplayName = () => {
+    if (profile?.tenant_id === 2 || profile?.nome_completo?.toLowerCase().includes('bar la sosta') || profile?.email?.toLowerCase().includes('bar.it')) {
+      return 'Bar la sosta';
+    }
+    if (profile?.nome_completo && !profile.nome_completo.toLowerCase().includes('amministratore principale')) {
+      return profile.nome_completo.replace(/^Admin\s+/i, '');
+    }
+    return companySettings.company_name || 'Aura Network';
+  };
+
+  const accountName = getAccountDisplayName();
+
   const getHeaderInfo = () => {
     switch (activeTab) {
-      case 'dashboard': return { title: 'Panoramica', sub: 'Indicatori economici e operativi del gruppo' };
+      case 'dashboard': return { title: `Panoramica - ${accountName}`, sub: `Indicatori economici e operativi di ${accountName}` };
       case 'upload': return { title: 'Carica Fatture', sub: 'Ingestione manuale file XML e archivi ZIP' };
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
@@ -564,7 +577,7 @@ export default function App() {
       case 'excludedproducts': return { title: 'Prodotti Esclusi', sub: 'Gestisci la blacklist globale dei prodotti da escludere dalle analisi' };
       case 'accordicommerciali': return { title: 'Accordi Commerciali (PFA)', sub: 'Rientri di fine anno, volumi d\'acquisto e calcolo prezzi netti' };
       case 'settings': return { title: 'Impostazioni', sub: 'Configurazione sistema e gestione utenti' };
-      default: return { title: 'Price Sentinel', sub: 'Audit System' };
+      default: return { title: accountName, sub: 'Audit System' };
     }
   }
 
@@ -590,7 +603,7 @@ export default function App() {
               <Activity color="white" size={20} />
             </div>
             <h2 style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700, letterSpacing: '0.5px' }}>
-              {companySettings.company_name.toUpperCase()}
+              {accountName.toUpperCase()}
             </h2>
           </div>
           {/* Mobile Close Drawer Button */}
@@ -609,7 +622,7 @@ export default function App() {
               className={`sidebar-nav-item ${activeTab === 'dashboard' ? 'is-active' : ''}`}
               onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
             >
-              <LayoutDashboard size={18} /> Panoramica
+              <LayoutDashboard size={18} /> Panoramica - {accountName}
             </button>
           )}
 
