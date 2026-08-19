@@ -29,6 +29,27 @@ class Ordine(Base):
         nullable=False,
         index=True,
     )
+    user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("utenti.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    settore: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+    data_consegna: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+    note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    whatsapp_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
     data_ordine: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -40,14 +61,15 @@ class Ordine(Base):
         default=0.0,
     )
     stato: Mapped[str] = mapped_column(
-        String(20),
+        String(30),
         nullable=False,
-        default="bozza",  # bozza, inviato
+        default="inviato",  # inviato, consegnato, riconciliato
     )
 
     # ── Relationships ────────────────────────
-    fornitore = relationship("Fornitore")
-    location = relationship("Location")
+    fornitore = relationship("Fornitore", lazy="selectin")
+    location = relationship("Location", lazy="selectin")
+    user = relationship("Utente", foreign_keys=[user_id], lazy="selectin")
     righe = relationship("RigaOrdine", back_populates="ordine", cascade="all, delete-orphan", lazy="selectin")
 
     def __repr__(self) -> str:
@@ -67,6 +89,11 @@ class RigaOrdine(Base):
         nullable=False,
         index=True,
     )
+    product_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("products.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     sku_interno: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
@@ -76,6 +103,11 @@ class RigaOrdine(Base):
     quantita: Mapped[float] = mapped_column(
         Numeric(10, 2),
         nullable=False,
+    )
+    uom: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+        default="CT",
     )
     prezzo_pattuito: Mapped[float] = mapped_column(
         Numeric(12, 4),
@@ -95,6 +127,7 @@ class RigaOrdine(Base):
 
     # ── Relationships ────────────────────────
     ordine = relationship("Ordine", back_populates="righe")
+    product = relationship("Product", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<RigaOrdine {self.sku_interno} qta={self.quantita} @ {self.prezzo_inserito}>"

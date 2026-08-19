@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import ValidationRoom from './components/ValidationRoom'
@@ -22,6 +22,8 @@ import DisputeManagement from './components/DisputeManagement'
 import OperationalAlerts from './components/OperationalAlerts'
 import ClientOnboarding from './components/ClientOnboarding'
 import SectorOrderBuilder from './components/SectorOrderBuilder'
+import OrderRegistry from './components/OrderRegistry'
+import ProductFeedbackReviewModal from './components/ProductFeedbackReviewModal'
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -65,6 +67,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Acquisti',
     items: [
       { id: 'sectororders', label: 'Sviluppo ordini settore', icon: ShoppingCart },
+      { id: 'orderregistry', label: 'Registro ordini', icon: ClipboardList },
       { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
       { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
     ],
@@ -105,8 +108,7 @@ export function isItemPermitted(item: NavItem, profile: UserProfile | null): boo
 
   const det = profile.ruolo_dettagliato || 'manager_sede';
   if (det.startsWith('responsabile_')) {
-    // I responsabili possono sviluppare ordini, visualizzare il registro fatture, consultare il Listino Smart e le Oscillazioni Prezzi in sola lettura
-    return item.id === 'sectororders' || item.id === 'fatture' || item.id === 'crosssupplier' || item.id === 'priceanalysis';
+    return item.id === 'sectororders' || item.id === 'orderregistry' || item.id === 'fatture' || item.id === 'crosssupplier' || item.id === 'priceanalysis';
   }
 
   // Manager di sede vedono le funzioni operative non adminOnly
@@ -125,6 +127,30 @@ export default function App() {
     catalog: false,
     administration: false,
   })
+
+  // Product feedback notifications for admin
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [pendingFeedbacksCount, setPendingFeedbacksCount] = useState(0);
+
+  const loadFeedbackStats = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/products/feedbacks/stats`, { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingFeedbacksCount(data.pending_negative_feedbacks || 0);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (isAuth && (profile?.ruolo === 'admin' || profile?.ruolo_dettagliato === 'admin')) {
+      loadFeedbackStats();
+      const interval = setInterval(loadFeedbackStats, 20000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuth, profile]);
 
   // Login form states
   const [email, setEmail] = useState('')
@@ -177,7 +203,7 @@ export default function App() {
       const isAdm = profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin';
       const det = profile.ruolo_dettagliato || 'manager_sede';
       if (det.startsWith('responsabile_')) {
-        if (activeTab !== 'sectororders' && activeTab !== 'crosssupplier' && activeTab !== 'fatture' && activeTab !== 'priceanalysis') {
+        if (activeTab !== 'sectororders' && activeTab !== 'orderregistry' && activeTab !== 'crosssupplier' && activeTab !== 'fatture' && activeTab !== 'priceanalysis') {
           setActiveTab('sectororders');
         }
       } else if (!isAdm && (activeTab === 'dashboard' || activeTab === 'settings' || activeTab === 'listini' || activeTab === 'onboarding')) {
@@ -443,6 +469,7 @@ export default function App() {
       case 'productconsumption': return <ProductConsumptionReport />;
       case 'priceanalysis': return <PriceTrendAnalyzer />;
       case 'sectororders': return <SectorOrderBuilder userProfile={profile} />;
+      case 'orderregistry': return <OrderRegistry isAdmin={profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin'} />;
       case 'ordini': return <SectorOrderBuilder userProfile={profile} />;
       case 'skumanager': return <SkuManager />;
       case 'categories': return <CategorySupplierManager />;
@@ -470,6 +497,7 @@ export default function App() {
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'sectororders': return { title: 'Sviluppo Ordini Settore', sub: 'Compilazione fabbisogno per responsabili, assegnazione fornitori e invio WhatsApp' };
+      case 'orderregistry': return { title: 'Registro Ordini', sub: 'Storico e consultazione ordini d\'acquisto, articoli e comunicazioni WhatsApp' };
       case 'ordini': return { title: 'Sviluppo Ordini Settore', sub: 'Compilazione fabbisogno per responsabili, assegnazione fornitori e invio WhatsApp' };
       case 'skumanager': return { title: 'Gestione SKU', sub: 'Organizza e rinomina gli SKU interni del catalogo' };
       case 'categories': return { title: 'Categorie & Fornitori', sub: 'Catalogo categorie merci e mappatura settori fornitori' };
@@ -616,6 +644,46 @@ export default function App() {
           </div>
           
           <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {(profile?.ruolo === 'admin' || profile?.ruolo_dettagliato === 'admin') && (
+              <button
+                type="button"
+                onClick={() => setFeedbackModalOpen(true)}
+                title="Segnalazioni & Feedback Prodotti"
+                style={{
+                  position: 'relative',
+                  background: pendingFeedbacksCount > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255,255,255,0.03)',
+                  border: pendingFeedbacksCount > 0 ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid var(--border-glass)',
+                  borderRadius: '10px',
+                  width: '40px',
+                  height: '40px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: pendingFeedbacksCount > 0 ? '#ef4444' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <Bell size={18} />
+                {pendingFeedbacksCount > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '-4px',
+                    right: '-4px',
+                    background: '#ef4444',
+                    color: 'white',
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    borderRadius: '10px',
+                    padding: '1px 5px',
+                    boxShadow: '0 0 10px rgba(239, 68, 68, 0.8)'
+                  }}>
+                    {pendingFeedbacksCount}
+                  </span>
+                )}
+              </button>
+            )}
+
             <div className="profile-info" style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 600, color: 'white' }}>{getRoleLabel()}</div>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{profile?.nome_completo || profile?.email || 'Profilo in caricamento…'}</div>
@@ -631,6 +699,13 @@ export default function App() {
           {renderContent()}
         </div>
       </main>
+
+      {/* Product Feedback Review Modal */}
+      <ProductFeedbackReviewModal
+        isOpen={feedbackModalOpen}
+        onClose={() => setFeedbackModalOpen(false)}
+        onFeedbackResolved={loadFeedbackStats}
+      />
 
       {/* Global AI Copilot */}
       <SentinelCopilot />

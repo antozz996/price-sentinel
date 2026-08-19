@@ -9,7 +9,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -595,6 +595,11 @@ async def salva_ordini_settore(
         ordine = Ordine(
             fornitore_id=bundle.fornitore_id,
             location_id=data.location_id,
+            user_id=_user.id,
+            settore=data.settore,
+            data_consegna=data.data_consegna,
+            note=data.note,
+            whatsapp_message=bundle.whatsapp_message,
             data_ordine=now,
             spesa_totale=bundle.totale_ordine,
             stato="inviato",
@@ -605,9 +610,11 @@ async def salva_ordini_settore(
         for it in bundle.items:
             riga = RigaOrdine(
                 ordine_id=ordine.id,
+                product_id=it.product_id,
                 sku_interno=it.sku_interno or f"PROD-{it.product_id}",
                 descrizione=it.nome_prodotto,
                 quantita=it.quantita,
+                uom=it.uom or "CT",
                 prezzo_pattuito=it.prezzo_unitario,
                 prezzo_inserito=it.prezzo_unitario,
                 stato_ottimizzazione="concordato" if it.is_concordato else "settore",
@@ -627,28 +634,124 @@ async def salva_ordini_settore(
 
 @router.get(
     "/",
-    summary="Elenco di tutti gli ordini generati",
+    summary="Registro completo di tutti gli ordini generati con filtri e ricerca",
 )
 async def list_ordini(
+    location_id: Optional[int] = Query(None),
+    fornitore_id: Optional[int] = Query(None),
+    settore: Optional[str] = Query(None),
+    stato: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user),
 ):
-    """Restituisce la lista di tutti gli ordini d'acquisto preventivi memorizzati."""
+    """Restituisce la lista filtrata e paginata del Registro Ordini."""
     stmt = select(Ordine).order_by(Ordine.id.desc())
+
+    # User Scoping
+    if _user.ruolo != "admin" and _user.ruolo_dettagliato != "admin":
+        if _user.location_id:
+            stmt = stmt.where(Ordine.location_id == _user.location_id)
+        if _user.settore_abilitato and _user.settore_abilitato != "all":
+            stmt = stmt.where(Ordine.settore == _user.settore_abilitato)
+
+    # Param Filters
+    if location_id:
+        stmt = stmt.where(Ordine.location_id == location_id)
+    if fornitore_id:
+        stmt = stmt.where(Ordine.fornitore_id == fornitore_id)
+    if settore and settore != "all":
+        stmt = stmt.where(Ordine.settore == settore)
+    if stato and stato != "all":
+        stmt = stmt.where(Ordine.stato == stato)
+
     res = await db.execute(stmt)
     ordini = res.scalars().all()
-    
+
+    # Search filter
+    if search and search.strip():
+        q = search.strip().lower()
+        ordini = [
+            o for o in ordini
+            if (q in str(o.id)
+                or (o.fornitore and q in o.fornitore.nome_azienda.lower())
+                or (o.location and q in o.location.nome_struttura.lower())
+                or (o.settore and q in o.settore.lower())
+                or (o.user and q in (o.user.nome_completo or o.user.email).lower()))
+        ]
+
     return [
         {
             "id": o.id,
             "fornitore_id": o.fornitore_id,
-            "fornitore_nome": o.fornitore.nome_azienda if o.fornitore else "Generico",
+            "fornitore_nome": o.fornitore.nome_azienda if o.fornitore else f"Fornitore #{o.fornitore_id}",
             "location_id": o.location_id,
-            "location_nome": o.location.nome_struttura if o.location else "Generico",
-            "data_ordine": o.data_ordine,
+            "location_nome": o.location.nome_struttura if o.location else f"Sede #{o.location_id}",
+            "user_id": o.user_id,
+            "user_nome": o.user.nome_completo if o.user else (o.user.email if o.user else "Operatore"),
+            "user_ruolo": o.user.ruolo_dettagliato if o.user else None,
+            "settore": o.settore or "Generico",
+            "data_ordine": o.data_ordine.isoformat() if o.data_ordine else None,
+            "data_consegna": o.data_consegna,
+            "note": o.note,
+            "whatsapp_message": o.whatsapp_message,
             "spesa_totale": float(o.spesa_totale),
             "stato": o.stato,
-            "n_righe": len(o.righe)
+            "n_righe": len(o.righe),
+            "totale_colli": sum(float(r.quantita) for r in o.righe)
         }
         for o in ordini
     ]
+
+
+@router.get(
+    "/{ordine_id}",
+    summary="Dettaglio completo di un singolo ordine",
+)
+async def get_ordine_detail(
+    ordine_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: Utente = Depends(get_current_user),
+):
+    ordine = await db.get(Ordine, ordine_id)
+    if not ordine:
+        raise HTTPException(status_code=404, detail="Ordine non trovato")
+
+    # Check permission
+    if _user.ruolo != "admin" and _user.ruolo_dettagliato != "admin":
+        if _user.location_id and ordine.location_id != _user.location_id:
+            raise HTTPException(status_code=403, detail="Accesso non autorizzato all'ordine di questa sede")
+
+    return {
+        "id": ordine.id,
+        "fornitore_id": ordine.fornitore_id,
+        "fornitore_nome": ordine.fornitore.nome_azienda if ordine.fornitore else f"Fornitore #{ordine.fornitore_id}",
+        "fornitore_piva": ordine.fornitore.partita_iva if ordine.fornitore else None,
+        "location_id": ordine.location_id,
+        "location_nome": ordine.location.nome_struttura if ordine.location else f"Sede #{ordine.location_id}",
+        "user_id": ordine.user_id,
+        "user_nome": ordine.user.nome_completo if ordine.user else (ordine.user.email if ordine.user else "Operatore"),
+        "settore": ordine.settore or "Generico",
+        "data_ordine": ordine.data_ordine.isoformat() if ordine.data_ordine else None,
+        "data_consegna": ordine.data_consegna,
+        "note": ordine.note,
+        "whatsapp_message": ordine.whatsapp_message,
+        "spesa_totale": float(ordine.spesa_totale),
+        "stato": ordine.stato,
+        "righe": [
+            {
+                "id": r.id,
+                "product_id": r.product_id,
+                "sku_interno": r.sku_interno,
+                "descrizione": r.descrizione,
+                "quantita": float(r.quantita),
+                "uom": r.uom or "CT",
+                "prezzo_pattuito": float(r.prezzo_pattuito),
+                "prezzo_inserito": float(r.prezzo_inserito),
+                "subtotale": round(float(r.quantita) * float(r.prezzo_inserito), 2),
+                "stato_ottimizzazione": r.stato_ottimizzazione,
+            }
+            for r in ordine.righe
+        ]
+    }
+
