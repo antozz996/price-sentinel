@@ -30,6 +30,7 @@ def create_access_token(
     user_id: int,
     ruolo: str,
     location_id: int | None = None,
+    tenant_id: int | None = 1,
     expires_delta: timedelta | None = None,
 ) -> str:
     """
@@ -37,6 +38,7 @@ def create_access_token(
     - sub: user_id
     - ruolo: admin|manager
     - location_id: per filtraggio dati (solo manager)
+    - tenant_id: isolamento multi-tenant azienda
     - exp: scadenza
     """
     if expires_delta is None:
@@ -47,6 +49,7 @@ def create_access_token(
         "sub": str(user_id),
         "ruolo": ruolo,
         "location_id": location_id,
+        "tenant_id": tenant_id or 1,
         "iat": now,
         "exp": now + expires_delta,
     }

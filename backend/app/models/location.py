@@ -35,6 +35,12 @@ class Location(Base):
         Enum(TipologiaLocation, name="tipologia_location", native_enum=True),
         nullable=False,
     )
+    tenant_id: Mapped[int | None] = mapped_column(
+        Integer,
+        default=1,
+        nullable=True,
+        comment="ID Azienda / Tenant"
+    )
 
     # ── Relationships ────────────────────────
     utenti = relationship("Utente", back_populates="location", lazy="selectin")

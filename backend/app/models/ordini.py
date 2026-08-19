@@ -34,6 +34,12 @@ class Ordine(Base):
         ForeignKey("utenti.id", ondelete="SET NULL"),
         nullable=True,
     )
+    tenant_id: Mapped[int | None] = mapped_column(
+        Integer,
+        default=1,
+        nullable=True,
+        comment="ID Azienda / Tenant"
+    )
     settore: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,

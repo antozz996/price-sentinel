@@ -12,6 +12,7 @@ class UtenteBase(BaseModel):
     ruolo_dettagliato: str | None = "admin"
     settore_abilitato: str | None = "all"
     location_id: int | None = None
+    tenant_id: int | None = 1
     attivo: bool = True
 
 
@@ -26,6 +27,7 @@ class UtenteUpdate(BaseModel):
     ruolo_dettagliato: str | None = None
     settore_abilitato: str | None = None
     location_id: int | None = None
+    tenant_id: int | None = None
     attivo: bool | None = None
     password: str | None = None
 
@@ -49,3 +51,4 @@ class TokenResponse(BaseModel):
     settore_abilitato: str | None = None
     nome_completo: str | None = None
     location_id: int | None = None
+    tenant_id: int | None = 1

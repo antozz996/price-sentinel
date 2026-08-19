@@ -47,6 +47,7 @@ async def login(
         user_id=user.id,
         ruolo=user.ruolo.value,
         location_id=user.location_id,
+        tenant_id=user.tenant_id or 1,
     )
 
     return TokenResponse(
@@ -56,6 +57,7 @@ async def login(
         settore_abilitato=user.settore_abilitato or "all",
         nome_completo=user.nome_completo,
         location_id=user.location_id,
+        tenant_id=user.tenant_id or 1,
     )
 
 

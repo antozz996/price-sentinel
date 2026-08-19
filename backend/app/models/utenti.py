@@ -62,6 +62,12 @@ class Utente(Base):
         server_default="1",
         comment="Versione per la rotazione del refresh token"
     )
+    tenant_id: Mapped[int | None] = mapped_column(
+        Integer,
+        default=1,
+        nullable=True,
+        comment="ID Azienda / Tenant"
+    )
     attivo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # ── Relationships ────────────────────────

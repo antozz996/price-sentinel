@@ -68,6 +68,10 @@ async def list_fatture(
         .order_by(Fattura.data_documento.desc())
     )
 
+    # Isolamento Multi-Tenant per Azienda
+    if getattr(current_user, "tenant_id", None):
+        query = query.where(Fattura.tenant_id == current_user.tenant_id)
+
     # Manager vede solo la propria location e fallisce in modo sicuro se non configurato.
     if current_user.ruolo.value == "manager":
         if current_user.location_id is None:

@@ -203,6 +203,12 @@ class Fattura(Base):
         Numeric(12, 4),
         nullable=False,
     )
+    tenant_id: Mapped[int | None] = mapped_column(
+        Integer,
+        default=1,
+        nullable=True,
+        comment="ID Azienda / Tenant"
+    )
     marker: Mapped[MarkerFattura] = mapped_column(
         Enum(MarkerFattura, name="marker_fattura", native_enum=True, create_type=False),
         nullable=False,

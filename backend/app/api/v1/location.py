@@ -27,6 +27,9 @@ async def list_locations(
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Location).options(noload("*")).order_by(Location.nome_struttura)
+    if getattr(current_user, "tenant_id", None):
+        query = query.where(Location.tenant_id == current_user.tenant_id)
+
     if current_user.ruolo.value == "manager":
         if current_user.location_id is None:
             raise HTTPException(

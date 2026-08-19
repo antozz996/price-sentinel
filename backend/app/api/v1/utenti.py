@@ -25,7 +25,10 @@ async def list_utenti(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Utente).order_by(Utente.id))
+    stmt = select(Utente).order_by(Utente.id)
+    if getattr(_admin, "tenant_id", None):
+        stmt = stmt.where(Utente.tenant_id == _admin.tenant_id)
+    result = await db.execute(stmt)
     return result.scalars().all()
 
 
@@ -55,6 +58,7 @@ async def create_utente(
         settore_abilitato=data.settore_abilitato or "all",
         nome_completo=data.nome_completo,
         location_id=data.location_id,
+        tenant_id=getattr(_admin, "tenant_id", 1) or 1,
         attivo=data.attivo,
     )
     db.add(utente)
