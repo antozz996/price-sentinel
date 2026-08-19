@@ -761,7 +761,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                       ) : isOtherWhenForced ? (
                         <span style={{ color: 'var(--text-secondary)' }}>alternativo</span>
                       ) : (
-                        <span style={{ color: 'var(--text-secondary)' }}>{offer.source_type}</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>{offer.source_type === 'contratto' ? 'prezzo listino' : 'prezzo spot'}</span>
                       )}
                     </div>
                   </> : <>{isAdmin && <Pencil size={13} />} {isAdmin ? 'inserisci' : '—'}</>}
