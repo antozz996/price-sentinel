@@ -40,19 +40,25 @@ async def get_kpi(
     - Euro In Contestazione (Anomalie in_reclamo)
     - Euro A Rischio (Anomalie contestate ma non ancora in reclamo)
     """
+    tenant_id = getattr(_admin, "tenant_id", None)
+
     # Optimized single query for Anomalia states
     anomalie_stmt = select(
         func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.in_reclamo, Anomalia.delta_totale), else_=0)), 0).label("in_contestazione"),
         func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.contestata, Anomalia.delta_totale), else_=0)), 0).label("a_rischio"),
         func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.da_verificare, Anomalia.delta_totale), else_=0)), 0).label("attesa_manager"),
     )
+    if tenant_id:
+        anomalie_stmt = anomalie_stmt.where(Anomalia.tenant_id == tenant_id)
+
     anomalie_res = await db.execute(anomalie_stmt)
     anomalie_row = anomalie_res.one()
 
     # Recuperati Totali (from NotaDiCredito table)
-    recuperati_res = await db.execute(
-        select(func.coalesce(func.sum(NotaDiCredito.importo_recuperato), 0))
-    )
+    recup_stmt = select(func.coalesce(func.sum(NotaDiCredito.importo_recuperato), 0))
+    if tenant_id:
+        recup_stmt = recup_stmt.where(NotaDiCredito.tenant_id == tenant_id)
+    recuperati_res = await db.execute(recup_stmt)
     recuperati = recuperati_res.scalar()
 
     return {
@@ -780,18 +786,21 @@ async def get_efficiency_leaderboard(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    tenant_id = getattr(_admin, "tenant_id", 1) or 1
     sql = """
     WITH hist_min AS (
         SELECT 
-            sku_interno,
-            MIN(prezzo_netto_normalizzato) as hist_prezzo_min
-        FROM righe_fattura
-        WHERE sku_interno IS NOT NULL 
-          AND sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-          AND stato_matching = 'matched'
-          AND prezzo_netto_normalizzato > 0
-          AND is_omaggio IS NOT TRUE
-        GROUP BY sku_interno
+            rf.sku_interno,
+            MIN(rf.prezzo_netto_normalizzato) as hist_prezzo_min
+        FROM righe_fattura rf
+        JOIN fatture f ON rf.fattura_id = f.id
+        WHERE rf.sku_interno IS NOT NULL 
+          AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
+          AND rf.stato_matching = 'matched'
+          AND rf.prezzo_netto_normalizzato > 0
+          AND rf.is_omaggio IS NOT TRUE
+          AND f.tenant_id = :tenant_id
+        GROUP BY rf.sku_interno
     ),
     purchases AS (
         SELECT 
@@ -806,6 +815,7 @@ async def get_efficiency_leaderboard(
         JOIN fatture f ON rf.fattura_id = f.id
         JOIN location loc ON f.location_id = loc.id
         WHERE rf.stato_matching = 'matched'
+          AND f.tenant_id = :tenant_id
     )
     SELECT 
         location_id,
@@ -817,7 +827,7 @@ async def get_efficiency_leaderboard(
     GROUP BY location_id, nome_struttura
     ORDER BY score DESC
     """
-    res = await db.execute(text(sql))
+    res = await db.execute(text(sql), {"tenant_id": tenant_id})
     
     leaderboard = []
     for i, r in enumerate(res.all()):

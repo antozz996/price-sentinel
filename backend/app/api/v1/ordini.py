@@ -713,6 +713,8 @@ async def list_ordini(
     _user: Utente = Depends(get_current_user),
 ):
     """Restituisce la lista filtrata e paginata del Registro Ordini."""
+    stmt = select(Ordine).order_by(Ordine.id.desc())
+
     # Isolamento Multi-Tenant per Azienda
     if getattr(_user, "tenant_id", None):
         stmt = stmt.where(Ordine.tenant_id == _user.tenant_id)
