@@ -284,7 +284,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       const [locRes, prodRes, matrixRes] = await Promise.all([
         fetch(`${API_BASE}/location/`, { headers }),
         fetch(`${API_BASE}/products`, { headers }),
-        fetch(`${API_BASE}/smart-price-sheet/matrix?category=all&limit=500`, { headers }).catch(() => null)
+        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }).catch(() => null)
       ]);
 
       if (locRes.ok) {
@@ -303,7 +303,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         }
       }
 
-      // If matrix is available, enrich products with recommended suppliers and prices
+      // If matrix is available, enrich products with recommended/forced suppliers and prices
       if (matrixRes && matrixRes.ok) {
         try {
           const matrixData = await matrixRes.json();
@@ -315,17 +315,22 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           prods = prods.map(p => {
             const m = matrixMap.get(p.id);
             if (m) {
-              const recOffer = m.recommended_supplier_id ? m.offers[String(m.recommended_supplier_id)] : null;
-              const selOffer = m.selected_supplier_id ? m.offers[String(m.selected_supplier_id)] : null;
-              const offer = selOffer || recOffer;
+              const selSupplierId = m.selected_supplier_id || m.recommended_supplier_id;
+              const selOffer = selSupplierId && m.offers ? m.offers[String(selSupplierId)] : null;
+              const anyOffer = selOffer || Object.values(m.offers || {})[0] as any;
+              
+              const finalSupId = selSupplierId || (anyOffer ? anyOffer.supplier_id : null);
+              const finalSupName = anyOffer ? anyOffer.supplier_name : null;
+              const finalPrice = anyOffer ? parseFloat(anyOffer.price) : null;
+
               return {
                 ...p,
                 category: m.category || p.category,
                 subcategory: m.subcategory || p.subcategory,
                 order_name: m.order_name || p.order_name,
-                prezzo_listino: offer ? parseFloat(offer.price) : null,
-                fornitore_consigliato_id: offer ? offer.supplier_id : null,
-                fornitore_consigliato_nome: offer ? offer.supplier_name : null,
+                prezzo_listino: finalPrice,
+                fornitore_consigliato_id: finalSupId,
+                fornitore_consigliato_nome: finalSupName,
               };
             }
             return p;

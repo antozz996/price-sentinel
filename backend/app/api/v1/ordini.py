@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import select, func, and_, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -21,6 +21,7 @@ from app.models.fornitori import Fornitore
 from app.models.location import Location
 from app.models.ordini import Ordine, RigaOrdine
 from app.models.products import Product, SupplierProductAlias
+from app.models.purchase_policy import ProductPurchasePolicy
 from app.models.utenti import Utente
 
 router = APIRouter()
@@ -456,8 +457,29 @@ async def elabora_ordine_settore(
         if not product:
             continue
         
-        # Cerca fornitore e prezzo migliore / pattuito
-        chosen_supplier_id = it.preferred_supplier_id
+        # 1. Cerca forzatura/policy di acquisto attiva per questo prodotto (per sede o globale)
+        policy_stmt = (
+            select(ProductPurchasePolicy)
+            .where(
+                ProductPurchasePolicy.product_id == product.id,
+                ProductPurchasePolicy.is_active.is_(True),
+                ProductPurchasePolicy.valid_from <= today,
+                or_(ProductPurchasePolicy.valid_to.is_(None), ProductPurchasePolicy.valid_to >= today),
+                or_(ProductPurchasePolicy.location_id == data.location_id, ProductPurchasePolicy.location_id.is_(None))
+            )
+            .order_by(
+                case((ProductPurchasePolicy.location_id.is_not(None), 0), else_=1),
+                ProductPurchasePolicy.id.desc()
+            )
+        )
+        policy = (await db.scalars(policy_stmt)).first()
+
+        chosen_supplier_id = None
+        if policy and policy.preferred_supplier_id:
+            chosen_supplier_id = policy.preferred_supplier_id
+        elif it.preferred_supplier_id:
+            chosen_supplier_id = it.preferred_supplier_id
+
         unit_price = it.prezzo_unitario
         uom = it.comparison_unit or product.comparison_unit or "CT"
         if uom.lower() == "piece":
@@ -465,8 +487,23 @@ async def elabora_ordine_settore(
         is_concordato = False
         supplier_code = None
 
-        if not chosen_supplier_id or unit_price is None:
-            # Query listino_master per il miglior prezzo attivo
+        if chosen_supplier_id:
+            # Query listino_master per il fornitore forzato/preferito
+            if product.sku_interno:
+                listino_query = select(ListinoMaster).where(
+                    ListinoMaster.sku_interno == product.sku_interno,
+                    ListinoMaster.fornitore_id == chosen_supplier_id,
+                    ListinoMaster.data_inizio_validita <= today,
+                    or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today)
+                ).order_by(ListinoMaster.prezzo_pattuito.asc())
+                sup_listino = (await db.execute(listino_query)).scalars().first()
+                if sup_listino:
+                    unit_price = float(sup_listino.prezzo_pattuito)
+                    if not it.comparison_unit and sup_listino.unita_misura:
+                        uom = sup_listino.unita_misura
+                    is_concordato = True
+        else:
+            # Nessuna forzatura: cerca il fornitore con miglior prezzo attivo
             if product.sku_interno:
                 listino_query = select(ListinoMaster).where(
                     ListinoMaster.sku_interno == product.sku_interno,
@@ -483,7 +520,7 @@ async def elabora_ordine_settore(
 
         # Fallback se ancora nullo
         if not chosen_supplier_id:
-            chosen_supplier_id = 3 if 3 in fornitori_map else (fornitori_db[0].id if fornitori_db else 1)
+            chosen_supplier_id = fornitori_db[0].id if fornitori_db else 1
         if unit_price is None:
             unit_price = 0.0
 

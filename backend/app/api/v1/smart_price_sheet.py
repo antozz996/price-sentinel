@@ -148,8 +148,8 @@ async def matrix(
                 Product.sku_interno.ilike(term),
             )
         )
-    if category:
-        product_filter.append(Product.category == category)
+    if category and category != "all" and category.strip():
+        product_filter.append(Product.category == category.strip())
     total = await db.scalar(
         select(func.count()).select_from(Product).where(*product_filter)
     )
