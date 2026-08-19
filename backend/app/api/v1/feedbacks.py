@@ -15,6 +15,7 @@ from app.database import get_db
 from app.api.deps import get_current_user, require_admin
 from app.models.utenti import Utente
 from app.models.products import Product, ProductFeedback
+from app.models.ordini import Ordine, RigaOrdine
 from app.models.listino import ListinoMaster
 from app.models.fornitori import Fornitore
 
@@ -27,7 +28,7 @@ class ProductFeedbackCreateRequest(BaseModel):
     product_id: int
     feedback: str = Field(..., pattern="^(SI|NO)$")
     rating: Optional[int] = Field(None, ge=1, le=5)
-    motivo: Optional[str] = Field(None, max_length=255)
+    motivo: Optional[str] = None
     note: Optional[str] = None
     ordine_id: Optional[int] = None
 
@@ -37,11 +38,11 @@ class FeedbackItemResponse(BaseModel):
     user_id: int
     user_nome: str
     user_email: str
-    user_ruolo: Optional[str]
+    user_ruolo: Optional[str] = None
     feedback: str
-    rating: Optional[int]
-    motivo: Optional[str]
-    note: Optional[str]
+    rating: Optional[int] = None
+    motivo: Optional[str] = None
+    note: Optional[str] = None
     stato: str
     created_at: datetime
     admin_action: Optional[str] = None
@@ -75,6 +76,12 @@ class ProductReviewItemResponse(BaseModel):
     # Tutte le recensioni recenti
     recensioni_recenti: List[FeedbackItemResponse] = []
 
+    # Storico Ordini Operatore
+    ordinato_da_me: bool = False
+    numero_ordini_miei: int = 0
+    data_ultimo_ordine_mio: Optional[str] = None
+    puo_recensire: bool = True
+
 
 class FeedbackResolveRequest(BaseModel):
     action: str = Field(..., pattern="^(escluso|archiviato|approvato)$")
@@ -94,8 +101,54 @@ async def get_prodotti_per_recensione(
 ):
     """
     Restituisce i prodotti arricchiti con le recensioni degli operatori e l'eventuale voto dell'utente corrente.
+    Gli operatori visualizzano e possono recensire solo i prodotti ordinati almeno una volta.
     """
+    is_admin = (user.ruolo == "admin" or user.ruolo_dettagliato == "admin")
+
+    # 1. Carica lo storico ordini dell'utente / sede
+    order_filter = (Ordine.user_id == user.id)
+    if user.location_id:
+        order_filter = or_(Ordine.user_id == user.id, Ordine.location_id == user.location_id)
+
+    order_lines_rows = (await db.execute(
+        select(
+            RigaOrdine.product_id,
+            RigaOrdine.sku_interno,
+            func.count(RigaOrdine.id).label("n_ordini"),
+            func.max(Ordine.data_ordine).label("ultimo_ordine")
+        )
+        .join(Ordine, Ordine.id == RigaOrdine.ordine_id)
+        .where(order_filter)
+        .group_by(RigaOrdine.product_id, RigaOrdine.sku_interno)
+    )).all()
+
+    ordered_prod_stats: dict[str | int, dict] = {}
+    ordered_ids_set: set[int] = set()
+    ordered_skus_set: set[str] = set()
+
+    for ol in order_lines_rows:
+        n_ord = int(ol.n_ordini) if ol.n_ordini else 1
+        ult_dt = ol.ultimo_ordine.isoformat() if ol.ultimo_ordine else None
+        if ol.product_id:
+            ordered_ids_set.add(ol.product_id)
+            ordered_prod_stats[ol.product_id] = {"n_ordini": n_ord, "ultimo_ordine": ult_dt}
+        if ol.sku_interno:
+            ordered_skus_set.add(ol.sku_interno)
+            ordered_prod_stats[ol.sku_interno] = {"n_ordini": n_ord, "ultimo_ordine": ult_dt}
+
+    # 2. Query prodotti
     prod_query = select(Product).where(Product.is_active.is_(True))
+
+    # Per operatori non-admin: mostra solo ciò che è stato ordinato almeno una volta
+    if not is_admin:
+        if not ordered_ids_set and not ordered_skus_set:
+            return []  # Nessun ordine ancora effettuato
+        prod_query = prod_query.where(
+            or_(
+                Product.id.in_(ordered_ids_set),
+                Product.sku_interno.in_(ordered_skus_set)
+            )
+        )
 
     # Scoping settore se l'operatore non è admin
     if user.settore_abilitato and user.settore_abilitato != "all":
@@ -159,6 +212,13 @@ async def get_prodotti_per_recensione(
         neg = sum(1 for f in p_feeds if f.feedback == "NO")
         ratings = [f.rating for f in p_feeds if f.rating is not None]
         avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
+
+        # Statistiche ordine operatore
+        st = ordered_prod_stats.get(p.id) or (ordered_prod_stats.get(p.sku_interno) if p.sku_interno else None)
+        ord_me = st is not None
+        num_ord = st["n_ordini"] if st else 0
+        ult_ord_dt = st["ultimo_ordine"] if st else None
+        can_review = is_admin or ord_me
 
         # Mio feedback
         mio = next((f for f in p_feeds if f.user_id == user.id), None)
@@ -233,6 +293,10 @@ async def get_prodotti_per_recensione(
                 rating_medio=avg_rating,
                 mio_feedback=mio_resp,
                 recensioni_recenti=recenti_resp,
+                ordinato_da_me=ord_me,
+                numero_ordini_miei=num_ord,
+                data_ultimo_ordine_mio=ult_ord_dt,
+                puo_recensire=can_review,
             )
         )
 
@@ -247,10 +311,37 @@ async def crea_o_aggiorna_feedback(
 ):
     """
     Crea o aggiorna la recensione di un prodotto da parte dell'utente loggato.
+    Verifica obbligatoria che l'operatore abbia ordinato il prodotto almeno una volta.
     """
     prod = await db.get(Product, data.product_id)
     if not prod:
         raise HTTPException(status_code=404, detail="Prodotto non trovato")
+
+    is_admin = (user.ruolo == "admin" or user.ruolo_dettagliato == "admin")
+
+    # Verifica vincolo di ordine pregresso
+    if not is_admin:
+        order_filter = (Ordine.user_id == user.id)
+        if user.location_id:
+            order_filter = or_(Ordine.user_id == user.id, Ordine.location_id == user.location_id)
+
+        has_ordered = (await db.scalar(
+            select(func.count(RigaOrdine.id))
+            .join(Ordine, Ordine.id == RigaOrdine.ordine_id)
+            .where(
+                order_filter,
+                or_(
+                    RigaOrdine.product_id == prod.id,
+                    and_(prod.sku_interno.is_not(None), RigaOrdine.sku_interno == prod.sku_interno)
+                )
+            )
+        )) or 0
+
+        if has_ordered == 0:
+            raise HTTPException(
+                status_code=403,
+                detail="Puoi recensire solo i prodotti che hai ordinato almeno una volta con il tuo account o per la tua sede."
+            )
 
     # Verifica se l'utente ha già recensito questo prodotto
     stmt = select(ProductFeedback).where(

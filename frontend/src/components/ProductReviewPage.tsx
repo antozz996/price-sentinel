@@ -5,10 +5,10 @@ import {
   ThumbsDown,
   Search,
   RefreshCw,
-  Boxes,
   CheckCircle2,
   ShieldAlert,
   Send,
+  ShoppingCart,
 } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
@@ -55,6 +55,10 @@ interface ProductReviewItem {
   rating_medio?: number | null;
   mio_feedback?: FeedbackItem | null;
   recensioni_recenti: FeedbackItem[];
+  ordinato_da_me?: boolean;
+  numero_ordini_miei?: number;
+  data_ultimo_ordine_mio?: string | null;
+  puo_recensire?: boolean;
 }
 
 const MOTIVI_POSITIVI = [
@@ -386,9 +390,12 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
         </div>
       ) : filteredProducts.length === 0 ? (
         <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <Boxes size={40} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-          <h3 style={{ margin: '0 0 6px', color: 'white' }}>Nessun prodotto trovato</h3>
-          <p style={{ fontSize: '0.85rem', margin: 0 }}>Modifica i filtri o la ricerca per visualizzare altri articoli.</p>
+          <ShoppingCart size={42} style={{ margin: '0 auto 14px', opacity: 0.5, color: '#60a5fa' }} />
+          <h3 style={{ margin: '0 0 6px', color: 'white' }}>Nessun prodotto ordinato da recensire</h3>
+          <p style={{ fontSize: '0.85rem', margin: '0 auto', maxWidth: '520px', lineHeight: '1.5' }}>
+            Puoi recensire solo gli articoli che hai ordinato almeno una volta con il tuo account o per la tua sede.
+            Non appena emetterai un ordine in <strong>Sviluppo Ordini Settore</strong>, gli articoli compariranno qui per essere valutati.
+          </p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
@@ -448,6 +455,12 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '8px', fontSize: '0.75rem' }}>
+                    {prod.ordinato_da_me && (
+                      <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <ShoppingCart size={11} /> Ordinato {prod.numero_ordini_miei} {prod.numero_ordini_miei === 1 ? 'volta' : 'volte'}
+                        {prod.data_ultimo_ordine_mio && ` • Ultimo: ${new Date(prod.data_ultimo_ordine_mio).toLocaleDateString('it-IT')}`}
+                      </span>
+                    )}
                     <span style={{ color: 'var(--text-secondary)' }}>
                       SKU: <code>{prod.sku_interno || 'N/D'}</code>
                     </span>
