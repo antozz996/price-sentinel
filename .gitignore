@@ -27,10 +27,16 @@ docker-compose.override.yml
 **/ssl/**
 **/ssl_*/**
 
-# Database dumps
+# Database dumps — never commit production/business data
 backups/
 .tmp/
+*.sql
 *.sql.gz
+*.dump
+*.backup
+backup_*.sql
+backup_*.dump
+backup_*.backup
 
 # OS
 .DS_Store
