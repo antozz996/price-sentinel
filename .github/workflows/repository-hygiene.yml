@@ -1,0 +1,33 @@
+name: Repository Data Hygiene
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  reject-sensitive-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reject tracked database dumps and runtime secret files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          forbidden_regex='(^|/)(backup[^/]*\.(sql|dump|backup)|[^/]+\.(sql|sql\.gz|dump|backup)|\.env($|\.)|[^/]*private[^/]*\.key$|privkey\.pem$)'
+          allowed_regex='(^|/)\.env\.example$'
+
+          violations="$({ git ls-files || true; } | grep -Ei "$forbidden_regex" | grep -Eiv "$allowed_regex" || true)"
+
+          if [ -n "$violations" ]; then
+            echo "Forbidden sensitive/data artifacts are tracked:" >&2
+            echo "$violations" >&2
+            exit 1
+          fi
+
+          echo "Repository data hygiene gate passed."
