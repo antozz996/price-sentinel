@@ -6,6 +6,27 @@
 
 ---
 
+### [2026-09-05] Fix: responsive UX & docked bottom bar per carrello ordini da mobile
+
+**File toccati:**
+- `frontend/src/index.css`
+- `frontend/src/components/SectorOrderBuilder.tsx`
+- `frontend/src/components/SentinelCopilot.tsx`
+- `frontend/src/App.tsx`
+- `DEVLOG.md`
+**Tipo:** Bug Fix / UX
+
+#### Problema / Obiettivo
+Su dispositivi mobili e tablet, il banner fluttuante del carrello ordini (`SectorOrderBuilder`) occupava uno spazio verticale eccessivo (~40% dello schermo), nascondeva la lista dei prodotti, troncava il testo del pulsante d'azione ("Elabora Buoni d'Ordine Whats...") e veniva parzialmente coperto dall'icona circolare del widget AI Copilot. La causa era il breakpoint rigido a 768px (invece di 1024px usato dal resto dell'app per la visualizzazione mobile) e la mancanza di uno stato reattivo combinato nel componente.
+
+#### Soluzione implementata
+- **Docked Bar Compatta su Mobile/Tablet (<= 1024px)**: la barra ora si ancora elegantemente al fondo dello schermo con safe-area padding e altezza contenuta (~58px), mostrando in una sola riga pulita: icona carrello, totale colli, spesa totale in verde, pulsante "Dettagli ▾" e pulsante CTA compatto "Elabora Ordine".
+- **Drawer Dettagli Espandibile**: cliccando su "Dettagli ▾" o sulle info del carrello, un drawer a scomparsa si apre verso l'alto mostrando sede di consegna, data, fornitori coinvolti, note, promozioni attive e il pulsante di sicurezza "Svuota Carrello".
+- **Disaccoppiamento Copilot**: aggiunto posizionamento elevato a `bottom: 84px` per Sentinel Copilot su mobile e in modalità ordini (`copilot-order-mode`), impedendo qualunque sovrapposizione con i pulsanti d'azione.
+- **Rilevamento Reattivo a Doppio Livello**: introdotto `isMobileScreen` in React combinato con `@media (max-width: 1024px)` per garantire una transizione fluida su ogni risoluzione senza glitch visivi o testo troncato.
+
+---
+
 ### [2026-08-29] Fix: nome completo prodotto negli ordini di settore
 
 **File toccati:**

@@ -478,20 +478,20 @@ h1, h2, h3, h4 {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  width: calc(100% - 60px);
-  max-width: 1100px;
+  width: calc(100% - 140px);
+  max-width: 1050px;
   z-index: 1000;
   background: rgba(15, 23, 42, 0.95);
   border: 1px solid var(--accent-blue);
   border-radius: 16px;
-  padding: 14px 24px;
+  padding: 12px 24px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(59, 130, 246, 0.3);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -527,6 +527,10 @@ h1, h2, h3, h4 {
   transition: transform 0.2s, bottom 0.3s;
 }
 
+.copilot-floating-btn.copilot-order-mode {
+  bottom: 84px !important;
+}
+
 .copilot-floating-btn:hover {
   transform: scale(1.05);
 }
@@ -550,10 +554,10 @@ h1, h2, h3, h4 {
   overflow: hidden;
 }
 
-/* Mobile Responsiveness for Order Builder & Floating Bar */
-@media (max-width: 768px) {
+/* Mobile & Tablet Responsiveness for Order Builder & Floating Bar */
+@media (max-width: 1024px) {
   .sector-builder-container {
-    padding-bottom: 120px !important;
+    padding-bottom: 110px !important;
     gap: 16px !important;
   }
 
@@ -600,7 +604,7 @@ h1, h2, h3, h4 {
     display: flex !important;
   }
 
-  /* Docked Minimalist Bottom Bar on Mobile */
+  /* Docked Minimalist Bottom Bar on Mobile/Tablet */
   .order-floating-bar {
     position: fixed !important;
     bottom: 0 !important;
@@ -609,18 +613,18 @@ h1, h2, h3, h4 {
     transform: none !important;
     width: 100% !important;
     max-width: 100% !important;
-    border-radius: 20px 20px 0 0 !important;
+    border-radius: 18px 18px 0 0 !important;
     border-left: none !important;
     border-right: none !important;
     border-bottom: none !important;
-    border-top: 1px solid rgba(59, 130, 246, 0.4) !important;
-    background: rgba(13, 17, 28, 0.98) !important;
+    border-top: 1px solid rgba(59, 130, 246, 0.35) !important;
+    background: rgba(13, 17, 28, 0.97) !important;
     backdrop-filter: blur(20px) !important;
     -webkit-backdrop-filter: blur(20px) !important;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)) 14px !important;
-    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75), 0 0 25px rgba(59, 130, 246, 0.25) !important;
+    padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px)) 14px !important;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.85), 0 0 25px rgba(59, 130, 246, 0.25) !important;
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 8px !important;
     z-index: 9998 !important;
   }
 
@@ -636,7 +640,7 @@ h1, h2, h3, h4 {
 
   /* Elevate Sentinel AI Copilot so it never overlaps the mobile cart bar */
   .copilot-floating-btn {
-    bottom: 74px !important;
+    bottom: 84px !important;
     right: 14px !important;
     width: 44px !important;
     height: 44px !important;

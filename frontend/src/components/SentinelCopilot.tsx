@@ -8,7 +8,11 @@ interface ChatMessage {
   content: string;
 }
 
-export default function SentinelCopilot() {
+interface SentinelCopilotProps {
+  isOrderBuilder?: boolean;
+}
+
+export default function SentinelCopilot({ isOrderBuilder }: SentinelCopilotProps = {}) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([{
     role: 'assistant',
@@ -63,7 +67,7 @@ export default function SentinelCopilot() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="copilot-floating-btn"
+          className={`copilot-floating-btn ${isOrderBuilder ? 'copilot-order-mode' : ''}`}
           title="Parla con Sentinel AI Copilot"
         >
           <MessageSquare size={24} />

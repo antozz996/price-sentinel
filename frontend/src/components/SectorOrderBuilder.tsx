@@ -269,6 +269,20 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   
   // Mobile expandable details in floating bottom bar
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState<boolean>(false);
+  
+  // Responsive screen detection (<= 1024px) for adaptive bottom bar
+  const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 1024;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth <= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const headers = getHeaders();
 
@@ -1218,149 +1232,70 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             </div>
           )}
 
-          {/* MOBILE COMPACT BAR ROW (Visible on Mobile <= 768px) */}
-          <div className="order-floating-bar-mobile-only" style={{ width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-            <div 
-              onClick={() => setMobileDetailsOpen(prev => !prev)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
-            >
-              <div style={{
-                width: '34px', height: '34px', borderRadius: '8px',
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 0 10px rgba(16, 185, 129, 0.35)',
-                flexShrink: 0
-              }}>
-                <ShoppingCart size={17} color="white" />
-              </div>
-              <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                <div style={{ fontWeight: 800, fontSize: '0.86rem', color: 'white', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                  {basketStats.totalItems} prod <span style={{ color: '#93c5fd', fontWeight: 600 }}>({basketStats.totalUnits} colli)</span>
-                  {basketStats.waterFreebies > 0 && (
-                    <span style={{ marginLeft: '6px', color: '#34d399', fontWeight: 800 }}>
-                      🎁+{basketStats.waterFreebies}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.78rem', color: basketStats.estimatedTotal > 0 ? 'var(--status-green)' : 'var(--text-secondary)', fontWeight: basketStats.estimatedTotal > 0 ? 800 : 500 }}>
-                  {basketStats.estimatedTotal > 0 ? `€ ${basketStats.estimatedTotal.toFixed(2)}` : `${basketStats.supplierCount} ${basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'}`}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setMobileDetailsOpen(prev => !prev); }}
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '6px',
-                  color: 'var(--text-secondary)',
-                  padding: '4px 6px',
-                  fontSize: '0.72rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '2px',
-                  cursor: 'pointer',
-                  flexShrink: 0
-                }}
+          {isMobileScreen ? (
+            /* MOBILE COMPACT BAR ROW (<= 1024px) */
+            <div className="order-floating-bar-mobile-only" style={{ width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+              <div 
+                onClick={() => setMobileDetailsOpen(prev => !prev)}
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flex: 1, minWidth: 0 }}
               >
-                <span>Info</span>
-                {mobileDetailsOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-              </button>
-            </div>
-
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={draftProcessing}
-              onClick={handleProcessOrder}
-              style={{
-                padding: '9px 14px',
-                fontSize: '0.85rem',
-                fontWeight: 800,
-                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
-                border: 'none',
-                borderRadius: '10px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                flexShrink: 0,
-                boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)'
-              }}
-            >
-              {draftProcessing ? (
-                <>
-                  <RefreshCw className="spinner" size={15} />
-                  <span>Elaborazione...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={15} />
-                  <span>Elabora Ordine</span>
-                  <ArrowRight size={14} />
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* DESKTOP ROW (Visible on Desktop > 768px) */}
-          <div className="order-floating-bar-desktop-only" style={{ width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                width: '44px', height: '44px', borderRadius: '12px',
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)'
-              }}>
-                <ShoppingCart size={22} color="white" />
-              </div>
-
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'white' }}>
-                    Fabbisogno: {basketStats.totalItems} prodotti ({basketStats.totalUnits} colli)
-                  </span>
-                  <span style={{ 
-                    padding: '2px 8px', borderRadius: '6px', 
-                    background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', 
-                    fontSize: '0.75rem', fontWeight: 700 
-                  }}>
-                    {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'} coinvolti
-                  </span>
-                  {basketStats.waterFreebies > 0 && (
-                    <span style={{ 
-                      padding: '2px 8px', borderRadius: '6px', 
-                      background: 'rgba(16, 185, 129, 0.25)', color: '#34d399', 
-                      fontSize: '0.75rem', fontWeight: 800,
-                      border: '1px solid rgba(16, 185, 129, 0.4)'
-                    }}>
-                      🎁 +{basketStats.waterFreebies} {basketStats.waterFreebies === 1 ? 'box omaggio' : 'box omaggio'}
+                <div style={{
+                  width: '36px', height: '36px', borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 0 12px rgba(16, 185, 129, 0.4)',
+                  flexShrink: 0
+                }}>
+                  <ShoppingCart size={18} color="white" />
+                </div>
+                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'white', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>{basketStats.totalItems} {basketStats.totalItems === 1 ? 'prod.' : 'prod.'}</span>
+                    <span style={{ color: '#93c5fd', fontWeight: 600, fontSize: '0.8rem' }}>({basketStats.totalUnits} colli)</span>
+                    {basketStats.waterFreebies > 0 && (
+                      <span style={{ 
+                        background: 'rgba(16, 185, 129, 0.25)', 
+                        color: '#34d399', 
+                        padding: '1px 5px', 
+                        borderRadius: '4px', 
+                        fontSize: '0.72rem', 
+                        fontWeight: 800 
+                      }}>
+                        🎁+{basketStats.waterFreebies}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px' }}>
+                    <span style={{ color: 'var(--status-green)', fontWeight: 800 }}>
+                      € {basketStats.estimatedTotal.toFixed(2)}
                     </span>
-                  )}
-                </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                  Destinazione: <strong>{selectedLocObj?.nome_struttura || 'Sede'}</strong> · Consegna: <strong>{deliveryDate}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              {basketStats.estimatedTotal > 0 && (
-                <div style={{ textAlign: 'right', marginRight: '6px' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Spesa stimata</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--status-green)' }}>
-                    € {basketStats.estimatedTotal.toFixed(2)}
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
+                      · {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'forn.' : 'fornitori'}
+                    </span>
                   </div>
                 </div>
-              )}
-
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleResetBasket}
-                style={{ padding: '10px 16px', fontSize: '0.85rem' }}
-              >
-                Azzera
-              </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setMobileDetailsOpen(prev => !prev); }}
+                  style={{
+                    background: mobileDetailsOpen ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.06)',
+                    border: '1px solid ' + (mobileDetailsOpen ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255,255,255,0.1)'),
+                    borderRadius: '6px',
+                    color: mobileDetailsOpen ? '#93c5fd' : 'var(--text-secondary)',
+                    padding: '4px 7px',
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                >
+                  <span>{mobileDetailsOpen ? 'Chiudi' : 'Dettagli'}</span>
+                  {mobileDetailsOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -1368,32 +1303,128 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 disabled={draftProcessing}
                 onClick={handleProcessOrder}
                 style={{
-                  padding: '12px 26px',
-                  fontSize: '0.98rem',
+                  padding: '10px 16px',
+                  fontSize: '0.88rem',
                   fontWeight: 800,
                   background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
                   border: 'none',
+                  borderRadius: '10px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
-                  boxShadow: '0 0 25px rgba(59, 130, 246, 0.5)'
+                  gap: '6px',
+                  flexShrink: 0,
+                  boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)'
                 }}
               >
                 {draftProcessing ? (
                   <>
-                    <RefreshCw className="spinner" size={18} />
-                    <span>Elaborazione in corso...</span>
+                    <RefreshCw className="spinner" size={15} />
+                    <span>Invio...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles size={18} />
-                    <span>Elabora Buoni d'Ordine & WhatsApp</span>
-                    <ArrowRight size={16} />
+                    <Sparkles size={15} />
+                    <span>Elabora Ordine</span>
+                    <ArrowRight size={14} />
                   </>
                 )}
               </button>
             </div>
-          </div>
+          ) : (
+            /* DESKTOP ROW (> 1024px) */
+            <div className="order-floating-bar-desktop-only" style={{ width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0, flex: 1 }}>
+                <div style={{
+                  width: '42px', height: '42px', borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)',
+                  flexShrink: 0
+                }}>
+                  <ShoppingCart size={20} color="white" />
+                </div>
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 800, fontSize: '1rem', color: 'white' }}>
+                      Fabbisogno: {basketStats.totalItems} {basketStats.totalItems === 1 ? 'prodotto' : 'prodotti'} ({basketStats.totalUnits} colli)
+                    </span>
+                    <span style={{ 
+                      padding: '2px 8px', borderRadius: '6px', 
+                      background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', 
+                      fontSize: '0.75rem', fontWeight: 700 
+                    }}>
+                      {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'} coinvolti
+                    </span>
+                    {basketStats.waterFreebies > 0 && (
+                      <span style={{ 
+                        padding: '2px 8px', borderRadius: '6px', 
+                        background: 'rgba(16, 185, 129, 0.25)', color: '#34d399', 
+                        fontSize: '0.75rem', fontWeight: 800,
+                        border: '1px solid rgba(16, 185, 129, 0.4)'
+                      }}>
+                        🎁 +{basketStats.waterFreebies} {basketStats.waterFreebies === 1 ? 'box omaggio' : 'box omaggio'}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    Destinazione: <strong>{selectedLocObj?.nome_struttura || 'Sede'}</strong> · Consegna: <strong>{deliveryDate}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                {basketStats.estimatedTotal > 0 && (
+                  <div style={{ textAlign: 'right', marginRight: '4px' }}>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Spesa stimata</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--status-green)' }}>
+                      € {basketStats.estimatedTotal.toFixed(2)}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleResetBasket}
+                  style={{ padding: '9px 14px', fontSize: '0.82rem' }}
+                >
+                  Azzera
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={draftProcessing}
+                  onClick={handleProcessOrder}
+                  style={{
+                    padding: '11px 22px',
+                    fontSize: '0.92rem',
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
+                  }}
+                >
+                  {draftProcessing ? (
+                    <>
+                      <RefreshCw className="spinner" size={16} />
+                      <span>Elaborazione...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      <span>Elabora Ordine & WhatsApp</span>
+                      <ArrowRight size={15} />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

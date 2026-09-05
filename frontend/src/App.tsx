@@ -821,7 +821,7 @@ export default function App() {
       />
 
       {/* Global AI Copilot */}
-      <SentinelCopilot />
+      <SentinelCopilot isOrderBuilder={activeTab === 'sectororders' || activeTab === 'ordini'} />
     </div>
   )
 }
