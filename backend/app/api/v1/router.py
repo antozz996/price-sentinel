@@ -21,7 +21,6 @@ from app.api.v1 import (
     ingestion,
     ordini,
     sku_manager,
-    ai,
     accordi,
     product_identity,
     integrations,
@@ -58,7 +57,6 @@ api_router.include_router(ingestion.router, prefix="/ingestion", tags=["Ingestio
 api_router.include_router(intelligence.router, prefix="/intelligence", tags=["Intelligence & Admin"])
 api_router.include_router(ordini.router, prefix="/ordini", tags=["Ottimizzazione Ordini"])
 api_router.include_router(sku_manager.router, prefix="/sku", tags=["Gestione SKU"])
-api_router.include_router(ai.router, prefix="/ai", tags=["Sentinel AI"])
 api_router.include_router(accordi.router, prefix="/accordi", tags=["Accordi Commerciali"])
 api_router.include_router(product_identity.router, prefix="", tags=["Product Identity Layer"])
 api_router.include_router(

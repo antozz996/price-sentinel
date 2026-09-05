@@ -8,7 +8,6 @@ import ManualUpload from './components/ManualUpload'
 import FattureList from './components/FattureList'
 import SettingsPage from './components/SettingsPage'
 import SkuManager from './components/SkuManager'
-import SentinelCopilot from './components/SentinelCopilot'
 import ProductConsumptionReport from './components/ProductConsumptionReport'
 import SmartPriceSheet from './components/SmartPriceSheet'
 import TopProductsPriceList from './components/TopProductsPriceList'
@@ -819,9 +818,6 @@ export default function App() {
         onViewReceipt={() => setActiveTab('goodsreceipt')}
         onRefreshCounts={loadNotificationStats}
       />
-
-      {/* Global AI Copilot */}
-      <SentinelCopilot isOrderBuilder={activeTab === 'sectororders' || activeTab === 'ordini'} />
     </div>
   )
 }

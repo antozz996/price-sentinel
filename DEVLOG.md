@@ -6,6 +6,28 @@
 
 ---
 
+### [2026-09-05] Rimozione completa: Sentinel Copilot & integrazione provider AI
+
+**File toccati:**
+- `backend/app/services/ai_engine.py` (decommissionato)
+- `backend/app/api/v1/ai.py` (decommissionato)
+- `backend/app/api/v1/router.py`
+- `frontend/src/components/SentinelCopilot.tsx` (decommissionato)
+- `frontend/src/App.tsx`
+- `frontend/src/index.css`
+- `frontend/package.json`
+- `DEVLOG.md`
+**Tipo:** Refactor / Deprecation
+
+#### Problema / Obiettivo
+Richiesta esplicita dell'utente di eliminare completamente il widget Sentinel Copilot e tutta la parte di intelligenza artificiale collegata a provider esterni (Groq/LLM) da backend e frontend.
+
+#### Soluzione implementata
+- **Frontend**: rimosso il componente `SentinelCopilot` e il relativo rendering globale in `App.tsx`; rimosse tutte le regole CSS `.copilot-floating-btn` e `.copilot-chat-window` da `index.css`; dismesso `react-markdown` dalle dipendenze del frontend.
+- **Backend**: rimossa la route `/api/v1/ai` dal router principale FastAPI (`backend/app/api/v1/router.py`); dismessi il modulo `ai.py` e il servizio `ai_engine.py` (interfaccia HTTP a Groq API, tools SQL e chiamate esterne).
+
+---
+
 ### [2026-09-05] Fix: responsive UX & docked bottom bar per carrello ordini da mobile
 
 **File toccati:**
