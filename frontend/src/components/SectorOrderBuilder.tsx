@@ -596,56 +596,34 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
     <div className="sector-builder-container">
       
       {/* Top Banner / Hero */}
-      <div className="glass-panel" style={{ 
-        padding: '24px 30px', 
-        background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
-        border: '1px solid rgba(59, 130, 246, 0.25)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '20px'
-      }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ 
-              width: '40px', height: '40px', borderRadius: '10px', 
-              background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
-            }}>
-              <ShoppingCart size={22} color="white" />
-            </div>
-            <div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
-                Sviluppo Ordini Settore
-              </h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '3px 0 0' }}>
-                Compila il fabbisogno merci: il sistema assegna i migliori prezzi fornitore e genera i messaggi WhatsApp pronti per i rappresentanti.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Order Header Controls */}
-        <div className="sector-hero-controls">
+      {isMobileScreen ? (
+        <div style={{ 
+          padding: '12px 14px', 
+          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
+          border: '1px solid rgba(59, 130, 246, 0.25)',
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
           {/* Location Selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Store size={13} color="var(--accent-blue)" /> Sede di Consegna
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+            <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Store size={12} color="var(--accent-blue)" /> Sede di Consegna
             </label>
             <select
               value={selectedLocation}
               onChange={e => setSelectedLocation(e.target.value ? Number(e.target.value) : '')}
               style={{
-                padding: '8px 12px',
+                padding: '7px 10px',
                 background: 'rgba(0,0,0,0.4)',
                 border: '1px solid var(--border-glass)',
                 borderRadius: '8px',
                 color: 'white',
-                fontSize: '0.85rem',
+                fontSize: '0.82rem',
                 outline: 'none',
-                minWidth: '180px'
+                width: '100%',
+                boxSizing: 'border-box'
               }}
             >
               {locations.map(loc => (
@@ -656,51 +634,161 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             </select>
           </div>
 
-          {/* Delivery Date */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Calendar size={13} color="var(--status-green)" /> Data Consegna Richiesta
-            </label>
-            <input
-              type="date"
-              value={deliveryDate}
-              onChange={e => setDeliveryDate(e.target.value)}
-              style={{
-                padding: '7px 12px',
-                background: 'rgba(0,0,0,0.4)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '0.85rem',
-                outline: 'none'
-              }}
-            />
-          </div>
+          {/* Delivery Date & Notes in 2-column row */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ flex: '0 0 44%', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Calendar size={12} color="var(--status-green)" /> Data Consegna
+              </label>
+              <input
+                type="date"
+                value={deliveryDate}
+                onChange={e => setDeliveryDate(e.target.value)}
+                style={{
+                  padding: '7px 8px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
 
-          {/* Optional Order Notes */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <FileText size={13} color="#f59e0b" /> Note Consegna
-            </label>
-            <input
-              type="text"
-              placeholder="Es. Consegna entro le 11:00..."
-              value={orderNotes}
-              onChange={e => setOrderNotes(e.target.value)}
-              style={{
-                padding: '7px 12px',
-                background: 'rgba(0,0,0,0.4)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '0.85rem',
-                outline: 'none',
-                minWidth: '200px'
-              }}
-            />
+            <div style={{ flex: '1 1 56%', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <FileText size={12} color="#f59e0b" /> Note
+              </label>
+              <input
+                type="text"
+                placeholder="Es. Entro le 11..."
+                value={orderNotes}
+                onChange={e => setOrderNotes(e.target.value)}
+                style={{
+                  padding: '7px 10px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="glass-panel" style={{ 
+          padding: '24px 30px', 
+          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
+          border: '1px solid rgba(59, 130, 246, 0.25)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ 
+                width: '40px', height: '40px', borderRadius: '10px', 
+                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
+              }}>
+                <ShoppingCart size={22} color="white" />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
+                  Sviluppo Ordini Settore
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '3px 0 0' }}>
+                  Compila il fabbisogno merci: il sistema assegna i migliori prezzi fornitore e genera i messaggi WhatsApp pronti per i rappresentanti.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Order Header Controls */}
+          <div className="sector-hero-controls">
+            {/* Location Selector */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Store size={13} color="var(--accent-blue)" /> Sede di Consegna
+              </label>
+              <select
+                value={selectedLocation}
+                onChange={e => setSelectedLocation(e.target.value ? Number(e.target.value) : '')}
+                style={{
+                  padding: '8px 12px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  minWidth: '180px'
+                }}
+              >
+                {locations.map(loc => (
+                  <option key={loc.id} value={loc.id} style={{ background: '#13131c' }}>
+                    {loc.nome_struttura}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Delivery Date */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Calendar size={13} color="var(--status-green)" /> Data Consegna Richiesta
+              </label>
+              <input
+                type="date"
+                value={deliveryDate}
+                onChange={e => setDeliveryDate(e.target.value)}
+                style={{
+                  padding: '7px 12px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Optional Order Notes */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <FileText size={13} color="#f59e0b" /> Note Consegna
+              </label>
+              <input
+                type="text"
+                placeholder="Es. Consegna entro le 11:00..."
+                value={orderNotes}
+                onChange={e => setOrderNotes(e.target.value)}
+                style={{
+                  padding: '7px 12px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  minWidth: '200px'
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {errorMsg && (
         <div style={{ padding: '14px 18px', borderRadius: '10px', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -711,9 +799,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
       {/* Settore / Macro-Category Pills Selector */}
       <div className="sector-pills-wrapper">
-        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px', whiteSpace: 'nowrap' }}>
-          Settore Attivo:
-        </span>
+        {!isMobileScreen && (
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px', whiteSpace: 'nowrap' }}>
+            Settore Attivo:
+          </span>
+        )}
         {MACRO_CATEGORIES
           .filter(cat => {
             if (cat.id === 'all') return allowedSectors.length > 1;
@@ -734,27 +824,28 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   setSelectedSubcategory('all');
                 }}
                 style={{
-                  padding: '8px 16px',
+                  padding: isMobileScreen ? '6px 12px' : '8px 16px',
                   borderRadius: '30px',
                   border: isSelected ? `2px solid ${cat.color}` : '1px solid var(--border-glass)',
                   background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
                   color: isSelected ? 'white' : 'var(--text-secondary)',
                   fontWeight: isSelected ? 700 : 500,
-                  fontSize: '0.85rem',
+                  fontSize: isMobileScreen ? '0.8rem' : '0.85rem',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  gap: '6px',
                   boxShadow: isSelected ? `0 0 15px ${cat.color}33` : 'none',
                   transition: 'all 0.2s',
-                  flexShrink: 0
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap'
                 }}
               >
                 <span>{cat.icon}</span>
-                <span>{cat.id === 'all' && allowedSectors.length < 3 ? 'Tutti i miei settori' : cat.label}</span>
+                <span>{cat.id === 'all' && allowedSectors.length < 3 ? 'I miei settori' : cat.label}</span>
                 <span style={{ 
-                  fontSize: '0.75rem', 
-                  padding: '2px 7px', 
+                  fontSize: '0.72rem', 
+                  padding: '2px 6px', 
                   borderRadius: '10px', 
                   background: isSelected ? cat.color : 'rgba(255,255,255,0.08)',
                   color: isSelected ? '#000' : 'inherit',
@@ -768,59 +859,80 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       </div>
 
       {/* Search & Subcategory Bar */}
-      <div className="glass-panel" style={{ padding: '16px 20px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="glass-panel" style={{ 
+        padding: isMobileScreen ? '10px 12px' : '16px 20px', 
+        display: 'flex', 
+        gap: '8px', 
+        flexDirection: isMobileScreen ? 'column' : 'row',
+        alignItems: isMobileScreen ? 'stretch' : 'center' 
+      }}>
         {/* Search Input */}
-        <div style={{ position: 'relative', flex: '1 1 280px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+        <div style={{ position: 'relative', flex: '1 1 280px', width: '100%' }}>
+          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
           <input
             type="text"
-            placeholder="Cerca per nome prodotto, nome rapido, SKU o brand..."
+            placeholder="Cerca per prodotto, SKU, brand o fornitore..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{
               width: '100%',
               boxSizing: 'border-box',
-              padding: '10px 14px 10px 42px',
+              padding: '8px 12px 8px 36px',
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid var(--border-glass)',
               borderRadius: '8px',
               color: 'white',
-              fontSize: '0.9rem',
+              fontSize: '0.85rem',
               outline: 'none'
             }}
           />
         </div>
 
-        {/* Subcategory dropdown if available */}
-        {subcategories.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Filter size={15} color="var(--text-secondary)" />
-            <select
-              value={selectedSubcategory}
-              onChange={e => setSelectedSubcategory(e.target.value)}
-              style={{
-                padding: '9px 14px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '0.85rem',
-                outline: 'none',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="all" style={{ background: '#13131c' }}>Tutte le sottocategorie ({subcategories.length})</option>
-              {subcategories.map(sub => (
-                <option key={sub} value={sub} style={{ background: '#13131c' }}>
-                  {sub}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* Subcategory dropdown and product count */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between', 
+          gap: '8px',
+          width: isMobileScreen ? '100%' : 'auto'
+        }}>
+          {subcategories.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: isMobileScreen ? 1 : 'initial' }}>
+              <Filter size={13} color="var(--text-secondary)" />
+              <select
+                value={selectedSubcategory}
+                onChange={e => setSelectedSubcategory(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  width: isMobileScreen ? '100%' : 'auto',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                <option value="all" style={{ background: '#13131c' }}>Tutte le sottocategorie ({subcategories.length})</option>
+                {subcategories.map(sub => (
+                  <option key={sub} value={sub} style={{ background: '#13131c' }}>
+                    {sub}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-        <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginLeft: 'auto' }}>
-          Visualizzati: <strong>{filteredProducts.length}</strong> prodotti
+          <div style={{ 
+            color: 'var(--text-secondary)', 
+            fontSize: '0.8rem', 
+            marginLeft: (isMobileScreen && subcategories.length === 0) ? '0' : 'auto',
+            whiteSpace: 'nowrap'
+          }}>
+            Visualizzati: <strong>{filteredProducts.length}</strong>
+          </div>
         </div>
       </div>
 
@@ -1163,7 +1275,29 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
       {/* Floating Bottom Action Bar for Cart */}
       {basketItems.length > 0 && (
-        <div className="order-floating-bar">
+        <div 
+          className="order-floating-bar"
+          style={isMobileScreen ? {
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            width: '100%',
+            maxWidth: '100vw',
+            margin: 0,
+            transform: 'none',
+            borderRadius: '16px 16px 0 0',
+            border: 'none',
+            borderTop: '1px solid rgba(59, 130, 246, 0.35)',
+            background: 'rgba(11, 15, 25, 0.98)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            padding: '8px 12px calc(8px + env(safe-area-inset-bottom, 12px)) 12px',
+            boxShadow: '0 -10px 35px rgba(0, 0, 0, 0.9), 0 0 20px rgba(59, 130, 246, 0.2)',
+            zIndex: 9999,
+            boxSizing: 'border-box'
+          } : undefined}
+        >
           {/* MOBILE EXPANDABLE DETAILS DRAWER */}
           {mobileDetailsOpen && (
             <div className="order-floating-bar-mobile-drawer">
@@ -1234,67 +1368,67 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
           {isMobileScreen ? (
             /* MOBILE COMPACT BAR ROW (<= 1024px) */
-            <div className="order-floating-bar-mobile-only" style={{ width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <div className="order-floating-bar-mobile-only" style={{ width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
               <div 
                 onClick={() => setMobileDetailsOpen(prev => !prev)}
-                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px', 
+                  cursor: 'pointer', 
+                  flex: 1, 
+                  minWidth: 0,
+                  padding: '4px 6px',
+                  borderRadius: '8px',
+                  background: mobileDetailsOpen ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  transition: 'background 0.2s'
+                }}
               >
                 <div style={{
-                  width: '36px', height: '36px', borderRadius: '10px',
+                  width: '34px', height: '34px', borderRadius: '8px',
                   background: 'linear-gradient(135deg, #10b981, #059669)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 0 12px rgba(16, 185, 129, 0.4)',
+                  boxShadow: '0 0 10px rgba(16, 185, 129, 0.4)',
                   flexShrink: 0
                 }}>
-                  <ShoppingCart size={18} color="white" />
+                  <ShoppingCart size={16} color="white" />
                 </div>
-                <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.88rem', color: 'white', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>{basketStats.totalItems} {basketStats.totalItems === 1 ? 'prod.' : 'prod.'}</span>
-                    <span style={{ color: '#93c5fd', fontWeight: 600, fontSize: '0.8rem' }}>({basketStats.totalUnits} colli)</span>
+                <div style={{ minWidth: 0, overflow: 'hidden', flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'white', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <span>{basketStats.totalItems} prod.</span>
+                    <span style={{ color: '#93c5fd', fontWeight: 600, fontSize: '0.78rem' }}>({basketStats.totalUnits} c.)</span>
                     {basketStats.waterFreebies > 0 && (
                       <span style={{ 
                         background: 'rgba(16, 185, 129, 0.25)', 
                         color: '#34d399', 
-                        padding: '1px 5px', 
+                        padding: '1px 4px', 
                         borderRadius: '4px', 
-                        fontSize: '0.72rem', 
+                        fontSize: '0.7rem', 
                         fontWeight: 800 
                       }}>
-                        🎁+{basketStats.waterFreebies}
+                        +{basketStats.waterFreebies}
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '1px' }}>
+                  <div style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '1px' }}>
                     <span style={{ color: 'var(--status-green)', fontWeight: 800 }}>
                       € {basketStats.estimatedTotal.toFixed(2)}
                     </span>
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
-                      · {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'forn.' : 'fornitori'}
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
+                      · {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'forn.' : 'forn.'}
                     </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setMobileDetailsOpen(prev => !prev); }}
-                  style={{
-                    background: mobileDetailsOpen ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.06)',
-                    border: '1px solid ' + (mobileDetailsOpen ? 'rgba(59, 130, 246, 0.4)' : 'rgba(255,255,255,0.1)'),
-                    borderRadius: '6px',
-                    color: mobileDetailsOpen ? '#93c5fd' : 'var(--text-secondary)',
-                    padding: '4px 7px',
-                    fontSize: '0.72rem',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    cursor: 'pointer',
-                    flexShrink: 0
-                  }}
-                >
-                  <span>{mobileDetailsOpen ? 'Chiudi' : 'Dettagli'}</span>
-                  {mobileDetailsOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                </button>
+
+                <div style={{
+                  color: mobileDetailsOpen ? '#93c5fd' : 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '2px 4px',
+                  flexShrink: 0
+                }}>
+                  {mobileDetailsOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                </div>
               </div>
 
               <button
@@ -1303,29 +1437,29 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 disabled={draftProcessing}
                 onClick={handleProcessOrder}
                 style={{
-                  padding: '10px 16px',
-                  fontSize: '0.88rem',
+                  padding: '9px 14px',
+                  fontSize: '0.85rem',
                   fontWeight: 800,
                   background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
                   border: 'none',
                   borderRadius: '10px',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '5px',
                   flexShrink: 0,
                   boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)'
                 }}
               >
                 {draftProcessing ? (
                   <>
-                    <RefreshCw className="spinner" size={15} />
+                    <RefreshCw className="spinner" size={14} />
                     <span>Invio...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles size={15} />
-                    <span>Elabora Ordine</span>
-                    <ArrowRight size={14} />
+                    <Sparkles size={14} />
+                    <span>Elabora</span>
+                    <ArrowRight size={13} />
                   </>
                 )}
               </button>
