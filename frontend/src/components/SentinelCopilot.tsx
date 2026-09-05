@@ -63,32 +63,16 @@ export default function SentinelCopilot() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          style={{
-            position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
-            width: '60px', height: '60px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--accent-blue) 0%, #60a5fa 100%)',
-            border: '1px solid rgba(255,255,255,0.2)', color: 'white', 
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 8px 32px rgba(59, 130, 246, 0.4)', cursor: 'pointer',
-            transition: 'transform 0.2s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+          className="copilot-floating-btn"
+          title="Parla con Sentinel AI Copilot"
         >
-          <MessageSquare size={28} />
+          <MessageSquare size={24} />
         </button>
       )}
 
       {/* Chat Window */}
       {isOpen && (
-        <div style={{
-          position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999,
-          width: '380px', height: '600px', maxHeight: '80vh',
-          background: 'rgba(20, 20, 30, 0.95)', backdropFilter: 'blur(16px)',
-          border: '1px solid var(--border-glass)', borderRadius: '16px',
-          display: 'flex', flexDirection: 'column',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)', overflow: 'hidden'
-        }}>
+        <div className="copilot-chat-window">
           {/* Header */}
           <div style={{
             padding: '16px', background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-glass)',

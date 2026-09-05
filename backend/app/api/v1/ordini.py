@@ -5,9 +5,10 @@ Modulo Sviluppo Ordini per Responsabili di Settore con invio WhatsApp.
 """
 
 import urllib.parse
+import re
 from datetime import datetime, date
 from decimal import Decimal
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_, or_, case
@@ -39,6 +40,7 @@ class SectorOrderItem(BaseModel):
     category: Optional[str] = None
     preferred_supplier_id: Optional[int] = None
     prezzo_unitario: Optional[float] = None
+    is_omaggio: Optional[bool] = False
 
 
 class SectorOrderDraftRequest(BaseModel):
@@ -46,6 +48,7 @@ class SectorOrderDraftRequest(BaseModel):
     settore: Optional[str] = None  # Beverage, Food, Materiali di consumo, etc.
     data_consegna: Optional[str] = None
     note: Optional[str] = None
+    water_freebie_product_id: Optional[int] = None
     items: List[SectorOrderItem] = Field(..., min_items=1)
 
 
@@ -59,6 +62,8 @@ class SupplierOrderItemDetail(BaseModel):
     prezzo_unitario: float
     subtotale: float
     is_concordato: bool
+    is_omaggio: Optional[bool] = False
+    note_omaggio: Optional[str] = None
 
 
 class SupplierOrderBundle(BaseModel):
@@ -335,6 +340,31 @@ async def ottimizza_ordine(
                     )
                 )
 
+    # Controllo Promozione Acqua 5+1 (ogni 5 box acqua qualsiasi tipo, 1 box omaggio)
+    water_righe = [
+        r for r in righe_ottimizzate
+        if is_water_product(canonical_name=r.descrizione) and r.tipo_regola != "omaggio"
+    ]
+    tot_water_qta = sum(r.quantita for r in water_righe)
+    free_water_boxes = int(tot_water_qta // 5)
+    if free_water_boxes > 0 and water_righe:
+        best_water = max(water_righe, key=lambda r: r.quantita)
+        righe_ottimizzate.append(
+            RigaOttimizzataResponse(
+                sku_interno=best_water.sku_interno,
+                descrizione=f"{best_water.descrizione} (OMAGGIO PROMO 5+1)",
+                quantita=float(free_water_boxes),
+                prezzo_inserito=0.0,
+                prezzo_ottimale=0.0,
+                tipo_regola="omaggio",
+                fornitore_id=best_water.fornitore_id,
+                fornitore_nome=best_water.fornitore_nome,
+                is_anomalia=False,
+                confronto_prezzi=[]
+            )
+        )
+        avvisi_preventivi.append(f"🎁 Promo Acqua 5+1 applicata: {free_water_boxes} box in omaggio inclusi")
+
     sintesi = SintesiOttimizzazione(
         spesa_totale_blindata=round(spesa_totale_blindata, 2),
         risparmio_preventivo_stimato=round(risparmio_preventivo_stimato, 2),
@@ -403,6 +433,71 @@ async def crea_ordine(
     return generated_ids
 
 
+# ── Helper Riconoscimento Promozione Acqua 5+1 ────────────────
+
+WATER_EXCLUDE_TERMS = (
+    "bicchiere", "bicchieri", "acquadelle", "acquavite",
+    "salviett", "monouso", "tovagli", "dispenser", "cannucc",
+    "piatto", "posat"
+)
+
+WATER_BRANDS = (
+    "ferrarelle", "sorgesana", "electa", "lete", "lilia",
+    "san benedetto", "san_benedetto", "s.benedetto", "sant'anna",
+    "santanna", "levissima", "uliveto", "rocchetta", "fiuggi",
+    "san bernardo", "lauretana", "guizza", "courmayeur", "perrier",
+    "panna", "vera", "evian", "nepi", "boario", "fonte"
+)
+
+
+def is_water_product(
+    canonical_name: str,
+    order_name: Optional[str] = None,
+    category: Optional[str] = None,
+    subcategory: Optional[str] = None,
+    uom: Optional[str] = None,
+) -> bool:
+    """
+    Riconosce se un prodotto è un'acqua minerale/potabile per l'applicazione
+    della regola promozionale Ho.Re.Ca: ogni 5 box d'acqua acquistati, 1 in omaggio (5+1).
+    Esclude materiali monouso/consumo (es. bicchieri acqua), pesce (acquadelle) e distillati (acquavite).
+    """
+    name = (canonical_name or "").lower()
+    oname = (order_name or "").lower()
+    cat = (category or "").lower()
+    subcat = (subcategory or "").lower()
+
+    # 1. Esclusioni categoriche esplicite
+    for ex in WATER_EXCLUDE_TERMS:
+        if ex in name or ex in oname:
+            return False
+
+    if cat in ("materiali di consumo", "food") and not ("acqua" in name or "acqua" in oname):
+        return False
+
+    # 2. Match su subcategoria o categoria
+    if "acqua" in subcat or subcat in ("acqua minerale", "acque", "acque minerali"):
+        return True
+    if cat in ("acqua", "acque", "acqua minerale"):
+        return True
+
+    # 3. Match su parola esatta 'acqua' o 'water' nel nome o order_name
+    if re.search(r"\bacqua\b", name) or re.search(r"\bacqua\b", oname):
+        return True
+    if re.search(r"\bwater\b", name) or re.search(r"\bwater\b", oname):
+        return True
+
+    # 4. Match su brand noto di acqua nel beverage
+    if cat in ("beverage", "beverage & soft drinks", ""):
+        for brand in WATER_BRANDS:
+            if brand in name or brand in oname:
+                if brand == "panna" and ("cucina" in name or cat == "food"):
+                    continue
+                return True
+
+    return False
+
+
 def _format_whatsapp_text(
     supplier_name: str,
     location_name: str,
@@ -430,10 +525,13 @@ def _format_whatsapp_text(
         name = it.nome_prodotto
         uom = it.uom or "pz"
         code_str = f" [Cod. {it.codice_fornitore}]" if it.codice_fornitore else ""
-        lines.append(f"• *{qty_str} {uom}* × {name}{code_str}")
+        omaggio_badge = " 🎁 *(OMAGGIO PROMO 5+1 — GRATIS)*" if getattr(it, "is_omaggio", False) else ""
+        lines.append(f"• *{qty_str} {uom}* × {name}{code_str}{omaggio_badge}")
     
     lines.append("")
-    lines.append(f"💰 *Totale stimato:* € {total_amount:.2f} + IVA")
+    omaggi_count = sum(int(it.quantita) for it in items if getattr(it, "is_omaggio", False))
+    omaggi_note = f" *(Include {omaggi_count} box di acqua in OMAGGIO)*" if omaggi_count > 0 else ""
+    lines.append(f"💰 *Totale stimato:* € {total_amount:.2f} + IVA{omaggi_note}")
     if order_notes and order_notes.strip():
         lines.append(f"📝 *Note:* {order_notes.strip()}")
     
@@ -463,12 +561,14 @@ async def elabora_ordine_settore(
 
     # 3. Raggruppamento per fornitore
     supplier_items_map: Dict[int, List[SupplierOrderItemDetail]] = {}
+    product_map: Dict[int, Product] = {}
     
     today = date.today()
     for it in data.items:
         product = await db.get(Product, it.product_id)
         if not product:
             continue
+        product_map[product.id] = product
         
         # 1. Cerca forzatura/policy di acquisto attiva per questo prodotto (per sede o globale)
         policy_stmt = (
@@ -537,7 +637,7 @@ async def elabora_ordine_settore(
         if unit_price is None:
             unit_price = 0.0
 
-        # Cerca codice articolo fornitore tramite alias
+        # Cerca il codice articolo del fornitore tramite alias.
         if product.id:
             alias = (await db.scalars(
                 select(SupplierProductAlias).where(
@@ -549,7 +649,10 @@ async def elabora_ordine_settore(
             if alias:
                 supplier_code = alias.supplier_code
 
-        display_name = it.order_name or product.order_name or it.canonical_name or product.canonical_name
+        # Il nome rapido (order_name) serve solo a trovare velocemente il prodotto
+        # nell'interfaccia. Nei documenti e messaggi d'ordine usa sempre il nome
+        # canonico completo, letto dal database e non dal payload del client.
+        display_name = product.canonical_name
         subtotal = round(unit_price * it.quantita, 2)
 
         item_detail = SupplierOrderItemDetail(
@@ -576,6 +679,51 @@ async def elabora_ordine_settore(
     for sup_id, items in supplier_items_map.items():
         sup = fornitori_map.get(sup_id)
         sup_name = sup.nome_azienda if sup else f"Fornitore #{sup_id}"
+
+        # Controllo Promozione Acqua 5+1 per questo fornitore:
+        # Ogni 5 box di acqua (qualsiasi tipo), 1 box in omaggio (5+1)
+        water_items = [
+            it for it in items
+            if is_water_product(
+                canonical_name=it.nome_prodotto,
+                order_name=getattr(product_map.get(it.product_id), "order_name", None),
+                category=getattr(product_map.get(it.product_id), "category", None),
+                subcategory=getattr(product_map.get(it.product_id), "subcategory", None),
+                uom=it.uom,
+            )
+            and (it.uom or "").upper() not in ("BT", "BOTTIGLIA", "BOTTIGLIE", "PZ", "PIECE")
+            and not getattr(it, "is_omaggio", False)
+        ]
+
+        total_water_boxes = sum(it.quantita for it in water_items)
+        free_water_boxes = int(total_water_boxes // 5)
+
+        if free_water_boxes > 0 and water_items:
+            # Selezione della referenza omaggio
+            chosen_water_item = None
+            if data.water_freebie_product_id:
+                chosen_water_item = next(
+                    (w for w in water_items if w.product_id == data.water_freebie_product_id),
+                    None
+                )
+            if not chosen_water_item:
+                chosen_water_item = max(water_items, key=lambda w: w.quantita)
+
+            omaggio_item = SupplierOrderItemDetail(
+                product_id=chosen_water_item.product_id,
+                sku_interno=chosen_water_item.sku_interno,
+                nome_prodotto=chosen_water_item.nome_prodotto,
+                codice_fornitore=chosen_water_item.codice_fornitore,
+                quantita=float(free_water_boxes),
+                uom=chosen_water_item.uom or "CT",
+                prezzo_unitario=0.0,
+                subtotale=0.0,
+                is_concordato=True,
+                is_omaggio=True,
+                note_omaggio=f"Omaggio promo 5+1 ({free_water_boxes} box gratis ogni 5 acquistati)",
+            )
+            items.append(omaggio_item)
+
         totale_bundle = round(sum(i.subtotale for i in items), 2)
         totale_colli = sum(i.quantita for i in items)
         totale_complessivo += totale_bundle
@@ -675,6 +823,7 @@ async def salva_ordini_settore(
         await db.flush()
 
         for it in bundle.items:
+            is_omaggio = getattr(it, "is_omaggio", False) or it.prezzo_unitario == 0.0
             riga = RigaOrdine(
                 ordine_id=ordine.id,
                 product_id=it.product_id,
@@ -684,7 +833,8 @@ async def salva_ordini_settore(
                 uom=it.uom or "CT",
                 prezzo_pattuito=it.prezzo_unitario,
                 prezzo_inserito=it.prezzo_unitario,
-                stato_ottimizzazione="concordato" if it.is_concordato else "settore",
+                stato_ottimizzazione="omaggio" if is_omaggio else ("concordato" if it.is_concordato else "settore"),
+                note_riga=getattr(it, "note_omaggio", None) or ("Omaggio Promo 5+1" if is_omaggio else None),
             )
             db.add(riga)
 
@@ -838,6 +988,7 @@ async def get_ordine_detail(
                 "prezzo_inserito": float(r.prezzo_inserito),
                 "subtotale": round(float(r.quantita) * float(r.prezzo_inserito), 2),
                 "stato_ottimizzazione": r.stato_ottimizzazione,
+                "is_omaggio": r.stato_ottimizzazione == "omaggio" or float(r.prezzo_inserito) == 0.0,
                 "stato_riga": r.stato_riga or "in_attesa",
                 "note_riga": r.note_riga
             }
@@ -944,5 +1095,4 @@ async def get_order_notifications(
         "count": len(items),
         "notifications": items
     }
-
 

@@ -7,7 +7,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,8 +91,13 @@ async def list_fatture(
     if data_a:
         query = query.where(Fattura.data_documento <= data_a)
     if search:
+        search_pattern = f"%{search}%"
         query = query.where(
-            Fattura.numero_documento.ilike(f"%{search}%")
+            or_(
+                Fattura.numero_documento.ilike(search_pattern),
+                Fornitore.nome_azienda.ilike(search_pattern),
+                RigaFattura.descrizione_fornitore_raw.ilike(search_pattern),
+            )
         )
 
     # Count total from the subquery of the filtered base query

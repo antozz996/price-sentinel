@@ -31,9 +31,12 @@ class StatoIngestion(str, enum.Enum):
 
 class TipoDocumento(str, enum.Enum):
     """Tipi documento FatturaPA — Spec §2.2."""
-    TD01 = "TD01"  # Fattura
+    TD01 = "TD01"  # Fattura immediata
     TD04 = "TD04"  # Nota di Credito
     TD08 = "TD08"  # Nota di Debito
+    TD24 = "TD24"  # Fattura differita (DDT)
+    TD25 = "TD25"  # Fattura differita triangolare
+
 
 
 class StatoMatching(str, enum.Enum):

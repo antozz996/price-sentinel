@@ -6,6 +6,25 @@
 
 ---
 
+### [2026-08-29] Fix: nome completo prodotto negli ordini di settore
+
+**File toccati:**
+- `backend/app/api/v1/ordini.py`
+- `backend/tests/sector_orders_whatsapp_unit.py`
+- `DEVLOG.md`
+**Tipo:** Bugfix
+
+#### Problema / Obiettivo
+Il nome rapido assegnato internamente a un prodotto per facilitarne la ricerca (per esempio `LAVA PIATTI`) veniva riportato anche nell'ordine destinato al fornitore.
+
+#### Soluzione implementata
+- Anteprima ordine, messaggio WhatsApp e riga salvata usano sempre il nome canonico completo del prodotto letto dal database.
+- Il nome rapido resta disponibile esclusivamente per ricerca e selezione nel catalogo.
+- Il codice articolo del fornitore continua a essere recuperato dall'alias approvato.
+- Aggiunto un test di regressione che distingue nome rapido, nome canonico, descrizione alias e valore inviato dal client.
+
+---
+
 ## Formato entry
 
 ```

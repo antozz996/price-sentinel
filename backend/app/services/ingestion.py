@@ -95,8 +95,8 @@ async def process_xml_raw(db: AsyncSession, xml_raw_id: int, parsed: FatturaPars
     # ── Step 5: Routing per TipoDocumento ──
     tipo = parsed.tipo_documento.upper()
 
-    if tipo == "TD01":
-        # Fattura standard — parsing completo + matching
+    if tipo in ("TD01", "TD24", "TD25"):
+        # Fattura standard o differita — parsing completo + matching
         result = await _process_td01(db, xml_raw_id, parsed, fornitore, location)
         report.update(result)
 
@@ -122,7 +122,7 @@ async def process_xml_raw(db: AsyncSession, xml_raw_id: int, parsed: FatturaPars
 
 
 # ─────────────────────────────────────────────
-# TD01 — Fattura Standard (Spec §2.2 Step 7)
+# TD01 / TD24 — Fattura Standard / Differita (Spec §2.2 Step 7)
 # ─────────────────────────────────────────────
 
 async def _process_td01(
@@ -132,7 +132,7 @@ async def _process_td01(
     fornitore: Fornitore,
     location: Location,
 ) -> dict:
-    """Processa una fattura TD01 — il flusso principale."""
+    """Processa una fattura TD01/TD24/TD25 — il flusso principale."""
 
     stats = {
         "righe_matched": 0,
@@ -140,6 +140,8 @@ async def _process_td01(
         "righe_omaggio": 0,
         "anomalie_generate": 0,
     }
+
+    doc_type = getattr(TipoDocumento, parsed.tipo_documento.upper(), TipoDocumento.TD01)
 
     # ── Crea record Fattura ──
     fattura = Fattura(
@@ -149,7 +151,7 @@ async def _process_td01(
         numero_documento=parsed.numero_documento,
         data_documento=_parse_date(parsed.data_documento),
         data_ricezione_sdi=_parse_date(parsed.data_ricezione_sdi or parsed.data_documento),
-        tipo_documento=TipoDocumento.TD01,
+        tipo_documento=doc_type,
         totale_imponibile=parsed.totale_imponibile,
     )
     db.add(fattura)

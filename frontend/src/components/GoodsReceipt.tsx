@@ -658,9 +658,20 @@ export default function GoodsReceipt({ userProfile: _userProfile }: { userProfil
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                       <div>
-                        <div style={{ fontWeight: 700, color: 'white', fontSize: '0.92rem' }}>{r.descrizione}</div>
+                        <div style={{ fontWeight: 700, color: 'white', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span>{r.descrizione}</span>
+                          {(r.stato_ottimizzazione === 'omaggio' || r.prezzo_inserito === 0 || (r as any).is_omaggio) && (
+                            <span style={{
+                              padding: '2px 8px', borderRadius: '6px',
+                              background: 'rgba(16, 185, 129, 0.25)', color: '#34d399',
+                              fontSize: '0.72rem', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.4)'
+                            }}>
+                              🎁 OMAGGIO (Promo 5+1)
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          SKU: <code>{r.sku_interno}</code> • Prezzo: € {r.prezzo_inserito.toFixed(2)} /{r.uom}
+                          SKU: <code>{r.sku_interno}</code> • Prezzo: {(r.stato_ottimizzazione === 'omaggio' || r.prezzo_inserito === 0 || (r as any).is_omaggio) ? 'GRATIS (€ 0,00)' : `€ ${r.prezzo_inserito.toFixed(2)}`} /{r.uom}
                         </div>
                       </div>
 

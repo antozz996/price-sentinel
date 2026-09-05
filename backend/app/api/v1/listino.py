@@ -396,7 +396,7 @@ async def extract_listino_from_invoices(
         .join(Fattura, Fattura.id == RigaFattura.fattura_id)
         .where(
             Fattura.fornitore_id == fornitore_id,
-            Fattura.tipo_documento == TipoDocumento.TD01,
+            Fattura.tipo_documento.in_([TipoDocumento.TD01, TipoDocumento.TD24, TipoDocumento.TD25]),
             RigaFattura.is_omaggio.is_(False),
             RigaFattura.descrizione_fornitore_raw.is_not(None),
         )
@@ -513,7 +513,7 @@ async def import_from_invoices_direct(
         .join(Fattura, Fattura.id == RigaFattura.fattura_id)
         .where(
             Fattura.fornitore_id == fornitore_id,
-            Fattura.tipo_documento == TipoDocumento.TD01,
+            Fattura.tipo_documento.in_([TipoDocumento.TD01, TipoDocumento.TD24, TipoDocumento.TD25]),
             RigaFattura.is_omaggio.is_(False),
             RigaFattura.descrizione_fornitore_raw.is_not(None),
         )

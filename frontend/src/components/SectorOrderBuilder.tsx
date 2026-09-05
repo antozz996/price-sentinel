@@ -21,6 +21,8 @@ import {
   Filter,
   Trash2,
   Phone,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
@@ -56,6 +58,8 @@ interface SupplierOrderItemDetail {
   prezzo_unitario: number;
   subtotale: number;
   is_concordato: boolean;
+  is_omaggio?: boolean;
+  note_omaggio?: string | null;
 }
 
 interface SupplierOrderBundle {
@@ -148,6 +152,53 @@ export function normalizeDefaultUom(rawUom?: string | null, category?: string | 
   return 'CT';
 }
 
+// ── Promozione Acqua 5+1 Helper ─────────────────────────────
+const WATER_EXCLUDE_TERMS = [
+  'bicchiere', 'bicchieri', 'acquadelle', 'acquavite',
+  'salviett', 'monouso', 'tovagli', 'dispenser', 'cannucc',
+  'piatto', 'posat'
+];
+
+const WATER_BRANDS = [
+  'ferrarelle', 'sorgesana', 'electa', 'lete', 'lilia',
+  'san benedetto', 'san_benedetto', 's.benedetto', 'sant\'anna',
+  'santanna', 'levissima', 'uliveto', 'rocchetta', 'fiuggi',
+  'san bernardo', 'lauretana', 'guizza', 'courmayeur', 'perrier',
+  'panna', 'vera', 'evian', 'nepi', 'boario', 'fonte'
+];
+
+export function isWaterProduct(prod: ProductItem): boolean {
+  const name = (prod.canonical_name || '').toLowerCase();
+  const oname = (prod.order_name || '').toLowerCase();
+  const cat = (prod.category || '').toLowerCase();
+  const subcat = (prod.subcategory || '').toLowerCase();
+
+  for (const ex of WATER_EXCLUDE_TERMS) {
+    if (name.includes(ex) || oname.includes(ex)) return false;
+  }
+
+  if ((cat === 'materiali di consumo' || cat === 'food') && !name.includes('acqua') && !oname.includes('acqua')) {
+    return false;
+  }
+
+  if (subcat.includes('acqua') || subcat === 'acqua minerale' || subcat === 'acque') return true;
+  if (cat === 'acqua' || cat === 'acque' || cat === 'acqua minerale') return true;
+
+  if (/\bacqua\b/i.test(name) || /\bacqua\b/i.test(oname)) return true;
+  if (/\bwater\b/i.test(name) || /\bwater\b/i.test(oname)) return true;
+
+  if (cat === 'beverage' || cat === '' || !prod.category) {
+    for (const brand of WATER_BRANDS) {
+      if (name.includes(brand) || oname.includes(brand)) {
+        if (brand === 'panna' && (name.includes('cucina') || cat === 'food')) continue;
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export interface SectorOrderUserProfile {
   id: number;
   email: string;
@@ -197,6 +248,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   // Unit of Measure overrides per product_id
   const [selectedUoms, setSelectedUoms] = useState<Record<number, string>>({});
 
+  // Freebie product selection for water 5+1 promo
+  const [selectedWaterFreebieId, setSelectedWaterFreebieId] = useState<number | null>(null);
+
   // Helper for effective UoM
   const getEffectiveUom = (prod: ProductItem) => {
     return selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit, prod.category);
@@ -212,6 +266,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
   // Phone numbers overrides per supplier
   const [supplierPhones, setSupplierPhones] = useState<Record<number, string>>({});
+  
+  // Mobile expandable details in floating bottom bar
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState<boolean>(false);
 
   const headers = getHeaders();
 
@@ -347,12 +404,25 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       }
     });
 
+    // Calcolo Promozione Acqua 5+1 (1 box omaggio ogni 5 box di acqua qualsiasi tipo)
+    const waterItems = basketItems.filter(it => 
+      isWaterProduct(it.product) && !['BT', 'PZ', 'PIECE', 'BOTTIGLIA'].includes(it.uom.toUpperCase())
+    );
+    const totalWaterBoxes = waterItems.reduce((acc, it) => acc + it.quantity, 0);
+    const waterFreebies = Math.floor(totalWaterBoxes / 5);
+    const waterMissingForNext = 5 - (totalWaterBoxes % 5);
+    const waterProductsInBasket = waterItems.map(it => it.product);
+
     return {
       totalItems,
       totalUnits,
       estimatedTotal,
       supplierCount: suppliersSet.size || (totalItems > 0 ? 1 : 0),
-      supplierNames: Array.from(suppliersSet)
+      supplierNames: Array.from(suppliersSet),
+      totalWaterBoxes,
+      waterFreebies,
+      waterMissingForNext,
+      waterProductsInBasket
     };
   }, [basketItems]);
 
@@ -377,8 +447,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
     if (basketItems.length === 0 || window.confirm("Sei sicuro di voler azzerare il carrello dell'ordine?")) {
       setQuantities({});
       setSelectedUoms({});
+      setSelectedWaterFreebieId(null);
       setDraftResult(null);
       setSaveSuccessMsg(null);
+      setMobileDetailsOpen(false);
     }
   };
 
@@ -402,6 +474,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       settore: selectedSector !== 'all' ? selectedSector : null,
       data_consegna: deliveryDate || null,
       note: orderNotes.trim() || null,
+      water_freebie_product_id: selectedWaterFreebieId || (basketStats.waterProductsInBasket.length > 0 ? basketStats.waterProductsInBasket[0].id : null),
       items: basketItems.map(it => ({
         product_id: it.product.id,
         sku_interno: it.product.sku_interno,
@@ -506,7 +579,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   const selectedLocObj = locations.find(l => l.id === Number(selectedLocation));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', paddingBottom: '120px' }}>
+    <div className="sector-builder-container">
       
       {/* Top Banner / Hero */}
       <div className="glass-panel" style={{ 
@@ -541,7 +614,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         </div>
 
         {/* Quick Order Header Controls */}
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="sector-hero-controls">
           {/* Location Selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -623,8 +696,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       )}
 
       {/* Settore / Macro-Category Pills Selector */}
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px' }}>
+      <div className="sector-pills-wrapper">
+        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px', whiteSpace: 'nowrap' }}>
           Settore Attivo:
         </span>
         {MACRO_CATEGORIES
@@ -647,19 +720,20 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   setSelectedSubcategory('all');
                 }}
                 style={{
-                  padding: '9px 18px',
+                  padding: '8px 16px',
                   borderRadius: '30px',
                   border: isSelected ? `2px solid ${cat.color}` : '1px solid var(--border-glass)',
                   background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
                   color: isSelected ? 'white' : 'var(--text-secondary)',
                   fontWeight: isSelected ? 700 : 500,
-                  fontSize: '0.9rem',
+                  fontSize: '0.85rem',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
                   boxShadow: isSelected ? `0 0 15px ${cat.color}33` : 'none',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  flexShrink: 0
                 }}
               >
                 <span>{cat.icon}</span>
@@ -736,6 +810,90 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         </div>
       </div>
 
+      {/* Promozione Acqua 5+1 Banner Interattivo */}
+      {basketStats.totalWaterBoxes > 0 && (
+        <div className="glass-panel" style={{
+          padding: '16px 20px',
+          background: basketStats.waterFreebies > 0 
+            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(5, 150, 105, 0.22) 100%)'
+            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(37, 99, 235, 0.18) 100%)',
+          border: basketStats.waterFreebies > 0 ? '1px solid #10b981' : '1px solid rgba(59, 130, 246, 0.4)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '14px',
+          boxShadow: basketStats.waterFreebies > 0 ? '0 0 25px rgba(16, 185, 129, 0.2)' : 'none'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '42px', height: '42px', borderRadius: '12px',
+              background: basketStats.waterFreebies > 0 ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
+              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.25rem', boxShadow: '0 0 15px rgba(0,0,0,0.3)'
+            }}>
+              🎁
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span>Promozione Acqua 5+1 (1 Box Omaggio ogni 5 Box)</span>
+                <span style={{
+                  padding: '2px 8px', borderRadius: '6px',
+                  background: basketStats.waterFreebies > 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)',
+                  color: basketStats.waterFreebies > 0 ? '#a7f3d0' : '#93c5fd',
+                  fontSize: '0.75rem', fontWeight: 700
+                }}>
+                  {basketStats.totalWaterBoxes} box ordinati
+                </span>
+              </div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
+                {basketStats.waterFreebies > 0 ? (
+                  <>
+                    🎉 Complimenti! Hai maturato <strong style={{ color: '#34d399' }}>{basketStats.waterFreebies} {basketStats.waterFreebies === 1 ? 'box' : 'box'} in OMAGGIO</strong> (€ 0,00)!
+                    {basketStats.totalWaterBoxes % 5 !== 0 && (
+                      <span style={{ marginLeft: '4px', opacity: 0.9 }}>
+                        (Aggiungi ancora {basketStats.waterMissingForNext} box per sbloccare il prossimo omaggio)
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Mancano solo <strong style={{ color: '#60a5fa' }}>{basketStats.waterMissingForNext} {basketStats.waterMissingForNext === 1 ? 'box' : 'box'}</strong> di acqua per ricevere <strong>1 BOX IN OMAGGIO</strong>!
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {basketStats.waterFreebies > 0 && basketStats.waterProductsInBasket.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Referenza omaggio:</span>
+              <select
+                value={selectedWaterFreebieId || basketStats.waterProductsInBasket[0]?.id}
+                onChange={e => setSelectedWaterFreebieId(Number(e.target.value))}
+                style={{
+                  padding: '6px 12px',
+                  background: 'rgba(0,0,0,0.4)',
+                  border: '1px solid #10b981',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                {basketStats.waterProductsInBasket.map(wp => (
+                  <option key={wp.id} value={wp.id} style={{ background: '#13131c' }}>
+                    {wp.order_name || wp.canonical_name} (Omaggio)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Products Catalog Cards Grid */}
       {loading ? (
         <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -749,7 +907,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           <p style={{ fontSize: '0.85rem', margin: 0 }}>Prova a modificare i filtri di ricerca o il settore selezionato.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+        <div className="sector-order-grid">
           {filteredProducts.map(prod => {
             const currentQty = quantities[prod.id] || 0;
             const hasQty = currentQty > 0;
@@ -809,6 +967,21 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       <>
                         <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
                         <span style={{ color: '#93c5fd' }}>{prod.subcategory}</span>
+                      </>
+                    )}
+                    {isWaterProduct(prod) && (
+                      <>
+                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+                        <span style={{ 
+                          color: '#34d399', 
+                          background: 'rgba(16, 185, 129, 0.15)', 
+                          padding: '1px 6px', 
+                          borderRadius: '4px',
+                          fontWeight: 700,
+                          fontSize: '0.7rem' 
+                        }}>
+                          🎁 Promo 5+1
+                        </span>
                       </>
                     )}
                   </div>
@@ -976,73 +1149,124 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
       {/* Floating Bottom Action Bar for Cart */}
       {basketItems.length > 0 && (
-        <div style={{
-          position: 'fixed',
-          bottom: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 'calc(100% - 60px)',
-          maxWidth: '1100px',
-          zIndex: 1000,
-          background: 'rgba(15, 23, 42, 0.95)',
-          border: '1px solid var(--accent-blue)',
-          borderRadius: '16px',
-          padding: '16px 24px',
-          boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(59, 130, 246, 0.3)',
-          backdropFilter: 'blur(12px)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '20px',
-          flexWrap: 'wrap'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-            <div style={{
-              width: '44px', height: '44px', borderRadius: '12px',
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)'
-            }}>
-              <ShoppingCart size={22} color="white" />
-            </div>
-
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'white' }}>
-                  Fabbisogno: {basketStats.totalItems} prodotti ({basketStats.totalUnits} colli)
-                </span>
-                <span style={{ 
-                  padding: '2px 8px', borderRadius: '6px', 
-                  background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', 
-                  fontSize: '0.75rem', fontWeight: 700 
-                }}>
-                  {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'} coinvolti
-                </span>
+        <div className="order-floating-bar">
+          {/* MOBILE EXPANDABLE DETAILS DRAWER */}
+          {mobileDetailsOpen && (
+            <div className="order-floating-bar-mobile-drawer">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Store size={14} color="var(--accent-blue)" />
+                  <span>{selectedLocObj?.nome_struttura || 'Sede di Consegna'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileDetailsOpen(false)}
+                  style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: 'var(--text-secondary)',
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span>Chiudi</span>
+                  <ChevronDown size={14} />
+                </button>
               </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                Destinazione: <strong>{selectedLocObj?.nome_struttura || 'Sede'}</strong> · Consegna: <strong>{deliveryDate}</strong>
-              </div>
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {basketStats.estimatedTotal > 0 && (
-              <div style={{ textAlign: 'right', marginRight: '6px' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Spesa stimata</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--status-green)' }}>
-                  € {basketStats.estimatedTotal.toFixed(2)}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '3px 8px', borderRadius: '6px' }}>
+                  <Calendar size={12} color="var(--status-green)" /> Consegna: <strong style={{ color: 'white' }}>{deliveryDate}</strong>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59,130,246,0.15)', color: '#93c5fd', padding: '3px 8px', borderRadius: '6px' }}>
+                  <Truck size={12} /> {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'}
                 </div>
               </div>
-            )}
 
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={handleResetBasket}
-              style={{ padding: '10px 16px', fontSize: '0.85rem' }}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={handleResetBasket}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: 'var(--status-red)',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Trash2 size={13} /> Svuota Carrello
+                </button>
+
+                {basketStats.estimatedTotal > 0 && (
+                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--status-green)' }}>
+                    Spesa: € {basketStats.estimatedTotal.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MOBILE COMPACT BAR ROW (Visible on Mobile <= 768px) */}
+          <div className="order-floating-bar-mobile-only" style={{ width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+            <div 
+              onClick={() => setMobileDetailsOpen(prev => !prev)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
             >
-              Azzera
-            </button>
+              <div style={{
+                width: '34px', height: '34px', borderRadius: '8px',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 10px rgba(16, 185, 129, 0.35)',
+                flexShrink: 0
+              }}>
+                <ShoppingCart size={17} color="white" />
+              </div>
+              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ fontWeight: 800, fontSize: '0.86rem', color: 'white', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                  {basketStats.totalItems} prod <span style={{ color: '#93c5fd', fontWeight: 600 }}>({basketStats.totalUnits} colli)</span>
+                  {basketStats.waterFreebies > 0 && (
+                    <span style={{ marginLeft: '6px', color: '#34d399', fontWeight: 800 }}>
+                      🎁+{basketStats.waterFreebies}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: basketStats.estimatedTotal > 0 ? 'var(--status-green)' : 'var(--text-secondary)', fontWeight: basketStats.estimatedTotal > 0 ? 800 : 500 }}>
+                  {basketStats.estimatedTotal > 0 ? `€ ${basketStats.estimatedTotal.toFixed(2)}` : `${basketStats.supplierCount} ${basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'}`}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setMobileDetailsOpen(prev => !prev); }}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '6px',
+                  color: 'var(--text-secondary)',
+                  padding: '4px 6px',
+                  fontSize: '0.72rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '2px',
+                  cursor: 'pointer',
+                  flexShrink: 0
+                }}
+              >
+                <span>Info</span>
+                {mobileDetailsOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+              </button>
+            </div>
 
             <button
               type="button"
@@ -1050,30 +1274,125 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               disabled={draftProcessing}
               onClick={handleProcessOrder}
               style={{
-                padding: '12px 26px',
-                fontSize: '0.98rem',
+                padding: '9px 14px',
+                fontSize: '0.85rem',
                 fontWeight: 800,
                 background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
                 border: 'none',
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                boxShadow: '0 0 25px rgba(59, 130, 246, 0.5)'
+                gap: '6px',
+                flexShrink: 0,
+                boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)'
               }}
             >
               {draftProcessing ? (
                 <>
-                  <RefreshCw className="spinner" size={18} />
-                  <span>Elaborazione in corso...</span>
+                  <RefreshCw className="spinner" size={15} />
+                  <span>Elaborazione...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles size={18} />
-                  <span>Elabora Buoni d'Ordine & WhatsApp</span>
-                  <ArrowRight size={16} />
+                  <Sparkles size={15} />
+                  <span>Elabora Ordine</span>
+                  <ArrowRight size={14} />
                 </>
               )}
             </button>
+          </div>
+
+          {/* DESKTOP ROW (Visible on Desktop > 768px) */}
+          <div className="order-floating-bar-desktop-only" style={{ width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{
+                width: '44px', height: '44px', borderRadius: '12px',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)'
+              }}>
+                <ShoppingCart size={22} color="white" />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '1.05rem', color: 'white' }}>
+                    Fabbisogno: {basketStats.totalItems} prodotti ({basketStats.totalUnits} colli)
+                  </span>
+                  <span style={{ 
+                    padding: '2px 8px', borderRadius: '6px', 
+                    background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', 
+                    fontSize: '0.75rem', fontWeight: 700 
+                  }}>
+                    {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'} coinvolti
+                  </span>
+                  {basketStats.waterFreebies > 0 && (
+                    <span style={{ 
+                      padding: '2px 8px', borderRadius: '6px', 
+                      background: 'rgba(16, 185, 129, 0.25)', color: '#34d399', 
+                      fontSize: '0.75rem', fontWeight: 800,
+                      border: '1px solid rgba(16, 185, 129, 0.4)'
+                    }}>
+                      🎁 +{basketStats.waterFreebies} {basketStats.waterFreebies === 1 ? 'box omaggio' : 'box omaggio'}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                  Destinazione: <strong>{selectedLocObj?.nome_struttura || 'Sede'}</strong> · Consegna: <strong>{deliveryDate}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {basketStats.estimatedTotal > 0 && (
+                <div style={{ textAlign: 'right', marginRight: '6px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Spesa stimata</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--status-green)' }}>
+                    € {basketStats.estimatedTotal.toFixed(2)}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleResetBasket}
+                style={{ padding: '10px 16px', fontSize: '0.85rem' }}
+              >
+                Azzera
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={draftProcessing}
+                onClick={handleProcessOrder}
+                style={{
+                  padding: '12px 26px',
+                  fontSize: '0.98rem',
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  boxShadow: '0 0 25px rgba(59, 130, 246, 0.5)'
+                }}
+              >
+                {draftProcessing ? (
+                  <>
+                    <RefreshCw className="spinner" size={18} />
+                    <span>Elaborazione in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={18} />
+                    <span>Elabora Buoni d'Ordine & WhatsApp</span>
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1235,25 +1554,39 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         </tr>
                       </thead>
                       <tbody>
-                        {bundle.items.map((it, iIdx) => (
-                          <tr key={iIdx} style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-                            <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>
-                              {it.nome_prodotto}
-                            </td>
-                            <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                              <code>{it.codice_fornitore || it.sku_interno || '—'}</code>
-                            </td>
-                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#60a5fa' }}>
-                              {it.quantita} {it.uom}
-                            </td>
-                            <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                              € {it.prezzo_unitario.toFixed(2)}
-                            </td>
-                            <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: 'white' }}>
-                              € {it.subtotale.toFixed(2)}
-                            </td>
-                          </tr>
-                        ))}
+                        {bundle.items.map((it, iIdx) => {
+                          const isFreebie = it.is_omaggio || it.prezzo_unitario === 0;
+                          return (
+                            <tr key={iIdx} style={{ borderTop: '1px solid rgba(255,255,255,0.04)', background: isFreebie ? 'rgba(16, 185, 129, 0.08)' : 'transparent' }}>
+                              <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <span>{it.nome_prodotto}</span>
+                                  {isFreebie && (
+                                    <span style={{
+                                      padding: '2px 8px', borderRadius: '6px',
+                                      background: 'rgba(16, 185, 129, 0.25)', color: '#34d399',
+                                      fontSize: '0.72rem', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.4)'
+                                    }}>
+                                      🎁 OMAGGIO (Promo 5+1)
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                <code>{it.codice_fornitore || it.sku_interno || '—'}</code>
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: isFreebie ? '#34d399' : '#60a5fa' }}>
+                                {it.quantita} {it.uom}
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'right', color: isFreebie ? '#34d399' : 'var(--text-secondary)' }}>
+                                {isFreebie ? <strong style={{ color: '#34d399' }}>GRATIS (€ 0,00)</strong> : `€ ${it.prezzo_unitario.toFixed(2)}`}
+                              </td>
+                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: isFreebie ? '#34d399' : 'white' }}>
+                                {isFreebie ? <strong style={{ color: '#34d399' }}>€ 0,00</strong> : `€ ${it.subtotale.toFixed(2)}`}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

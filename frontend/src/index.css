@@ -441,3 +441,233 @@ h1, h2, h3, h4 {
     width: 100% !important;
   }
 }
+
+/* ==========================================================================
+   Sector Order Builder & Responsive Mobile Floating Action Bar
+   ========================================================================== */
+.sector-builder-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 120px;
+}
+
+.sector-hero-controls {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sector-pills-wrapper {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.sector-order-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+/* Desktop Floating Bar */
+.order-floating-bar {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 60px);
+  max-width: 1100px;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid var(--accent-blue);
+  border-radius: 16px;
+  padding: 14px 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px rgba(59, 130, 246, 0.3);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.order-floating-bar-mobile-drawer {
+  display: none;
+}
+
+.order-floating-bar-desktop-only {
+  display: flex;
+}
+
+.order-floating-bar-mobile-only {
+  display: none;
+}
+
+/* Sentinel AI Copilot Widget */
+.copilot-floating-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-blue) 0%, #60a5fa 100%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4);
+  cursor: pointer;
+  transition: transform 0.2s, bottom 0.3s;
+}
+
+.copilot-floating-btn:hover {
+  transform: scale(1.05);
+}
+
+.copilot-chat-window {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10001;
+  width: 380px;
+  height: 600px;
+  max-height: 80vh;
+  background: rgba(20, 20, 30, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+/* Mobile Responsiveness for Order Builder & Floating Bar */
+@media (max-width: 768px) {
+  .sector-builder-container {
+    padding-bottom: 120px !important;
+    gap: 16px !important;
+  }
+
+  .sector-hero-controls {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .sector-hero-controls > div {
+    width: 100% !important;
+  }
+
+  .sector-hero-controls select,
+  .sector-hero-controls input {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .sector-pills-wrapper {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 6px !important;
+    scrollbar-width: none !important;
+  }
+
+  .sector-pills-wrapper::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .sector-order-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .order-floating-bar-desktop-only {
+    display: none !important;
+  }
+
+  .order-floating-bar-mobile-only {
+    display: flex !important;
+  }
+
+  /* Docked Minimalist Bottom Bar on Mobile */
+  .order-floating-bar {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 20px 20px 0 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    border-top: 1px solid rgba(59, 130, 246, 0.4) !important;
+    background: rgba(13, 17, 28, 0.98) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)) 14px !important;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.75), 0 0 25px rgba(59, 130, 246, 0.25) !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    z-index: 9998 !important;
+  }
+
+  .order-floating-bar-mobile-drawer {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+    padding-bottom: 12px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    animation: drawerSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  /* Elevate Sentinel AI Copilot so it never overlaps the mobile cart bar */
+  .copilot-floating-btn {
+    bottom: 74px !important;
+    right: 14px !important;
+    width: 44px !important;
+    height: 44px !important;
+    box-shadow: 0 4px 18px rgba(59, 130, 246, 0.45) !important;
+  }
+
+  .copilot-floating-btn svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .copilot-chat-window {
+    inset: 0 !important;
+    bottom: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    border: none !important;
+    z-index: 10005 !important;
+  }
+}
+
+@keyframes drawerSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

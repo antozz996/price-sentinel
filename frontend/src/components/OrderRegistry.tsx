@@ -552,28 +552,42 @@ export default function OrderRegistry(props?: { isAdmin?: boolean; selectedOrder
                       </tr>
                     </thead>
                     <tbody>
-                      {activeOrderDetail.righe?.map(r => (
-                        <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                          <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                            {r.sku_interno}
-                          </td>
-                          <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>
-                            {r.descrizione}
-                          </td>
-                          <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#60a5fa' }}>
-                            {r.quantita}
-                          </td>
-                          <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#93c5fd' }}>
-                            {r.uom}
-                          </td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--text-secondary)' }}>
-                            € {r.prezzo_inserito.toFixed(2)}
-                          </td>
-                          <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: 'white' }}>
-                            € {r.subtotale.toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
+                      {activeOrderDetail.righe?.map(r => {
+                        const isFreebie = r.stato_ottimizzazione === 'omaggio' || r.prezzo_inserito === 0 || (r as any).is_omaggio;
+                        return (
+                          <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', background: isFreebie ? 'rgba(16, 185, 129, 0.06)' : 'transparent' }}>
+                            <td style={{ padding: '10px 14px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                              {r.sku_interno}
+                            </td>
+                            <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span>{r.descrizione}</span>
+                                {isFreebie && (
+                                  <span style={{
+                                    padding: '2px 8px', borderRadius: '6px',
+                                    background: 'rgba(16, 185, 129, 0.25)', color: '#34d399',
+                                    fontSize: '0.72rem', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.4)'
+                                  }}>
+                                    🎁 OMAGGIO
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: isFreebie ? '#34d399' : '#60a5fa' }}>
+                              {r.quantita}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: '#93c5fd' }}>
+                              {r.uom}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', color: isFreebie ? '#34d399' : 'var(--text-secondary)' }}>
+                              {isFreebie ? <strong style={{ color: '#34d399' }}>GRATIS</strong> : `€ ${r.prezzo_inserito.toFixed(2)}`}
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: isFreebie ? '#34d399' : 'white' }}>
+                              {isFreebie ? <strong style={{ color: '#34d399' }}>€ 0,00</strong> : `€ ${r.subtotale.toFixed(2)}`}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
