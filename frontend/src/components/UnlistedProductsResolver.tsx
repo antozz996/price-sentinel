@@ -81,17 +81,9 @@ interface ExistingProduct {
 }
 
 const CATEGORIES = [
-  'Beverage',
   'Food',
+  'Beverage',
   'Materiali di consumo',
-  'Alcolici & Liquori',
-  'Birre',
-  'Vini & Spumanti',
-  'Soft Drink & Acque',
-  'Caffetteria',
-  'Detergenti & Sanificazione',
-  'Monouso & Packaging',
-  'Altro',
 ];
 
 export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: (tab: string) => void }) {
@@ -114,9 +106,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   const [createForm, setCreateForm] = useState({
     canonical_name: '',
     sku_interno: '',
-    category: 'Beverage',
+    category: 'Food',
     subcategory: '',
-    comparison_unit: 'piece',
+    comparison_unit: 'Pz',
     prezzo_listino: '',
     unita_misura_listino: 'Pz',
     data_inizio_validita: '',
@@ -249,8 +241,19 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     const rawUom = item.unita_misura || 'Pz';
     const invoiceDate = item.data_documento || item.latest_invoice_date || new Date().toISOString().split('T')[0];
 
-    const initialCategory = item.suggested_product.category || 'Food';
-    const initialSubcategory = item.suggested_product.subcategory || '';
+    let initialCategory = item.suggested_product.category || 'Food';
+    let initialSubcategory = item.suggested_product.subcategory || '';
+
+    // Normalize any legacy or granular category to standard macro-categories
+    if (['Alcolici & Liquori', 'Birre', 'Vini & Spumanti', 'Soft Drink & Acque', 'Caffetteria'].includes(initialCategory)) {
+      initialSubcategory = initialSubcategory || initialCategory;
+      initialCategory = 'Beverage';
+    } else if (['Detergenti & Sanificazione', 'Monouso & Packaging'].includes(initialCategory)) {
+      initialSubcategory = initialSubcategory || initialCategory;
+      initialCategory = 'Materiali di consumo';
+    } else if (!CATEGORIES.includes(initialCategory)) {
+      initialCategory = 'Food';
+    }
     fetchSubcategories(initialCategory);
 
     // Populate create form
@@ -259,7 +262,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       sku_interno: autoSku,
       category: initialCategory,
       subcategory: initialSubcategory,
-      comparison_unit: item.suggested_product.comparison_unit || 'piece',
+      comparison_unit: item.suggested_product.comparison_unit && item.suggested_product.comparison_unit !== 'piece' ? item.suggested_product.comparison_unit : 'Pz',
       prezzo_listino: rawPrice,
       unita_misura_listino: rawUom,
       data_inizio_validita: invoiceDate,
@@ -295,7 +298,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           sku_interno: createForm.sku_interno.trim() || undefined,
           category: createForm.category || undefined,
           subcategory: createForm.subcategory.trim() || undefined,
-          comparison_unit: createForm.comparison_unit || 'piece',
+          comparison_unit: createForm.comparison_unit && createForm.comparison_unit !== 'piece' ? createForm.comparison_unit : 'Pz',
           prezzo_listino: createForm.prezzo_listino ? parseFloat(createForm.prezzo_listino) : undefined,
           unita_misura_listino: createForm.unita_misura_listino || 'Pz',
           data_inizio_validita: createForm.data_inizio_validita || undefined,
@@ -1374,7 +1377,11 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                             </label>
                             <select
                               value={createForm.category}
-                              onChange={e => setCreateForm({ ...createForm, category: e.target.value })}
+                              onChange={e => {
+                                const newCat = e.target.value;
+                                setCreateForm(prev => ({ ...prev, category: newCat, subcategory: '' }));
+                                fetchSubcategories(newCat);
+                              }}
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
@@ -1395,7 +1402,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                               <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
-                                Sottocategoria {createForm.category === 'Food' ? '(Food)' : ''}
+                                Sottocategoria ({createForm.category})
                               </label>
                               {!showInlineNewSubcat && (
                                 <button
@@ -1495,7 +1502,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 }}
                               >
                                 <option value="">-- Nessuna / Generale --</option>
-                                {availableSubcategories.map(sub => (
+                                {Array.from(new Set([
+                                  ...(createForm.subcategory ? [createForm.subcategory] : []),
+                                  ...availableSubcategories
+                                ])).map(sub => (
                                   <option key={sub} value={sub}>{sub}</option>
                                 ))}
                               </select>

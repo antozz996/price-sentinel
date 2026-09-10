@@ -610,7 +610,7 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
             weight_g=canonical.weight_g,
             unit_count=canonical.unit_count,
             container_type=canonical.container_type,
-            comparison_unit=canonical.comparison_unit,
+            comparison_unit="Pz" if canonical.comparison_unit in ("piece", None, "") else canonical.comparison_unit,
             is_commodity=False,
             is_active=True,
         )
