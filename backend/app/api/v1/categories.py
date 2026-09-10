@@ -187,104 +187,7 @@ async def seed_default_categories(
     return {"status": "ok", "created": created_count, "message": f"{created_count} categorie create con successo."}
 
 
-@router.put("/{category_id}", response_model=CategoryResponse, summary="Modifica categoria")
-@router.patch("/{category_id}", response_model=CategoryResponse, summary="Modifica categoria")
-async def update_category(
-    category_id: int,
-    data: CategoryUpdate,
-    db: AsyncSession = Depends(get_db),
-    _admin: Utente = Depends(require_admin),
-):
-    """Aggiorna i dettagli di una categoria."""
-    cat = await db.get(MasterCategory, category_id)
-    if not cat:
-        raise HTTPException(status_code=404, detail="Categoria non trovata")
 
-    old_name = cat.nome
-
-    if data.nome is not None:
-        clean_name = data.nome.strip()
-        if not clean_name:
-            raise HTTPException(status_code=400, detail="Il nome non può essere vuoto")
-        # Check uniqueness if name changed
-        if clean_name.casefold() != old_name.casefold():
-            existing = await db.scalar(
-                select(MasterCategory).where(
-                    func.lower(func.btrim(MasterCategory.nome)) == clean_name.casefold(),
-                    MasterCategory.id != category_id,
-                )
-            )
-            if existing:
-                raise HTTPException(status_code=409, detail=f"Categoria '{clean_name}' già esistente")
-            
-            # Cascade name update in products and capabilities
-            await db.execute(
-                update(Product)
-                .where(func.lower(func.btrim(Product.category)) == old_name.casefold())
-                .values(category=clean_name)
-            )
-            await db.execute(
-                update(SupplierCategoryCapability)
-                .where(func.lower(func.btrim(SupplierCategoryCapability.category)) == old_name.casefold())
-                .values(category=clean_name)
-            )
-            cat.nome = clean_name
-
-    if data.descrizione is not None:
-        cat.descrizione = data.descrizione.strip() if data.descrizione else None
-    if data.colore is not None:
-        cat.colore = data.colore.strip() if data.colore else "#3b82f6"
-    if data.is_active is not None:
-        cat.is_active = data.is_active
-
-    cat.updated_at = datetime.now(timezone.utc)
-    await db.flush()
-    await db.refresh(cat)
-
-    # Get counts
-    prod_count = await db.scalar(
-        select(func.count(Product.id)).where(
-            Product.is_active.is_(True),
-            func.lower(func.btrim(Product.category)) == cat.nome.casefold(),
-        )
-    ) or 0
-    supp_count = await db.scalar(
-        select(func.count(SupplierCategoryCapability.supplier_id))
-        .join(Fornitore, and_(Fornitore.id == SupplierCategoryCapability.supplier_id, Fornitore.archived_at.is_(None)))
-        .where(
-            SupplierCategoryCapability.enabled.is_(True),
-            func.lower(func.btrim(SupplierCategoryCapability.category)) == cat.nome.casefold(),
-        )
-    ) or 0
-
-    return CategoryResponse(
-        id=cat.id,
-        nome=cat.nome,
-        descrizione=cat.descrizione,
-        colore=cat.colore,
-        is_active=cat.is_active,
-        product_count=prod_count,
-        supplier_count=supp_count,
-        created_at=cat.created_at,
-        updated_at=cat.updated_at,
-    )
-
-
-@router.delete("/{category_id}", status_code=status.HTTP_200_OK, summary="Elimina categoria")
-async def delete_category(
-    category_id: int,
-    db: AsyncSession = Depends(get_db),
-    _admin: Utente = Depends(require_admin),
-):
-    """Elimina una categoria master."""
-    cat = await db.get(MasterCategory, category_id)
-    if not cat:
-        raise HTTPException(status_code=404, detail="Categoria non trovata")
-
-    cat_name = cat.nome
-    await db.delete(cat)
-    await db.flush()
-    return {"status": "ok", "message": f"Categoria '{cat_name}' eliminata con successo."}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -613,6 +516,43 @@ async def create_subcategory(
     )
 
 
+@router.post("/subcategories/seed-food-defaults", summary="Carica sottocategorie Food predefinite")
+async def seed_food_subcategories(
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    await _ensure_subcategory_table(db)
+    created_count = 0
+    now = datetime.now(timezone.utc)
+
+    for item in DEFAULT_FOOD_SUBCATEGORIES:
+        clean_name = item["nome"].strip()
+        existing = await db.scalar(
+            select(MasterSubcategory).where(
+                func.lower(func.btrim(MasterSubcategory.categoria_nome)) == "food",
+                func.lower(func.btrim(MasterSubcategory.nome)) == clean_name.casefold(),
+            )
+        )
+        if not existing:
+            sub = MasterSubcategory(
+                categoria_nome="Food",
+                nome=clean_name,
+                descrizione=item["descrizione"],
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(sub)
+            created_count += 1
+
+    await db.flush()
+    return {
+        "status": "ok",
+        "created": created_count,
+        "message": f"{created_count} sottocategorie Food create con successo."
+    }
+
+
 @router.put("/subcategories/{subcategory_id}", response_model=SubcategoryResponse, summary="Modifica sottocategoria")
 @router.patch("/subcategories/{subcategory_id}", response_model=SubcategoryResponse, summary="Modifica sottocategoria")
 async def update_subcategory(
@@ -699,38 +639,105 @@ async def delete_subcategory(
     return None
 
 
-@router.post("/subcategories/seed-food-defaults", summary="Carica sottocategorie Food predefinite")
-async def seed_food_subcategories(
+# ──────────────────────────────────────────────────────────────────────
+# Categorie Master (Aggiornamento ed Eliminazione)
+# ──────────────────────────────────────────────────────────────────────
+
+@router.put("/{category_id}", response_model=CategoryResponse, summary="Modifica categoria")
+@router.patch("/{category_id}", response_model=CategoryResponse, summary="Modifica categoria")
+async def update_category(
+    category_id: int,
+    data: CategoryUpdate,
     db: AsyncSession = Depends(get_db),
     _admin: Utente = Depends(require_admin),
 ):
-    await _ensure_subcategory_table(db)
-    created_count = 0
-    now = datetime.now(timezone.utc)
+    """Aggiorna i dettagli di una categoria."""
+    cat = await db.get(MasterCategory, category_id)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria non trovata")
 
-    for item in DEFAULT_FOOD_SUBCATEGORIES:
-        clean_name = item["nome"].strip()
-        existing = await db.scalar(
-            select(MasterSubcategory).where(
-                func.lower(func.btrim(MasterSubcategory.categoria_nome)) == "food",
-                func.lower(func.btrim(MasterSubcategory.nome)) == clean_name.casefold(),
-            )
-        )
-        if not existing:
-            sub = MasterSubcategory(
-                categoria_nome="Food",
-                nome=clean_name,
-                descrizione=item["descrizione"],
-                is_active=True,
-                created_at=now,
-                updated_at=now,
-            )
-            db.add(sub)
-            created_count += 1
+    old_name = cat.nome
 
+    if data.nome is not None:
+        clean_name = data.nome.strip()
+        if not clean_name:
+            raise HTTPException(status_code=400, detail="Il nome non può essere vuoto")
+        # Check uniqueness if name changed
+        if clean_name.casefold() != old_name.casefold():
+            existing = await db.scalar(
+                select(MasterCategory).where(
+                    func.lower(func.btrim(MasterCategory.nome)) == clean_name.casefold(),
+                    MasterCategory.id != category_id,
+                )
+            )
+            if existing:
+                raise HTTPException(status_code=409, detail=f"Categoria '{clean_name}' già esistente")
+            
+            # Cascade name update in products and capabilities
+            await db.execute(
+                update(Product)
+                .where(func.lower(func.btrim(Product.category)) == old_name.casefold())
+                .values(category=clean_name)
+            )
+            await db.execute(
+                update(SupplierCategoryCapability)
+                .where(func.lower(func.btrim(SupplierCategoryCapability.category)) == old_name.casefold())
+                .values(category=clean_name)
+            )
+            cat.nome = clean_name
+
+    if data.descrizione is not None:
+        cat.descrizione = data.descrizione.strip() if data.descrizione else None
+    if data.colore is not None:
+        cat.colore = data.colore.strip() if data.colore else "#3b82f6"
+    if data.is_active is not None:
+        cat.is_active = data.is_active
+
+    cat.updated_at = datetime.now(timezone.utc)
     await db.flush()
-    return {
-        "status": "ok",
-        "created": created_count,
-        "message": f"{created_count} sottocategorie Food create con successo."
-    }
+    await db.refresh(cat)
+
+    # Get counts
+    prod_count = await db.scalar(
+        select(func.count(Product.id)).where(
+            Product.is_active.is_(True),
+            func.lower(func.btrim(Product.category)) == cat.nome.casefold(),
+        )
+    ) or 0
+    supp_count = await db.scalar(
+        select(func.count(SupplierCategoryCapability.supplier_id))
+        .join(Fornitore, and_(Fornitore.id == SupplierCategoryCapability.supplier_id, Fornitore.archived_at.is_(None)))
+        .where(
+            SupplierCategoryCapability.enabled.is_(True),
+            func.lower(func.btrim(SupplierCategoryCapability.category)) == cat.nome.casefold(),
+        )
+    ) or 0
+
+    return CategoryResponse(
+        id=cat.id,
+        nome=cat.nome,
+        descrizione=cat.descrizione,
+        colore=cat.colore,
+        is_active=cat.is_active,
+        product_count=prod_count,
+        supplier_count=supp_count,
+        created_at=cat.created_at,
+        updated_at=cat.updated_at,
+    )
+
+
+@router.delete("/{category_id}", status_code=status.HTTP_200_OK, summary="Elimina categoria")
+async def delete_category(
+    category_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    """Elimina una categoria master."""
+    cat = await db.get(MasterCategory, category_id)
+    if not cat:
+        raise HTTPException(status_code=404, detail="Categoria non trovata")
+
+    cat_name = cat.nome
+    await db.delete(cat)
+    await db.flush()
+    return {"status": "ok", "message": f"Categoria '{cat_name}' eliminata con successo."}

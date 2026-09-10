@@ -59,6 +59,7 @@ api_router.include_router(ordini.router, prefix="/ordini", tags=["Ottimizzazione
 api_router.include_router(sku_manager.router, prefix="/sku", tags=["Gestione SKU"])
 api_router.include_router(accordi.router, prefix="/accordi", tags=["Accordi Commerciali"])
 api_router.include_router(product_identity.router, prefix="", tags=["Product Identity Layer"])
+api_router.include_router(product_identity.router, prefix="/product-identity", tags=["Product Identity Layer (Alias)"])
 api_router.include_router(
     integrations.router,
     prefix="/integrations",
