@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Sparkles,
   Building2,
-  FileText,
   EyeOff,
   Check,
   Calendar,
