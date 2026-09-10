@@ -141,6 +141,7 @@ async def build_price_preview(
     default_uom: str,
     create_missing_products: bool = True,
     category: str | None = None,
+    subcategory: str | None = None,
     location_id: int | None,
     actor_id: int,
 ) -> SmartPriceSheetPreview:
@@ -293,6 +294,7 @@ async def build_price_preview(
                     canonical_name=ref.strip(),
                     normalized_name=norm_ref,
                     category=category or infer_category(ref) or "Beverage",
+                    subcategory=subcategory or None,
                     comparison_unit=row_uom,
                     is_active=True,
                 )

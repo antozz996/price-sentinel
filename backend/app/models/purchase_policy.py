@@ -1,6 +1,6 @@
 """Supplier assessments, purchase policies and Smart Price Sheet audit data."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -49,6 +49,37 @@ class SupplierCategoryCapability(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SupplierSubcategoryCapability(Base):
+    __tablename__ = "supplier_subcategory_capabilities"
+    __table_args__ = (
+        UniqueConstraint(
+            "supplier_id", "categoria_nome", "subcategory", name="uq_supplier_subcat"
+        ),
+        Index(
+            "ix_supplier_subcategory_capabilities_supplier", "supplier_id", "enabled"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    supplier_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("fornitori.id", ondelete="CASCADE"), nullable=False
+    )
+    categoria_nome: Mapped[str] = mapped_column(String(100), nullable=False)
+    subcategory: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 class ProductSupplierAssessment(Base):

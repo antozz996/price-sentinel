@@ -23,6 +23,7 @@ type MatrixRow = {
   canonical_name: string
   order_name?: string | null
   category?: string | null
+  subcategory?: string | null
   comparison_unit: string
   offers: Record<string, Offer>
   eligible_supplier_ids: number[]
@@ -42,6 +43,7 @@ type MatrixResponse = {
   limit: number
   offset: number
   category_counts?: Record<string, number>
+  subcategory_counts?: Record<string, number>
   suppliers: Supplier[]
   rows: MatrixRow[]
 }
@@ -165,6 +167,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('matrix')
   const [matrix, setMatrix] = useState<MatrixResponse | null>(null)
   const [selectedMatrixCategory, setSelectedMatrixCategory] = useState<string>('all')
+  const [selectedMatrixSubcategory, setSelectedMatrixSubcategory] = useState<string>('all')
+  const [allSubcategories, setAllSubcategories] = useState<Array<{ id: number; categoria_nome: string; nome: string }>>([])
   const [sheetCatalog, setSheetCatalog] = useState<MatrixResponse | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
@@ -175,18 +179,21 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [notice, setNotice] = useState<string | null>(null)
 
   const [activeCategorySheet, setActiveCategorySheet] = useState<MacroCategory>('Beverage')
+  const [activeSubcategorySheet, setActiveSubcategorySheet] = useState<string>('all')
   const [categorySheets, setCategorySheets] = useState<Record<string, string[][]>>({
     'Beverage': blankSheet(),
     'Food': blankSheet(),
     'Materiali di consumo': blankSheet(),
   })
-  const sheet = categorySheets[activeCategorySheet] || blankSheet()
+
+  const currentSheetKey = activeSubcategorySheet !== 'all' ? `${activeCategorySheet}:${activeSubcategorySheet}` : activeCategorySheet
+  const sheet = categorySheets[currentSheetKey] || blankSheet()
 
   function setSheet(updater: string[][] | ((current: string[][]) => string[][])) {
     setCategorySheets(prev => {
-      const current = prev[activeCategorySheet] || blankSheet()
+      const current = prev[currentSheetKey] || blankSheet()
       const next = typeof updater === 'function' ? updater(current) : updater
-      return { ...prev, [activeCategorySheet]: next }
+      return { ...prev, [currentSheetKey]: next }
     })
   }
 
@@ -207,15 +214,30 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [auditRows, setAuditRows] = useState<any[]>([])
   const [deviations, setDeviations] = useState<any[]>([])
 
-  async function loadMatrix(customOffset?: number, customCategory?: string) {
+  async function loadSubcategoriesList() {
+    try {
+      const data = await fetchWithAuth('/categories/subcategories') as Array<{ id: number; categoria_nome: string; nome: string }>
+      if (Array.isArray(data)) setAllSubcategories(data)
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  useEffect(() => {
+    void loadSubcategoriesList()
+  }, [])
+
+  async function loadMatrix(customOffset?: number, customCategory?: string, customSubcategory?: string) {
     setLoading(true)
     setError(null)
     try {
       const currentOffset = customOffset !== undefined ? customOffset : offset
       const currentCat = customCategory !== undefined ? customCategory : selectedMatrixCategory
+      const currentSubcat = customSubcategory !== undefined ? customSubcategory : selectedMatrixSubcategory
       const query = new URLSearchParams({ limit: '100', offset: String(currentOffset) })
       if (search.trim()) query.set('search', search.trim())
       if (currentCat && currentCat !== 'all') query.set('category', currentCat)
+      if (currentSubcat && currentSubcat !== 'all') query.set('subcategory', currentSubcat)
       const data = await fetchWithAuth(`/smart-price-sheet/matrix?${query}`) as MatrixResponse
       setMatrix(data)
       setSelectedSupplierIds(current => {
@@ -229,6 +251,15 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       setLoading(false)
     }
   }
+
+  const subcategoriesForSelectedMatrix = useMemo(() => {
+    if (selectedMatrixCategory === 'all') return []
+    return allSubcategories.filter(s => s.categoria_nome.toLowerCase() === selectedMatrixCategory.toLowerCase())
+  }, [allSubcategories, selectedMatrixCategory])
+
+  const subcategoriesForActiveSheet = useMemo(() => {
+    return allSubcategories.filter(s => s.categoria_nome.toLowerCase() === activeCategorySheet.toLowerCase())
+  }, [allSubcategories, activeCategorySheet])
 
   async function loadProducts() {
     if (products.length) return
@@ -403,6 +434,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           default_uom: defaultUom,
           create_missing_products: autoCreateProducts,
           category: activeCategorySheet,
+          subcategory: activeSubcategorySheet !== 'all' ? activeSubcategorySheet : undefined,
         }),
       }) as Preview
       setPreview(data)
@@ -473,17 +505,21 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     setSheet(next)
     setPreview(null)
     setNotice(skipped
-      ? `${pastedRows.length} righe incollate nel foglio ${activeCategorySheet} · ${skipped} celle fuori settore ignorate.`
-      : `Incollate ${pastedRows.length} righe nel foglio ${activeCategorySheet}.`)
+      ? `${pastedRows.length} righe incollate nel foglio ${activeCategorySheet}${activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''} · ${skipped} celle fuori settore ignorate.`
+      : `Incollate ${pastedRows.length} righe nel foglio ${activeCategorySheet}${activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}.`)
   }
 
   async function reloadCurrentPrices() {
     setLoading(true); setError(null)
     try {
-      const data = await fetchWithAuth(`/smart-price-sheet/matrix?limit=500&offset=0&category=${encodeURIComponent(activeCategorySheet)}`) as MatrixResponse
+      let url = `/smart-price-sheet/matrix?limit=500&offset=0&category=${encodeURIComponent(activeCategorySheet)}`
+      if (activeSubcategorySheet !== 'all') {
+        url += `&subcategory=${encodeURIComponent(activeSubcategorySheet)}`
+      }
+      const data = await fetchWithAuth(url) as MatrixResponse
       const newSheet = data.rows.length ? sheetFromMatrix(data) : blankSheet()
       setSheet(newSheet)
-      setNotice(`Foglio "${activeCategorySheet}" caricato con ${data.rows.length} prodotti attivi.`)
+      setNotice(`Foglio "${activeCategorySheet}${activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}" caricato con ${data.rows.length} prodotti attivi.`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -640,6 +676,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 onClick={() => {
                   setOffset(0)
                   setSelectedMatrixCategory('all')
+                  setSelectedMatrixSubcategory('all')
+                  void loadMatrix(0, 'all', 'all')
                 }}
                 style={{
                   padding: '4px 12px',
@@ -665,6 +703,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 onClick={() => {
                   setOffset(0)
                   setSelectedMatrixCategory(cat.id)
+                  setSelectedMatrixSubcategory('all')
+                  void loadMatrix(0, cat.id, 'all')
                 }}
                 style={{
                   padding: '4px 12px',
@@ -681,6 +721,60 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             )
           })}
         </div>
+
+        {/* Subcategories Filter Chips */}
+        {selectedMatrixCategory !== 'all' && subcategoriesForSelectedMatrix.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', paddingTop: 2, paddingLeft: 4 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>Sottocategoria:</span>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setOffset(0)
+                setSelectedMatrixSubcategory('all')
+                void loadMatrix(0, selectedMatrixCategory, 'all')
+              }}
+              style={{
+                padding: '3px 10px',
+                fontSize: 11,
+                borderRadius: 16,
+                background: selectedMatrixSubcategory === 'all' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.04)',
+                color: selectedMatrixSubcategory === 'all' ? 'white' : 'var(--text-secondary)',
+                border: selectedMatrixSubcategory === 'all' ? '1px solid var(--accent-blue, #3b82f6)' : '1px solid var(--border-glass)'
+              }}
+            >
+              Tutte
+            </button>
+            {subcategoriesForSelectedMatrix.map(sub => {
+              const isSubSelected = selectedMatrixSubcategory.toLowerCase() === sub.nome.toLowerCase()
+              const count = matrix?.subcategory_counts?.[sub.nome]
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setOffset(0)
+                    setSelectedMatrixSubcategory(sub.nome)
+                    void loadMatrix(0, selectedMatrixCategory, sub.nome)
+                  }}
+                  style={{
+                    padding: '3px 10px',
+                    fontSize: 11,
+                    borderRadius: 16,
+                    background: isSubSelected ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.03)',
+                    color: isSubSelected ? '#60a5fa' : 'var(--text-secondary)',
+                    border: isSubSelected ? '1px solid #3b82f6' : '1px solid var(--border-glass)',
+                    fontWeight: isSubSelected ? 600 : 400
+                  }}
+                >
+                  {sub.nome} {count !== undefined && `(${count})`}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({visibleSuppliers.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{matrix?.suppliers.filter(supplier => (matrix?.rows || []).some(row => row.eligible_supplier_ids.includes(supplier.id) || row.offers[String(supplier.id)])).map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
@@ -688,7 +782,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
               {row.order_name && <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.canonical_name}</div>}
-              <div style={{ color: 'var(--text-secondary)', fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', marginTop: 2 }}>
+              <div style={{ color: 'var(--text-secondary)', fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
                 <span>{row.sku_interno || 'SKU mancante'}</span>
                 <span>·</span>
                 <span style={{
@@ -701,6 +795,19 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 }}>
                   {row.category || 'Beverage'}
                 </span>
+                {row.subcategory && (
+                  <span style={{
+                    color: '#a78bfa',
+                    background: 'rgba(167,139,250,0.1)',
+                    padding: '1px 6px',
+                    borderRadius: 4,
+                    fontSize: 10,
+                    fontWeight: 500,
+                    border: '1px solid rgba(167,139,250,0.2)'
+                  }}>
+                    {row.subcategory}
+                  </span>
+                )}
               </div>
               {row.requires_manual_selection && <small style={{ color: '#fbbf24' }}>Scelta manuale richiesta</small>}
             </td>
@@ -902,20 +1009,84 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           })}
         </div>
 
+        {/* Subcategories Selector for Active Sheet */}
+        {subcategoriesForActiveSheet.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 14px', background: 'rgba(0,0,0,0.2)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Sottocategoria da compilare:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveSubcategorySheet('all')
+                setPreview(null)
+                setError(null)
+              }}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 6,
+                border: activeSubcategorySheet === 'all' ? '1px solid var(--accent-blue, #3b82f6)' : '1px solid rgba(255,255,255,0.08)',
+                background: activeSubcategorySheet === 'all' ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
+                color: activeSubcategorySheet === 'all' ? 'white' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: activeSubcategorySheet === 'all' ? 600 : 400
+              }}
+            >
+              📋 Tutte le sottocategorie {activeCategorySheet}
+            </button>
+            {subcategoriesForActiveSheet.map(sub => {
+              const isSubSelected = activeSubcategorySheet.toLowerCase() === sub.nome.toLowerCase()
+              const subKey = `${activeCategorySheet}:${sub.nome}`
+              const count = categorySheets[subKey]?.slice(1).filter(r => r[1]?.trim() || r[0]?.trim()).length || 0
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveSubcategorySheet(sub.nome)
+                    setPreview(null)
+                    setError(null)
+                  }}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: 6,
+                    border: isSubSelected ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.08)',
+                    background: isSubSelected ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.03)',
+                    color: isSubSelected ? '#ddd6fe' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: isSubSelected ? 600 : 400,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  <span>{sub.nome}</span>
+                  {count > 0 && <span style={{ fontSize: 10, background: 'rgba(0,0,0,0.4)', padding: '1px 5px', borderRadius: 8, color: '#a78bfa' }}>{count}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
           <div>
-            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Foglio Prezzi</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? '#f59e0b' : activeCategorySheet === 'Materiali di consumo' ? '#10b981' : '#60a5fa', background: activeCategorySheet === 'Food' ? 'rgba(245,158,11,0.12)' : activeCategorySheet === 'Materiali di consumo' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--border-glass)' }}>
                 Settore: {activeCategorySheet}
               </span>
+              {activeSubcategorySheet !== 'all' && (
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid rgba(167,139,250,0.3)' }}>
+                  Sottocategoria: {activeSubcategorySheet}
+                </span>
+              )}
             </h3>
             <p style={{ color: 'var(--text-secondary)', margin: '5px 0 0' }}>
               Colonna A = nome rapido facoltativo. Colonna B = nome reale del prodotto. Colonna C = Unità di misura (UoM). Da D in poi = fornitori.
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={reloadCurrentPrices}><RotateCcw size={15} /> Prezzi correnti {activeCategorySheet}</button>
+            <button className="btn" onClick={reloadCurrentPrices}><RotateCcw size={15} /> Prezzi correnti {activeCategorySheet}{activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}</button>
             <button className="btn" onClick={clearSheet}><Trash2 size={15} /> Svuota</button>
           </div>
         </div>

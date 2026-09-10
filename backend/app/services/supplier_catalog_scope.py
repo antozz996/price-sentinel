@@ -12,6 +12,7 @@ from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import (
     ProductSupplierAssessment,
     SupplierCategoryCapability,
+    SupplierSubcategoryCapability,
 )
 
 
@@ -20,15 +21,18 @@ class SupplierCatalogScope:
     direct_pairs: set[tuple[int, int]]
     categories_by_supplier: dict[int, set[str]]
     explicit_categories: dict[tuple[int, str], bool]
+    subcategories_by_supplier_category: dict[tuple[int, str], set[str]] | None = None
 
     def eligible_supplier_ids(
         self,
         *,
         product_id: int,
         category: str | None,
+        subcategory: str | None = None,
         supplier_ids: set[int],
     ) -> set[int]:
         normalized_category = (category or "").strip().casefold()
+        normalized_subcategory = (subcategory or "").strip().casefold()
         eligible: set[int] = set()
         for supplier_id in supplier_ids:
             explicit = self.explicit_categories.get(
@@ -36,6 +40,15 @@ class SupplierCatalogScope:
             ) if normalized_category else None
             if explicit is False:
                 continue
+
+            # Subcategory-level capability check:
+            # If supplier has explicit subcategories configured for this category, check if this subcategory is enabled
+            if normalized_category and self.subcategories_by_supplier_category:
+                enabled_subs = self.subcategories_by_supplier_category.get((supplier_id, normalized_category))
+                if enabled_subs:
+                    if normalized_subcategory and normalized_subcategory not in enabled_subs:
+                        continue
+
             if explicit is True or (product_id, supplier_id) in self.direct_pairs or (
                 normalized_category
                 and normalized_category
@@ -102,8 +115,24 @@ async def load_supplier_catalog_scope(
         for supplier_id, category, enabled in (await db.execute(explicit_stmt)).all()
     }
 
+    explicit_sub_stmt = select(
+        SupplierSubcategoryCapability.supplier_id,
+        SupplierSubcategoryCapability.categoria_nome,
+        SupplierSubcategoryCapability.subcategory,
+        SupplierSubcategoryCapability.enabled,
+    )
+    if supplier_ids:
+        explicit_sub_stmt = explicit_sub_stmt.where(
+            SupplierSubcategoryCapability.supplier_id.in_(supplier_ids)
+        )
+    subcategories_by_supplier_category: dict[tuple[int, str], set[str]] = defaultdict(set)
+    for s_id, cat_name, sub_name, en in (await db.execute(explicit_sub_stmt)).all():
+        if en:
+            subcategories_by_supplier_category[(s_id, cat_name.strip().casefold())].add(sub_name.strip().casefold())
+
     return SupplierCatalogScope(
         direct_pairs=direct_pairs,
         categories_by_supplier=dict(categories_by_supplier),
         explicit_categories=explicit_categories,
+        subcategories_by_supplier_category=dict(subcategories_by_supplier_category),
     )

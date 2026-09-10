@@ -60,6 +60,7 @@ from app.models.purchase_policy import (  # noqa: F401
     PurchasePolicyDeviation,
     SmartPriceSheetPreview,
     SupplierCategoryCapability,
+    SupplierSubcategoryCapability,
 )
 
 __all__ = [
@@ -101,6 +102,7 @@ __all__ = [
     "PurchasePolicyDeviation",
     "SmartPriceSheetPreview",
     "SupplierCategoryCapability",
+    "SupplierSubcategoryCapability",
     "MasterCategory",
     "MasterSubcategory",
 ]

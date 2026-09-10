@@ -131,6 +131,7 @@ async def _validate_entities(
 async def matrix(
     search: str | None = Query(default=None, max_length=150),
     category: str | None = Query(default=None, max_length=100),
+    subcategory: str | None = Query(default=None, max_length=100),
     location_id: int | None = Query(default=None, gt=0),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -149,7 +150,9 @@ async def matrix(
             )
         )
     if category and category != "all" and category.strip():
-        product_filter.append(Product.category == category.strip())
+        product_filter.append(func.lower(func.btrim(Product.category)) == category.strip().casefold())
+    if subcategory and subcategory != "all" and subcategory.strip():
+        product_filter.append(func.lower(func.btrim(Product.subcategory)) == subcategory.strip().casefold())
     total = await db.scalar(
         select(func.count()).select_from(Product).where(*product_filter)
     )
@@ -316,6 +319,7 @@ async def matrix(
         eligible_supplier_ids = supplier_scope.eligible_supplier_ids(
             product_id=product.id,
             category=product.category,
+            subcategory=product.subcategory,
             supplier_ids=set(supplier_ids),
         )
         offers = []
@@ -367,6 +371,17 @@ async def matrix(
     )
     category_counts = {str(cat): count for cat, count in category_counts_res.all() if cat}
 
+    subcategory_counts_stmt = select(
+        Product.subcategory, func.count(Product.id)
+    ).where(Product.is_active.is_(True), Product.subcategory.is_not(None))
+    if category and category != "all" and category.strip():
+        subcategory_counts_stmt = subcategory_counts_stmt.where(
+            func.lower(func.btrim(Product.category)) == category.strip().casefold()
+        )
+    subcategory_counts_stmt = subcategory_counts_stmt.group_by(Product.subcategory)
+    subcategory_counts_res = await db.execute(subcategory_counts_stmt)
+    subcategory_counts = {str(sub): count for sub, count in subcategory_counts_res.all() if sub}
+
     filtered_suppliers = suppliers
     if category:
         norm_cat = category.strip().casefold()
@@ -388,6 +403,7 @@ async def matrix(
         "offset": offset,
         "location_id": scope,
         "category_counts": category_counts,
+        "subcategory_counts": subcategory_counts,
         "suppliers": [
             {"id": row.id, "name": row.nome_azienda, "vat": row.partita_iva}
             for row in filtered_suppliers
@@ -573,6 +589,7 @@ async def preview_clipboard(
             default_uom=payload.default_uom,
             create_missing_products=payload.create_missing_products,
             category=payload.category,
+            subcategory=payload.subcategory,
             location_id=scope,
             actor_id=user.id,
         )

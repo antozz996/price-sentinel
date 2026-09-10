@@ -15,7 +15,7 @@ from app.database import get_db
 from app.models.categories import MasterCategory, MasterSubcategory
 from app.models.fornitori import Fornitore
 from app.models.products import Product
-from app.models.purchase_policy import SupplierCategoryCapability
+from app.models.purchase_policy import SupplierCategoryCapability, SupplierSubcategoryCapability
 from app.models.utenti import Utente
 from app.schemas.categories import (
     CategoryCreate,
@@ -25,6 +25,8 @@ from app.schemas.categories import (
     SupplierCategoryMatrixRow,
     SupplierCategoryMatrixResponse,
     BulkSupplierCategoryUpdate,
+    SupplierSubcategoryToggle,
+    BulkSupplierSubcategoryUpdate,
     SubcategoryCreate,
     SubcategoryUpdate,
     SubcategoryResponse,
@@ -231,6 +233,21 @@ async def get_supplier_category_matrix(
     for c in capabilities:
         cap_map[(c.supplier_id, c.category.strip().casefold())] = c.enabled
 
+    # 4. Get all supplier subcategory capabilities
+    sub_capabilities = (
+        await db.execute(
+            select(SupplierSubcategoryCapability).where(SupplierSubcategoryCapability.enabled.is_(True))
+        )
+    ).scalars().all()
+
+    # Map subcategory capabilities: (supplier_id, category_casefold) -> list of subcategories
+    subcap_map: Dict[tuple[int, str], List[str]] = {}
+    for sc in sub_capabilities:
+        key = (sc.supplier_id, sc.categoria_nome.strip().casefold())
+        if key not in subcap_map:
+            subcap_map[key] = []
+        subcap_map[key].append(sc.subcategory.strip())
+
     # Count products per category
     prod_counts_stmt = (
         select(Product.category, func.count(Product.id))
@@ -268,9 +285,12 @@ async def get_supplier_category_matrix(
     matrix_rows = []
     for s in suppliers:
         supplier_caps = {}
+        supplier_subcaps = {}
         for c in categories_raw:
             cf = c.nome.strip().casefold()
             supplier_caps[c.nome] = cap_map.get((s.id, cf), False)
+            if (s.id, cf) in subcap_map:
+                supplier_subcaps[c.nome] = subcap_map[(s.id, cf)]
 
         matrix_rows.append(
             SupplierCategoryMatrixRow(
@@ -279,6 +299,7 @@ async def get_supplier_category_matrix(
                 partita_iva=s.partita_iva,
                 attivo_whitelist=s.attivo_whitelist,
                 categories=supplier_caps,
+                subcategories=supplier_subcaps,
             )
         )
 
@@ -384,6 +405,94 @@ async def bulk_update_supplier_matrix(
     return {"status": "ok", "message": "Associazioni aggiornate con successo."}
 
 
+@router.post("/supplier-subcategories/toggle", summary="Attiva o disattiva una sottocategoria per un fornitore")
+async def toggle_supplier_subcategory(
+    data: SupplierSubcategoryToggle,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(require_admin),
+):
+    """
+    Abilita/disabilita una specifica sottocategoria per un fornitore e categoria.
+    """
+    supplier = await db.get(Fornitore, data.supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Fornitore non trovato")
+
+    clean_cat = data.category.strip()
+    clean_sub = data.subcategory.strip()
+    
+    cap = await db.scalar(
+        select(SupplierSubcategoryCapability).where(
+            SupplierSubcategoryCapability.supplier_id == supplier.id,
+            func.lower(func.btrim(SupplierSubcategoryCapability.categoria_nome)) == clean_cat.casefold(),
+            func.lower(func.btrim(SupplierSubcategoryCapability.subcategory)) == clean_sub.casefold(),
+        )
+    )
+    now = datetime.now(timezone.utc)
+    if cap:
+        cap.enabled = data.enabled
+        cap.updated_at = now
+    else:
+        cap = SupplierSubcategoryCapability(
+            supplier_id=supplier.id,
+            categoria_nome=clean_cat,
+            subcategory=clean_sub,
+            enabled=data.enabled,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(cap)
+
+    await db.flush()
+    return {
+        "status": "ok",
+        "supplier_id": supplier.id,
+        "category": clean_cat,
+        "subcategory": clean_sub,
+        "enabled": data.enabled,
+    }
+
+
+@router.put("/supplier-subcategories/bulk", summary="Salva sottocategorie abilitate per un fornitore e categoria")
+async def bulk_update_supplier_subcategories(
+    data: BulkSupplierSubcategoryUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(require_admin),
+):
+    """
+    Salva la lista completa di sottocategorie abilitate per un fornitore e categoria.
+    """
+    supplier = await db.get(Fornitore, data.supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Fornitore non trovato")
+
+    clean_cat = data.category.strip()
+
+    await db.execute(
+        delete(SupplierSubcategoryCapability).where(
+            SupplierSubcategoryCapability.supplier_id == supplier.id,
+            func.lower(func.btrim(SupplierSubcategoryCapability.categoria_nome)) == clean_cat.casefold(),
+        )
+    )
+    now = datetime.now(timezone.utc)
+    for sub in data.subcategories:
+        clean_sub = sub.strip()
+        if clean_sub:
+            db.add(
+                SupplierSubcategoryCapability(
+                    supplier_id=supplier.id,
+                    categoria_nome=clean_cat,
+                    subcategory=clean_sub,
+                    enabled=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+    await db.flush()
+    return {"status": "ok", "message": f"Sottocategorie per {clean_cat} aggiornate con successo."}
+
+
 # ─────────────────────────────────────────────
 # Sottocategorie (Food & altre categorie)
 # ─────────────────────────────────────────────
@@ -405,15 +514,18 @@ DEFAULT_FOOD_SUBCATEGORIES = [
 
 @router.get("/subcategories", response_model=List[SubcategoryResponse], summary="Lista sottocategorie")
 async def list_subcategories(
-    categoria_nome: str = "Food",
+    categoria_nome: str | None = None,
     active_only: bool = False,
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user),
 ):
-    clean_cat = categoria_nome.strip()
-    query = select(MasterSubcategory).where(
-        func.lower(func.btrim(MasterSubcategory.categoria_nome)) == clean_cat.casefold()
-    ).order_by(MasterSubcategory.nome)
+    query = select(MasterSubcategory).order_by(MasterSubcategory.categoria_nome, MasterSubcategory.nome)
+    
+    clean_cat = (categoria_nome or "").strip()
+    if clean_cat and clean_cat.casefold() != "all":
+        query = query.where(
+            func.lower(func.btrim(MasterSubcategory.categoria_nome)) == clean_cat.casefold()
+        )
     
     if active_only:
         query = query.where(MasterSubcategory.is_active.is_(True))
@@ -422,16 +534,31 @@ async def list_subcategories(
 
     # Product counts per subcategory
     prod_counts_stmt = (
-        select(Product.subcategory, func.count(Product.id))
+        select(
+            func.lower(func.btrim(Product.category)),
+            func.lower(func.btrim(Product.subcategory)),
+            func.count(Product.id)
+        )
         .where(
             Product.is_active.is_(True),
             Product.subcategory.is_not(None),
-            func.lower(func.btrim(Product.category)) == clean_cat.casefold(),
+            Product.category.is_not(None),
         )
-        .group_by(Product.subcategory)
+        .group_by(
+            func.lower(func.btrim(Product.category)),
+            func.lower(func.btrim(Product.subcategory))
+        )
     )
+    if clean_cat and clean_cat.casefold() != "all":
+        prod_counts_stmt = prod_counts_stmt.where(
+            func.lower(func.btrim(Product.category)) == clean_cat.casefold()
+        )
+
     prod_counts_raw = (await db.execute(prod_counts_stmt)).all()
-    prod_counts = {sub.strip().casefold(): count for sub, count in prod_counts_raw if sub}
+    prod_counts = {
+        (cat_cf or "", sub_cf or ""): count
+        for cat_cf, sub_cf, count in prod_counts_raw
+    }
 
     return [
         SubcategoryResponse(
@@ -440,7 +567,7 @@ async def list_subcategories(
             nome=sub.nome,
             descrizione=sub.descrizione,
             is_active=sub.is_active,
-            product_count=prod_counts.get(sub.nome.strip().casefold(), 0),
+            product_count=prod_counts.get((sub.categoria_nome.strip().casefold(), sub.nome.strip().casefold()), 0),
             created_at=sub.created_at,
             updated_at=sub.updated_at,
         )

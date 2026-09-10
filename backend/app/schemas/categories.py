@@ -59,6 +59,7 @@ class SupplierCategoryMatrixRow(BaseModel):
     partita_iva: str
     attivo_whitelist: bool
     categories: Dict[str, bool] = {}  # category_name -> is_enabled
+    subcategories: Dict[str, List[str]] = {}  # category_name -> list of enabled subcategories
 
 
 class SupplierCategoryMatrixResponse(BaseModel):
@@ -71,6 +72,19 @@ class SupplierCategoryMatrixResponse(BaseModel):
 class BulkSupplierCategoryUpdate(BaseModel):
     supplier_id: int
     capabilities: List[SupplierCapabilityItem]
+
+
+class SupplierSubcategoryToggle(BaseModel):
+    supplier_id: int
+    category: str
+    subcategory: str
+    enabled: bool
+
+
+class BulkSupplierSubcategoryUpdate(BaseModel):
+    supplier_id: int
+    category: str
+    subcategories: List[str]
 
 
 class SubcategoryCreate(BaseModel):

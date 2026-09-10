@@ -50,6 +50,7 @@ interface SupplierMatrixRow {
   partita_iva: string;
   attivo_whitelist: boolean;
   categories: Record<string, boolean>;
+  subcategories?: Record<string, string[]>;
 }
 
 const COLOR_PRESETS = [
@@ -80,6 +81,7 @@ export default function CategorySupplierManager() {
   // Data states
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierMatrixRow[]>([]);
+  const [allSubcategories, setAllSubcategories] = useState<SubcategoryItem[]>([]);
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
@@ -105,11 +107,19 @@ export default function CategorySupplierManager() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/categories/matrix`, { headers });
-      if (!res.ok) throw new Error('Errore nel caricamento della matrice categorie');
-      const data = await res.json();
+      const [matrixRes, subcatsRes] = await Promise.all([
+        fetch(`${API_BASE}/categories/matrix`, { headers }),
+        fetch(`${API_BASE}/categories/subcategories`, { headers })
+      ]);
+      if (!matrixRes.ok) throw new Error('Errore nel caricamento della matrice categorie');
+      const data = await matrixRes.json();
       setCategories(data.categories || []);
       setSuppliers(data.suppliers || []);
+
+      if (subcatsRes.ok) {
+        const subData = await subcatsRes.json();
+        setAllSubcategories(subData || []);
+      }
     } catch (err: any) {
       console.error(err);
       setMessage({ text: err.message || 'Errore di connessione', type: 'error' });
@@ -132,6 +142,16 @@ export default function CategorySupplierManager() {
       setSubcatLoading(false);
     }
   };
+
+  const subcategoriesByCategory = useMemo(() => {
+    const map: Record<string, SubcategoryItem[]> = {};
+    for (const sub of allSubcategories) {
+      const key = sub.categoria_nome;
+      if (!map[key]) map[key] = [];
+      map[key].push(sub);
+    }
+    return map;
+  }, [allSubcategories]);
 
   useEffect(() => {
     loadData();
@@ -195,6 +215,93 @@ export default function CategorySupplierManager() {
       setMessage({ text: err.message, type: 'error' });
       // Revert on error
       loadData();
+    }
+  };
+
+  // Handle subcategory toggle for a supplier
+  const handleToggleSubcategory = async (
+    supplierId: number,
+    categoryName: string,
+    subcategoryName: string,
+    currentEnabled: boolean
+  ) => {
+    const newEnabled = !currentEnabled;
+
+    // Optimistic UI update
+    setSuppliers(prev => prev.map(s => {
+      if (s.supplier_id !== supplierId) return s;
+      const currentSubs = s.subcategories?.[categoryName] || [];
+      const newSubs = newEnabled
+        ? [...currentSubs, subcategoryName]
+        : currentSubs.filter(name => name.toLowerCase() !== subcategoryName.toLowerCase());
+      return {
+        ...s,
+        subcategories: {
+          ...(s.subcategories || {}),
+          [categoryName]: newSubs
+        }
+      };
+    }));
+
+    try {
+      const res = await fetch(`${API_BASE}/categories/supplier-subcategories/toggle`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          supplier_id: supplierId,
+          category: categoryName,
+          subcategory: subcategoryName,
+          enabled: newEnabled
+        })
+      });
+      if (!res.ok) {
+        throw new Error("Errore durante l'aggiornamento della sottocategoria");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ text: err.message, type: 'error' });
+      await loadData();
+    }
+  };
+
+  // Bulk subcategories for a supplier
+  const handleBulkSubcategories = async (
+    supplierId: number,
+    categoryName: string,
+    enableAll: boolean
+  ) => {
+    const catSubs = (subcategoriesByCategory[categoryName] || []).map(s => s.nome);
+    const newSubs = enableAll ? catSubs : [];
+
+    // Optimistic UI update
+    setSuppliers(prev => prev.map(s => {
+      if (s.supplier_id !== supplierId) return s;
+      return {
+        ...s,
+        subcategories: {
+          ...(s.subcategories || {}),
+          [categoryName]: newSubs
+        }
+      };
+    }));
+
+    try {
+      const res = await fetch(`${API_BASE}/categories/supplier-subcategories/bulk`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          supplier_id: supplierId,
+          category: categoryName,
+          subcategories: newSubs
+        })
+      });
+      if (!res.ok) {
+        throw new Error("Errore durante l'aggiornamento massivo delle sottocategorie");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ text: err.message, type: 'error' });
+      await loadData();
     }
   };
 
@@ -917,6 +1024,101 @@ export default function CategorySupplierManager() {
                           })}
                         </div>
                       </div>
+
+                      {/* Subcategories Breakdown for Enabled Categories */}
+                      {categories.filter(cat => supplier.categories[cat.nome] && (subcategoriesByCategory[cat.nome]?.length || 0) > 0).map(cat => {
+                        const catSubs = subcategoriesByCategory[cat.nome] || [];
+                        const enabledSubs = supplier.subcategories?.[cat.nome] || [];
+                        const allEnabledByDefault = enabledSubs.length === 0;
+
+                        return (
+                          <div
+                            key={`subs-${supplier.supplier_id}-${cat.nome}`}
+                            style={{
+                              marginTop: '4px',
+                              padding: '12px 14px',
+                              background: 'rgba(0,0,0,0.25)',
+                              borderRadius: '8px',
+                              border: `1px solid ${cat.colore || '#3b82f6'}35`,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '8px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, color: cat.colore || '#3b82f6' }}>
+                                <FolderTree size={14} />
+                                <span>Sottocategorie {cat.nome}:</span>
+                                <span style={{
+                                  fontSize: '0.7rem',
+                                  padding: '1px 7px',
+                                  borderRadius: '10px',
+                                  background: allEnabledByDefault ? 'rgba(255,255,255,0.08)' : `${cat.colore || '#3b82f6'}25`,
+                                  color: allEnabledByDefault ? 'var(--text-secondary)' : 'white',
+                                  fontWeight: 500
+                                }}>
+                                  {allEnabledByDefault ? 'Tutte (default)' : `${enabledSubs.length} di ${catSubs.length} attive`}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '8px', fontSize: '0.72rem' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBulkSubcategories(supplier.supplier_id, cat.nome, true)}
+                                  style={{ background: 'none', border: 'none', color: cat.colore || '#3b82f6', cursor: 'pointer', padding: 0 }}
+                                >
+                                  Tutte
+                                </button>
+                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBulkSubcategories(supplier.supplier_id, cat.nome, false)}
+                                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 0 }}
+                                  title="Deseleziona per abilitare tutte di default"
+                                >
+                                  Resetta
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Subcategory Pills */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {catSubs.map(sub => {
+                                const isSubEnabled = enabledSubs.some(s => s.toLowerCase() === sub.nome.toLowerCase());
+                                return (
+                                  <button
+                                    key={sub.id}
+                                    type="button"
+                                    onClick={() => handleToggleSubcategory(supplier.supplier_id, cat.nome, sub.nome, isSubEnabled)}
+                                    style={{
+                                      padding: '4px 9px',
+                                      borderRadius: '6px',
+                                      fontSize: '0.74rem',
+                                      cursor: 'pointer',
+                                      border: isSubEnabled ? `1px solid ${cat.colore || '#3b82f6'}` : '1px solid rgba(255,255,255,0.08)',
+                                      background: isSubEnabled ? `${cat.colore || '#3b82f6'}30` : 'rgba(255,255,255,0.02)',
+                                      color: isSubEnabled ? '#ffffff' : 'rgba(255,255,255,0.5)',
+                                      fontWeight: isSubEnabled ? 600 : 400,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      transition: 'all 0.1s ease'
+                                    }}
+                                    title={isSubEnabled ? `Disabilita ${sub.nome}` : `Abilita ${sub.nome}`}
+                                  >
+                                    {isSubEnabled ? (
+                                      <Check size={11} style={{ color: cat.colore || '#3b82f6' }} />
+                                    ) : (
+                                      <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
+                                    )}
+                                    {sub.nome}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
 
                       {/* Card Footer Quick Actions */}
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem' }}>
