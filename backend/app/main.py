@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.config import settings
-from app.database import async_session_factory
+from app.database import async_session_factory, engine, Base
 from app.services.automation import run_operational_monitor
 
 
@@ -37,6 +37,14 @@ async def lifespan(app: FastAPI):
     """Startup e shutdown hooks."""
     # Startup: importa i modelli per registrare metadata
     import app.models  # noqa: F401
+    
+    # Safe table creation for new models (CREATE TABLE IF NOT EXISTS)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as e:
+        logger.warning("Schema create_all notice: %s", e)
+
     automation_task = (
         asyncio.create_task(_automation_loop())
         if settings.AUTOMATION_ENABLED

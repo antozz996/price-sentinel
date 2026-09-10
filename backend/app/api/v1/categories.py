@@ -403,27 +403,6 @@ DEFAULT_FOOD_SUBCATEGORIES = [
 ]
 
 
-async def _ensure_subcategory_table(db: AsyncSession):
-    from sqlalchemy import text
-    try:
-        await db.execute(text("""
-            CREATE TABLE IF NOT EXISTS master_subcategories (
-                id SERIAL PRIMARY KEY,
-                categoria_nome VARCHAR(100) NOT NULL,
-                nome VARCHAR(100) NOT NULL,
-                descrizione TEXT,
-                is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-            CREATE INDEX IF NOT EXISTS ix_master_subcategories_categoria ON master_subcategories (categoria_nome);
-            CREATE INDEX IF NOT EXISTS ix_master_subcategories_nome ON master_subcategories (nome);
-        """))
-        await db.flush()
-    except Exception:
-        pass
-
-
 @router.get("/subcategories", response_model=List[SubcategoryResponse], summary="Lista sottocategorie")
 async def list_subcategories(
     categoria_nome: str = "Food",
@@ -431,7 +410,6 @@ async def list_subcategories(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user),
 ):
-    await _ensure_subcategory_table(db)
     clean_cat = categoria_nome.strip()
     query = select(MasterSubcategory).where(
         func.lower(func.btrim(MasterSubcategory.categoria_nome)) == clean_cat.casefold()
@@ -476,7 +454,6 @@ async def create_subcategory(
     db: AsyncSession = Depends(get_db),
     _admin: Utente = Depends(require_admin),
 ):
-    await _ensure_subcategory_table(db)
     clean_name = data.nome.strip()
     clean_cat = data.categoria_nome.strip() or "Food"
     if not clean_name:
@@ -521,7 +498,6 @@ async def seed_food_subcategories(
     db: AsyncSession = Depends(get_db),
     _admin: Utente = Depends(require_admin),
 ):
-    await _ensure_subcategory_table(db)
     created_count = 0
     now = datetime.now(timezone.utc)
 
@@ -561,7 +537,6 @@ async def update_subcategory(
     db: AsyncSession = Depends(get_db),
     _admin: Utente = Depends(require_admin),
 ):
-    await _ensure_subcategory_table(db)
     sub = await db.get(MasterSubcategory, subcategory_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Sottocategoria non trovata")
@@ -629,7 +604,6 @@ async def delete_subcategory(
     db: AsyncSession = Depends(get_db),
     _admin: Utente = Depends(require_admin),
 ):
-    await _ensure_subcategory_table(db)
     sub = await db.get(MasterSubcategory, subcategory_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Sottocategoria non trovata")
