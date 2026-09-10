@@ -112,7 +112,7 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
 }
 
 function sheetFromMatrix(matrix: MatrixResponse): string[][] {
-  const suppliers = matrix.suppliers
+  const suppliers = matrix.suppliers || []
   const rows = [
     ['Nome rapido ordine (facoltativo)', 'Prodotto reale', 'Unità di misura', ...suppliers.map(supplier => supplier.name)],
     ...matrix.rows.map(row => [
@@ -218,8 +218,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     try {
       const data = await fetchWithAuth('/categories/subcategories') as Array<{ id: number; categoria_nome: string; nome: string }>
       if (Array.isArray(data)) setAllSubcategories(data)
-    } catch {
-      // Non-blocking
+    } catch (err) {
+      console.error(err)
     }
   }
 
@@ -274,19 +274,20 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   async function loadFullPriceSheet() {
     setLoading(true); setError(null)
     try {
-      const data = await fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0') as MatrixResponse
-      setSheetCatalog(data)
-      const beverageRows = data.rows.filter(r => (r.category || '').toLowerCase() === 'beverage')
-      const foodRows = data.rows.filter(r => (r.category || '').toLowerCase() === 'food')
-      const matConsumoRows = data.rows.filter(r => (r.category || '').toLowerCase() === 'materiali di consumo')
+      const [bevData, foodData, matData] = await Promise.all([
+        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Beverage') as Promise<MatrixResponse>,
+        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Food') as Promise<MatrixResponse>,
+        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Materiali%20di%20consumo') as Promise<MatrixResponse>,
+      ])
 
-      setCategorySheets({
-        'Beverage': beverageRows.length ? sheetFromMatrix({ ...data, rows: beverageRows }) : blankSheet(),
-        'Food': foodRows.length ? sheetFromMatrix({ ...data, rows: foodRows }) : blankSheet(),
-        'Materiali di consumo': matConsumoRows.length ? sheetFromMatrix({ ...data, rows: matConsumoRows }) : blankSheet(),
-      })
+      setCategorySheets(prev => ({
+        ...prev,
+        'Beverage': sheetFromMatrix(bevData),
+        'Food': sheetFromMatrix(foodData),
+        'Materiali di consumo': sheetFromMatrix(matData),
+      }))
       setSheetInitialized(true)
-      setNotice(`Fogli precaricati per settore: Beverage (${beverageRows.length}), Food (${foodRows.length}), Materiali di consumo (${matConsumoRows.length}).`)
+      setNotice(`Fogli precaricati per settore: Beverage (${bevData.rows.length}), Food (${foodData.rows.length}), Materiali di consumo (${matData.rows.length}).`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -409,9 +410,14 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   }, [activeTab])
 
   useEffect(() => {
-    if (activeTab === 'paste' && matrix && !sheetInitialized) void loadFullPriceSheet()
-  // Opening the tab or invalidating the committed sheet is the only trigger.
-  }, [activeTab, matrix, sheetInitialized])
+    if (activeTab === 'paste') {
+      const existing = categorySheets[currentSheetKey]
+      const hasHeaders = existing && existing[0]?.slice(3).some(cell => cell.trim())
+      if (!hasHeaders) {
+        void reloadCurrentPrices()
+      }
+    }
+  }, [activeTab, activeCategorySheet, activeSubcategorySheet])
 
   const visibleSuppliers = useMemo(
     () => (matrix?.suppliers || []).filter(item => {
@@ -517,9 +523,13 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         url += `&subcategory=${encodeURIComponent(activeSubcategorySheet)}`
       }
       const data = await fetchWithAuth(url) as MatrixResponse
-      const newSheet = data.rows.length ? sheetFromMatrix(data) : blankSheet()
-      setSheet(newSheet)
-      setNotice(`Foglio "${activeCategorySheet}${activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}" caricato con ${data.rows.length} prodotti attivi.`)
+      const newSheet = sheetFromMatrix(data)
+      setCategorySheets(prev => ({
+        ...prev,
+        [currentSheetKey]: newSheet
+      }))
+      const suppCount = data.suppliers?.length || 0
+      setNotice(`Foglio "${activeCategorySheet}${activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}" caricato con ${data.rows.length} prodotti attivi e ${suppCount} fornitori collegati.`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -528,7 +538,14 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   }
 
   function clearSheet() {
-    setSheet(blankSheet())
+    setSheet(current => {
+      const headerRow = current[0] || []
+      const rowCount = Math.max(MIN_SHEET_ROWS, current.length)
+      const colCount = Math.max(MIN_SHEET_COLUMNS, headerRow.length)
+      return Array.from({ length: rowCount }, (_, rowIndex) =>
+        Array.from({ length: colCount }, (_, columnIndex) => (rowIndex === 0 ? headerRow[columnIndex] || '' : ''))
+      )
+    })
     setPreview(null); setSupplierMapping({}); setProductMapping({})
   }
 

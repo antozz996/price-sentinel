@@ -385,16 +385,38 @@ async def matrix(
     filtered_suppliers = suppliers
     if category:
         norm_cat = category.strip().casefold()
-        eligible_supplier_ids_for_cat = {
-            s_id for r in rows for s_id in r["eligible_supplier_ids"]
-        } | {
-            s.id for s in suppliers
-            if supplier_scope.explicit_categories.get((s.id, norm_cat)) is True
-            or (
-                supplier_scope.explicit_categories.get((s.id, norm_cat)) is not False
-                and norm_cat in supplier_scope.categories_by_supplier.get(s.id, set())
+        norm_sub = subcategory.strip().casefold() if subcategory and subcategory != "all" and subcategory.strip() else None
+
+        eligible_supplier_ids_for_cat = set()
+        for s in suppliers:
+            # 1. Check if category is explicitly disabled
+            explicit_cat = supplier_scope.explicit_categories.get((s.id, norm_cat))
+            if explicit_cat is False:
+                continue
+
+            # 2. Check subcategory capability if subcategory is specified
+            if norm_sub and supplier_scope.subcategories_by_supplier_category:
+                enabled_subs = supplier_scope.subcategories_by_supplier_category.get((s.id, norm_cat))
+                if enabled_subs and norm_sub not in enabled_subs:
+                    continue
+
+            # 3. Eligible if explicitly enabled for category/subcategory, or present in commercial evidence
+            is_eligible = (
+                explicit_cat is True
+                or (norm_sub and supplier_scope.subcategories_by_supplier_category and norm_sub in supplier_scope.subcategories_by_supplier_category.get((s.id, norm_cat), set()))
+                or (explicit_cat is not False and norm_cat in supplier_scope.categories_by_supplier.get(s.id, set()))
+                or any(s.id in r["eligible_supplier_ids"] for r in rows)
             )
-        }
+            if is_eligible:
+                eligible_supplier_ids_for_cat.add(s.id)
+
+        # Fallback if no specific suppliers configured for this category
+        if not eligible_supplier_ids_for_cat:
+            eligible_supplier_ids_for_cat = {
+                s.id for s in suppliers
+                if supplier_scope.explicit_categories.get((s.id, norm_cat)) is not False
+            }
+
         filtered_suppliers = [s for s in suppliers if s.id in eligible_supplier_ids_for_cat]
 
     return {
