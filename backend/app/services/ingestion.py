@@ -29,6 +29,7 @@ from app.models.fatture import (
 from app.models.fornitori import Fornitore
 from app.models.location import Location
 from app.services.matching import match_riga, MatchResult
+from app.services.normalization import normalize_text
 from app.services.xml_parser import FatturaParsata, RigaParsata
 from app.services.notifications import notify_manager_anomalies
 
@@ -446,17 +447,31 @@ async def _process_td08(
 # ─────────────────────────────────────────────
 
 async def _resolve_fornitore(db: AsyncSession, piva: str) -> Fornitore | None:
-    """Trova il fornitore per P.IVA."""
+    """Trova il fornitore per P.IVA (con o senza prefisso nazione)."""
+    clean_piva = piva.strip().replace(" ", "").upper()
+    candidates = [clean_piva]
+    if clean_piva.startswith("IT") and len(clean_piva) > 2:
+        candidates.append(clean_piva[2:])
+    elif not clean_piva.startswith("IT"):
+        candidates.append(f"IT{clean_piva}")
+
     result = await db.execute(
-        select(Fornitore).where(Fornitore.partita_iva == piva)
+        select(Fornitore).where(Fornitore.partita_iva.in_(candidates))
     )
     return result.scalar_one_or_none()
 
 
 async def _resolve_location(db: AsyncSession, piva: str) -> Location | None:
-    """Trova la location per P.IVA cessionario."""
+    """Trova la location per P.IVA cessionario (con o senza prefisso nazione)."""
+    clean_piva = piva.strip().replace(" ", "").upper()
+    candidates = [clean_piva]
+    if clean_piva.startswith("IT") and len(clean_piva) > 2:
+        candidates.append(clean_piva[2:])
+    elif not clean_piva.startswith("IT"):
+        candidates.append(f"IT{clean_piva}")
+
     result = await db.execute(
-        select(Location).where(Location.piva_riferimento == piva)
+        select(Location).where(Location.piva_riferimento.in_(candidates))
     )
     return result.scalar_one_or_none()
 

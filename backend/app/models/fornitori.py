@@ -16,11 +16,11 @@ class Fornitore(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     partita_iva: Mapped[str] = mapped_column(
-        String(11),
+        String(50),
         unique=True,
         nullable=False,
         index=True,
-        comment="P.IVA cedente da XML",
+        comment="P.IVA / Codice Fiscale cedente da XML",
     )
     nome_azienda: Mapped[str] = mapped_column(String(255), nullable=False)
     attivo_whitelist: Mapped[bool] = mapped_column(

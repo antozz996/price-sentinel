@@ -50,29 +50,39 @@ async def create_fornitore(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    clean_piva = data.partita_iva.strip().replace(" ", "").upper()
+    clean_nome = data.nome_azienda.strip()
+
+    # Search existing by exact clean_piva or with/without IT prefix
+    piva_candidates = [clean_piva]
+    if clean_piva.startswith("IT") and len(clean_piva) > 2:
+        piva_candidates.append(clean_piva[2:])
+    elif not clean_piva.startswith("IT"):
+        piva_candidates.append(f"IT{clean_piva}")
+
     existing = await db.execute(
         select(Fornitore)
         .options(noload("*"))
-        .where(Fornitore.partita_iva == data.partita_iva)
+        .where(Fornitore.partita_iva.in_(piva_candidates))
     )
     existing_supplier = existing.scalar_one_or_none()
     if existing_supplier:
         if existing_supplier.archived_at is None:
-            raise HTTPException(status_code=409, detail="P.IVA fornitore già registrata")
-        existing_supplier.nome_azienda = data.nome_azienda
+            raise HTTPException(status_code=409, detail=f"P.IVA fornitore '{existing_supplier.partita_iva}' già registrata per {existing_supplier.nome_azienda}")
+        existing_supplier.nome_azienda = clean_nome
         existing_supplier.attivo_whitelist = data.attivo_whitelist
         existing_supplier.email_contatto = data.email_contatto
-        existing_supplier.telefono_contatto = data.telefono_contatto
+        existing_supplier.telefono_contatto = data.telefono_contatto.strip() if data.telefono_contatto else None
         existing_supplier.archived_at = None
         await db.flush()
         return existing_supplier
 
     fornitore = Fornitore(
-        partita_iva=data.partita_iva,
-        nome_azienda=data.nome_azienda,
+        partita_iva=clean_piva,
+        nome_azienda=clean_nome,
         attivo_whitelist=data.attivo_whitelist,
         email_contatto=data.email_contatto,
-        telefono_contatto=data.telefono_contatto,
+        telefono_contatto=data.telefono_contatto.strip() if data.telefono_contatto else None,
     )
     db.add(fornitore)
     await db.flush()
@@ -128,6 +138,36 @@ async def update_fornitore(
         raise HTTPException(status_code=404, detail="Fornitore non trovato")
 
     update_data = data.model_dump(exclude_unset=True)
+    if "partita_iva" in update_data and update_data["partita_iva"]:
+        clean_piva = update_data["partita_iva"].strip().upper()
+        piva_candidates = [clean_piva]
+        if clean_piva.startswith("IT") and len(clean_piva) > 2:
+            piva_candidates.append(clean_piva[2:])
+        elif not clean_piva.startswith("IT"):
+            piva_candidates.append(f"IT{clean_piva}")
+
+        existing = await db.execute(
+            select(Fornitore)
+            .options(noload("*"))
+            .where(
+                Fornitore.partita_iva.in_(piva_candidates),
+                Fornitore.id != fornitore_id,
+                Fornitore.archived_at.is_(None),
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=409,
+                detail=f"Partita IVA '{clean_piva}' già registrata per un altro fornitore",
+            )
+        update_data["partita_iva"] = clean_piva
+
+    if "nome_azienda" in update_data and update_data["nome_azienda"]:
+        update_data["nome_azienda"] = update_data["nome_azienda"].strip()
+
+    if "telefono_contatto" in update_data and update_data["telefono_contatto"]:
+        update_data["telefono_contatto"] = update_data["telefono_contatto"].strip()
+
     for key, value in update_data.items():
         setattr(fornitore, key, value)
 

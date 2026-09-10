@@ -130,10 +130,31 @@ export default function SettingsPage() {
     return () => controller.abort();
   }, []);
 
+  const parseApiError = async (res: Response, defaultMsg: string): Promise<string> => {
+    try {
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        if (typeof data.detail === 'string') return data.detail;
+        if (Array.isArray(data.detail)) return data.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+        if (data.message) return data.message;
+      } catch {
+        if (text && text.length < 200 && !text.includes('<!DOCTYPE') && !text.includes('Internal Server Error')) {
+          return text;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return defaultMsg;
+  };
+
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!locNome || locPiva.length !== 11) {
-      setMessage({ text: 'Compila tutti i campi. La P.IVA ricevente deve essere di 11 cifre.', type: 'error' });
+    const cleanNome = locNome.trim();
+    const cleanPiva = locPiva.trim().toUpperCase();
+    if (!cleanNome || !cleanPiva) {
+      setMessage({ text: 'Compila tutti i campi obbligatori per la sede ricevente.', type: 'error' });
       return;
     }
 
@@ -147,18 +168,18 @@ export default function SettingsPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          nome_struttura: locNome,
-          piva_riferimento: locPiva,
+          nome_struttura: cleanNome,
+          piva_riferimento: cleanPiva,
           tipologia: locTipo
         })
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Impossibile creare la location.');
+        const errorDetail = await parseApiError(res, 'Impossibile creare la location.');
+        throw new Error(errorDetail);
       }
 
-      setMessage({ text: `Sede Ricevente "${locNome}" aggiunta correttamente!`, type: 'success' });
+      setMessage({ text: `Sede Ricevente "${cleanNome}" aggiunta correttamente!`, type: 'success' });
       setLocNome('');
       setLocPiva('');
       loadData();
@@ -181,8 +202,8 @@ export default function SettingsPage() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Impossibile eliminare la sede.');
+        const errorDetail = await parseApiError(res, 'Impossibile eliminare la sede.');
+        throw new Error(errorDetail);
       }
 
       setMessage({ text: 'Sede Ricevente eliminata con successo!', type: 'success' });
@@ -193,7 +214,8 @@ export default function SettingsPage() {
   };
 
   const handleUpdateLocation = async (locationId: number) => {
-    if (!editLocNome) {
+    const cleanNome = editLocNome.trim();
+    if (!cleanNome) {
       setMessage({ text: 'Il nome della struttura non può essere vuoto.', type: 'error' });
       return;
     }
@@ -206,14 +228,14 @@ export default function SettingsPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          nome_struttura: editLocNome,
+          nome_struttura: cleanNome,
           tipologia: editLocTipo
         })
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Impossibile aggiornare la sede.');
+        const errorDetail = await parseApiError(res, 'Impossibile aggiornare la sede.');
+        throw new Error(errorDetail);
       }
 
       setMessage({ text: 'Sede aggiornata con successo!', type: 'success' });
@@ -226,7 +248,9 @@ export default function SettingsPage() {
 
   const handleCreateFornitore = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fornNome || !fornPiva) {
+    const cleanNome = fornNome.trim();
+    const cleanPiva = fornPiva.trim().toUpperCase();
+    if (!cleanNome || !cleanPiva) {
       setMessage({ text: 'Compila i campi obbligatori per il fornitore.', type: 'error' });
       return;
     }
@@ -241,20 +265,20 @@ export default function SettingsPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          nome_azienda: fornNome,
-          partita_iva: fornPiva,
-          email_contatto: fornEmail !== '' ? fornEmail : null,
+          nome_azienda: cleanNome,
+          partita_iva: cleanPiva,
+          email_contatto: fornEmail.trim() !== '' ? fornEmail.trim() : null,
           telefono_contatto: fornTelefono.trim() !== '' ? fornTelefono.trim() : null,
           attivo_whitelist: true
         })
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Impossibile creare il fornitore.');
+        const errorDetail = await parseApiError(res, 'Impossibile creare il fornitore.');
+        throw new Error(errorDetail);
       }
 
-      setMessage({ text: `Fornitore "${fornNome}" aggiunto in Whitelist correttamente!`, type: 'success' });
+      setMessage({ text: `Fornitore "${cleanNome}" aggiunto in Whitelist correttamente!`, type: 'success' });
       setFornNome('');
       setFornPiva('');
       setFornEmail('');
@@ -279,6 +303,13 @@ export default function SettingsPage() {
   const handleSaveEditFornitore = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingForn) return;
+    const cleanNome = editFornNome.trim();
+    const cleanPiva = editFornPiva.trim().toUpperCase();
+    if (!cleanNome || !cleanPiva) {
+      setMessage({ text: 'Nome azienda e Partita IVA sono obbligatori.', type: 'error' });
+      return;
+    }
+
     setSubmittingEditForn(true);
     try {
       const res = await fetch(`${API_BASE}/fornitori/${editingForn.id}`, {
@@ -288,19 +319,19 @@ export default function SettingsPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          nome_azienda: editFornNome,
-          partita_iva: editFornPiva,
+          nome_azienda: cleanNome,
+          partita_iva: cleanPiva,
           email_contatto: editFornEmail.trim() !== '' ? editFornEmail.trim() : null,
           telefono_contatto: editFornTelefono.trim() !== '' ? editFornTelefono.trim() : null
         })
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || "Impossibile aggiornare il fornitore.");
+        const errorDetail = await parseApiError(res, "Impossibile aggiornare il fornitore.");
+        throw new Error(errorDetail);
       }
 
-      setMessage({ text: `Fornitore "${editFornNome}" aggiornato con successo!`, type: 'success' });
+      setMessage({ text: `Fornitore "${cleanNome}" aggiornato con successo!`, type: 'success' });
       setShowEditFornModal(false);
       loadData();
     } catch (err: any) {
@@ -336,8 +367,8 @@ export default function SettingsPage() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || 'Impossibile eliminare il fornitore.');
+        const errorDetail = await parseApiError(res, 'Impossibile eliminare il fornitore.');
+        throw new Error(errorDetail);
       }
 
       setMessage({ text: 'Fornitore archiviato correttamente. Lo storico è stato conservato.', type: 'success' });
@@ -416,8 +447,8 @@ export default function SettingsPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Errore durante il salvataggio dell\'operatore.');
+        const errorDetail = await parseApiError(res, 'Errore durante il salvataggio dell\'operatore.');
+        throw new Error(errorDetail);
       }
 
       setMessage({
@@ -459,8 +490,8 @@ export default function SettingsPage() {
         headers
       });
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Impossibile eliminare l\'operatore.');
+        const errorDetail = await parseApiError(res, 'Impossibile eliminare l\'operatore.');
+        throw new Error(errorDetail);
       }
       setMessage({ text: 'Operatore rimosso/disattivato con successo.', type: 'success' });
       loadData();
@@ -489,8 +520,8 @@ export default function SettingsPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Impossibile salvare il branding aziendale.');
+        const errorDetail = await parseApiError(res, 'Impossibile salvare il branding aziendale.');
+        throw new Error(errorDetail);
       }
 
       setMessage({ text: 'Branding e profilo aziendale salvati con successo!', type: 'success' });
@@ -542,9 +573,9 @@ export default function SettingsPage() {
         })
       });
 
-      const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail || 'Errore durante la modifica della password.');
+        const errorDetail = await parseApiError(res, 'Errore durante la modifica della password.');
+        throw new Error(errorDetail);
       }
 
       setPwdMessage({ text: 'Password aggiornata con successo!', type: 'success' });

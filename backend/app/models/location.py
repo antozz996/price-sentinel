@@ -25,11 +25,11 @@ class Location(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     nome_struttura: Mapped[str] = mapped_column(String(255), nullable=False)
     piva_riferimento: Mapped[str] = mapped_column(
-        String(11),
+        String(50),
         unique=True,
         nullable=False,
         index=True,
-        comment="P.IVA della location",
+        comment="P.IVA / Codice Fiscale della location",
     )
     tipologia: Mapped[TipologiaLocation] = mapped_column(
         Enum(TipologiaLocation, name="tipologia_location", native_enum=True),
