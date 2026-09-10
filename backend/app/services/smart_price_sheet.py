@@ -550,7 +550,8 @@ async def build_price_preview(
                 "old_price": _price_string(Decimal(str(current.prezzo_pattuito))) if current else None,
                 "new_price": _price_string(price),
                 "uom": row_uom,
-                "category": category or product.category or "Beverage",
+                "category": category or getattr(product, "category", None) or "Beverage",
+                "subcategory": subcategory or getattr(product, "subcategory", None),
                 "action": "unchanged" if same else ("update" if current else "create"),
             }
 
@@ -583,70 +584,87 @@ async def build_price_preview(
     now = datetime.now(timezone.utc)
     preview = SmartPriceSheetPreview(
         payload_hash=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-        preview_payload=preview_payload,
-        commit_result=None,
-        status="ready",
+        status="previewed",
         location_id=location_id,
-        created_by=actor_id,
-        created_at=now,
+        payload_json=preview_payload,
         expires_at=now + timedelta(minutes=30),
     )
     db.add(preview)
     await db.flush()
-    return preview
+
+    return {
+        "token": preview.id,
+        "hash": preview.payload_hash,
+        "delimiter": parsed["delimiter"],
+        "headers": parsed["headers"],
+        "effective_date": effective_date.isoformat(),
+        "default_uom": default_uom,
+        "supplier_mapping": mapping_report,
+        "product_mapping": product_report,
+        "order_name_changes": list(order_name_changes_by_product.values()),
+        "changes": changes,
+        "errors": errors,
+        "counts": counts,
+        "can_commit": preview_payload["can_commit"],
+    }
 
 
 async def commit_price_preview(
-    db: AsyncSession, preview_id, actor_id: int
-) -> tuple[SmartPriceSheetPreview, dict]:
-    preview = await db.scalar(
-        select(SmartPriceSheetPreview)
-        .where(SmartPriceSheetPreview.id == preview_id)
-        .with_for_update()
-    )
-    if not preview or preview.created_by != actor_id:
-        raise HTTPException(404, "Anteprima non trovata")
-    if preview.status == "committed":
-        return preview, preview.commit_result or {}
-    now = datetime.now(timezone.utc)
-    if preview.expires_at <= now:
+    db: AsyncSession,
+    *,
+    token: str,
+    payload_hash: str,
+    created_by_user_id: int | None = None,
+) -> dict:
+    preview = await db.get(SmartPriceSheetPreview, token)
+    if not preview:
+        raise ValueError("Anteprima non trovata o scaduta: ripetere l'incolla.")
+    if preview.status != "previewed":
+        raise ValueError("Anteprima già confermata o non più valida.")
+    if preview.expires_at < datetime.now(timezone.utc):
         preview.status = "expired"
-        raise HTTPException(410, "Anteprima scaduta: generarne una nuova")
-    payload = preview.preview_payload
-    if payload.get("errors") or not payload.get("can_commit"):
-        raise HTTPException(409, "Anteprima non confermabile: correggere gli errori")
+        await db.flush()
+        raise ValueError("Anteprima scaduta: ripetere l'incolla.")
+    if preview.payload_hash != payload_hash:
+        raise ValueError("L'anteprima è cambiata: rigenerare prima della conferma.")
+    if not preview.payload_json.get("can_commit"):
+        raise ValueError("L'anteprima contiene errori bloccanti.")
 
+    payload = preview.payload_json
     effective_date = date.fromisoformat(payload["effective_date"])
+    location_id = payload.get("location_id")
+    now = datetime.now(timezone.utc)
     result = {
-        "created": 0,
-        "updated": 0,
-        "unchanged": 0,
+        "status": "committed",
+        "effective_date": effective_date.isoformat(),
         "products_created": 0,
+        "suppliers_created": 0,
+        "prices_created": 0,
+        "prices_updated": 0,
         "order_names_updated": 0,
         "aliases_created": 0,
-        "listino_ids": [],
+        "unchanged": 0,
+        "details": [],
     }
-    for name_change in payload.get("order_name_changes", []):
-        prod_id = name_change.get("product_id")
-        if not prod_id:
-            continue
-        product = await db.scalar(
-            select(Product)
-            .where(Product.id == prod_id)
-            .with_for_update()
-        )
-        if not product:
-            continue
-        product.order_name = name_change["new_order_name"]
-        product.normalized_order_name = name_change["normalized_order_name"]
-        result["order_names_updated"] += 1
 
+    # 1. Update Order Names (Nomi Rapidi) — Spec §2.1 & §5
+    for ord_change in payload.get("order_name_changes", []):
+        p_obj = None
+        if ord_change.get("sku_interno"):
+            p_obj = await db.scalar(select(Product).where(Product.sku_interno == ord_change["sku_interno"]))
+        elif ord_change.get("canonical_name"):
+            p_obj = await db.scalar(select(Product).where(Product.canonical_name == ord_change["canonical_name"]))
+
+        if p_obj:
+            new_ord = ord_change.get("new_order_name")
+            p_obj.order_name = new_ord
+            p_obj.normalized_order_name = normalize_text(new_ord) if new_ord else None
+            result["order_names_updated"] += 1
+
+    # 2. Process Price Changes
     for change in payload["changes"]:
-        product_id = change.get("product_id")
-        product = None
-        if product_id:
-            product = await db.get(Product, product_id)
-        if not product:
+        # Risoluzione o creazione del prodotto canonico
+        if not change.get("product_id"):
             norm_name = normalize_text(change["product_name"])
             product = await db.scalar(
                 select(Product).where(
@@ -669,14 +687,18 @@ async def commit_price_preview(
                     order_name=ord_name,
                     normalized_order_name=normalize_text(ord_name) if ord_name else None,
                     category=change.get("category") or infer_category(change["product_name"]) or "Beverage",
+                    subcategory=change.get("subcategory"),
                     comparison_unit=change.get("uom") or "Pz",
                     is_active=True,
                 )
                 db.add(product)
                 await db.flush()
                 result["products_created"] += 1
-            elif change.get("category") and product.category != change["category"]:
-                product.category = change["category"]
+            else:
+                if change.get("category") and product.category != change["category"]:
+                    product.category = change["category"]
+                if change.get("subcategory") and product.subcategory != change["subcategory"]:
+                    product.subcategory = change["subcategory"]
             change["product_id"] = product.id
 
         # Risoluzione o creazione del fornitore (se provvisorio)

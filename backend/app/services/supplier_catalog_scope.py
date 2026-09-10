@@ -42,11 +42,15 @@ class SupplierCatalogScope:
                 continue
 
             # Subcategory-level capability check:
-            # If supplier has explicit subcategories configured for this category, check if this subcategory is enabled
-            if normalized_category and self.subcategories_by_supplier_category:
+            if normalized_category and normalized_subcategory and self.subcategories_by_supplier_category is not None:
                 enabled_subs = self.subcategories_by_supplier_category.get((supplier_id, normalized_category))
-                if enabled_subs:
-                    if normalized_subcategory and normalized_subcategory not in enabled_subs:
+                if enabled_subs is not None:
+                    if normalized_subcategory not in enabled_subs and (product_id, supplier_id) not in self.direct_pairs:
+                        continue
+                else:
+                    # If subcategories are configured for this category in the system, exclude unassigned suppliers unless direct pair exists
+                    has_subcaps_for_cat = any(k[1] == normalized_category for k in self.subcategories_by_supplier_category.keys())
+                    if has_subcaps_for_cat and (product_id, supplier_id) not in self.direct_pairs:
                         continue
 
             if explicit is True or (product_id, supplier_id) in self.direct_pairs or (
