@@ -44,14 +44,20 @@ class RigaParsata:
     sconto_percentuale: Decimal = Decimal("0")
     aliquota_iva: Decimal | None = None
     is_omaggio: bool = False
+    prezzo_totale: Decimal | None = None
 
     @property
     def prezzo_netto_normalizzato(self) -> Decimal:
         """
         Formula dal Master Spec §2.3:
-        Prezzo_Netto_Normalizzato = PrezzoUnitario * (1 - ScontoMaggiorazione/100)
+        Prezzo_Netto_Normalizzato = PrezzoTotale / Quantita (se PrezzoTotale disponibile e Quantita > 0)
+        Altrimenti: PrezzoUnitario * (1 - ScontoMaggiorazione/100)
         Il confronto col listino avviene SEMPRE su questo valore imponibile netto.
         """
+        if self.prezzo_totale is not None and self.quantita > Decimal("0"):
+            return (self.prezzo_totale / self.quantita).quantize(
+                Decimal("0.0001"), rounding=ROUND_HALF_UP
+            )
         sconto_fattore = Decimal("1") - (self.sconto_percentuale / Decimal("100"))
         return (self.prezzo_unitario * sconto_fattore).quantize(
             Decimal("0.0001"), rounding=ROUND_HALF_UP
@@ -276,21 +282,37 @@ def parse_fattura_xml(xml_string: str) -> FatturaParsata:
         for sconto_el in sconti:
             tipo_sm = _text(sconto_el, "Tipo")  # SC = Sconto, MG = Maggiorazione
             perc = _decimal(sconto_el, "Percentuale")
-            if tipo_sm == "SC":
-                net_factor *= (Decimal("1") - (perc / Decimal("100")))
-            elif tipo_sm == "MG":
-                net_factor *= (Decimal("1") + (perc / Decimal("100")))
+            importo = _decimal(sconto_el, "Importo")
+            if perc > Decimal("0"):
+                if tipo_sm == "SC":
+                    net_factor *= (Decimal("1") - (perc / Decimal("100")))
+                elif tipo_sm == "MG":
+                    net_factor *= (Decimal("1") + (perc / Decimal("100")))
+            elif importo > Decimal("0") and riga.prezzo_unitario > Decimal("0"):
+                base_line = (riga.prezzo_unitario * riga.quantita) if riga.quantita > Decimal("0") else riga.prezzo_unitario
+                if base_line > Decimal("0"):
+                    eq_perc = min(Decimal("100"), (importo / base_line) * Decimal("100"))
+                    if tipo_sm == "SC":
+                        net_factor *= (Decimal("1") - (eq_perc / Decimal("100")))
+                    elif tipo_sm == "MG":
+                        net_factor *= (Decimal("1") + (eq_perc / Decimal("100")))
         riga.sconto_percentuale = (Decimal("1") - net_factor) * Decimal("100")
 
-        # ── Rilevamento Omaggi — Spec §3.3 ──
-        # Controlliamo il PrezzoTotale solo se il tag è effettivamente presente nell'XML per evitare falsi positivi
+        # ── Rilevamento Omaggi e PrezzoTotale — Spec §3.3 e §2.2.1.11 ──
         prezzo_totale_el = _find(linea, "PrezzoTotale")
         has_prezzo_totale_zero = False
         if prezzo_totale_el is not None:
             try:
                 pt_val = _decimal(linea, "PrezzoTotale")
+                riga.prezzo_totale = pt_val
                 if pt_val == Decimal("0"):
                     has_prezzo_totale_zero = True
+                elif riga.sconto_percentuale == Decimal("0") and riga.prezzo_unitario > Decimal("0") and riga.quantita > Decimal("0"):
+                    total_gross = riga.prezzo_unitario * riga.quantita
+                    if total_gross > pt_val:
+                        riga.sconto_percentuale = ((total_gross - pt_val) / total_gross * Decimal("100")).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
             except Exception:
                 pass
 

@@ -48,7 +48,8 @@ router = APIRouter()
 
 
 def _scope_location(user: Utente, requested: int | None) -> int | None:
-    if user.ruolo.value == "manager":
+    ruolo_str = getattr(user.ruolo, "value", str(user.ruolo))
+    if ruolo_str == "manager":
         if user.location_id is None:
             raise HTTPException(403, "Manager senza sede associata")
         if requested is not None and requested != user.location_id:

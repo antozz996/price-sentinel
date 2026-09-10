@@ -152,7 +152,8 @@ async def list_accordi_commerciali(
             scaled_qty = qty * coef
 
             # TD04 represents Credit Notes, subtract them
-            if line.fattura.tipo_documento.value == "TD04":
+            tipo_doc = getattr(line.fattura.tipo_documento, "value", str(line.fattura.tipo_documento))
+            if tipo_doc == "TD04":
                 total_qty -= scaled_qty
                 total_spent -= val
             else:

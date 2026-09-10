@@ -181,14 +181,18 @@ def extract_pack_qty(text: str) -> Optional[int]:
     - cartone 24
     - conf 6
     - cassa 12
-    - 24x...
+    - 24x33cl, 6x1lt
+    Evita falsi positivi da dimensioni fisiche (es. 40x40, 30x40 cm, 90x120).
     """
     cleaned = text.lower()
 
-    # Pattern x24, x 24, x6
+    # Se troviamo pattern dimensionali espliciti come 40x40 cm, 30x40 mm, 30x150 mt, 90x120 cm
+    is_dimension = bool(re.search(r"\b\d+\s*x\s*\d+\s*(?:cm|mm|mt|m|h)\b", cleaned))
+
+    # Pattern x24, x 24, x6 (non preceduto da dimensioni)
     pattern_x = r"\bx\s*(\d+)\b"
     matches_x = re.findall(pattern_x, cleaned)
-    if matches_x:
+    if matches_x and not is_dimension:
         return int(matches_x[0])
 
     # Pattern 24 pz, 6 pezzi, 12pz
@@ -198,16 +202,23 @@ def extract_pack_qty(text: str) -> Optional[int]:
         return int(matches_pz[0])
 
     # Pattern cartone 24, conf 6, cassa 12
-    pattern_box = r"\b(cartone|cartoni|ct|conf|confezione|confezioni|cassa|casse)\s*(\d+)\b"
+    pattern_box = r"\b(?:cartone|cartoni|ct|conf|confezione|confezioni|cassa|casse)\s*(\d+)\b"
     matches_box = re.findall(pattern_box, cleaned)
     if matches_box:
-        return int(matches_box[0][1])
+        return int(matches_box[0])
 
-    # Pattern 24x33cl o similar (il moltiplicatore precede la x)
-    pattern_mult = r"\b(\d+)\s*x\s*\d+"
-    matches_mult = re.findall(pattern_mult, cleaned)
-    if matches_mult:
-        return int(matches_mult[0])
+    # Pattern 24x33cl, 6x1lt, 24x0.33, etc. (il moltiplicatore precede la x e segue unità o formato valido)
+    if not is_dimension:
+        pattern_mult_unit = r"\b(\d+)\s*x\s*(?:\d+(?:[.,]\d+)?)\s*(?:cl|ml|lt|l|kg|g|gr|pz)\b"
+        matches_mult_unit = re.findall(pattern_mult_unit, cleaned)
+        if matches_mult_unit:
+            return int(matches_mult_unit[0])
+
+        # Se preceduto da parola chiave packaging (es. cartone 24x33, conf 6x100)
+        pattern_box_mult = r"\b(?:cartone|cartoni|ct|conf|confezione|cassa)\s*(\d+)\s*x\s*\d+"
+        matches_box_mult = re.findall(pattern_box_mult, cleaned)
+        if matches_box_mult:
+            return int(matches_box_mult[0])
 
     return None
 

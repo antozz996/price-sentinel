@@ -65,6 +65,15 @@ def run_tests():
     assert "jagermeister" in norm7_jeg, f"Jegermeister non normalizzato correttamente: {norm7_jeg}"
     print(f"  ✅ Test 7 Superato: '{t7_jeg}' -> '{norm7_jeg}'")
 
+    # Test Case 8: Dimensioni fisiche (non pack quantity)
+    t8_tov = "TOVAGLIOLI BIANCHI 40X40"
+    pack8 = extract_pack_qty(t8_tov)
+    assert pack8 is None, f"40x40 interpretato erroneamente come pack: {pack8}"
+    t8_bus = "BUSTE SOTTOVUOTO 30X40CM"
+    pack8_bus = extract_pack_qty(t8_bus)
+    assert pack8_bus is None, f"30x40cm interpretato erroneamente come pack: {pack8_bus}"
+    print(f"  ✅ Test 8 Superato: Dimensioni 40x40 e 30x40cm non scambiate per quantità confezione!")
+
     print("🎉 Tutti i test unitari di normalizzazione superati con successo!")
 
 

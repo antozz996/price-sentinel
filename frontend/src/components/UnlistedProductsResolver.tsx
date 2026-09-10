@@ -502,7 +502,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               sku_interno: autoSku,
               category: cat,
               subcategory: subcat || undefined,
-              comparison_unit: item.suggested_product.comparison_unit || 'piece',
+              comparison_unit: item.suggested_product.comparison_unit && item.suggested_product.comparison_unit !== 'piece' ? item.suggested_product.comparison_unit : 'Pz',
               prezzo_listino: rawPrice,
               unita_misura_listino: rawUom,
               data_inizio_validita: invoiceDate,
