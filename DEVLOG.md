@@ -6,6 +6,57 @@
 
 ---
 
+### [2026-09-10] Pagina Dedicata Risoluzione Fuori Listino, Risoluzione Massiva & Sottocategorie Food
+
+**File toccati:**
+- `backend/app/models/categories.py`
+- `backend/app/schemas/categories.py`
+- `backend/app/api/v1/categories.py`
+- `backend/app/schemas/ingestion.py`
+- `backend/app/api/v1/ingestion.py`
+- `backend/app/api/v1/product_identity.py`
+- `frontend/src/components/UnlistedProductsResolver.tsx`
+- `frontend/src/components/CategorySupplierManager.tsx`
+- `frontend/src/components/ManualUpload.tsx`
+- `frontend/src/App.tsx`
+- `DEVLOG.md`
+**Tipo:** Feature / Data Management / UX
+
+#### Problema / Obiettivo
+1. Ottimizzazione della gestione dei prodotti fatturati non presenti a listino o senza corrispondenza: l'utente necessita di una pagina dedicata per inserire tali prodotti come nuovi a listino (con prezzo concordato, UoM, data validità e alias permanente) o per associarli a un prodotto già esistente.
+2. Suddivisione della categoria Food in sottocategorie liberamente gestibili e creabili dall'utente tramite apposito pannello.
+3. Risoluzione massiva in blocco (Risolvi Tutti) per i suggerimenti affidabili e per i nuovi inserimenti a listino.
+
+#### Soluzione implementata
+- **Frontend**:
+  - Creato `UnlistedProductsResolver.tsx` con navigazione dedicata in `App.tsx`, banner notifica in `ManualUpload.tsx`, toolbar per risoluzione massiva 1-click ("Risolvi Tutti i Suggerimenti" e "Inserisci Tutti i Nuovi") e selezione multipla.
+  - Aggiornato `CategorySupplierManager.tsx` con la nuova scheda "Sottocategorie Food & Reparti", caricamento preset Ho.Re.Ca., creazione, modifica, eliminazione e conteggio prodotti.
+  - Integrato selettore sottocategoria con creazione rapida inline (`+ Nuova Sottocategoria`) direttamente nel resolver dei fuori listino.
+- **Backend**:
+  - Creato modello `MasterSubcategory` e tabella `master_subcategories` in modo non distruttivo.
+  - Aggiunti endpoint REST `/categories/subcategories` (CRUD + seed preset Food).
+  - Esteso il flusso di risoluzione coda prodotti per creare/aggiornare automaticamente `ListinoMaster` e riconciliare le righe fattura collegate.
+
+---
+
+### [2026-09-07] Rimozione nota al prezzo negli invii ordine fornitori
+
+**File toccati:**
+- `backend/app/api/v1/ordini.py`
+- `backend/tests/sector_orders_whatsapp_unit.py`
+- `DEVLOG.md`
+**Tipo:** Feature / Business Policy
+
+#### Problema / Obiettivo
+Richiesta esplicita di rimuovere la nota al prezzo / stima importo (`💰 *Totale stimato:* € ... + IVA`) dai testi d'ordine generati per l'invio ai fornitori (WhatsApp e appunti). Negli ordini d'acquisto inviati ai rappresentanti non deve comparire la stima dei costi o il totale in euro, preservando unicamente le quantità, le unità di misura, le note di consegna e le indicazioni promozionali degli omaggi.
+
+#### Soluzione implementata
+- Modificata la funzione `_format_whatsapp_text` in `backend/app/api/v1/ordini.py`: eliminata la riga con la nota al prezzo stimato.
+- Preservata la visualizzazione dell'eventuale annotazione omaggi promozionali (`🎁 *(Include X box di acqua in OMAGGIO)*`) e delle note operative di consegna (`📝 *Note:* ...`) senza linee vuote ridondanti.
+- Aggiornati i test di unità in `backend/tests/sector_orders_whatsapp_unit.py` con controlli espliciti di assenza di riferimenti a prezzi o totali stimati nel messaggio.
+
+---
+
 ### [2026-09-05] Rimozione completa: Sentinel Copilot & integrazione provider AI
 
 **File toccati:**

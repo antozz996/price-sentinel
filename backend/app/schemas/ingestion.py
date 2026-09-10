@@ -8,6 +8,7 @@ class BatchSummary(BaseModel):
     gia_presenti: int
     errori_formato: int
     anomalie_generate: int
+    righe_parking: int = 0
 
 
 class BatchResponse(BaseModel):

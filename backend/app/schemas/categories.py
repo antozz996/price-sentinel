@@ -71,3 +71,30 @@ class SupplierCategoryMatrixResponse(BaseModel):
 class BulkSupplierCategoryUpdate(BaseModel):
     supplier_id: int
     capabilities: List[SupplierCapabilityItem]
+
+
+class SubcategoryCreate(BaseModel):
+    categoria_nome: str = Field(default="Food", min_length=1, max_length=100)
+    nome: str = Field(min_length=1, max_length=100)
+    descrizione: Optional[str] = None
+    is_active: bool = True
+
+
+class SubcategoryUpdate(BaseModel):
+    nome: Optional[str] = Field(None, min_length=1, max_length=100)
+    descrizione: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class SubcategoryResponse(BaseModel):
+    id: int
+    categoria_nome: str
+    nome: str
+    descrizione: Optional[str] = None
+    is_active: bool = True
+    product_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

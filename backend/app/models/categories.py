@@ -38,3 +38,27 @@ class MasterCategory(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class MasterSubcategory(Base):
+    """
+    Rappresenta una sottocategoria merceologica (es. Carni, Pesce, Latticini per Food).
+    """
+    __tablename__ = "master_subcategories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    categoria_nome: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    descrizione: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

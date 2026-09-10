@@ -14,7 +14,10 @@ import {
   CheckCircle2, 
   AlertCircle,
   Filter,
-  X
+  X,
+  Utensils,
+  FolderTree,
+  Tag
 } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
@@ -26,6 +29,17 @@ interface CategoryItem {
   is_active: boolean;
   product_count: number;
   supplier_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SubcategoryItem {
+  id: number;
+  categoria_nome: string;
+  nome: string;
+  descrizione: string | null;
+  is_active: boolean;
+  product_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -57,7 +71,7 @@ const COLOR_PRESETS = [
 ];
 
 export default function CategorySupplierManager() {
-  const [subTab, setSubTab] = useState<'matrix' | 'categories'>('matrix');
+  const [subTab, setSubTab] = useState<'matrix' | 'categories' | 'subcategories'>('matrix');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -68,6 +82,16 @@ export default function CategorySupplierManager() {
   const [suppliers, setSuppliers] = useState<SupplierMatrixRow[]>([]);
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+
+  // Subcategories state (Food and other categories)
+  const [subcategories, setSubcategories] = useState<SubcategoryItem[]>([]);
+  const [subcatParentCategory, setSubcatParentCategory] = useState<string>('Food');
+  const [subcatLoading, setSubcatLoading] = useState(false);
+  const [showSubcatModal, setShowSubcatModal] = useState(false);
+  const [editingSubcat, setEditingSubcat] = useState<SubcategoryItem | null>(null);
+  const [subcatFormNome, setSubcatFormNome] = useState('');
+  const [subcatFormDesc, setSubcatFormDesc] = useState('');
+  const [subcatFormIsActive, setSubcatFormIsActive] = useState(true);
 
   // Modals
   const [showCatModal, setShowCatModal] = useState(false);
@@ -94,9 +118,31 @@ export default function CategorySupplierManager() {
     }
   };
 
+  const loadSubcategories = async (parentCat = subcatParentCategory) => {
+    setSubcatLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/categories/subcategories?categoria_nome=${encodeURIComponent(parentCat)}`, { headers });
+      if (!res.ok) throw new Error('Errore nel caricamento delle sottocategorie');
+      const data = await res.json();
+      setSubcategories(data || []);
+    } catch (err: any) {
+      console.error(err);
+      setMessage({ text: err.message || 'Errore caricamento sottocategorie', type: 'error' });
+    } finally {
+      setSubcatLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadSubcategories('Food');
   }, []);
+
+  useEffect(() => {
+    if (subTab === 'subcategories') {
+      loadSubcategories(subcatParentCategory);
+    }
+  }, [subTab, subcatParentCategory]);
 
   // Quick feedback timeout
   useEffect(() => {
@@ -293,6 +339,132 @@ export default function CategorySupplierManager() {
     }
   };
 
+  // Subcategory management functions
+  const openSubcategoryModal = (sub?: SubcategoryItem) => {
+    if (sub) {
+      setEditingSubcat(sub);
+      setSubcatFormNome(sub.nome);
+      setSubcatFormDesc(sub.descrizione || '');
+      setSubcatFormIsActive(sub.is_active);
+    } else {
+      setEditingSubcat(null);
+      setSubcatFormNome('');
+      setSubcatFormDesc('');
+      setSubcatFormIsActive(true);
+    }
+    setShowSubcatModal(true);
+  };
+
+  const handleSaveSubcategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subcatFormNome.trim()) {
+      setMessage({ text: 'Inserisci il nome della sottocategoria', type: 'error' });
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      let res;
+      if (editingSubcat) {
+        res = await fetch(`${API_BASE}/categories/subcategories/${editingSubcat.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({
+            nome: subcatFormNome.trim(),
+            descrizione: subcatFormDesc.trim() || null,
+            is_active: subcatFormIsActive,
+          }),
+        });
+      } else {
+        res = await fetch(`${API_BASE}/categories/subcategories`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            categoria_nome: subcatParentCategory,
+            nome: subcatFormNome.trim(),
+            descrizione: subcatFormDesc.trim() || null,
+            is_active: subcatFormIsActive,
+          }),
+        });
+      }
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || 'Errore nel salvataggio della sottocategoria');
+      }
+
+      setShowSubcatModal(false);
+      setMessage({
+        text: editingSubcat ? 'Sottocategoria aggiornata con successo' : 'Nuova sottocategoria creata',
+        type: 'success',
+      });
+      await loadSubcategories(subcatParentCategory);
+    } catch (err: any) {
+      setMessage({ text: err.message, type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteSubcategory = async (sub: SubcategoryItem) => {
+    if (!window.confirm(`Sei sicuro di voler eliminare la sottocategoria "${sub.nome}"?`)) return;
+
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/categories/subcategories/${sub.id}`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Errore nell'eliminazione della sottocategoria");
+      }
+      setMessage({ text: `Sottocategoria "${sub.nome}" eliminata`, type: 'success' });
+      await loadSubcategories(subcatParentCategory);
+    } catch (err: any) {
+      setMessage({ text: err.message, type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleSubcatActive = async (sub: SubcategoryItem) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/categories/subcategories/${sub.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          is_active: !sub.is_active,
+        }),
+      });
+      if (!res.ok) throw new Error('Errore nel cambio stato');
+      await loadSubcategories(subcatParentCategory);
+    } catch (err: any) {
+      setMessage({ text: err.message, type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSeedFoodSubcategories = async () => {
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/categories/subcategories/seed-food-defaults`, {
+        method: 'POST',
+        headers,
+      });
+      if (!res.ok) throw new Error('Errore durante la creazione delle sottocategorie predefinite');
+      const data = await res.json();
+      setMessage({ text: data.message || 'Sottocategorie Food create con successo', type: 'success' });
+      await loadSubcategories('Food');
+    } catch (err: any) {
+      setMessage({ text: err.message, type: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Filtered suppliers
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter(s => {
@@ -312,6 +484,14 @@ export default function CategorySupplierManager() {
       (c.descrizione || '').toLowerCase().includes(searchFilter.toLowerCase())
     );
   }, [categories, searchFilter]);
+
+  // Filtered subcategories
+  const filteredSubcategories = useMemo(() => {
+    return subcategories.filter(s => 
+      s.nome.toLowerCase().includes(searchFilter.toLowerCase()) ||
+      (s.descrizione || '').toLowerCase().includes(searchFilter.toLowerCase())
+    );
+  }, [subcategories, searchFilter]);
 
   // Statistics
   const totalCategories = categories.length;
@@ -421,6 +601,27 @@ export default function CategorySupplierManager() {
               <Boxes size={16} />
               Catalogo Categorie Master ({categories.length})
             </button>
+
+            <button
+              onClick={() => setSubTab('subcategories')}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: subTab === 'subcategories' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.05)',
+                color: 'white',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Utensils size={16} />
+              Sottocategorie Food & Reparti ({subcategories.length})
+            </button>
           </div>
 
           {/* Action buttons on the right */}
@@ -468,30 +669,60 @@ export default function CategorySupplierManager() {
               </div>
             )}
 
-            {categories.length === 0 && (
-              <button
-                onClick={handleSeedDefaults}
-                disabled={actionLoading}
-                className="btn btn-secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
-              >
-                <Sparkles size={15} style={{ color: '#f59e0b' }} />
-                Carica Categorie Ho.Re.Ca.
-              </button>
+            {subTab === 'subcategories' && (
+              <>
+                <button
+                  onClick={handleSeedFoodSubcategories}
+                  disabled={actionLoading}
+                  className="btn btn-secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
+                  title="Carica le sottocategorie alimentari standard Ho.Re.Ca (Carni, Pesce, Latticini, Salumi, Surgelati, ecc.)"
+                >
+                  <Sparkles size={15} style={{ color: '#f59e0b' }} />
+                  Carica Predefinite Food
+                </button>
+                <button
+                  onClick={() => openSubcategoryModal()}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
+                >
+                  <Plus size={16} />
+                  Nuova Sottocategoria
+                </button>
+              </>
+            )}
+
+            {subTab === 'categories' && (
+              <>
+                {categories.length === 0 && (
+                  <button
+                    onClick={handleSeedDefaults}
+                    disabled={actionLoading}
+                    className="btn btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
+                  >
+                    <Sparkles size={15} style={{ color: '#f59e0b' }} />
+                    Carica Categorie Ho.Re.Ca.
+                  </button>
+                )}
+
+                <button
+                  onClick={() => openCategoryModal()}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
+                >
+                  <Plus size={16} />
+                  Nuova Categoria
+                </button>
+              </>
             )}
 
             <button
-              onClick={() => openCategoryModal()}
-              className="btn btn-primary"
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
-            >
-              <Plus size={16} />
-              Nuova Categoria
-            </button>
-
-            <button
-              onClick={loadData}
-              disabled={loading}
+              onClick={() => {
+                if (subTab === 'subcategories') loadSubcategories(subcatParentCategory);
+                else loadData();
+              }}
+              disabled={loading || subcatLoading}
               title="Ricarica dati"
               style={{
                 background: 'rgba(255,255,255,0.05)',
@@ -505,7 +736,7 @@ export default function CategorySupplierManager() {
                 justifyContent: 'center'
               }}
             >
-              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={15} className={(loading || subcatLoading) ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
@@ -516,7 +747,7 @@ export default function CategorySupplierManager() {
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
             <input
               type="text"
-              placeholder={subTab === 'matrix' ? 'Cerca fornitore o P.IVA...' : 'Cerca categoria...'}
+              placeholder={subTab === 'matrix' ? 'Cerca fornitore o P.IVA...' : subTab === 'categories' ? 'Cerca categoria...' : 'Cerca sottocategoria o descrizione...'}
               value={searchFilter}
               onChange={e => setSearchFilter(e.target.value)}
               style={{
@@ -550,6 +781,30 @@ export default function CategorySupplierManager() {
                 <option value="all">Tutti i settori merci</option>
                 {categories.map(c => (
                   <option key={c.id} value={c.nome}>Filtra per: {c.nome}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {subTab === 'subcategories' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Categoria Padre:</span>
+              <select
+                value={subcatParentCategory}
+                onChange={e => setSubcatParentCategory(e.target.value)}
+                style={{
+                  padding: '9px 12px',
+                  background: '#13131c',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '0.85rem',
+                  fontWeight: 600
+                }}
+              >
+                <option value="Food">Food (Alimentari)</option>
+                {categories.filter(c => c.nome.toLowerCase() !== 'food').map(c => (
+                  <option key={c.id} value={c.nome}>{c.nome}</option>
                 ))}
               </select>
             </div>
@@ -855,6 +1110,206 @@ export default function CategorySupplierManager() {
             )}
           </div>
         )}
+
+        {/* ──────────────────────────────────────────────────────────── */}
+        {/* SUBTAB 3: SOTTOCATEGORIE FOOD & REPARTI                      */}
+        {/* ──────────────────────────────────────────────────────────── */}
+        {subTab === 'subcategories' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Info Banner */}
+            <div style={{
+              padding: '16px 20px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(245, 158, 11, 0.08))',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '14px'
+            }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.05rem', color: '#f59e0b' }}>
+                  <Utensils size={18} />
+                  Suddivisione Sottocategorie & Reparti: {subcatParentCategory}
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+                  Organizza i prodotti alimentari in sottocategorie personalizzate (Carni, Ittico, Latticini, Salumi, Surgelati, ecc.) per facilitare la gestione ordini, listini e catalogazione.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  onClick={handleSeedFoodSubcategories}
+                  disabled={actionLoading}
+                  className="btn btn-secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}
+                >
+                  <Sparkles size={15} style={{ color: '#f59e0b' }} />
+                  Carica Predefinite Food Ho.Re.Ca.
+                </button>
+                <button
+                  onClick={() => openSubcategoryModal()}
+                  className="btn btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}
+                >
+                  <Plus size={16} />
+                  Nuova Sottocategoria
+                </button>
+              </div>
+            </div>
+
+            {/* Content Cards */}
+            {subcatLoading ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 12px' }} />
+                Caricamento sottocategorie in corso...
+              </div>
+            ) : filteredSubcategories.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+                <FolderTree size={40} style={{ opacity: 0.3 }} />
+                <div>
+                  <h4 style={{ margin: '0 0 6px', color: 'white', fontSize: '1.1rem' }}>Nessuna sottocategoria trovata</h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem' }}>
+                    Non hai ancora creato sottocategorie per <strong>{subcatParentCategory}</strong> oppure i filtri applicati non producono risultati.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                  <button
+                    onClick={handleSeedFoodSubcategories}
+                    disabled={actionLoading}
+                    className="btn btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
+                  >
+                    <Sparkles size={16} />
+                    Inizializza Sottocategorie Predefinite Food
+                  </button>
+                  <button
+                    onClick={() => openSubcategoryModal()}
+                    className="btn btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
+                  >
+                    <Plus size={16} />
+                    Crea Manualmente
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                gap: '16px'
+              }}>
+                {filteredSubcategories.map(sub => (
+                  <div
+                    key={sub.id}
+                    style={{
+                      background: 'rgba(255,255,255,0.03)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '12px',
+                      padding: '18px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '14px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '8px',
+                            background: 'rgba(245, 158, 11, 0.15)',
+                            color: '#f59e0b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Tag size={18} />
+                          </div>
+                          <div>
+                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'white' }}>
+                              {sub.nome}
+                            </h4>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                              Categoria: {sub.categoria_nome}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => openSubcategoryModal(sub)}
+                            title="Modifica sottocategoria"
+                            style={{
+                              background: 'rgba(255,255,255,0.05)',
+                              border: '1px solid var(--border-glass)',
+                              borderRadius: '6px',
+                              padding: '6px',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSubcategory(sub)}
+                            title="Elimina sottocategoria"
+                            style={{
+                              background: 'rgba(239,68,68,0.1)',
+                              border: '1px solid rgba(239,68,68,0.2)',
+                              borderRadius: '6px',
+                              padding: '6px',
+                              color: 'var(--status-red, #ef4444)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {sub.descrizione && (
+                        <p style={{ margin: '10px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                          {sub.descrizione}
+                        </p>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
+                        <Boxes size={14} />
+                        <span><strong>{sub.product_count}</strong> {sub.product_count === 1 ? 'prodotto associato' : 'prodotti associati'}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSubcatActive(sub)}
+                        style={{
+                          background: sub.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)',
+                          border: `1px solid ${sub.is_active ? 'rgba(16,185,129,0.3)' : 'var(--border-glass)'}`,
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          color: sub.is_active ? 'var(--status-green, #10b981)' : 'var(--text-secondary)',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {sub.is_active ? 'Attiva' : 'Disattivata'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ──────────────────────────────────────────────────────────── */}
@@ -965,6 +1420,128 @@ export default function CategorySupplierManager() {
                 >
                   {actionLoading ? <RefreshCw className="animate-spin" size={16} /> : <Check size={16} />}
                   {editingCategory ? 'Aggiorna Categoria' : 'Crea Categoria'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* MODAL: NUOVA / MODIFICA SOTTOCATEGORIA                       */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {showSubcatModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.75)',
+          zIndex: 1100,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(255,255,255,0.15)' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Utensils size={18} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
+                  {editingSubcat ? 'Modifica Sottocategoria' : `Nuova Sottocategoria ${subcatParentCategory}`}
+                </h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setShowSubcatModal(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSubcategory} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                Categoria Padre
+                <input
+                  type="text"
+                  disabled
+                  value={subcatParentCategory}
+                  style={{
+                    padding: '11px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    color: '#93c5fd',
+                    fontWeight: 600
+                  }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                Nome Sottocategoria *
+                <input
+                  type="text"
+                  required
+                  placeholder="Es. Carni & Hamburger, Ittico, Latticini, Surgelati, Salumi..."
+                  value={subcatFormNome}
+                  onChange={e => setSubcatFormNome(e.target.value)}
+                  style={{
+                    padding: '11px',
+                    background: 'rgba(0,0,0,0.25)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    color: 'white'
+                  }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                Descrizione o Note
+                <textarea
+                  rows={2}
+                  placeholder="Descrivi la tipologia di prodotti compresi in questo raggruppamento..."
+                  value={subcatFormDesc}
+                  onChange={e => setSubcatFormDesc(e.target.value)}
+                  style={{
+                    padding: '11px',
+                    background: 'rgba(0,0,0,0.25)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    resize: 'vertical'
+                  }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: 'white', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={subcatFormIsActive}
+                  onChange={e => setSubcatFormIsActive(e.target.checked)}
+                  style={{ width: '16px', height: '16px', accentColor: '#10b981' }}
+                />
+                Sottocategoria attiva e visibile nei listini e ordini
+              </label>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  disabled={actionLoading} 
+                  onClick={() => setShowSubcatModal(false)}
+                >
+                  Annulla
+                </button>
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? <RefreshCw className="animate-spin" size={16} /> : <Check size={16} />}
+                  {editingSubcat ? 'Aggiorna Sottocategoria' : 'Crea Sottocategoria'}
                 </button>
               </div>
             </form>

@@ -106,6 +106,7 @@ async def upload_fatture(
 
     non_whitelistati_fornitori = []
     non_registrate_location = []
+    batch_righe_parking = 0
 
     # 3. Processa XML
     for filename, xml_payload in xml_files_to_process:
@@ -157,6 +158,7 @@ async def upload_fatture(
 
                     batch.file_elaborati += 1
                     batch.anomalie_generate += report.get("anomalie_generate", 0)
+                    batch_righe_parking += report.get("righe_parking", 0)
                     continue
 
             try:
@@ -193,6 +195,7 @@ async def upload_fatture(
 
                 batch.file_elaborati += 1
                 batch.anomalie_generate += report.get("anomalie_generate", 0)
+                batch_righe_parking += report.get("righe_parking", 0)
             except Exception as nested_exc:
                 logger.info(f"File {filename} errore o già presente: {nested_exc}")
                 batch.gia_presenti += 1
@@ -217,7 +220,8 @@ async def upload_fatture(
             elaborati=batch.file_elaborati,
             gia_presenti=batch.gia_presenti,
             errori_formato=batch.errori_formato,
-            anomalie_generate=batch.anomalie_generate
+            anomalie_generate=batch.anomalie_generate,
+            righe_parking=batch_righe_parking,
         ),
         non_whitelistati_fornitori=non_whitelistati_fornitori,
         non_registrate_location=non_registrate_location
@@ -291,6 +295,7 @@ async def reprocess_parked(
 
     non_whitelistati_fornitori = []
     non_registrate_location = []
+    batch_righe_parking = 0
 
     for xml_raw in xml_raws:
         try:
@@ -318,6 +323,7 @@ async def reprocess_parked(
 
             batch.file_elaborati += 1
             batch.anomalie_generate += report.get("anomalie_generate", 0)
+            batch_righe_parking += report.get("righe_parking", 0)
         except Exception as e:
             logger.error(f"Errore rielaborazione {getattr(xml_raw, 'id', 'unknown')}: {e}")
             batch.errori_formato += 1
@@ -335,7 +341,8 @@ async def reprocess_parked(
             elaborati=batch.file_elaborati,
             gia_presenti=batch.gia_presenti,
             errori_formato=batch.errori_formato,
-            anomalie_generate=batch.anomalie_generate
+            anomalie_generate=batch.anomalie_generate,
+            righe_parking=batch_righe_parking,
         ),
         non_whitelistati_fornitori=non_whitelistati_fornitori,
         non_registrate_location=non_registrate_location

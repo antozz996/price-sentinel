@@ -12,7 +12,7 @@ from sqlalchemy.orm import noload
 
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
-from app.models.categories import MasterCategory
+from app.models.categories import MasterCategory, MasterSubcategory
 from app.models.fornitori import Fornitore
 from app.models.products import Product
 from app.models.purchase_policy import SupplierCategoryCapability
@@ -25,6 +25,9 @@ from app.schemas.categories import (
     SupplierCategoryMatrixRow,
     SupplierCategoryMatrixResponse,
     BulkSupplierCategoryUpdate,
+    SubcategoryCreate,
+    SubcategoryUpdate,
+    SubcategoryResponse,
 )
 from app.services.normalization import normalize_text
 
@@ -476,3 +479,258 @@ async def bulk_update_supplier_matrix(
 
     await db.flush()
     return {"status": "ok", "message": "Associazioni aggiornate con successo."}
+
+
+# ─────────────────────────────────────────────
+# Sottocategorie (Food & altre categorie)
+# ─────────────────────────────────────────────
+
+DEFAULT_FOOD_SUBCATEGORIES = [
+    {"nome": "Carni & Hamburger", "descrizione": "Carni fresche, tagli bovino/suino/pollame, hamburger"},
+    {"nome": "Ittico & Pesce", "descrizione": "Pesce fresco, crostacei, molluschi, filetti e surgelato mare"},
+    {"nome": "Latticini & Formaggi", "descrizione": "Mozzarelle, burrate, formaggi stagionati, latte, panna"},
+    {"nome": "Salumi & Affettati", "descrizione": "Prosciutti, salami, speck, bresaola, salumi tipici"},
+    {"nome": "Ortofrutta Fresca", "descrizione": "Frutta e verdura fresca di stagione per cucina e decorazione"},
+    {"nome": "Pane, Pizza & Pasticceria", "descrizione": "Basi pizza, pane, focacce, lievitati, cornetti"},
+    {"nome": "Pasta, Riso & Cereali", "descrizione": "Pasta secca, pasta fresca, riso per risotti, farine"},
+    {"nome": "Surgelati & Congelati", "descrizione": "Patate fritte, verdure surgelate, basi dolci, gelati"},
+    {"nome": "Olio, Condimenti & Salse", "descrizione": "Olio EVO, aceti, salse, maionese, ketchup, senape"},
+    {"nome": "Conserve, Sottoli & Spezie", "descrizione": "Pomodori pelati, passata, sottoli, spezie, aromi"},
+    {"nome": "Dolci & Dessert", "descrizione": "Dessert pronti, monoporzioni, dolci al cucchiaio, torte"},
+]
+
+
+async def _ensure_subcategory_table(db: AsyncSession):
+    from sqlalchemy import text
+    try:
+        await db.execute(text("""
+            CREATE TABLE IF NOT EXISTS master_subcategories (
+                id SERIAL PRIMARY KEY,
+                categoria_nome VARCHAR(100) NOT NULL,
+                nome VARCHAR(100) NOT NULL,
+                descrizione TEXT,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS ix_master_subcategories_categoria ON master_subcategories (categoria_nome);
+            CREATE INDEX IF NOT EXISTS ix_master_subcategories_nome ON master_subcategories (nome);
+        """))
+        await db.flush()
+    except Exception:
+        pass
+
+
+@router.get("/subcategories", response_model=List[SubcategoryResponse], summary="Lista sottocategorie")
+async def list_subcategories(
+    categoria_nome: str = "Food",
+    active_only: bool = False,
+    db: AsyncSession = Depends(get_db),
+    _user: Utente = Depends(get_current_user),
+):
+    await _ensure_subcategory_table(db)
+    clean_cat = categoria_nome.strip()
+    query = select(MasterSubcategory).where(
+        func.lower(func.btrim(MasterSubcategory.categoria_nome)) == clean_cat.casefold()
+    ).order_by(MasterSubcategory.nome)
+    
+    if active_only:
+        query = query.where(MasterSubcategory.is_active.is_(True))
+
+    subcategories = (await db.execute(query)).scalars().all()
+
+    # Product counts per subcategory
+    prod_counts_stmt = (
+        select(Product.subcategory, func.count(Product.id))
+        .where(
+            Product.is_active.is_(True),
+            Product.subcategory.is_not(None),
+            func.lower(func.btrim(Product.category)) == clean_cat.casefold(),
+        )
+        .group_by(Product.subcategory)
+    )
+    prod_counts_raw = (await db.execute(prod_counts_stmt)).all()
+    prod_counts = {sub.strip().casefold(): count for sub, count in prod_counts_raw if sub}
+
+    return [
+        SubcategoryResponse(
+            id=sub.id,
+            categoria_nome=sub.categoria_nome,
+            nome=sub.nome,
+            descrizione=sub.descrizione,
+            is_active=sub.is_active,
+            product_count=prod_counts.get(sub.nome.strip().casefold(), 0),
+            created_at=sub.created_at,
+            updated_at=sub.updated_at,
+        )
+        for sub in subcategories
+    ]
+
+
+@router.post("/subcategories", response_model=SubcategoryResponse, status_code=status.HTTP_201_CREATED, summary="Crea sottocategoria")
+async def create_subcategory(
+    data: SubcategoryCreate,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    await _ensure_subcategory_table(db)
+    clean_name = data.nome.strip()
+    clean_cat = data.categoria_nome.strip() or "Food"
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Il nome della sottocategoria non può essere vuoto")
+
+    existing = await db.scalar(
+        select(MasterSubcategory).where(
+            func.lower(func.btrim(MasterSubcategory.categoria_nome)) == clean_cat.casefold(),
+            func.lower(func.btrim(MasterSubcategory.nome)) == clean_name.casefold(),
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Sottocategoria '{clean_name}' già presente in {clean_cat}")
+
+    now = datetime.now(timezone.utc)
+    sub = MasterSubcategory(
+        categoria_nome=clean_cat,
+        nome=clean_name,
+        descrizione=data.descrizione.strip() if data.descrizione else None,
+        is_active=data.is_active,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(sub)
+    await db.flush()
+    await db.refresh(sub)
+
+    return SubcategoryResponse(
+        id=sub.id,
+        categoria_nome=sub.categoria_nome,
+        nome=sub.nome,
+        descrizione=sub.descrizione,
+        is_active=sub.is_active,
+        product_count=0,
+        created_at=sub.created_at,
+        updated_at=sub.updated_at,
+    )
+
+
+@router.put("/subcategories/{subcategory_id}", response_model=SubcategoryResponse, summary="Modifica sottocategoria")
+@router.patch("/subcategories/{subcategory_id}", response_model=SubcategoryResponse, summary="Modifica sottocategoria")
+async def update_subcategory(
+    subcategory_id: int,
+    data: SubcategoryUpdate,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    await _ensure_subcategory_table(db)
+    sub = await db.get(MasterSubcategory, subcategory_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Sottocategoria non trovata")
+
+    old_name = sub.nome
+
+    if data.nome is not None:
+        clean_name = data.nome.strip()
+        if not clean_name:
+            raise HTTPException(status_code=400, detail="Il nome non può essere vuoto")
+        if clean_name.casefold() != old_name.casefold():
+            existing = await db.scalar(
+                select(MasterSubcategory).where(
+                    func.lower(func.btrim(MasterSubcategory.categoria_nome)) == sub.categoria_nome.casefold(),
+                    func.lower(func.btrim(MasterSubcategory.nome)) == clean_name.casefold(),
+                    MasterSubcategory.id != subcategory_id,
+                )
+            )
+            if existing:
+                raise HTTPException(status_code=409, detail=f"Sottocategoria '{clean_name}' già presente")
+            
+            # Cascade update to products
+            await db.execute(
+                update(Product)
+                .where(
+                    func.lower(func.btrim(Product.category)) == sub.categoria_nome.casefold(),
+                    func.lower(func.btrim(Product.subcategory)) == old_name.casefold(),
+                )
+                .values(subcategory=clean_name)
+            )
+            sub.nome = clean_name
+
+    if data.descrizione is not None:
+        sub.descrizione = data.descrizione.strip() if data.descrizione else None
+    if data.is_active is not None:
+        sub.is_active = data.is_active
+
+    sub.updated_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.refresh(sub)
+
+    prod_count = await db.scalar(
+        select(func.count(Product.id)).where(
+            Product.is_active.is_(True),
+            func.lower(func.btrim(Product.category)) == sub.categoria_nome.casefold(),
+            func.lower(func.btrim(Product.subcategory)) == sub.nome.casefold(),
+        )
+    ) or 0
+
+    return SubcategoryResponse(
+        id=sub.id,
+        categoria_nome=sub.categoria_nome,
+        nome=sub.nome,
+        descrizione=sub.descrizione,
+        is_active=sub.is_active,
+        product_count=prod_count,
+        created_at=sub.created_at,
+        updated_at=sub.updated_at,
+    )
+
+
+@router.delete("/subcategories/{subcategory_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Elimina sottocategoria")
+async def delete_subcategory(
+    subcategory_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    await _ensure_subcategory_table(db)
+    sub = await db.get(MasterSubcategory, subcategory_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Sottocategoria non trovata")
+
+    await db.delete(sub)
+    await db.flush()
+    return None
+
+
+@router.post("/subcategories/seed-food-defaults", summary="Carica sottocategorie Food predefinite")
+async def seed_food_subcategories(
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    await _ensure_subcategory_table(db)
+    created_count = 0
+    now = datetime.now(timezone.utc)
+
+    for item in DEFAULT_FOOD_SUBCATEGORIES:
+        clean_name = item["nome"].strip()
+        existing = await db.scalar(
+            select(MasterSubcategory).where(
+                func.lower(func.btrim(MasterSubcategory.categoria_nome)) == "food",
+                func.lower(func.btrim(MasterSubcategory.nome)) == clean_name.casefold(),
+            )
+        )
+        if not existing:
+            sub = MasterSubcategory(
+                categoria_nome="Food",
+                nome=clean_name,
+                descrizione=item["descrizione"],
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(sub)
+            created_count += 1
+
+    await db.flush()
+    return {
+        "status": "ok",
+        "created": created_count,
+        "message": f"{created_count} sottocategorie Food create con successo."
+    }

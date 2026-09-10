@@ -26,6 +26,7 @@ import GoodsReceipt from './components/GoodsReceipt'
 import ProductReviewPage from './components/ProductReviewPage'
 import NotificationCenterModal from './components/NotificationCenterModal'
 import GodModeControlRoom from './components/GodModeControlRoom'
+import UnlistedProductsResolver from './components/UnlistedProductsResolver'
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -58,6 +59,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Operatività',
     items: [
       { id: 'upload', label: 'Carica fatture', icon: FileUp, adminOnly: true },
+      { id: 'unlistedproducts', label: 'Prodotti fuori listino', icon: Layers, adminOnly: true },
       { id: 'fatture', label: 'Registro fatture', icon: FileText },
       { id: 'validation', label: 'Anomalie da validare', icon: AlertTriangle, adminOnly: true },
       { id: 'reconciliations', label: 'Riconciliazioni', icon: GitCompareArrows, adminOnly: true },
@@ -167,6 +169,7 @@ export default function App() {
   const [pendingFeedbacksCount, setPendingFeedbacksCount] = useState(0);
   const [recentOrdersCount, setRecentOrdersCount] = useState(0);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [unlistedProductsCount, setUnlistedProductsCount] = useState(0);
 
   // White-Label & Company Branding
   const [companySettings, setCompanySettings] = useState<{
@@ -193,9 +196,10 @@ export default function App() {
 
   const loadNotificationStats = async () => {
     try {
-      const [feedRes, ordRes] = await Promise.all([
+      const [feedRes, ordRes, unlistedRes] = await Promise.all([
         fetch(`${API_BASE}/feedbacks/pending-count`, { headers: getHeaders() }),
-        fetch(`${API_BASE}/ordini/notifications/feed?limit=10`, { headers: getHeaders() })
+        fetch(`${API_BASE}/ordini/notifications/feed?limit=10`, { headers: getHeaders() }),
+        fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, { headers: getHeaders() })
       ]);
 
       if (feedRes.ok) {
@@ -205,6 +209,10 @@ export default function App() {
       if (ordRes.ok) {
         const ordData = await ordRes.json();
         setRecentOrdersCount(ordData.count || 0);
+      }
+      if (unlistedRes.ok) {
+        const unlistedData = await unlistedRes.json();
+        setUnlistedProductsCount(unlistedData.summary?.work_items || 0);
       }
     } catch {
       // ignore
@@ -544,7 +552,8 @@ export default function App() {
     
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
-      case 'upload': return <ManualUpload isAdmin={profile.ruolo === 'admin'} />;
+      case 'upload': return <ManualUpload isAdmin={profile.ruolo === 'admin'} onNavigate={setActiveTab} />;
+      case 'unlistedproducts': return <UnlistedProductsResolver onNavigate={setActiveTab} />;
       case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
@@ -593,6 +602,7 @@ export default function App() {
     switch (activeTab) {
       case 'dashboard': return { title: `Panoramica - ${accountName}`, sub: `Indicatori economici e operativi di ${accountName}` };
       case 'upload': return { title: 'Carica Fatture', sub: 'Ingestione manuale file XML e archivi ZIP' };
+      case 'unlistedproducts': return { title: 'Prodotti Fuori Listino', sub: 'Inserimento a listino e mappatura alias per voci non riconosciute' };
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
@@ -696,8 +706,24 @@ export default function App() {
                           className={`sidebar-nav-item ${activeTab === item.id ? 'is-active' : ''}`}
                           key={item.id}
                           onClick={() => { setActiveTab(item.id); setMobileSidebarOpen(false); }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                         >
-                          <Icon size={17} /> {item.label}
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Icon size={17} /> {item.label}
+                          </span>
+                          {item.id === 'unlistedproducts' && unlistedProductsCount > 0 && (
+                            <span style={{
+                              background: 'var(--status-yellow)',
+                              color: '#000',
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: '10px',
+                              lineHeight: 1
+                            }}>
+                              {unlistedProductsCount}
+                            </span>
+                          )}
                         </button>
                       )
                     })}

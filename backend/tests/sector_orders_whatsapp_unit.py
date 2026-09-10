@@ -123,6 +123,8 @@ async def test_whatsapp_name_resolution():
     assert "Nome alterato dal client" not in msg, "Il nome deve essere letto dal database"
     assert "× GUANTI [" not in msg and "× GUANTI\n" not in msg, "NON deve usare il nome rapido interno 'GUANTI'"
     assert "× BURRO [" not in msg and "× BURRO\n" not in msg, "NON deve usare il nome rapido interno 'BURRO'"
+    assert "Totale stimato" not in msg, "NON deve includere la nota al prezzo / totale stimato negli invii ai fornitori"
+    assert "€" not in msg, "NON deve includere il simbolo di prezzo negli invii ai fornitori"
 
     print("✅ TEST PASSED: I nomi rapidi d'ordine dati dall'utente non vengono copiati su WhatsApp!")
 
@@ -166,6 +168,7 @@ async def test_water_promo_5_plus_1():
     assert bundle1.totale_colli == 6.0, "I colli totali devono includere la scatola omaggio (5+1=6)"
     assert "🎁 *(OMAGGIO PROMO 5+1 — GRATIS)*" in bundle1.whatsapp_message
     assert "(Include 1 box di acqua in OMAGGIO)" in bundle1.whatsapp_message
+    assert "Totale stimato" not in bundle1.whatsapp_message, "La nota al prezzo non deve comparire neanche con omaggi attivi"
 
     # TEST 2: 12 box totali misti (7 Ferrarelle + 5 Lete) -> 2 box omaggio (12 // 5 = 2)
     req2 = SectorOrderDraftRequest(

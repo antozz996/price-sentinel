@@ -11,6 +11,7 @@ from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.utenti import Utente
 from app.models.products import Product, SupplierProductAlias, MatchCandidate, ProductEquivalenceGroupItem, ProductFeedback
+from app.models.listino import ListinoMaster
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
 from app.models.fornitori import Fornitore
 from app.models.anomalie import Anomalia, StatoValidazione
@@ -147,12 +148,19 @@ class WorkQueueResolutionProduct(BaseModel):
     unit_count: int = Field(default=1, ge=1)
     container_type: Optional[str] = Field(default=None, max_length=50)
     comparison_unit: str = Field(default="piece", max_length=50)
+    prezzo_listino: Optional[Decimal] = None
+    unita_misura_listino: Optional[str] = None
+    data_inizio_validita: Optional[date] = None
 
 class WorkQueueResolutionRequest(BaseModel):
     invoice_line_ids: List[int] = Field(min_length=1, max_length=1000)
     action: str
     product_id: Optional[int] = None
     canonical_data: Optional[WorkQueueResolutionProduct] = None
+    prezzo_listino: Optional[Decimal] = None
+    unita_misura_listino: Optional[str] = None
+    data_inizio_validita: Optional[date] = None
+    insert_in_listino: Optional[bool] = True
 
 class BulkWorkQueueResolutionRequest(BaseModel):
     items: List[WorkQueueResolutionRequest] = Field(min_length=1, max_length=500)
@@ -446,12 +454,20 @@ async def get_match_work_queue(
                 "latest_invoice_date": invoice.data_documento,
                 "candidates": {},
                 "candidate_records": 0,
+                "prezzo_unitario": float(line.prezzo_netto_normalizzato or line.prezzo_unitario_fatturato or 0),
+                "unita_misura": line.unita_misura_fattura or "Pz",
+                "quantita": float(line.quantita or 1),
+                "numero_documento": invoice.numero_documento,
             },
         )
         group["invoice_line_ids"].add(line.id)
         group["invoice_ids"].add(invoice.id)
-        if invoice.data_documento > group["latest_invoice_date"]:
+        if invoice.data_documento >= group["latest_invoice_date"]:
             group["latest_invoice_date"] = invoice.data_documento
+            group["prezzo_unitario"] = float(line.prezzo_netto_normalizzato or line.prezzo_unitario_fatturato or 0)
+            group["unita_misura"] = line.unita_misura_fattura or "Pz"
+            group["quantita"] = float(line.quantita or 1)
+            group["numero_documento"] = invoice.numero_documento
 
         if not candidate or not product:
             continue
@@ -495,6 +511,11 @@ async def get_match_work_queue(
             "recommendation": "associate_existing" if best_candidate else "create_canonical",
             "best_candidate": best_candidate,
             "alternatives": alternatives,
+            "prezzo_unitario": group.get("prezzo_unitario", 0),
+            "unita_misura": group.get("unita_misura", "Pz"),
+            "quantita": group.get("quantita", 1),
+            "numero_documento": group.get("numero_documento", ""),
+            "data_documento": str(group["latest_invoice_date"]),
             "suggested_product": {
                 "canonical_name": group["raw_description"].strip(),
                 "category": attributes.get("category") or infer_category(group["raw_description"]),
@@ -631,6 +652,83 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
         db.add(alias)
     await db.flush()
 
+    # Inserimento o Aggiornamento Listino Master
+    created_listino = False
+    if data.action == "create_canonical" and data.insert_in_listino is not False:
+        listino_existing = await db.scalar(
+            select(ListinoMaster).where(
+                ListinoMaster.fornitore_id == representative_invoice.fornitore_id,
+                ListinoMaster.sku_interno == product.sku_interno,
+                ListinoMaster.data_scadenza.is_(None),
+            )
+        )
+        if not listino_existing:
+            price_val = (
+                data.prezzo_listino 
+                if data.prezzo_listino is not None 
+                else (data.canonical_data.prezzo_listino if data.canonical_data and data.canonical_data.prezzo_listino is not None else None)
+            )
+            if price_val is None:
+                price_val = representative_line.prezzo_netto_normalizzato or representative_line.prezzo_unitario_fatturato or 0
+
+            uom_val = (
+                data.unita_misura_listino 
+                if data.unita_misura_listino 
+                else (data.canonical_data.unita_misura_listino if data.canonical_data and data.canonical_data.unita_misura_listino else None)
+            )
+            if not uom_val:
+                uom_val = representative_line.unita_misura_fattura or product.comparison_unit or "Pz"
+
+            valid_from = (
+                data.data_inizio_validita 
+                if data.data_inizio_validita 
+                else (data.canonical_data.data_inizio_validita if data.canonical_data and data.canonical_data.data_inizio_validita else None)
+            )
+            if not valid_from:
+                valid_from = representative_invoice.data_documento or date.today()
+
+            listino_entry = ListinoMaster(
+                fornitore_id=representative_invoice.fornitore_id,
+                sku_interno=product.sku_interno,
+                descrizione=product.canonical_name,
+                prezzo_pattuito=Decimal(str(price_val)),
+                unita_misura=str(uom_val)[:20],
+                data_inizio_validita=valid_from,
+                supplier_product_alias_id=alias.id,
+            )
+            db.add(listino_entry)
+            await db.flush()
+            created_listino = True
+
+    elif data.action == "associate_existing":
+        listino_existing = await db.scalar(
+            select(ListinoMaster).where(
+                ListinoMaster.fornitore_id == representative_invoice.fornitore_id,
+                ListinoMaster.sku_interno == product.sku_interno,
+                ListinoMaster.data_scadenza.is_(None),
+            )
+        )
+        if not listino_existing and (data.prezzo_listino is not None or data.insert_in_listino is not False):
+            price_val = data.prezzo_listino
+            if price_val is None:
+                price_val = representative_line.prezzo_netto_normalizzato or representative_line.prezzo_unitario_fatturato or 0
+
+            uom_val = data.unita_misura_listino or representative_line.unita_misura_fattura or product.comparison_unit or "Pz"
+            valid_from = data.data_inizio_validita or representative_invoice.data_documento or date.today()
+
+            listino_entry = ListinoMaster(
+                fornitore_id=representative_invoice.fornitore_id,
+                sku_interno=product.sku_interno,
+                descrizione=product.canonical_name,
+                prezzo_pattuito=Decimal(str(price_val)),
+                unita_misura=str(uom_val)[:20],
+                data_inizio_validita=valid_from,
+                supplier_product_alias_id=alias.id,
+            )
+            db.add(listino_entry)
+            await db.flush()
+            created_listino = True
+
     for line, invoice in line_rows:
         line.sku_interno = product.sku_interno
         line.stato_matching = StatoMatching.matched
@@ -675,6 +773,7 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
         "product_id": product.id,
         "product_name": product.canonical_name,
         "created_product": created_product,
+        "created_listino": created_listino,
     }
 
 

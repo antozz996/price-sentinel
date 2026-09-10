@@ -506,7 +506,7 @@ def _format_whatsapp_text(
     sector: Optional[str],
     order_notes: Optional[str],
     items: List[SupplierOrderItemDetail],
-    total_amount: float,
+    total_amount: float = 0.0,
 ) -> str:
     lines = [
         f"📦 *ORDINE D'ACQUISTO — {supplier_name.upper()}*",
@@ -528,13 +528,17 @@ def _format_whatsapp_text(
         omaggio_badge = " 🎁 *(OMAGGIO PROMO 5+1 — GRATIS)*" if getattr(it, "is_omaggio", False) else ""
         lines.append(f"• *{qty_str} {uom}* × {name}{code_str}{omaggio_badge}")
     
-    lines.append("")
     omaggi_count = sum(int(it.quantita) for it in items if getattr(it, "is_omaggio", False))
-    omaggi_note = f" *(Include {omaggi_count} box di acqua in OMAGGIO)*" if omaggi_count > 0 else ""
-    lines.append(f"💰 *Totale stimato:* € {total_amount:.2f} + IVA{omaggi_note}")
+    extra_notes = []
+    if omaggi_count > 0:
+        extra_notes.append(f"🎁 *(Include {omaggi_count} box di acqua in OMAGGIO)*")
     if order_notes and order_notes.strip():
-        lines.append(f"📝 *Note:* {order_notes.strip()}")
-    
+        extra_notes.append(f"📝 *Note:* {order_notes.strip()}")
+
+    if extra_notes:
+        lines.append("")
+        lines.extend(extra_notes)
+
     lines.append("")
     lines.append("Si prega di confermare la ricezione e la presa in carico. Grazie!")
     return "\n".join(lines)

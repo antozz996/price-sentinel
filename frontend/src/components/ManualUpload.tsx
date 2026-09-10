@@ -8,6 +8,7 @@ interface BatchSummary {
   gia_presenti: number;
   errori_formato: number;
   anomalie_generate: number;
+  righe_parking?: number;
 }
 
 interface BatchHistoryItem {
@@ -29,7 +30,13 @@ interface UnregisteredLocation {
   nome_struttura: string;
 }
 
-export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
+export default function ManualUpload({
+  isAdmin = false,
+  onNavigate
+}: {
+  isAdmin?: boolean;
+  onNavigate?: (tab: string) => void;
+}) {
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -404,11 +411,19 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
           )}
 
           {summary && (
-            <div style={{ padding: '20px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)' }}>
-              <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle2 size={18} color="var(--status-green)" /> Elaborazione Completata
+            <div style={{
+              padding: '20px',
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: 'var(--border-radius-md)',
+              border: '1px solid var(--border-glass)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}>
+              <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-green)', margin: 0 }}>
+                <CheckCircle2 size={18} /> Risultato Elaborazione Batch
               </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', textAlign: 'center' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
                 <div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{summary.elaborati}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Processati</div>
@@ -421,7 +436,62 @@ export default function ManualUpload({isAdmin=false}:{isAdmin?:boolean}) {
                   <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--status-red)' }}>{summary.anomalie_generate}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anomalie</div>
                 </div>
+                <div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: (summary.righe_parking || 0) > 0 ? 'var(--status-yellow)' : 'var(--text-secondary)' }}>
+                    {summary.righe_parking || 0}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Fuori Listino</div>
+                </div>
               </div>
+
+              {/* Banner per Prodotti Fuori Listino con Reindirizzamento Rapido */}
+              {summary.righe_parking !== undefined && summary.righe_parking > 0 && (
+                <div style={{
+                  padding: '14px 18px',
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(59, 130, 246, 0.15))',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  animation: 'fadeIn 0.3s ease'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <AlertCircle size={22} color="var(--status-yellow)" />
+                    <div>
+                      <strong style={{ color: 'white', fontSize: '0.9rem' }}>
+                        {summary.righe_parking} {summary.righe_parking === 1 ? 'prodotto fuori listino rilevato' : 'prodotti fuori listino rilevati'}
+                      </strong>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '2px 0 0' }}>
+                        Queste voci non sono a listino. Puoi inserirle come nuove o associarle a prodotti esistenti.
+                      </p>
+                    </div>
+                  </div>
+                  {onNavigate && (
+                    <button
+                      onClick={() => onNavigate('unlistedproducts')}
+                      style={{
+                        padding: '8px 16px',
+                        background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        color: 'white',
+                        fontWeight: 600,
+                        fontSize: '0.85rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                      }}
+                    >
+                      Gestisci nella Pagina Dedicata ➔
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
