@@ -410,11 +410,18 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   }, [activeTab])
 
   useEffect(() => {
+    if (activeTab === 'paste' && !sheetInitialized) {
+      void loadFullPriceSheet()
+    }
+  }, [activeTab, sheetInitialized])
+
+  useEffect(() => {
     if (activeTab === 'paste') {
-      const existing = categorySheets[currentSheetKey]
+      const key = activeSubcategorySheet !== 'all' ? `${activeCategorySheet}:${activeSubcategorySheet}` : activeCategorySheet
+      const existing = categorySheets[key]
       const hasHeaders = existing && existing[0]?.slice(3).some(cell => cell.trim())
       if (!hasHeaders) {
-        void reloadCurrentPrices()
+        void reloadCurrentPrices(activeCategorySheet, activeSubcategorySheet)
       }
     }
   }, [activeTab, activeCategorySheet, activeSubcategorySheet])
@@ -515,21 +522,26 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       : `Incollate ${pastedRows.length} righe nel foglio ${activeCategorySheet}${activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}.`)
   }
 
-  async function reloadCurrentPrices() {
+  async function reloadCurrentPrices(targetCat?: MacroCategory, targetSub?: string) {
+    const cat = targetCat || activeCategorySheet
+    const sub = targetSub !== undefined ? targetSub : activeSubcategorySheet
+    const key = sub !== 'all' ? `${cat}:${sub}` : cat
+
     setLoading(true); setError(null)
     try {
-      let url = `/smart-price-sheet/matrix?limit=500&offset=0&category=${encodeURIComponent(activeCategorySheet)}`
-      if (activeSubcategorySheet !== 'all') {
-        url += `&subcategory=${encodeURIComponent(activeSubcategorySheet)}`
+      let url = `/smart-price-sheet/matrix?limit=500&offset=0&category=${encodeURIComponent(cat)}`
+      if (sub !== 'all') {
+        url += `&subcategory=${encodeURIComponent(sub)}`
       }
       const data = await fetchWithAuth(url) as MatrixResponse
+      setSheetCatalog(data)
       const newSheet = sheetFromMatrix(data)
       setCategorySheets(prev => ({
         ...prev,
-        [currentSheetKey]: newSheet
+        [key]: newSheet
       }))
       const suppCount = data.suppliers?.length || 0
-      setNotice(`Foglio "${activeCategorySheet}${activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}" caricato con ${data.rows.length} prodotti attivi e ${suppCount} fornitori collegati.`)
+      setNotice(`Foglio "${cat}${sub !== 'all' ? ` · ${sub}` : ''}" caricato con ${data.rows.length} prodotti attivi e ${suppCount} fornitori collegati.`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -998,9 +1010,12 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 key={cat.id}
                 type="button"
                 onClick={() => {
-                  setActiveCategorySheet(cat.id as MacroCategory)
+                  const newCat = cat.id as MacroCategory
+                  setActiveCategorySheet(newCat)
+                  setActiveSubcategorySheet('all')
                   setPreview(null)
                   setError(null)
+                  void reloadCurrentPrices(newCat, 'all')
                 }}
                 style={{
                   padding: '8px 16px',
@@ -1036,6 +1051,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 setActiveSubcategorySheet('all')
                 setPreview(null)
                 setError(null)
+                void reloadCurrentPrices(activeCategorySheet, 'all')
               }}
               style={{
                 padding: '5px 12px',
@@ -1062,6 +1078,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                     setActiveSubcategorySheet(sub.nome)
                     setPreview(null)
                     setError(null)
+                    void reloadCurrentPrices(activeCategorySheet, sub.nome)
                   }}
                   style={{
                     padding: '5px 12px',
@@ -1103,7 +1120,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={reloadCurrentPrices}><RotateCcw size={15} /> Prezzi correnti {activeCategorySheet}{activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}</button>
+            <button className="btn" onClick={() => void reloadCurrentPrices(activeCategorySheet, activeSubcategorySheet)}><RotateCcw size={15} /> Prezzi correnti {activeCategorySheet}{activeSubcategorySheet !== 'all' ? ` · ${activeSubcategorySheet}` : ''}</button>
             <button className="btn" onClick={clearSheet}><Trash2 size={15} /> Svuota</button>
           </div>
         </div>
