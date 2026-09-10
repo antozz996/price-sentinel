@@ -620,13 +620,19 @@ async def elabora_ordine_settore(
                         uom = sup_listino.unita_misura
                     is_concordato = True
         else:
-            # Nessuna forzatura: cerca il fornitore con miglior prezzo attivo
+            # Nessuna forzatura: cerca il fornitore con miglior prezzo attivo (solo whitelist)
             if product.sku_interno:
-                listino_query = select(ListinoMaster).where(
-                    ListinoMaster.sku_interno == product.sku_interno,
-                    ListinoMaster.data_inizio_validita <= today,
-                    or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today)
-                ).order_by(ListinoMaster.prezzo_pattuito.asc())
+                listino_query = (
+                    select(ListinoMaster)
+                    .join(Fornitore, Fornitore.id == ListinoMaster.fornitore_id)
+                    .where(
+                        ListinoMaster.sku_interno == product.sku_interno,
+                        Fornitore.attivo_whitelist.is_(True),
+                        ListinoMaster.data_inizio_validita <= today,
+                        or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today)
+                    )
+                    .order_by(ListinoMaster.prezzo_pattuito.asc())
+                )
                 best_listino = (await db.execute(listino_query)).scalars().first()
                 if best_listino:
                     chosen_supplier_id = best_listino.fornitore_id
@@ -637,7 +643,8 @@ async def elabora_ordine_settore(
 
         # Fallback se ancora nullo
         if not chosen_supplier_id:
-            chosen_supplier_id = fornitori_db[0].id if fornitori_db else 1
+            active_fornitori = [f for f in fornitori_db if f.attivo_whitelist]
+            chosen_supplier_id = active_fornitori[0].id if active_fornitori else (fornitori_db[0].id if fornitori_db else 1)
         if unit_price is None:
             unit_price = 0.0
 

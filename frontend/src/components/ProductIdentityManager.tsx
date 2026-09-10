@@ -123,7 +123,7 @@ export default function ProductIdentityManager() {
     canonical_name: '',
     category: '',
     subcategory: '',
-    comparison_unit: 'piece'
+    comparison_unit: 'Pz'
   })
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([])
   const [bulkCategoryAction, setBulkCategoryAction] = useState<'keep' | 'set' | 'clear'>('keep')
@@ -141,14 +141,14 @@ export default function ProductIdentityManager() {
     canonical_name: '',
     order_name: '',
     brand: '',
-    category: 'monouso',
+    category: 'Beverage',
     subcategory: '',
     variant: '',
     volume_ml: '',
     weight_g: '',
     unit_count: '1',
     container_type: '',
-    comparison_unit: 'piece',
+    comparison_unit: 'Pz',
     is_commodity: false,
     is_active: true
   })
@@ -1731,11 +1731,12 @@ export default function ProductIdentityManager() {
                       onChange={e => setQuickProductForm({ ...quickProductForm, comparison_unit: e.target.value })}
                       style={{ padding: '11px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
                     >
-                      <option value="piece">Pezzo</option>
-                      <option value="box">Confezione / scatola</option>
-                      <option value="liter">Litro</option>
-                      <option value="kg">Chilogrammo</option>
-                      <option value="bottle">Bottiglia</option>
+                      <option value="Pz">Pezzo (Pz)</option>
+                      <option value="Ct">Cartone (Ct)</option>
+                      <option value="Lt">Litro (Lt)</option>
+                      <option value="Kg">Chilogrammo (Kg)</option>
+                      <option value="Bt">Bottiglia (Bt)</option>
+                      <option value="Box">Box / Cassa</option>
                     </select>
                   </label>
                 </>
@@ -1940,12 +1941,9 @@ export default function ProductIdentityManager() {
                   onChange={e => setProductForm({ ...productForm, category: e.target.value })}
                   style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
                 >
-                  <option value="acqua" style={{ background: '#13131c' }}>Acqua</option>
-                  <option value="soft_drink" style={{ background: '#13131c' }}>Soft Drink</option>
-                  <option value="monouso" style={{ background: '#13131c' }}>Monouso</option>
-                  <option value="vino" style={{ background: '#13131c' }}>Vino</option>
-                  <option value="spirits" style={{ background: '#13131c' }}>Spirits</option>
-                  <option value="food" style={{ background: '#13131c' }}>Food</option>
+                  <option value="Food" style={{ background: '#13131c' }}>Food</option>
+                  <option value="Beverage" style={{ background: '#13131c' }}>Beverage</option>
+                  <option value="Materiali di consumo" style={{ background: '#13131c' }}>Materiali di consumo</option>
                 </select>
               </div>
 
@@ -1988,11 +1986,12 @@ export default function ProductIdentityManager() {
                   onChange={e => setProductForm({ ...productForm, comparison_unit: e.target.value })}
                   style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
                 >
-                  <option value="piece" style={{ background: '#13131c' }}>Pezzo (piece)</option>
-                  <option value="liter" style={{ background: '#13131c' }}>Litro (liter)</option>
-                  <option value="kg" style={{ background: '#13131c' }}>Chilogrammo (kg)</option>
-                  <option value="bottle" style={{ background: '#13131c' }}>Bottiglia (bottle)</option>
-                  <option value="box" style={{ background: '#13131c' }}>Cassa/Scatola (box)</option>
+                  <option value="Pz" style={{ background: '#13131c' }}>Pezzo (Pz)</option>
+                  <option value="Lt" style={{ background: '#13131c' }}>Litro (Lt)</option>
+                  <option value="Kg" style={{ background: '#13131c' }}>Chilogrammo (Kg)</option>
+                  <option value="Bt" style={{ background: '#13131c' }}>Bottiglia (Bt)</option>
+                  <option value="Ct" style={{ background: '#13131c' }}>Cartone (Ct)</option>
+                  <option value="Box" style={{ background: '#13131c' }}>Box / Cassa</option>
                 </select>
               </div>
 

@@ -143,8 +143,21 @@ export function normalizeDefaultUom(rawUom?: string | null, category?: string | 
     if (u === 'PZ' || u === 'PIECE' || u === 'PEZZO') return 'PZ';
     return 'CT';
   }
+  if (category === 'Food') {
+    if (!rawUom) return 'PZ';
+    const u = rawUom.trim().toUpperCase();
+    if (u === 'KG' || u.includes('CHIL') || u === 'GR' || u === 'ETTO') return 'KG';
+    if (u === 'LT' || u.includes('LITR')) return 'LT';
+    if (u === 'PZ' || u === 'PIECE' || u === 'PEZZO') return 'PZ';
+    if (u === 'BT' || u.includes('BOTT')) return 'BT';
+    if (u.includes('BUST')) return 'BUSTA';
+    if (u.includes('BOX')) return 'BOX';
+    return 'CT';
+  }
   if (!rawUom) return 'CT';
   const u = rawUom.trim().toUpperCase();
+  if (u === 'KG' || u.includes('CHIL')) return 'KG';
+  if (u === 'LT' || u.includes('LITR')) return 'LT';
   if (u === 'BT' || u.includes('BOTT')) return 'BT';
   if (u === 'PIECE' || u === 'PZ' || u === 'PEZZO') return 'PZ';
   if (u.includes('BUST')) return 'BUSTA';

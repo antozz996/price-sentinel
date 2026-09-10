@@ -199,7 +199,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   const [sheetInitialized, setSheetInitialized] = useState(false)
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
-  const [defaultUom, setDefaultUom] = useState('piece')
+  const [defaultUom, setDefaultUom] = useState('Pz')
   const [autoCreateProducts, setAutoCreateProducts] = useState(true)
   const [supplierMapping, setSupplierMapping] = useState<Record<string, number>>({})
   const [productMapping, setProductMapping] = useState<Record<string, number>>({})
@@ -859,7 +859,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   disabled={!isAdmin}
                   onClick={() => {
                     if (isAdmin) {
-                      setEditing({ product: row, supplier, price: offer?.price || '', uom: offer?.uom || row.comparison_unit || 'piece' })
+                      setEditing({ product: row, supplier, price: offer?.price || '', uom: offer?.uom || row.comparison_unit || 'Pz' })
                       setForceLabel(row.policy?.preferred_supplier_id === supplier.id ? (row.policy?.reason || '') : '')
                     }
                   }}

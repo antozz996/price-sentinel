@@ -525,7 +525,7 @@ async def get_match_work_queue(
                 # numero confezione non viene mai presunto nella creazione rapida.
                 "unit_count": 1,
                 "container_type": attributes.get("container_type"),
-                "comparison_unit": "piece",
+                "comparison_unit": "Pz",
             },
         })
 

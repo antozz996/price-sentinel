@@ -694,6 +694,15 @@ async def update_subcategory(
                 )
                 .values(subcategory=clean_name)
             )
+            # Cascade update to supplier subcategory capabilities
+            await db.execute(
+                update(SupplierSubcategoryCapability)
+                .where(
+                    func.lower(func.btrim(SupplierSubcategoryCapability.categoria_nome)) == sub.categoria_nome.casefold(),
+                    func.lower(func.btrim(SupplierSubcategoryCapability.subcategory)) == old_name.casefold(),
+                )
+                .values(subcategory=clean_name)
+            )
             sub.nome = clean_name
 
     if data.descrizione is not None:
@@ -734,6 +743,24 @@ async def delete_subcategory(
     sub = await db.get(MasterSubcategory, subcategory_id)
     if not sub:
         raise HTTPException(status_code=404, detail="Sottocategoria non trovata")
+
+    # Cascade nullify on products
+    await db.execute(
+        update(Product)
+        .where(
+            func.lower(func.btrim(Product.category)) == sub.categoria_nome.casefold(),
+            func.lower(func.btrim(Product.subcategory)) == sub.nome.casefold(),
+        )
+        .values(subcategory=None)
+    )
+    # Cascade delete on supplier subcategory capabilities
+    await db.execute(
+        delete(SupplierSubcategoryCapability)
+        .where(
+            func.lower(func.btrim(SupplierSubcategoryCapability.categoria_nome)) == sub.categoria_nome.casefold(),
+            func.lower(func.btrim(SupplierSubcategoryCapability.subcategory)) == sub.nome.casefold(),
+        )
+    )
 
     await db.delete(sub)
     await db.flush()
