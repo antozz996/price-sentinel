@@ -178,7 +178,7 @@ async def matrix(
     skus = [row.sku_interno for row in products if row.sku_interno]
     supplier_ids = [row.id for row in suppliers]
     supplier_scope = await load_supplier_catalog_scope(
-        db, supplier_ids=set(supplier_ids)
+        db, supplier_ids=set(supplier_ids), product_ids=set(product_ids)
     )
     today = date.today()
 

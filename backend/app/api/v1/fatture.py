@@ -68,43 +68,65 @@ async def list_fatture(
         .order_by(Fattura.data_documento.desc())
     )
 
+    conditions = []
     # Isolamento Multi-Tenant per Azienda
     if getattr(current_user, "tenant_id", None):
-        query = query.where(Fattura.tenant_id == current_user.tenant_id)
+        conditions.append(Fattura.tenant_id == current_user.tenant_id)
 
     # Manager vede solo la propria location e fallisce in modo sicuro se non configurato.
-    if current_user.ruolo.value == "manager":
+    ruolo_str = getattr(current_user.ruolo, "value", str(current_user.ruolo))
+    if ruolo_str == "manager":
         if current_user.location_id is None:
             raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
-        query = query.where(Fattura.location_id == current_user.location_id)
+        conditions.append(Fattura.location_id == current_user.location_id)
     elif location_id:
-        query = query.where(Fattura.location_id == location_id)
+        conditions.append(Fattura.location_id == location_id)
 
     if fornitore_id:
-        query = query.where(Fattura.fornitore_id == fornitore_id)
+        conditions.append(Fattura.fornitore_id == fornitore_id)
     if tipo_documento:
-        query = query.where(Fattura.tipo_documento == tipo_documento)
+        conditions.append(Fattura.tipo_documento == tipo_documento)
     if marker:
-        query = query.where(Fattura.marker == marker)
+        conditions.append(Fattura.marker == marker)
     if data_da:
-        query = query.where(Fattura.data_documento >= data_da)
+        conditions.append(Fattura.data_documento >= data_da)
     if data_a:
-        query = query.where(Fattura.data_documento <= data_a)
+        conditions.append(Fattura.data_documento <= data_a)
+
+    search_cond = None
     if search:
         search_pattern = f"%{search}%"
-        query = query.where(
-            or_(
-                Fattura.numero_documento.ilike(search_pattern),
-                Fornitore.nome_azienda.ilike(search_pattern),
-                RigaFattura.descrizione_fornitore_raw.ilike(search_pattern),
-            )
+        search_cond = or_(
+            Fattura.numero_documento.ilike(search_pattern),
+            Fornitore.nome_azienda.ilike(search_pattern),
+            RigaFattura.descrizione_fornitore_raw.ilike(search_pattern),
         )
 
-    # Count total from the subquery of the filtered base query
-    count_query = select(func.count()).select_from(query.subquery())
+    # Count totale super-veloce: evita di aggregare tutte le righe e anomalie storiche
+    if search_cond is not None:
+        count_query = (
+            select(func.count(func.distinct(Fattura.id)))
+            .select_from(Fattura)
+            .outerjoin(Fornitore, Fattura.fornitore_id == Fornitore.id)
+            .outerjoin(RigaFattura, RigaFattura.fattura_id == Fattura.id)
+            .where(and_(*conditions, search_cond))
+        )
+    else:
+        count_query = (
+            select(func.count(Fattura.id))
+            .select_from(Fattura)
+            .where(and_(*conditions))
+        )
+
     total_res = await db.execute(count_query)
     total = total_res.scalar() or 0
     response.headers["X-Total-Count"] = str(total)
+
+    # Applica filtri alla query principale
+    if conditions:
+        query = query.where(and_(*conditions))
+    if search_cond is not None:
+        query = query.where(search_cond)
 
     query = query.limit(limit).offset(offset)
     result = await db.execute(query)

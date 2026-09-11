@@ -1,32 +1,34 @@
-import { useState, useEffect } from 'react'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star } from 'lucide-react'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
-import ValidationRoom from './components/ValidationRoom'
-import PriceListManager from './components/PriceListManager'
-import ManualUpload from './components/ManualUpload'
-import FattureList from './components/FattureList'
-import SettingsPage from './components/SettingsPage'
-import SkuManager from './components/SkuManager'
-import ProductConsumptionReport from './components/ProductConsumptionReport'
-import SmartPriceSheet from './components/SmartPriceSheet'
-import TopProductsPriceList from './components/TopProductsPriceList'
-import PriceTrendAnalyzer from './components/PriceTrendAnalyzer'
-import ExcludedProducts from './components/ExcludedProducts'
-import CommercialAgreements from './components/CommercialAgreements'
-import ProductIdentityManager from './components/ProductIdentityManager'
-import CategorySupplierManager from './components/CategorySupplierManager'
-import OrderReconciliations from './components/OrderReconciliations'
-import DisputeManagement from './components/DisputeManagement'
-import OperationalAlerts from './components/OperationalAlerts'
-import ClientOnboarding from './components/ClientOnboarding'
-import SectorOrderBuilder from './components/SectorOrderBuilder'
-import OrderRegistry from './components/OrderRegistry'
-import GoodsReceipt from './components/GoodsReceipt'
-import ProductReviewPage from './components/ProductReviewPage'
 import NotificationCenterModal from './components/NotificationCenterModal'
-import GodModeControlRoom from './components/GodModeControlRoom'
-import UnlistedProductsResolver from './components/UnlistedProductsResolver'
+
+// Lazy-loaded heavy modules for instant first load & optimal memory
+const ValidationRoom = lazy(() => import('./components/ValidationRoom'))
+const PriceListManager = lazy(() => import('./components/PriceListManager'))
+const ManualUpload = lazy(() => import('./components/ManualUpload'))
+const FattureList = lazy(() => import('./components/FattureList'))
+const SettingsPage = lazy(() => import('./components/SettingsPage'))
+const SkuManager = lazy(() => import('./components/SkuManager'))
+const ProductConsumptionReport = lazy(() => import('./components/ProductConsumptionReport'))
+const SmartPriceSheet = lazy(() => import('./components/SmartPriceSheet'))
+const TopProductsPriceList = lazy(() => import('./components/TopProductsPriceList'))
+const PriceTrendAnalyzer = lazy(() => import('./components/PriceTrendAnalyzer'))
+const ExcludedProducts = lazy(() => import('./components/ExcludedProducts'))
+const CommercialAgreements = lazy(() => import('./components/CommercialAgreements'))
+const ProductIdentityManager = lazy(() => import('./components/ProductIdentityManager'))
+const CategorySupplierManager = lazy(() => import('./components/CategorySupplierManager'))
+const OrderReconciliations = lazy(() => import('./components/OrderReconciliations'))
+const DisputeManagement = lazy(() => import('./components/DisputeManagement'))
+const OperationalAlerts = lazy(() => import('./components/OperationalAlerts'))
+const ClientOnboarding = lazy(() => import('./components/ClientOnboarding'))
+const SectorOrderBuilder = lazy(() => import('./components/SectorOrderBuilder'))
+const OrderRegistry = lazy(() => import('./components/OrderRegistry'))
+const GoodsReceipt = lazy(() => import('./components/GoodsReceipt'))
+const ProductReviewPage = lazy(() => import('./components/ProductReviewPage'))
+const GodModeControlRoom = lazy(() => import('./components/GodModeControlRoom'))
+const UnlistedProductsResolver = lazy(() => import('./components/UnlistedProductsResolver'))
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -826,9 +828,24 @@ export default function App() {
           </div>
         </header>
 
-        {/* Dynamic Content */}
+        {/* Dynamic Content with Code-Splitting */}
         <div style={{ position: 'relative', zIndex: 1 }}>
-          {renderContent()}
+          <Suspense fallback={
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '400px',
+              gap: '16px',
+              color: 'var(--text-secondary)'
+            }}>
+              <Loader2 size={32} className="spin" style={{ color: 'var(--accent-blue)' }} />
+              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Caricamento modulo in corso…</span>
+            </div>
+          }>
+            {renderContent()}
+          </Suspense>
         </div>
       </main>
 

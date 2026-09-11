@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -175,6 +176,10 @@ class Fattura(Base):
     Spec §5.2: collegata a XMLRaw, Fornitore, Location.
     """
     __tablename__ = "fatture"
+    __table_args__ = (
+        Index("ix_fatture_location_data", "location_id", "data_documento"),
+        Index("ix_fatture_data_documento", "data_documento"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     xml_raw_id: Mapped[int] = mapped_column(
@@ -235,6 +240,10 @@ class RigaFattura(Base):
     Spec §5.2: prezzo normalizzato = PrezzoUnitario * (1 - Sconto/100).
     """
     __tablename__ = "righe_fattura"
+    __table_args__ = (
+        Index("ix_righe_fattura_stato_matching", "stato_matching"),
+        Index("ix_righe_fattura_sku_prezzo", "sku_interno", "prezzo_netto_normalizzato"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     fattura_id: Mapped[int] = mapped_column(
