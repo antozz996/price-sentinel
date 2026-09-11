@@ -66,7 +66,6 @@ async def load_supplier_catalog_scope(
     db: AsyncSession,
     *,
     supplier_ids: set[int] | None = None,
-    product_ids: set[int] | None = None,
 ) -> SupplierCatalogScope:
     """Use aliases, listini, invoices and explicit assessments as scope evidence."""
     statements = [
@@ -84,8 +83,6 @@ async def load_supplier_catalog_scope(
         .join(ProductSupplierAssessment, ProductSupplierAssessment.product_id == Product.id)
         .where(Product.is_active.is_(True), ProductSupplierAssessment.is_active.is_(True)),
     ]
-    if product_ids:
-        statements = [statement.where(Product.id.in_(product_ids)) for statement in statements]
     if supplier_ids:
         supplier_columns = (
             SupplierProductAlias.supplier_id,

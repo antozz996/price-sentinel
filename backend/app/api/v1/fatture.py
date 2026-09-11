@@ -109,14 +109,15 @@ async def list_fatture(
             .select_from(Fattura)
             .outerjoin(Fornitore, Fattura.fornitore_id == Fornitore.id)
             .outerjoin(RigaFattura, RigaFattura.fattura_id == Fattura.id)
-            .where(and_(*conditions, search_cond))
         )
+        if conditions:
+            count_query = count_query.where(and_(*conditions, search_cond))
+        else:
+            count_query = count_query.where(search_cond)
     else:
-        count_query = (
-            select(func.count(Fattura.id))
-            .select_from(Fattura)
-            .where(and_(*conditions))
-        )
+        count_query = select(func.count(Fattura.id)).select_from(Fattura)
+        if conditions:
+            count_query = count_query.where(and_(*conditions))
 
     total_res = await db.execute(count_query)
     total = total_res.scalar() or 0
