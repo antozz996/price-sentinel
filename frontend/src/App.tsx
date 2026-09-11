@@ -198,23 +198,37 @@ export default function App() {
 
   const loadNotificationStats = async () => {
     try {
-      const [feedRes, ordRes, unlistedRes] = await Promise.all([
-        fetch(`${API_BASE}/feedbacks/pending-count`, { headers: getHeaders() }),
-        fetch(`${API_BASE}/ordini/notifications/feed?limit=10`, { headers: getHeaders() }),
-        fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, { headers: getHeaders() })
-      ]);
+      const isAdm = profile?.ruolo === 'admin';
+      const promises: Promise<Response>[] = [
+        fetch(`${API_BASE}/ordini/notifications/feed?limit=10`, { headers: getHeaders() })
+      ];
 
-      if (feedRes.ok) {
-        const feedData = await feedRes.json();
-        setPendingFeedbacksCount(feedData.count || 0);
+      if (isAdm) {
+        promises.push(
+          fetch(`${API_BASE}/feedbacks/pending-count`, { headers: getHeaders() }),
+          fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, { headers: getHeaders() })
+        );
       }
+
+      const results = await Promise.all(promises);
+      const ordRes = results[0];
       if (ordRes.ok) {
         const ordData = await ordRes.json();
         setRecentOrdersCount(ordData.count || 0);
       }
-      if (unlistedRes.ok) {
-        const unlistedData = await unlistedRes.json();
-        setUnlistedProductsCount(unlistedData.summary?.work_items || 0);
+
+      if (isAdm && results.length >= 3) {
+        const feedRes = results[1];
+        const unlistedRes = results[2];
+
+        if (feedRes.ok) {
+          const feedData = await feedRes.json();
+          setPendingFeedbacksCount(feedData.pending_count ?? feedData.count ?? 0);
+        }
+        if (unlistedRes.ok) {
+          const unlistedData = await unlistedRes.json();
+          setUnlistedProductsCount(unlistedData.summary?.work_items || 0);
+        }
       }
     } catch {
       // ignore
