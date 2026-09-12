@@ -276,9 +276,15 @@ export default function PriceTrendAnalyzer() {
     })
 
     if (allSeriesPoints.length === 0) {
+      const contractProducts = selectedProducts.map(p => ({
+        product: p,
+        trend: getProductTrend(p.sku)
+      })).filter(item => item.trend && item.trend.prezzo_contratto_corrente !== null)
+
       return (
         <div style={{
-          height: '300px',
+          minHeight: '240px',
+          padding: '24px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -286,10 +292,51 @@ export default function PriceTrendAnalyzer() {
           color: 'var(--text-secondary)',
           background: 'rgba(255,255,255,0.01)',
           borderRadius: '12px',
-          border: '1px dashed var(--border-glass)'
+          border: '1px dashed var(--border-glass)',
+          gap: '16px'
         }}>
-          <TrendingUp size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
-          <span>Nessun dato storico di acquisto trovato per i filtri selezionati.</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <TrendingUp size={28} style={{ opacity: 0.5, color: 'var(--accent-blue)' }} />
+            <span style={{ fontSize: '0.95rem', fontWeight: 500, color: 'white' }}>
+              Nessuna fattura di acquisto registrata per i filtri impostati.
+            </span>
+          </div>
+
+          {contractProducts.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '12px',
+              justifyContent: 'center',
+              width: '100%',
+              maxWidth: '750px'
+            }}>
+              {contractProducts.map(({ product, trend }) => (
+                <div key={product.sku} style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${product.color}`,
+                  borderRadius: '10px',
+                  padding: '12px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                  flex: '1 1 300px'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ color: 'white', fontWeight: 600, fontSize: '0.9rem' }}>{product.label}</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>SKU: {product.sku}</span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Prezzo a Listino</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: product.color }}>
+                      {trend?.prezzo_contratto_corrente?.toFixed(2)} €
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )
     }
@@ -731,7 +778,7 @@ export default function PriceTrendAnalyzer() {
 
     selectedProducts.forEach(p => {
       const data = getProductTrend(p.sku)
-      if (data && data.history) {
+      if (data && data.history && data.history.length > 0) {
         data.history.forEach(h => {
           rows.push({
             sku: p.sku,
@@ -744,6 +791,18 @@ export default function PriceTrendAnalyzer() {
             location: h.location,
             prezzo_contratto: h.prezzo_contratto
           })
+        })
+      } else if (data && data.prezzo_contratto_corrente !== null) {
+        rows.push({
+          sku: p.sku,
+          label: p.label,
+          color: p.color,
+          data: 'A Contratto',
+          prezzo_pagato: data.prezzo_contratto_corrente,
+          quantita: 0,
+          fornitore: 'Listino Master',
+          location: 'Tutte le sedi',
+          prezzo_contratto: data.prezzo_contratto_corrente
         })
       }
     })

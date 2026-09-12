@@ -457,7 +457,7 @@ async def list_approvazioni(
 
 
 def _extract_informative_keywords(text: str) -> list[str]:
-    """Estrae parole chiave significative (solo lettere, lunghezza >= 3) escludendo stop words e unità di misura."""
+    """Estrae parole chiave e radici significative escludendo stop words e unità di misura."""
     import re
     if not text:
         return []
@@ -469,10 +469,23 @@ def _extract_informative_keywords(text: str) -> list[str]:
         'x', 'da', 'di', 'in', 'su', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una'
     }
     cleaned = re.sub(r'[^a-zA-Z\s]', ' ', text.lower())
-    words = [
-        w.strip() for w in cleaned.split() 
-        if len(w.strip()) >= 3 and w.strip() not in stop_words and not w.strip().endswith(('cl', 'lt', 'ml', 'gr', 'kg'))
-    ]
+    words = []
+    for w in cleaned.split():
+        w_s = w.strip()
+        if len(w_s) >= 3 and w_s not in stop_words and not w_s.endswith(('cl', 'lt', 'ml', 'gr', 'kg')):
+            # Normalizzazione radici comuni bevande (arancia/arancio -> aranc, mirtillo -> mirtill, ecc.)
+            if w_s.startswith(('aranci', 'aranc', 'ara.')):
+                words.append('aran')
+            elif w_s.startswith('anana'):
+                words.append('anan')
+            elif w_s.startswith('mirtill'):
+                words.append('mirtill')
+            elif w_s.startswith('albicoc') or w_s == 'alb':
+                words.append('alb')
+            elif w_s.startswith('pesc'):
+                words.append('pesc')
+            else:
+                words.append(w_s)
     return list(dict.fromkeys(words))
 
 
