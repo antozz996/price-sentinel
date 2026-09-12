@@ -468,7 +468,9 @@ export default function PriceTrendAnalyzer() {
     }
 
     const formatDateStr = (isoString: string) => {
+      if (!isoString || isoString === 'A Contratto' || isoString === '-') return 'A Listino'
       const d = new Date(isoString)
+      if (isNaN(d.getTime())) return isoString
       return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
     }
 
@@ -1217,34 +1219,43 @@ export default function PriceTrendAnalyzer() {
                 </thead>
                 <tbody>
                   {tableRows.map((r, idx) => {
-                    const delta = r.prezzo_contratto ? ((r.prezzo_pagato - r.prezzo_contratto) / r.prezzo_contratto) * 100 : null
-                    const parsedDate = new Date(r.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    const isListinoBaseline = r.data === 'A Contratto' || r.quantita === 0
+                    const delta = (!isListinoBaseline && r.prezzo_contratto) ? ((r.prezzo_pagato - r.prezzo_contratto) / r.prezzo_contratto) * 100 : null
+                    const parsedDate = isListinoBaseline
+                      ? 'A Listino'
+                      : (isNaN(new Date(r.data).getTime()) ? r.data : new Date(r.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }))
                     
                     return (
                       <tr key={`tr-${idx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }} className="table-row-hover">
-                        <td style={{ padding: '12px 10px', fontWeight: 500 }}>{parsedDate}</td>
+                        <td style={{ padding: '12px 10px', fontWeight: 500 }}>
+                          {isListinoBaseline ? <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>A Listino</span> : parsedDate}
+                        </td>
                         <td style={{ padding: '12px 10px', fontFamily: 'monospace', opacity: 0.8 }}>{r.sku}</td>
                         <td style={{ padding: '12px 10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: r.color }}></span>
-                            {r.label}
+                            <span>{r.label}</span>
                           </span>
                         </td>
-                        <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{r.fornitore}</td>
-                        <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{r.location}</td>
-                        <td style={{ padding: '12px 10px' }}>{r.quantita}</td>
-                        <td style={{ padding: '12px 10px', fontWeight: 600 }}>{r.prezzo_pagato.toFixed(2)} €</td>
-                        <td style={{ padding: '12px 10px', opacity: r.prezzo_contratto ? 1 : 0.4 }}>
+                        <td style={{ padding: '12px 10px', opacity: 0.85 }}>{r.fornitore}</td>
+                        <td style={{ padding: '12px 10px', opacity: 0.85 }}>{r.location}</td>
+                        <td style={{ padding: '12px 10px' }}>{isListinoBaseline ? '-' : r.quantita}</td>
+                        <td style={{ padding: '12px 10px', fontWeight: 600 }}>
+                          {isListinoBaseline ? '-' : `${r.prezzo_pagato.toFixed(2)} €`}
+                        </td>
+                        <td style={{ padding: '12px 10px' }}>
                           {r.prezzo_contratto ? `${r.prezzo_contratto.toFixed(2)} €` : '-'}
                         </td>
                         <td style={{ padding: '12px 10px' }}>
-                          {delta !== null ? (
-                            <span className={delta > 0 ? 'badge badge-red' : 'badge badge-green'}>
+                          {isListinoBaseline ? (
+                            <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--accent-blue)', border: '1px solid rgba(59,130,246,0.3)' }}>
+                              Listino Base
+                            </span>
+                          ) : delta !== null ? (
+                            <span className={`badge ${delta > 0 ? 'badge-red' : delta < 0 ? 'badge-green' : 'badge-yellow'}`}>
                               {delta > 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`}
                             </span>
-                          ) : (
-                            <span style={{ opacity: 0.4 }}>-</span>
-                          )}
+                          ) : '-'}
                         </td>
                       </tr>
                     )
