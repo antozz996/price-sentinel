@@ -124,10 +124,10 @@ async def get_cross_location_matrix(
 
     # Costruzione condizioni dinamiche per data
     from app.models.esclusi import SKUEscluso
+    valid_price = func.coalesce(func.nullif(RigaFattura.prezzo_netto_normalizzato, 0), RigaFattura.prezzo_unitario_fatturato, 0)
     conditions = [
-        RigaFattura.stato_matching == StatoMatching.matched,
         RigaFattura.sku_interno.isnot(None),
-        RigaFattura.prezzo_netto_normalizzato > 0,
+        valid_price > 0,
         RigaFattura.is_omaggio.isnot(True),
         ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno))
     ]
@@ -154,7 +154,7 @@ async def get_cross_location_matrix(
         select(
             RigaFattura.sku_interno, 
             Fattura.location_id, 
-            RigaFattura.prezzo_netto_normalizzato,
+            valid_price.label("prezzo_netto_normalizzato"),
             RigaFattura.descrizione_fornitore_raw,
             Fattura.id.label("fattura_id"),
             RigaFattura.quantita
@@ -227,12 +227,12 @@ async def get_cross_supplier_matrix(
     contracts_res = await db.execute(contracts_stmt)
     contracts = contracts_res.all()
     
-    # 2. Recupero prezzi storici spot minimi da righe fattura registrate (matched)
-    # Escludiamo omaggi e articoli a prezzo zero (prezzo_netto_normalizzato > 0 e is_omaggio is False)
+    # 2. Recupero prezzi storici spot minimi da righe fattura registrate
+    # Supportiamo fallback prezzo netto normalizzato o unitario
+    valid_spot_price = func.coalesce(func.nullif(RigaFattura.prezzo_netto_normalizzato, 0), RigaFattura.prezzo_unitario_fatturato, 0)
     spot_conds = [
-        RigaFattura.stato_matching == StatoMatching.matched,
         RigaFattura.sku_interno.isnot(None),
-        RigaFattura.prezzo_netto_normalizzato > 0,
+        valid_spot_price > 0,
         RigaFattura.is_omaggio.isnot(True),
         ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno))
     ]
@@ -246,7 +246,7 @@ async def get_cross_supplier_matrix(
             RigaFattura.sku_interno,
             RigaFattura.descrizione_fornitore_raw,
             Fattura.fornitore_id,
-            func.min(RigaFattura.prezzo_netto_normalizzato).label("prezzo_min")
+            func.min(valid_spot_price).label("prezzo_min")
         )
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
         .where(and_(*spot_conds))
@@ -456,6 +456,130 @@ async def list_approvazioni(
     return res.scalars().all()
 
 
+def _extract_informative_keywords(text: str) -> list[str]:
+    """Estrae parole chiave significative (solo lettere, lunghezza >= 3) escludendo stop words e unità di misura."""
+    import re
+    if not text:
+        return []
+    stop_words = {
+        'bev', 'pet', 'per', 'con', 'del', 'dei', 'delle', 'della', 'degli', 'allo', 'alla',
+        'alle', 'agli', 'vol', 'cl', 'lt', 'ml', 'gr', 'kg', 'bt', 'pz', 'crt',
+        'pac', 'conf', 'cassa', 'bar', 'rist', 'doc', 'dop', 'igp', 'igt', 'san', 'sant',
+        'red', 'blue', 'gold', 'plus', 'pro', 'max', 'min', 'net', 'lord', 'art', 'cod',
+        'x', 'da', 'di', 'in', 'su', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una'
+    }
+    cleaned = re.sub(r'[^a-zA-Z\s]', ' ', text.lower())
+    words = [
+        w.strip() for w in cleaned.split() 
+        if len(w.strip()) >= 3 and w.strip() not in stop_words and not w.strip().endswith(('cl', 'lt', 'ml', 'gr', 'kg'))
+    ]
+    return list(dict.fromkeys(words))
+
+
+async def _resolve_sku_metadata(sku_list: list[str], db: AsyncSession):
+    from app.models.products import Product, SupplierProductAlias
+    from app.models.alias import AliasProdotto
+
+    sku_synonyms: dict[str, set[str]] = {sku: {sku.lower().strip()} for sku in sku_list}
+    sku_keywords: dict[str, list[str]] = {}
+    canonical_names: dict[str, str] = {}
+    contracts: dict[str, Any] = {}
+
+    for sku in sku_list:
+        s_low = sku.lower().strip()
+        kws = _extract_informative_keywords(sku)
+        sku_keywords[sku] = kws
+
+        # 1. Risoluzione da Product e SupplierProductAlias
+        conds = [
+            Product.sku_interno == sku,
+            func.lower(func.trim(Product.sku_interno)) == s_low,
+            Product.canonical_name == sku,
+            func.lower(func.trim(Product.canonical_name)) == s_low,
+            SupplierProductAlias.raw_description == sku,
+            func.lower(func.trim(SupplierProductAlias.raw_description)) == s_low,
+            SupplierProductAlias.supplier_code == sku,
+            func.lower(func.trim(SupplierProductAlias.supplier_code)) == s_low,
+        ]
+        if len(kws) >= 2:
+            conds.append(and_(*[Product.canonical_name.ilike(f"%{kw}%") for kw in kws]))
+            conds.append(and_(*[SupplierProductAlias.raw_description.ilike(f"%{kw}%") for kw in kws]))
+        elif len(kws) == 1:
+            conds.append(Product.canonical_name.ilike(f"%{kws[0]}%"))
+            conds.append(SupplierProductAlias.raw_description.ilike(f"%{kws[0]}%"))
+
+        prod_stmt = (
+            select(Product.id, Product.sku_interno, Product.canonical_name)
+            .outerjoin(SupplierProductAlias, Product.id == SupplierProductAlias.product_id)
+            .where(or_(*conds))
+            .distinct()
+        )
+        prod_res = await db.execute(prod_stmt)
+        matched_products = prod_res.all()
+
+        for p_id, p_sku, p_name in matched_products:
+            if p_sku:
+                sku_synonyms[sku].add(p_sku.lower().strip())
+            if p_name:
+                sku_synonyms[sku].add(p_name.lower().strip())
+                if sku not in canonical_names:
+                    canonical_names[sku] = p_name
+
+            if p_id:
+                alias_stmt = select(SupplierProductAlias.raw_description, SupplierProductAlias.supplier_code).where(SupplierProductAlias.product_id == p_id)
+                alias_res = await db.execute(alias_stmt)
+                for a_desc, a_code in alias_res.all():
+                    if a_desc:
+                        sku_synonyms[sku].add(a_desc.lower().strip())
+                    if a_code:
+                        sku_synonyms[sku].add(a_code.lower().strip())
+
+        # 2. Risoluzione da AliasProdotto
+        alias_p_conds = [
+            AliasProdotto.sku_interno == sku,
+            func.lower(func.trim(AliasProdotto.sku_interno)) == s_low,
+            AliasProdotto.codice_fornitore_originale == sku,
+            func.lower(func.trim(AliasProdotto.codice_fornitore_originale)) == s_low,
+        ]
+        if len(kws) >= 2:
+            alias_p_conds.append(and_(*[AliasProdotto.sku_interno.ilike(f"%{kw}%") for kw in kws]))
+        alias_p_stmt = select(AliasProdotto.sku_interno, AliasProdotto.codice_fornitore_originale).where(or_(*alias_p_conds))
+        alias_p_res = await db.execute(alias_p_stmt)
+        for ap_sku, ap_code in alias_p_res.all():
+            if ap_sku:
+                sku_synonyms[sku].add(ap_sku.lower().strip())
+            if ap_code:
+                sku_synonyms[sku].add(ap_code.lower().strip())
+
+        # 3. Risoluzione da ListinoMaster
+        lm_conds = [
+            ListinoMaster.sku_interno == sku,
+            func.lower(func.trim(ListinoMaster.sku_interno)) == s_low,
+            ListinoMaster.descrizione == sku,
+            func.lower(func.trim(ListinoMaster.descrizione)) == s_low,
+            ListinoMaster.codice_fornitore == sku,
+            func.lower(func.trim(ListinoMaster.codice_fornitore)) == s_low,
+        ]
+        if len(kws) >= 2:
+            lm_conds.append(and_(*[ListinoMaster.descrizione.ilike(f"%{kw}%") for kw in kws]))
+        elif len(kws) == 1:
+            lm_conds.append(ListinoMaster.descrizione.ilike(f"%{kws[0]}%"))
+
+        lm_stmt = select(ListinoMaster).where(or_(*lm_conds))
+        lm_res = await db.execute(lm_stmt)
+        for l in lm_res.scalars().all():
+            if l.sku_interno:
+                sku_synonyms[sku].add(l.sku_interno.lower().strip())
+            if l.descrizione:
+                sku_synonyms[sku].add(l.descrizione.lower().strip())
+            if l.codice_fornitore:
+                sku_synonyms[sku].add(l.codice_fornitore.lower().strip())
+            if l.data_scadenza is None or sku not in contracts:
+                contracts[sku] = l
+
+    return sku_synonyms, sku_keywords, canonical_names, contracts
+
+
 @router.get("/price-trend/{sku_interno}", summary="Trend Storico Prezzi per SKU")
 async def get_price_trend(
     sku_interno: str,
@@ -463,58 +587,32 @@ async def get_price_trend(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.esclusi import SKUEscluso
+
     # Verifica se è escluso
-    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
+    chk = await db.execute(
+        select(SKUEscluso.sku_interno).where(
+            or_(
+                SKUEscluso.sku_interno == sku_interno,
+                func.lower(func.trim(SKUEscluso.sku_interno)) == sku_interno.lower().strip()
+            )
+        )
+    )
     if chk.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
 
-    # Recupera lo storico degli acquisti cronologicamente
-    stmt = (
-        select(
-            Fattura.data_documento,
-            RigaFattura.prezzo_netto_normalizzato,
-            RigaFattura.quantita,
-            Fornitore.nome_azienda.label("fornitore_nome")
-        )
-        .join(RigaFattura, RigaFattura.fattura_id == Fattura.id)
-        .join(Fornitore, Fattura.fornitore_id == Fornitore.id)
-        .where(
-            and_(
-                RigaFattura.sku_interno == sku_interno,
-                RigaFattura.stato_matching == "matched"
-            )
-        )
-        .order_by(Fattura.data_documento.asc())
-    )
-    res = await db.execute(stmt)
-    history = res.all()
+    trends_map = await get_price_trends(skus=sku_interno, _user=_user, db=db)
+    if sku_interno in trends_map:
+        return trends_map[sku_interno]
     
-    # Recupera il listino attivo corrente
-    listino_stmt = select(ListinoMaster).where(
-        and_(
-            ListinoMaster.sku_interno == sku_interno,
-            ListinoMaster.data_scadenza.is_(None)
-        )
-    ).limit(1)
-    listino_res = await db.execute(listino_stmt)
-    listino_active = listino_res.scalar_one_or_none()
-    prezzo_contratto = float(listino_active.prezzo_pattuito) if listino_active else None
+    # Fallback if mapped under a different key
+    for k, v in trends_map.items():
+        return v
 
-    points = []
-    for r in history:
-        points.append({
-            "data": r.data_documento.isoformat() if isinstance(r.data_documento, date) else str(r.data_documento),
-            "prezzo_pagato": float(r.prezzo_netto_normalizzato),
-            "quantita": float(r.quantita),
-            "fornitore": r.fornitore_nome,
-            "prezzo_contratto": prezzo_contratto
-        })
-        
     return {
         "sku_interno": sku_interno,
-        "prodotto_nome": listino_active.descrizione if listino_active else sku_interno,
-        "prezzo_contratto_corrente": prezzo_contratto,
-        "history": points
+        "prodotto_nome": sku_interno,
+        "prezzo_contratto_corrente": None,
+        "history": []
     }
 
 
@@ -535,23 +633,38 @@ async def get_price_trends(
 
     # Filtra SKU esclusi
     from app.models.esclusi import SKUEscluso
-    stmt_ex = select(SKUEscluso.sku_interno).where(SKUEscluso.sku_interno.in_(sku_list))
+
+    stmt_ex = select(SKUEscluso.sku_interno).where(
+        or_(
+            SKUEscluso.sku_interno.in_(sku_list),
+            func.lower(func.trim(SKUEscluso.sku_interno)).in_([s.lower() for s in sku_list])
+        )
+    )
     res_ex = await db.execute(stmt_ex)
-    excluded = set(res_ex.scalars().all())
-    sku_list = [s for s in sku_list if s not in excluded]
+    excluded = set(s.lower() for s in res_ex.scalars().all())
+    sku_list = [s for s in sku_list if s.lower() not in excluded]
     if not sku_list:
         return {}
 
-    # Recupera i listini attivi correnti per questi SKU
-    listino_stmt = select(ListinoMaster).where(
-        and_(
-            ListinoMaster.sku_interno.in_(sku_list),
-            ListinoMaster.data_scadenza.is_(None)
-        )
-    )
-    listino_res = await db.execute(listino_stmt)
-    listini = listino_res.scalars().all()
-    contracts = {l.sku_interno: l for l in listini}
+    sku_synonyms, sku_keywords, canonical_names, contracts = await _resolve_sku_metadata(sku_list, db)
+
+    all_search_terms = list(set().union(*sku_synonyms.values()))
+    valid_price = func.coalesce(func.nullif(RigaFattura.prezzo_netto_normalizzato, 0), RigaFattura.prezzo_unitario_fatturato, 0)
+
+    # Costruisci le clausole di matching su righe fattura
+    sku_matching_clauses = []
+    if all_search_terms:
+        sku_matching_clauses.append(func.lower(func.trim(RigaFattura.sku_interno)).in_(all_search_terms))
+        sku_matching_clauses.append(func.lower(func.trim(RigaFattura.descrizione_fornitore_raw)).in_(all_search_terms))
+        sku_matching_clauses.append(func.lower(func.trim(RigaFattura.codice_fornitore_raw)).in_(all_search_terms))
+
+    for sku, kws in sku_keywords.items():
+        if len(kws) >= 2:
+            sku_matching_clauses.append(and_(*[RigaFattura.descrizione_fornitore_raw.ilike(f"%{kw}%") for kw in kws]))
+            sku_matching_clauses.append(and_(*[RigaFattura.sku_interno.ilike(f"%{kw}%") for kw in kws]))
+        elif len(kws) == 1:
+            sku_matching_clauses.append(RigaFattura.descrizione_fornitore_raw.ilike(f"%{kws[0]}%"))
+            sku_matching_clauses.append(RigaFattura.sku_interno.ilike(f"%{kws[0]}%"))
 
     # Recupera lo storico degli acquisti cronologicamente con filtri
     stmt = (
@@ -560,19 +673,20 @@ async def get_price_trends(
             Fattura.location_id,
             Fattura.fornitore_id,
             RigaFattura.sku_interno,
-            RigaFattura.prezzo_netto_normalizzato,
-            RigaFattura.quantita,
             RigaFattura.descrizione_fornitore_raw,
-            Fornitore.nome_azienda.label("fornitore_nome"),
-            Location.nome_struttura.label("location_nome")
+            RigaFattura.codice_fornitore_raw,
+            valid_price.label("prezzo_pagato"),
+            func.coalesce(RigaFattura.quantita, 1).label("quantita"),
+            func.coalesce(Fornitore.nome_azienda, "Fornitore non associato").label("fornitore_nome"),
+            func.coalesce(Location.nome_struttura, "Tutte le sedi").label("location_nome")
         )
         .join(RigaFattura, RigaFattura.fattura_id == Fattura.id)
-        .join(Fornitore, Fattura.fornitore_id == Fornitore.id)
-        .join(Location, Fattura.location_id == Location.id)
+        .outerjoin(Fornitore, Fattura.fornitore_id == Fornitore.id)
+        .outerjoin(Location, Fattura.location_id == Location.id)
         .where(
             and_(
-                RigaFattura.sku_interno.in_(sku_list),
-                RigaFattura.stato_matching == "matched"
+                valid_price > 0,
+                or_(*sku_matching_clauses)
             )
         )
     )
@@ -603,12 +717,12 @@ async def get_price_trends(
     res = await db.execute(stmt)
     history = res.all()
 
-    # Prepara la risposta raggruppata per SKU
+    # Prepara la risposta raggruppata per ciascun SKU richiesto
     response_data = {}
     for sku in sku_list:
         l_active = contracts.get(sku)
-        prezzo_contratto = float(l_active.prezzo_pattuito) if l_active else None
-        prod_name = l_active.descrizione if l_active else sku
+        prezzo_contratto = float(l_active.prezzo_pattuito) if l_active and l_active.prezzo_pattuito else None
+        prod_name = (l_active.descrizione if l_active and l_active.descrizione else canonical_names.get(sku)) or sku
         response_data[sku] = {
             "sku_interno": sku,
             "prodotto_nome": prod_name,
@@ -617,25 +731,42 @@ async def get_price_trends(
         }
 
     for r in history:
-        sku = r.sku_interno
-        if sku not in response_data:
-            continue
+        r_sku = (r.sku_interno or "").strip().lower()
+        r_desc = (r.descrizione_fornitore_raw or "").strip().lower()
+        r_code = (r.codice_fornitore_raw or "").strip().lower()
+        r_combined = f"{r_sku} {r_desc} {r_code}"
 
-        # Se il nome del prodotto è ancora lo SKU di fallback, aggiornalo con la prima descrizione reale trovata
-        if response_data[sku]["prodotto_nome"] == sku and r.descrizione_fornitore_raw:
-            response_data[sku]["prodotto_nome"] = r.descrizione_fornitore_raw
+        prezzo = float(r.prezzo_pagato) if r.prezzo_pagato is not None else 0.0
+        qty = float(r.quantita) if r.quantita is not None else 1.0
 
-        l_active = contracts.get(sku)
-        prezzo_contratto = float(l_active.prezzo_pattuito) if l_active else None
+        for sku in sku_list:
+            syns = sku_synonyms.get(sku, set())
+            kws = sku_keywords.get(sku, [])
 
-        response_data[sku]["history"].append({
-            "data": r.data_documento.isoformat() if isinstance(r.data_documento, date) else str(r.data_documento),
-            "prezzo_pagato": float(r.prezzo_netto_normalizzato),
-            "quantita": float(r.quantita),
-            "fornitore": r.fornitore_nome,
-            "location": r.location_nome,
-            "prezzo_contratto": prezzo_contratto
-        })
+            matched = (
+                r_sku in syns or 
+                r_desc in syns or 
+                r_code in syns or 
+                (len(kws) >= 2 and all(kw in r_combined for kw in kws)) or
+                (len(kws) == 1 and kws[0] in r_combined)
+            )
+
+            if matched:
+                target_key = sku
+                if response_data[target_key]["prodotto_nome"] == target_key and r.descrizione_fornitore_raw:
+                    response_data[target_key]["prodotto_nome"] = r.descrizione_fornitore_raw
+
+                l_active = contracts.get(target_key)
+                prezzo_contratto = float(l_active.prezzo_pattuito) if l_active and l_active.prezzo_pattuito else None
+
+                response_data[target_key]["history"].append({
+                    "data": r.data_documento.isoformat() if isinstance(r.data_documento, date) else str(r.data_documento),
+                    "prezzo_pagato": prezzo,
+                    "quantita": qty,
+                    "fornitore": r.fornitore_nome,
+                    "location": r.location_nome,
+                    "prezzo_contratto": prezzo_contratto
+                })
 
     return response_data
 
@@ -659,18 +790,19 @@ async def get_pricing_audit(
         SELECT 
             rf.sku_interno as prodotto_id,
             rf.descrizione_fornitore_raw as nome_normalizzato,
-            fo.nome_azienda as fornitore_ragione_sociale,
+            COALESCE(fo.nome_azienda, 'Fornitore ND') as fornitore_ragione_sociale,
             f.fornitore_id,
             to_char(f.data_documento, 'YYYY-MM') as mese,
-            AVG(rf.prezzo_netto_normalizzato) as prezzo_medio,
+            AVG(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as prezzo_medio,
             SUM(rf.quantita) as qta_mese_corrente
         FROM righe_fattura rf
         JOIN fatture f ON rf.fattura_id = f.id
-        JOIN fornitori fo ON f.fornitore_id = fo.id
+        LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
         WHERE rf.sku_interno IS NOT NULL
           AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
           AND (:location_id IS NULL OR f.location_id = :location_id)
           AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
+          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
         GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
     ),
     lagged_prezzi AS (
@@ -690,8 +822,8 @@ async def get_pricing_audit(
         lp.prezzo_precedente_lag,
         lc.prezzo_pattuito as prezzo_concordato,
         COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) as prezzo_precedente,
-        (SELECT MIN(rf2.prezzo_netto_normalizzato) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND rf2.prezzo_netto_normalizzato > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_min,
-        (SELECT MAX(rf2.prezzo_netto_normalizzato) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND rf2.prezzo_netto_normalizzato > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_max,
+        (SELECT MIN(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_min,
+        (SELECT MAX(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_max,
         ap.stato
     FROM lagged_prezzi lp
     LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id
@@ -712,13 +844,14 @@ async def get_pricing_audit(
                 rf.descrizione_fornitore_raw as nome_normalizzato,
                 f.fornitore_id,
                 to_char(f.data_documento, 'YYYY-MM') as mese,
-                AVG(rf.prezzo_netto_normalizzato) as prezzo_medio
+                AVG(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as prezzo_medio
             FROM righe_fattura rf
             JOIN fatture f ON rf.fattura_id = f.id
             WHERE rf.sku_interno IS NOT NULL
               AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
               AND (:location_id IS NULL OR f.location_id = :location_id)
               AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
+              AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
             GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, to_char(f.data_documento, 'YYYY-MM')
         ),
         lagged_prezzi AS (
@@ -791,13 +924,12 @@ async def get_efficiency_leaderboard(
     WITH hist_min AS (
         SELECT 
             rf.sku_interno,
-            MIN(rf.prezzo_netto_normalizzato) as hist_prezzo_min
+            MIN(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as hist_prezzo_min
         FROM righe_fattura rf
         JOIN fatture f ON rf.fattura_id = f.id
         WHERE rf.sku_interno IS NOT NULL 
           AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-          AND rf.stato_matching = 'matched'
-          AND rf.prezzo_netto_normalizzato > 0
+          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
           AND rf.is_omaggio IS NOT TRUE
           AND f.tenant_id = :tenant_id
         GROUP BY rf.sku_interno
@@ -805,17 +937,19 @@ async def get_efficiency_leaderboard(
     purchases AS (
         SELECT 
             f.location_id,
-            loc.nome_struttura,
+            COALESCE(loc.nome_struttura, 'Sede Non Assegnata') as nome_struttura,
             rf.id as riga_id,
-            rf.prezzo_netto_normalizzato,
+            COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) as price,
             hm.hist_prezzo_min,
-            CASE WHEN rf.prezzo_netto_normalizzato <= (hm.hist_prezzo_min * 1.05) THEN 1 ELSE 0 END as is_optimal
+            CASE WHEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) <= (hm.hist_prezzo_min * 1.05) THEN 1 ELSE 0 END as is_optimal
         FROM righe_fattura rf
         JOIN hist_min hm ON rf.sku_interno = hm.sku_interno
         JOIN fatture f ON rf.fattura_id = f.id
-        JOIN location loc ON f.location_id = loc.id
-        WHERE rf.stato_matching = 'matched'
+        LEFT JOIN location loc ON f.location_id = loc.id
+        WHERE rf.sku_interno IS NOT NULL
           AND f.tenant_id = :tenant_id
+          AND rf.is_omaggio IS NOT TRUE
+          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
     )
     SELECT 
         location_id,
@@ -858,28 +992,33 @@ async def get_variance_loss(
     WITH min_prices AS (
         SELECT 
             sku_interno, 
-            MIN(prezzo_netto_normalizzato) AS min_price
+            MIN(COALESCE(NULLIF(prezzo_netto_normalizzato, 0), prezzo_unitario_fatturato, 0)) AS min_price
         FROM righe_fattura
-        WHERE stato_matching = 'matched' AND sku_interno IS NOT NULL AND prezzo_netto_normalizzato > 0
+        WHERE sku_interno IS NOT NULL 
+          AND COALESCE(NULLIF(prezzo_netto_normalizzato, 0), prezzo_unitario_fatturato, 0) > 0
           AND sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
+          AND is_omaggio IS NOT TRUE
         GROUP BY sku_interno
     )
     SELECT 
         r.sku_interno,
         COALESCE(MAX(lm.descrizione), MAX(r.descrizione_fornitore_raw), r.sku_interno) AS prodotto_nome,
-        COALESCE(MAX(f.nome_azienda), 'ND') AS fornitore_nome,
+        COALESCE(MAX(f.nome_azienda), MAX(flm.nome_azienda), 'ND') AS fornitore_nome,
         COUNT(r.id) AS numero_acquisti,
         SUM(r.quantita) AS quantita_totale,
         mp.min_price AS prezzo_minimo,
-        AVG(r.prezzo_netto_normalizzato) AS prezzo_medio,
-        SUM(GREATEST(0, r.prezzo_netto_normalizzato - mp.min_price) * r.quantita) AS spreco_totale
+        AVG(COALESCE(NULLIF(r.prezzo_netto_normalizzato, 0), r.prezzo_unitario_fatturato, 0)) AS prezzo_medio,
+        SUM(GREATEST(0, COALESCE(NULLIF(r.prezzo_netto_normalizzato, 0), r.prezzo_unitario_fatturato, 0) - mp.min_price) * r.quantita) AS spreco_totale
     FROM righe_fattura r
     JOIN min_prices mp ON r.sku_interno = mp.sku_interno
+    LEFT JOIN fatture ft ON r.fattura_id = ft.id
+    LEFT JOIN fornitori f ON ft.fornitore_id = f.id
     LEFT JOIN listino_master lm ON lm.sku_interno = r.sku_interno AND lm.data_scadenza IS NULL
-    LEFT JOIN fornitori f ON f.id = lm.fornitore_id
-    WHERE r.stato_matching = 'matched'
+    LEFT JOIN fornitori flm ON flm.id = lm.fornitore_id
+    WHERE r.sku_interno IS NOT NULL
+      AND r.is_omaggio IS NOT TRUE
     GROUP BY r.sku_interno, mp.min_price
-    HAVING SUM(GREATEST(0, r.prezzo_netto_normalizzato - mp.min_price) * r.quantita) > 0
+    HAVING SUM(GREATEST(0, COALESCE(NULLIF(r.prezzo_netto_normalizzato, 0), r.prezzo_unitario_fatturato, 0) - mp.min_price) * r.quantita) > 0
     ORDER BY spreco_totale DESC
     LIMIT 10;
     """
@@ -917,17 +1056,18 @@ async def export_dispute_excel(
         SELECT 
             rf.sku_interno as prodotto_id,
             rf.descrizione_fornitore_raw as nome_normalizzato,
-            fo.nome_azienda as fornitore_ragione_sociale,
+            COALESCE(fo.nome_azienda, 'Fornitore ND') as fornitore_ragione_sociale,
             f.fornitore_id,
             to_char(f.data_documento, 'YYYY-MM') as mese,
-            AVG(rf.prezzo_netto_normalizzato) as prezzo_medio,
+            AVG(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as prezzo_medio,
             SUM(rf.quantita) as qta_mese_corrente
         FROM righe_fattura rf
         JOIN fatture f ON rf.fattura_id = f.id
-        JOIN fornitori fo ON f.fornitore_id = fo.id
+        LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
         WHERE rf.sku_interno IS NOT NULL
           AND (:location_id IS NULL OR f.location_id = :location_id)
           AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
+          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
         GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
     ),
     lagged_prezzi AS (
@@ -1103,10 +1243,10 @@ async def get_product_consumption(
             MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
             MAX(rf.unita_misura_fattura)
         ) as unita_misura,
-        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
         CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
             ELSE 0 
         END as prezzo_medio
     FROM righe_fattura rf
@@ -1199,18 +1339,18 @@ async def get_product_consumption_detail(
     # 1. Split by Location
     sql_loc = f"""
     SELECT 
-        l.nome_struttura as location_nome,
+        COALESCE(l.nome_struttura, 'Sede non assegnata') as location_nome,
         SUM(rf.quantita) as quantita_totale,
-        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale
+        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
-    JOIN location l ON f.location_id = l.id
+    LEFT JOIN location l ON f.location_id = l.id
     WHERE {sku_filter}
       {location_filter}
       AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
       AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
       AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    GROUP BY l.nome_struttura
+    GROUP BY COALESCE(l.nome_struttura, 'Sede non assegnata')
     ORDER BY spesa_totale DESC
     """
     res_loc = await db.execute(text(sql_loc), params)
@@ -1227,7 +1367,7 @@ async def get_product_consumption_detail(
     SELECT 
         to_char(f.data_documento, 'YYYY-MM') as mese,
         SUM(rf.quantita) as quantita_totale,
-        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale
+        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
     WHERE {sku_filter}
@@ -1250,11 +1390,11 @@ async def get_product_consumption_detail(
     # 3. Aggregated Prices (Min, Max, Avg)
     sql_prices = f"""
     SELECT 
-        MIN(CASE WHEN rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato END) as prezzo_minimo,
-        MAX(CASE WHEN rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato END) as prezzo_massimo,
+        MIN(CASE WHEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) END) as prezzo_minimo,
+        MAX(CASE WHEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) END) as prezzo_massimo,
         CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
             ELSE 0 
         END as prezzo_medio
     FROM righe_fattura rf
@@ -1339,19 +1479,19 @@ async def get_product_consumption_invoices(
         f.id as fattura_id,
         f.numero_documento,
         f.data_documento,
-        l.nome_struttura as location_nome,
-        fo.nome_azienda as fornitore_nome,
+        COALESCE(l.nome_struttura, 'Sede non assegnata') as location_nome,
+        COALESCE(fo.nome_azienda, 'Fornitore non specificato') as fornitore_nome,
         rf.descrizione_fornitore_raw as prodotto_descrizione,
         rf.quantita as quantita,
         rf.unita_misura_fattura as unita_misura,
-        rf.prezzo_netto_normalizzato as prezzo_unitario,
-        (rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) as prezzo_unitario,
+        (COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
         rf.is_omaggio as is_omaggio,
         rf.sku_interno as sku_interno
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
-    JOIN location l ON f.location_id = l.id
-    JOIN fornitori fo ON f.fornitore_id = fo.id
+    LEFT JOIN location l ON f.location_id = l.id
+    LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
     WHERE {sku_filter}
       {location_filter}
       AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
@@ -1494,22 +1634,22 @@ async def export_product_consumption_excel(
     SELECT 
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
-        string_agg(DISTINCT fo.nome_azienda, ', ') as fornitori,
+        COALESCE(string_agg(DISTINCT fo.nome_azienda, ', '), 'ND') as fornitori,
         SUM(rf.quantita) as quantita_totale,
         SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
         COALESCE(
             MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
             MAX(rf.unita_misura_fattura)
         ) as unita_misura,
-        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
         CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
             ELSE 0 
         END as prezzo_medio
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
-    JOIN fornitori fo ON f.fornitore_id = fo.id
+    LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
     WHERE rf.sku_interno IS NOT NULL
       {location_filter}
       AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
@@ -1681,23 +1821,23 @@ async def get_top_purchased_products(
     SELECT 
         rf.sku_interno, 
         MAX(rf.descrizione_fornitore_raw) as descrizione,
-        string_agg(DISTINCT fo.nome_azienda, ', ') as fornitori,
+        COALESCE(string_agg(DISTINCT fo.nome_azienda, ', '), '—') as fornitori,
         SUM(rf.quantita) as quantita_totale,
         SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
         COALESCE(
             MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
             MAX(rf.unita_misura_fattura)
         ) as unita_misura,
-        SUM(rf.prezzo_netto_normalizzato * rf.quantita) as spesa_totale,
+        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
         COUNT(rf.id) as numero_acquisti,
         CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.prezzo_netto_normalizzato * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND rf.prezzo_netto_normalizzato > 0 THEN rf.quantita ELSE 0 END)
+            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
+            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
             ELSE 0 
         END as prezzo_medio
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
-    JOIN fornitori fo ON f.fornitore_id = fo.id
+    LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
     WHERE rf.sku_interno IS NOT NULL
       AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
       {location_filter}

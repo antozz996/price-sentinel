@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Search, X, Calendar, Download, ArrowUpDown, Info, TrendingUp } from 'lucide-react'
 import { fetchWithAuth } from '../api'
 
@@ -203,13 +203,55 @@ export default function PriceTrendAnalyzer() {
     setHoverData(null)
   }
 
-  // Filter suggestions based on input query
-  const suggestions = searchQuery.trim() === ''
-    ? []
-    : allProducts.filter(p =>
-        p.sku_interno.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.nome_prodotto && p.nome_prodotto.toLowerCase().includes(searchQuery.toLowerCase()))
-      ).slice(0, 8)
+  // Filter suggestions based on input query with smart multi-word & beverage synonym matching
+  const suggestions = useMemo(() => {
+    if (!allProducts || allProducts.length === 0) return []
+    const q = searchQuery.toLowerCase().trim()
+    if (q === '') {
+      return allProducts.slice(0, 10)
+    }
+
+    const searchTerms = q.split(/\s+/).filter(Boolean)
+    const isJuiceSearch = searchTerms.some(t => t.startsWith('succ') || t.startsWith('juic'))
+
+    return allProducts.filter(p => {
+      const sku = (p.sku_interno || '').toLowerCase()
+      const name = (p.nome_prodotto || '').toLowerCase()
+      const fullText = `${sku} ${name}`
+
+      if (isJuiceSearch && (fullText.includes('yoga') || fullText.includes('nettare') || fullText.includes('succo') || fullText.includes('ace') || fullText.includes('ananas') || fullText.includes('arancia') || fullText.includes('pera') || fullText.includes('pesca') || fullText.includes('mela'))) {
+        return true
+      }
+
+      return searchTerms.every(term => fullText.includes(term))
+    }).slice(0, 15)
+  }, [searchQuery, allProducts])
+
+  // Helper to safely lookup trend data regardless of casing, whitespace, or naming variations
+  const getProductTrend = (sku: string): SkuTrend | undefined => {
+    if (!sku || !trendData || Object.keys(trendData).length === 0) return undefined
+    if (trendData[sku]) return trendData[sku]
+    
+    const lower = sku.toLowerCase().trim()
+    
+    // 1. Direct case-insensitive key match
+    const entry = Object.entries(trendData).find(([k]) => k.toLowerCase().trim() === lower)
+    if (entry) return entry[1]
+
+    // 2. Match by inner sku_interno or prodotto_nome inside trend object
+    const innerEntry = Object.values(trendData).find(v => 
+      (v.sku_interno && v.sku_interno.toLowerCase().trim() === lower) ||
+      (v.prodotto_nome && v.prodotto_nome.toLowerCase().trim() === lower)
+    )
+    if (innerEntry) return innerEntry
+
+    // 3. Fallback when only 1 product is requested and 1 trend object returned
+    if (selectedProducts.length === 1 && Object.keys(trendData).length === 1) {
+      return Object.values(trendData)[0]
+    }
+
+    return undefined
+  }
 
   // 4. Custom SVG Chart Mathematics & Rendering
   const renderChart = () => {
@@ -217,7 +259,7 @@ export default function PriceTrendAnalyzer() {
     const allSeriesPoints: { sku: string; timestamp: number; price: number; point: HistoryPoint; color: string; label: string }[] = []
     
     selectedProducts.forEach(p => {
-      const data = trendData[p.sku]
+      const data = getProductTrend(p.sku)
       if (data && data.history) {
         data.history.forEach(h => {
           const timestamp = new Date(h.data).getTime()
@@ -258,7 +300,7 @@ export default function PriceTrendAnalyzer() {
     
     // Also include contract prices in the Y boundary check to prevent clipping of contract guide lines
     selectedProducts.forEach(p => {
-      const data = trendData[p.sku]
+      const data = getProductTrend(p.sku)
       if (data && data.prezzo_contratto_corrente) {
         prices.push(data.prezzo_contratto_corrente)
       }
@@ -342,7 +384,7 @@ export default function PriceTrendAnalyzer() {
       // Extract details for all selected products on this closest date
       const hoveredPoints: any[] = []
       selectedProducts.forEach(p => {
-        const data = trendData[p.sku]
+        const data = getProductTrend(p.sku)
         if (data && data.history) {
           // Find the transaction closest to this date for this SKU, or on this exact date
           const skuPointsOnDate = data.history.filter(h => h.data === closestDateStr)
@@ -455,7 +497,7 @@ export default function PriceTrendAnalyzer() {
 
           {/* Active Contract Benchmark Lines (Dashed, in SKU color) */}
           {selectedProducts.map(p => {
-            const data = trendData[p.sku]
+            const data = getProductTrend(p.sku)
             if (data && data.prezzo_contratto_corrente !== null) {
               const contractY = getY(data.prezzo_contratto_corrente)
               if (contractY >= paddingY && contractY <= svgHeight - paddingY) {
@@ -490,7 +532,7 @@ export default function PriceTrendAnalyzer() {
 
           {/* Price Trend Lines & Nodes */}
           {selectedProducts.map(p => {
-            const data = trendData[p.sku]
+            const data = getProductTrend(p.sku)
             if (!data || !data.history || data.history.length === 0) return null
 
             // Map and sort historical coordinates chronologically
@@ -688,7 +730,7 @@ export default function PriceTrendAnalyzer() {
     }[] = []
 
     selectedProducts.forEach(p => {
-      const data = trendData[p.sku]
+      const data = getProductTrend(p.sku)
       if (data && data.history) {
         data.history.forEach(h => {
           rows.push({
@@ -924,7 +966,7 @@ export default function PriceTrendAnalyzer() {
               boxShadow: '0 15px 30px rgba(0,0,0,0.5)',
               border: '1px solid rgba(255,255,255,0.08)'
             }}>
-              {suggestions.map((p, idx) => (
+              {suggestions.map((p: ProductSku, idx: number) => (
                 <div
                   key={`sug-${idx}`}
                   onClick={() => handleAddProduct(p)}

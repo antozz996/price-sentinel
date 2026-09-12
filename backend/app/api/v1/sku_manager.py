@@ -13,19 +13,79 @@ async def get_all_skus(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Ritorna la lista di tutti gli SKU unici associati a righe fattura,
+    Ritorna la lista di tutti gli SKU unici associati a righe fattura, prodotti e listini,
     ordinata per frequenza di acquisto, escludendo gli SKU in blacklist.
     """
     sql = """
+        WITH all_skus AS (
+            -- 1. Righe fattura con SKU interno
+            SELECT 
+                rf.sku_interno as sku, 
+                MAX(COALESCE(p.canonical_name, lm.descrizione, rf.descrizione_fornitore_raw, rf.sku_interno)) as nome_prodotto,
+                COUNT(rf.id) as total_acquisti
+            FROM righe_fattura rf
+            LEFT JOIN products p ON p.sku_interno = rf.sku_interno
+            LEFT JOIN listino_master lm ON lm.sku_interno = rf.sku_interno AND lm.data_scadenza IS NULL
+            WHERE rf.sku_interno IS NOT NULL 
+              AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
+            GROUP BY rf.sku_interno
+
+            UNION ALL
+
+            -- 2. Righe fattura senza SKU interno (usano descrizione raw)
+            SELECT 
+                rf.descrizione_fornitore_raw as sku, 
+                rf.descrizione_fornitore_raw as nome_prodotto,
+                COUNT(rf.id) as total_acquisti
+            FROM righe_fattura rf
+            WHERE rf.sku_interno IS NULL 
+              AND rf.descrizione_fornitore_raw IS NOT NULL 
+              AND LENGTH(TRIM(rf.descrizione_fornitore_raw)) > 0
+              AND rf.descrizione_fornitore_raw NOT IN (SELECT sku_interno FROM skus_esclusi)
+            GROUP BY rf.descrizione_fornitore_raw
+
+            UNION ALL
+
+            -- 3. Catalogo Products
+            SELECT 
+                p.sku_interno as sku,
+                COALESCE(p.canonical_name, p.sku_interno) as nome_prodotto,
+                0 as total_acquisti
+            FROM products p
+            WHERE p.sku_interno IS NOT NULL
+              AND p.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
+
+            UNION ALL
+
+            -- 4. Alias da SupplierProductAlias
+            SELECT 
+                spa.raw_description as sku,
+                COALESCE(p.canonical_name, spa.raw_description) as nome_prodotto,
+                0 as total_acquisti
+            FROM supplier_product_aliases spa
+            LEFT JOIN products p ON p.id = spa.product_id
+            WHERE spa.raw_description IS NOT NULL
+              AND spa.raw_description NOT IN (SELECT sku_interno FROM skus_esclusi)
+
+            UNION ALL
+
+            -- 5. Listino Master
+            SELECT 
+                lm.sku_interno as sku,
+                COALESCE(lm.descrizione, lm.sku_interno) as nome_prodotto,
+                0 as total_acquisti
+            FROM listino_master lm
+            WHERE lm.sku_interno IS NOT NULL
+              AND lm.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
+        )
         SELECT 
-            sku_interno, 
-            MAX(descrizione_fornitore_raw) as nome_prodotto,
-            COUNT(id) as total_acquisti
-        FROM righe_fattura 
-        WHERE sku_interno IS NOT NULL 
-          AND sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-        GROUP BY sku_interno
-        ORDER BY total_acquisti DESC
+            sku as sku_interno, 
+            MAX(nome_prodotto) as nome_prodotto,
+            SUM(total_acquisti) as total_acquisti
+        FROM all_skus
+        WHERE sku IS NOT NULL AND LENGTH(TRIM(sku)) > 0
+        GROUP BY sku
+        ORDER BY total_acquisti DESC, nome_prodotto ASC
     """
     res = await db.execute(text(sql))
     
@@ -132,6 +192,11 @@ async def rename_sku(
         # Update approvazioni_prezzo
         await db.execute(
             text("UPDATE approvazioni_prezzo SET sku_interno = :new_sku WHERE sku_interno = :old_sku"),
+            {"new_sku": new_sku, "old_sku": old_sku}
+        )
+        # Update products
+        await db.execute(
+            text("UPDATE products SET sku_interno = :new_sku WHERE sku_interno = :old_sku"),
             {"new_sku": new_sku, "old_sku": old_sku}
         )
         
