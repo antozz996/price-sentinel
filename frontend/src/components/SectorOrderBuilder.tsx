@@ -116,17 +116,20 @@ export const SECTOR_UOMS: Record<string, { id: string; label: string; short: str
     { id: 'BT', label: 'BT (Bottiglia)', short: 'BT' },
     { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
     { id: 'BOX', label: 'BOX (Box)', short: 'BOX' },
+    { id: 'CP', label: 'CP (Coppia)', short: 'CP' },
   ],
   'Materiali di consumo': [
     { id: 'PZ', label: 'PZ (Pezzo)', short: 'PZ' },
     { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
     { id: 'BUSTA', label: 'BUSTA (Busta)', short: 'BUSTA' },
+    { id: 'CP', label: 'CP (Coppia)', short: 'CP' },
   ],
   Food: [
     { id: 'PZ', label: 'PZ (Pezzo)', short: 'PZ' },
     { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
     { id: 'KG', label: 'KG (Chilogrammo)', short: 'KG' },
     { id: 'LT', label: 'LT (Litro)', short: 'LT' },
+    { id: 'CP', label: 'CP (Coppia)', short: 'CP' },
   ]
 };
 
@@ -140,6 +143,7 @@ export function getSectorUoms(category?: string | null): { id: string; label: st
     { id: 'PZ', label: 'PZ (Pezzo)', short: 'PZ' },
     { id: 'BOX', label: 'BOX (Box)', short: 'BOX' },
     { id: 'BUSTA', label: 'BUSTA (Busta)', short: 'BUSTA' },
+    { id: 'CP', label: 'CP (Coppia)', short: 'CP' },
   ];
 }
 
@@ -149,12 +153,14 @@ export function normalizeDefaultUom(rawUom?: string | null, category?: string | 
     const u = rawUom.trim().toUpperCase();
     if (u.includes('BOX')) return 'BOX';
     if (u === 'BT' || u.includes('BOTT')) return 'BT';
+    if (u === 'CP' || u.includes('COPP') || u.includes('PAIR')) return 'CP';
     return 'CT';
   }
   if (category === 'Materiali di consumo') {
     if (!rawUom) return 'CT';
     const u = rawUom.trim().toUpperCase();
     if (u.includes('BUST')) return 'BUSTA';
+    if (u === 'CP' || u.includes('COPP') || u.includes('PAIR')) return 'CP';
     if (u === 'PZ' || u === 'PIECE' || u === 'PEZZO') return 'PZ';
     return 'CT';
   }
@@ -163,6 +169,7 @@ export function normalizeDefaultUom(rawUom?: string | null, category?: string | 
     const u = rawUom.trim().toUpperCase();
     if (u === 'KG' || u.includes('CHIL') || u === 'GR' || u === 'ETTO') return 'KG';
     if (u === 'LT' || u.includes('LITR')) return 'LT';
+    if (u === 'CP' || u.includes('COPP') || u.includes('PAIR')) return 'CP';
     if (u === 'PZ' || u === 'PIECE' || u === 'PEZZO') return 'PZ';
     if (u === 'BT' || u.includes('BOTT')) return 'BT';
     if (u.includes('BUST')) return 'BUSTA';
@@ -174,6 +181,7 @@ export function normalizeDefaultUom(rawUom?: string | null, category?: string | 
   if (u === 'KG' || u.includes('CHIL')) return 'KG';
   if (u === 'LT' || u.includes('LITR')) return 'LT';
   if (u === 'BT' || u.includes('BOTT')) return 'BT';
+  if (u === 'CP' || u.includes('COPP') || u.includes('PAIR')) return 'CP';
   if (u === 'PIECE' || u === 'PZ' || u === 'PEZZO') return 'PZ';
   if (u.includes('BUST')) return 'BUSTA';
   if (u.includes('BOX')) return 'BOX';

@@ -140,6 +140,7 @@ def normalize_price_for_comparison(
     individual_uoms = {
         "piece", "pieces", "pezzo", "pezzi", "pz", "unita", "unit",
         "bottle", "bottiglia", "bottiglie", "bot", "bt", "btl", "fl",
+        "coppia", "coppie", "cp", "paio", "paia", "pair", "pairs",
     }
     is_package_uom = uom_normalized in package_uoms
     is_individual_uom = uom_normalized in individual_uoms

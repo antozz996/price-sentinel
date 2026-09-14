@@ -1992,6 +1992,7 @@ export default function ProductIdentityManager() {
                   <option value="Bt" style={{ background: '#13131c' }}>Bottiglia (Bt)</option>
                   <option value="Ct" style={{ background: '#13131c' }}>Cartone (Ct)</option>
                   <option value="Box" style={{ background: '#13131c' }}>Box / Cassa</option>
+                  <option value="CP" style={{ background: '#13131c' }}>Coppia (CP)</option>
                 </select>
               </div>
 
