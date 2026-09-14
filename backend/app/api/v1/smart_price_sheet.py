@@ -208,18 +208,23 @@ async def matrix(
                 )
             )
         ).all()
+        valid_spot_price = func.coalesce(
+            func.nullif(RigaFattura.prezzo_netto_normalizzato, 0),
+            RigaFattura.prezzo_unitario_fatturato,
+            0,
+        )
         spot_prices = (
             await db.execute(
                 select(
                     RigaFattura.sku_interno,
                     Fattura.fornitore_id,
-                    func.min(RigaFattura.prezzo_netto_normalizzato).label("price"),
+                    func.min(valid_spot_price).label("price"),
                 )
                 .join(Fattura, RigaFattura.fattura_id == Fattura.id)
                 .where(
                     RigaFattura.sku_interno.in_(skus),
                     Fattura.fornitore_id.in_(supplier_ids),
-                    RigaFattura.prezzo_netto_normalizzato > 0,
+                    valid_spot_price > 0,
                     RigaFattura.is_omaggio.is_not(True),
                 )
                 .group_by(RigaFattura.sku_interno, Fattura.fornitore_id)

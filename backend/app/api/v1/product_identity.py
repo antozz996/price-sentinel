@@ -423,7 +423,7 @@ async def get_match_work_queue(
     stmt = (
         select(RigaFattura, Fattura, Fornitore, MatchCandidate, Product)
         .join(Fattura, Fattura.id == RigaFattura.fattura_id)
-        .join(Fornitore, Fornitore.id == Fattura.fornitore_id)
+        .outerjoin(Fornitore, Fornitore.id == Fattura.fornitore_id)
         .outerjoin(
             MatchCandidate,
             and_(
@@ -440,12 +440,14 @@ async def get_match_work_queue(
     groups: dict[tuple[int, str, str], dict[str, Any]] = {}
     weak_candidates_discarded = 0
     for line, invoice, supplier, candidate, product in rows:
-        signature = _work_queue_signature(supplier.id, line)
+        supplier_id = supplier.id if supplier else 0
+        supplier_name = supplier.nome_azienda if supplier else "Fornitore non associato"
+        signature = _work_queue_signature(supplier_id, line)
         group = groups.setdefault(
             signature,
             {
-                "supplier_id": supplier.id,
-                "supplier_name": supplier.nome_azienda,
+                "supplier_id": supplier_id,
+                "supplier_name": supplier_name,
                 "supplier_code": line.codice_fornitore_raw,
                 "raw_description": line.descrizione_fornitore_raw or "Prodotto senza descrizione",
                 "normalized_description": normalize_text(line.descrizione_fornitore_raw or ""),

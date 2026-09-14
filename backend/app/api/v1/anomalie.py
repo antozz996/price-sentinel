@@ -168,8 +168,8 @@ async def azione_manager(
                 select(Anomalia, RigaFattura, Fattura, Fornitore, Location)
                 .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
                 .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-                .join(Fornitore, Fattura.fornitore_id == Fornitore.id)
-                .join(Location, Fattura.location_id == Location.id)
+                .outerjoin(Fornitore, Fattura.fornitore_id == Fornitore.id)
+                .outerjoin(Location, Fattura.location_id == Location.id)
                 .where(Anomalia.id == anomalia_id)
             )
             row = res.first()
@@ -184,9 +184,9 @@ async def azione_manager(
                     asyncio.create_task(
                         notify_admin_escalation(
                             chat_id=admin.telegram_chat_id,
-                            location_name=loc.nome_struttura,
-                            fornitore_nome=forn.nome_azienda,
-                            prodotto=riga.descrizione_fornitore_raw,
+                            location_name=loc.nome_struttura if loc else "Sede non assegnata",
+                            fornitore_nome=forn.nome_azienda if forn else "Fornitore non specificato",
+                            prodotto=riga.descrizione_fornitore_raw if riga else "Prodotto sconosciuto",
                             delta=float(anomalia.delta_prezzo),
                         )
                     )

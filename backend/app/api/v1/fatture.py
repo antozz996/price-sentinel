@@ -298,7 +298,7 @@ async def list_righe_fattura(
                 riga.pfa_valore = lst.pfa_valore
                 
                 # Calculate the netto_rientro unit price
-                prezzo_netto = Decimal(str(riga.prezzo_netto_normalizzato))
+                prezzo_netto = Decimal(str(riga.prezzo_netto_normalizzato if riga.prezzo_netto_normalizzato is not None else (riga.prezzo_unitario_fatturato or 0)))
                 if lst.pfa_tipo == PFATipo.fisso and lst.pfa_valore:
                     riga.netto_rientro = prezzo_netto - Decimal(str(lst.pfa_valore))
                 elif lst.pfa_tipo == PFATipo.percentuale and lst.pfa_valore:
@@ -403,9 +403,10 @@ async def get_fattura_html(
         r_qty = f"{r.quantita:g}"
         r_pu = f"€ {r.prezzo_unitario_fatturato:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         r_sconto = f"{r.sconto_percentuale:g}%" if r.sconto_percentuale > 0 else "-"
-        r_net = f"€ {r.prezzo_netto_normalizzato:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        net_price_val = r.prezzo_netto_normalizzato if (r.prezzo_netto_normalizzato is not None and r.prezzo_netto_normalizzato > 0) else (r.prezzo_unitario_fatturato or 0)
+        r_net = f"€ {net_price_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         
-        tot_net_val = r.prezzo_netto_normalizzato * r.quantita
+        tot_net_val = net_price_val * r.quantita
         r_tot_net = f"€ {tot_net_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
         
         r_iva = f"{r.aliquota_iva:g}%" if r.aliquota_iva is not None else "-"

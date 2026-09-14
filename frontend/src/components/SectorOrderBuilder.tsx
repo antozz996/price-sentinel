@@ -26,6 +26,20 @@ import {
 } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
+interface ProductOffer {
+  supplier_id: number;
+  supplier_name: string;
+  price: number;
+  source_type?: string;
+  uom?: string | null;
+}
+
+interface SupplierItem {
+  id: number;
+  nome_azienda: string;
+  attivo_whitelist?: boolean;
+}
+
 interface ProductItem {
   id: number;
   sku_interno: string | null;
@@ -39,6 +53,7 @@ interface ProductItem {
   prezzo_listino?: number | null;
   fornitore_consigliato_id?: number | null;
   fornitore_consigliato_nome?: string | null;
+  offers?: Record<string, ProductOffer>;
 }
 
 interface LocationItem {
@@ -251,6 +266,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   const [orderNotes, setOrderNotes] = useState<string>('');
   
   const [products, setProducts] = useState<ProductItem[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<SupplierItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('all');
@@ -261,12 +277,27 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   // Unit of Measure overrides per product_id
   const [selectedUoms, setSelectedUoms] = useState<Record<number, string>>({});
 
+  // Supplier overrides per product_id: { supplier_id, supplier_name, price }
+  const [selectedSuppliers, setSelectedSuppliers] = useState<Record<number, { supplier_id: number; supplier_name: string; price: number | null }>>({});
+
   // Freebie product selection for water 5+1 promo
   const [selectedWaterFreebieId, setSelectedWaterFreebieId] = useState<number | null>(null);
 
   // Helper for effective UoM
   const getEffectiveUom = (prod: ProductItem) => {
     return selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit, prod.category);
+  };
+
+  // Helper for effective Supplier & Price
+  const getEffectiveSupplier = (prod: ProductItem) => {
+    if (selectedSuppliers[prod.id]) {
+      return selectedSuppliers[prod.id];
+    }
+    return {
+      supplier_id: prod.fornitore_consigliato_id || null,
+      supplier_name: prod.fornitore_consigliato_nome || 'Miglior Listino',
+      price: prod.prezzo_listino ?? null
+    };
   };
 
   // Draft resolution state
@@ -307,10 +338,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
     setLoading(true);
     setErrorMsg(null);
     try {
-      const [locRes, prodRes, matrixRes] = await Promise.all([
+      const [locRes, prodRes, matrixRes, fornitoriRes] = await Promise.all([
         fetch(`${API_BASE}/location/`, { headers }),
         fetch(`${API_BASE}/products`, { headers }),
-        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }).catch(() => null)
+        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/fornitori?attivi=true`, { headers }).catch(() => null)
       ]);
 
       if (locRes.ok) {
@@ -318,6 +350,13 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         if (Array.isArray(locData)) {
           setLocations(locData);
           if (locData.length > 0) setSelectedLocation(locData[0].id);
+        }
+      }
+
+      if (fornitoriRes && fornitoriRes.ok) {
+        const fornitoriData = await fornitoriRes.json();
+        if (Array.isArray(fornitoriData)) {
+          setAllSuppliers(fornitoriData);
         }
       }
 
@@ -349,6 +388,19 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               const finalSupName = anyOffer ? anyOffer.supplier_name : null;
               const finalPrice = anyOffer ? parseFloat(anyOffer.price) : null;
 
+              const parsedOffers: Record<string, ProductOffer> = {};
+              if (m.offers) {
+                Object.entries(m.offers).forEach(([sIdStr, off]: [string, any]) => {
+                  parsedOffers[sIdStr] = {
+                    supplier_id: Number(sIdStr),
+                    supplier_name: off.supplier_name,
+                    price: parseFloat(off.price) || 0,
+                    source_type: off.source_type,
+                    uom: off.uom
+                  };
+                });
+              }
+
               return {
                 ...p,
                 category: m.category || p.category,
@@ -357,6 +409,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 prezzo_listino: finalPrice,
                 fornitore_consigliato_id: finalSupId,
                 fornitore_consigliato_nome: finalSupName,
+                offers: parsedOffers
               };
             }
             return p;
@@ -392,42 +445,61 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       const matchSector = selectedSector === 'all' || p.category === selectedSector;
       const matchSubcat = selectedSubcategory === 'all' || p.subcategory === selectedSubcategory;
       const search = searchTerm.toLowerCase().trim();
+      const effSup = getEffectiveSupplier(p);
       const matchSearch = !search 
         || p.canonical_name.toLowerCase().includes(search)
         || (p.order_name && p.order_name.toLowerCase().includes(search))
         || (p.sku_interno && p.sku_interno.toLowerCase().includes(search))
-        || (p.brand && p.brand.toLowerCase().includes(search));
+        || (p.brand && p.brand.toLowerCase().includes(search))
+        || (effSup.supplier_name && effSup.supplier_name.toLowerCase().includes(search))
+        || (p.offers && Object.values(p.offers).some(o => o.supplier_name.toLowerCase().includes(search)));
       return matchSector && matchSubcat && matchSearch;
     });
-  }, [products, selectedSector, selectedSubcategory, searchTerm]);
+  }, [products, selectedSector, selectedSubcategory, searchTerm, selectedSuppliers]);
 
   // Quantities and Basket Totals
   const basketItems = useMemo(() => {
-    const items: { product: ProductItem; quantity: number; uom: string }[] = [];
+    const items: { 
+      product: ProductItem; 
+      quantity: number; 
+      uom: string; 
+      supplier_id?: number | null; 
+      supplier_name?: string | null; 
+      unit_price?: number | null 
+    }[] = [];
+
     Object.entries(quantities).forEach(([prodIdStr, qty]) => {
       if (qty > 0) {
         const prod = products.find(p => p.id === Number(prodIdStr));
         if (prod) {
-          const uom = selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit);
-          items.push({ product: prod, quantity: qty, uom });
+          const uom = selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit, prod.category);
+          const effSup = getEffectiveSupplier(prod);
+          items.push({ 
+            product: prod, 
+            quantity: qty, 
+            uom,
+            supplier_id: effSup.supplier_id,
+            supplier_name: effSup.supplier_name,
+            unit_price: effSup.price
+          });
         }
       }
     });
     return items;
-  }, [quantities, products, selectedUoms]);
+  }, [quantities, products, selectedUoms, selectedSuppliers]);
 
   const basketStats = useMemo(() => {
     const totalItems = basketItems.length;
     const totalUnits = basketItems.reduce((acc, it) => acc + it.quantity, 0);
     const estimatedTotal = basketItems.reduce((acc, it) => {
-      const price = it.product.prezzo_listino || 0;
+      const price = it.unit_price || 0;
       return acc + (price * it.quantity);
     }, 0);
 
     const suppliersSet = new Set<string>();
     basketItems.forEach(it => {
-      if (it.product.fornitore_consigliato_nome) {
-        suppliersSet.add(it.product.fornitore_consigliato_nome);
+      if (it.supplier_name) {
+        suppliersSet.add(it.supplier_name);
       }
     });
 
@@ -474,6 +546,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
     if (basketItems.length === 0 || window.confirm("Sei sicuro di voler azzerare il carrello dell'ordine?")) {
       setQuantities({});
       setSelectedUoms({});
+      setSelectedSuppliers({});
       setSelectedWaterFreebieId(null);
       setDraftResult(null);
       setSaveSuccessMsg(null);
@@ -510,8 +583,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         quantita: it.quantity,
         comparison_unit: it.uom,
         category: it.product.category,
-        preferred_supplier_id: it.product.fornitore_consigliato_id,
-        prezzo_unitario: it.product.prezzo_listino
+        preferred_supplier_id: it.supplier_id,
+        prezzo_unitario: it.unit_price
       }))
     };
 
@@ -1050,8 +1123,13 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           {filteredProducts.map(prod => {
             const currentQty = quantities[prod.id] || 0;
             const hasQty = currentQty > 0;
-            const unitPrice = prod.prezzo_listino;
+            const effSup = getEffectiveSupplier(prod);
+            const unitPrice = effSup.price;
             const lineTotal = unitPrice ? unitPrice * currentQty : 0;
+            const isSelectedSup = !!selectedSuppliers[prod.id];
+
+            const productOffers = prod.offers ? Object.values(prod.offers) : [];
+            const offerSupplierIds = new Set(productOffers.map(o => o.supplier_id));
 
             return (
               <div
@@ -1115,7 +1193,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                           color: '#34d399', 
                           background: 'rgba(16, 185, 129, 0.15)', 
                           padding: '1px 6px', 
-                          borderRadius: '4px',
+                          borderRadius: '4px', 
                           fontWeight: 700,
                           fontSize: '0.7rem' 
                         }}>
@@ -1125,26 +1203,97 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     )}
                   </div>
 
-                  {/* Recommended Supplier & Price info */}
+                  {/* Recommended / Selected Supplier & Price info */}
                   <div style={{ 
                     marginTop: '10px', 
-                    padding: '8px 10px', 
+                    padding: '6px 10px', 
                     borderRadius: '8px', 
-                    background: 'rgba(0, 0, 0, 0.25)', 
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    background: 'rgba(0, 0, 0, 0.3)', 
+                    border: isSelectedSup ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
+                    gap: '8px',
                     fontSize: '0.8rem'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Truck size={13} color="var(--accent-blue)" />
-                      <span style={{ color: 'var(--text-secondary)' }}>Fornitore:</span>
-                      <strong style={{ color: 'white' }}>{prod.fornitore_consigliato_nome || 'Miglior Listino'}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, minWidth: 0 }}>
+                      <Truck size={13} color={isSelectedSup ? 'var(--accent-blue)' : 'var(--text-secondary)'} style={{ flexShrink: 0 }} />
+                      <select
+                        value={effSup.supplier_id || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setSelectedSuppliers(prev => {
+                              const next = { ...prev };
+                              delete next[prod.id];
+                              return next;
+                            });
+                            return;
+                          }
+                          const sId = Number(val);
+                          const matchingOffer = prod.offers ? prod.offers[String(sId)] : null;
+                          const matchingSup = allSuppliers.find(s => s.id === sId);
+                          setSelectedSuppliers(prev => ({
+                            ...prev,
+                            [prod.id]: {
+                              supplier_id: sId,
+                              supplier_name: matchingOffer?.supplier_name || matchingSup?.nome_azienda || `Fornitore #${sId}`,
+                              price: matchingOffer ? matchingOffer.price : (prod.prezzo_listino ?? null)
+                            }
+                          }));
+                        }}
+                        style={{
+                          background: isSelectedSup ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                          border: isSelectedSup ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(255, 255, 255, 0.12)',
+                          borderRadius: '6px',
+                          color: isSelectedSup ? '#93c5fd' : 'white',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          padding: '3px 6px',
+                          outline: 'none',
+                          cursor: 'pointer',
+                          flex: 1,
+                          minWidth: 0,
+                          textOverflow: 'ellipsis',
+                          overflow: 'hidden',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Cambia fornitore per questo articolo"
+                      >
+                        {/* Option when no supplier id or default */}
+                        {(!effSup.supplier_id || (!productOffers.some(o => o.supplier_id === effSup.supplier_id) && !allSuppliers.some(s => s.id === effSup.supplier_id))) && (
+                          <option value="" style={{ background: '#13131c', color: 'white' }}>
+                            {effSup.supplier_name || 'Seleziona fornitore'}
+                          </option>
+                        )}
+
+                        {/* Offers with known prices first */}
+                        {productOffers.length > 0 && (
+                          <optgroup label="Offerte e listini" style={{ background: '#13131c', color: '#93c5fd' }}>
+                            {productOffers.map(off => (
+                              <option key={off.supplier_id} value={off.supplier_id} style={{ background: '#13131c', color: 'white' }}>
+                                {off.supplier_name} {off.price > 0 ? `(€ ${off.price.toFixed(2)})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+
+                        {/* Other active suppliers */}
+                        {allSuppliers.filter(s => !offerSupplierIds.has(s.id)).length > 0 && (
+                          <optgroup label="Tutti i fornitori" style={{ background: '#13131c', color: 'var(--text-secondary)' }}>
+                            {allSuppliers.filter(s => !offerSupplierIds.has(s.id)).map(sup => (
+                              <option key={sup.id} value={sup.id} style={{ background: '#13131c', color: 'white' }}>
+                                {sup.nome_azienda}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
                     </div>
-                    {unitPrice ? (
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--status-green)' }}>
+
+                    {unitPrice !== null && unitPrice !== undefined ? (
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ fontWeight: 700, color: 'var(--status-green)', fontSize: '0.82rem' }}>
                           € {unitPrice.toFixed(2)} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 400 }}>/{getEffectiveUom(prod)}</span>
                         </div>
                         {hasQty && (
@@ -1154,7 +1303,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         )}
                       </div>
                     ) : (
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>A listino</div>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', flexShrink: 0 }}>A listino</div>
                     )}
                   </div>
                 </div>

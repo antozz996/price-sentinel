@@ -592,10 +592,10 @@ async def elabora_ordine_settore(
         policy = (await db.scalars(policy_stmt)).first()
 
         chosen_supplier_id = None
-        if policy and policy.preferred_supplier_id:
-            chosen_supplier_id = policy.preferred_supplier_id
-        elif it.preferred_supplier_id:
+        if it.preferred_supplier_id:
             chosen_supplier_id = it.preferred_supplier_id
+        elif policy and policy.preferred_supplier_id:
+            chosen_supplier_id = policy.preferred_supplier_id
 
         unit_price = it.prezzo_unitario
         uom = it.comparison_unit or product.comparison_unit or "CT"
@@ -619,6 +619,8 @@ async def elabora_ordine_settore(
                     if not it.comparison_unit and sup_listino.unita_misura:
                         uom = sup_listino.unita_misura
                     is_concordato = True
+                elif it.prezzo_unitario is not None and it.prezzo_unitario > 0:
+                    unit_price = float(it.prezzo_unitario)
         else:
             # Nessuna forzatura: cerca il fornitore con miglior prezzo attivo (solo whitelist)
             if product.sku_interno:
