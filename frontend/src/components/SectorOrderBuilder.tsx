@@ -23,6 +23,10 @@ import {
   Phone,
   ChevronDown,
   ChevronUp,
+  Mail,
+  Send,
+  X,
+  Radio,
 } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
@@ -38,6 +42,38 @@ interface SupplierItem {
   id: number;
   nome_azienda: string;
   attivo_whitelist?: boolean;
+}
+
+export interface SectorPriceQuoteSupplierDetail {
+  supplier_id: number;
+  supplier_name: string;
+  partita_iva?: string | null;
+  email_contatto?: string | null;
+  telefono_contatto?: string | null;
+  whatsapp_message: string;
+  whatsapp_url: string;
+  email_subject: string;
+  email_body: string;
+  email_mailto_url: string;
+  has_capability: boolean;
+  capability_reason?: string | null;
+}
+
+export interface SectorPriceQuoteResponse {
+  product_id?: number | null;
+  canonical_name: string;
+  settore_categoria: string;
+  sottocategoria?: string | null;
+  brand?: string | null;
+  comparison_unit: string;
+  location_nome?: string | null;
+  total_fornitori_settore: number;
+  fornitori_con_whatsapp: number;
+  fornitori_con_email: number;
+  broadcast_whatsapp_text: string;
+  broadcast_email_subject: string;
+  broadcast_email_body: string;
+  fornitori: SectorPriceQuoteSupplierDetail[];
 }
 
 interface ProductItem {
@@ -322,6 +358,41 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   // Mobile expandable details in floating bottom bar
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState<boolean>(false);
   
+  // New Product Modal & RFQ Price Quote Modal States
+  const [isAddProductModalOpen, setIsAddProductModalOpen] = useState<boolean>(false);
+  const [isPriceQuoteModalOpen, setIsPriceQuoteModalOpen] = useState<boolean>(false);
+  const [quoteProductTarget, setQuoteProductTarget] = useState<ProductItem | null>(null);
+  const [quoteData, setQuoteData] = useState<SectorPriceQuoteResponse | null>(null);
+  const [loadingQuote, setLoadingQuote] = useState<boolean>(false);
+  const [savingProduct, setSavingProduct] = useState<boolean>(false);
+  const [quoteCopied, setQuoteCopied] = useState<boolean>(false);
+  const [quoteSupplierPhones, setQuoteSupplierPhones] = useState<Record<number, string>>({});
+  const [quoteSupplierEmails, setQuoteSupplierEmails] = useState<Record<number, string>>({});
+  const [quoteSuccessMsg, setQuoteSuccessMsg] = useState<string | null>(null);
+  
+  // New Product Form State
+  const [newProductForm, setNewProductForm] = useState<{
+    canonical_name: string;
+    order_name: string;
+    category: string;
+    subcategory: string;
+    brand: string;
+    comparison_unit: string;
+    sku_interno: string;
+    initial_quantity: number | '';
+    specifiche_extra: string;
+  }>({
+    canonical_name: '',
+    order_name: '',
+    category: 'Beverage',
+    subcategory: '',
+    brand: '',
+    comparison_unit: 'CT',
+    sku_interno: '',
+    initial_quantity: '',
+    specifiche_extra: ''
+  });
+
   // Responsive screen detection (<= 1024px) for adaptive bottom bar
   const [isMobileScreen, setIsMobileScreen] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -684,6 +755,219 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
     }
   };
 
+  // Open Add New Product Modal
+  const handleOpenAddProduct = () => {
+    const defaultCat = selectedSector !== 'all' ? selectedSector : (allowedSectors[0] || 'Beverage');
+    const uoms = getSectorUoms(defaultCat);
+    setNewProductForm({
+      canonical_name: '',
+      order_name: '',
+      category: defaultCat,
+      subcategory: selectedSubcategory !== 'all' ? selectedSubcategory : '',
+      brand: '',
+      comparison_unit: uoms[0]?.id || 'CT',
+      sku_interno: '',
+      initial_quantity: 1,
+      specifiche_extra: ''
+    });
+    setErrorMsg(null);
+    setIsAddProductModalOpen(true);
+  };
+
+  // Open Multi-Supplier Price Quote Modal (RFQ)
+  const handleOpenPriceQuote = async (prod: ProductItem) => {
+    setQuoteProductTarget(prod);
+    setIsPriceQuoteModalOpen(true);
+    setLoadingQuote(true);
+    setQuoteData(null);
+    setErrorMsg(null);
+    setQuoteSuccessMsg(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/ordini/settore/richiesta-prezzo`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          product_id: prod.id,
+          canonical_name: prod.canonical_name,
+          order_name: prod.order_name,
+          category: prod.category,
+          subcategory: prod.subcategory,
+          brand: prod.brand,
+          comparison_unit: getEffectiveUom(prod),
+          sku_interno: prod.sku_interno,
+          location_id: selectedLocation ? Number(selectedLocation) : null,
+          quantita_stimata: quantities[prod.id] || 1
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Errore nel calcolo dei fornitori del settore.");
+      }
+
+      const data: SectorPriceQuoteResponse = await res.json();
+      setQuoteData(data);
+      
+      const phoneMap: Record<number, string> = {};
+      const emailMap: Record<number, string> = {};
+      data.fornitori.forEach(f => {
+        if (f.telefono_contatto) phoneMap[f.supplier_id] = f.telefono_contatto;
+        if (f.email_contatto) emailMap[f.supplier_id] = f.email_contatto;
+      });
+      setQuoteSupplierPhones(phoneMap);
+      setQuoteSupplierEmails(emailMap);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || "Errore durante la generazione della richiesta di prezzo.");
+    } finally {
+      setLoadingQuote(false);
+    }
+  };
+
+  // Save New Product in Catalog and optionally launch multi-supplier RFQ
+  const handleSaveNewProduct = async (andRequestQuote: boolean) => {
+    if (!newProductForm.canonical_name.trim()) {
+      alert("Inserisci il nome canonico del prodotto.");
+      return;
+    }
+
+    setSavingProduct(true);
+    setErrorMsg(null);
+
+    const payload = {
+      canonical_name: newProductForm.canonical_name.trim(),
+      order_name: newProductForm.order_name.trim() || null,
+      category: newProductForm.category || (selectedSector !== 'all' ? selectedSector : null),
+      subcategory: newProductForm.subcategory.trim() || null,
+      brand: newProductForm.brand.trim() || null,
+      comparison_unit: newProductForm.comparison_unit || 'CT',
+      sku_interno: newProductForm.sku_interno.trim() || null,
+      initial_quantity: Number(newProductForm.initial_quantity) || 0
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/ordini/settore/prodotti/nuovo`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Errore durante l'importazione del prodotto.");
+      }
+
+      const created: any = await res.json();
+      
+      const newProductItem: ProductItem = {
+        id: created.id,
+        sku_interno: created.sku_interno,
+        canonical_name: created.canonical_name,
+        order_name: created.order_name,
+        brand: created.brand,
+        category: created.category,
+        subcategory: created.subcategory,
+        comparison_unit: created.comparison_unit,
+        is_active: created.is_active,
+        prezzo_listino: null,
+        fornitore_consigliato_id: null,
+        fornitore_consigliato_nome: null,
+        offers: {}
+      };
+
+      // Add to products list at the beginning
+      setProducts(prev => {
+        const filtered = prev.filter(p => p.id !== newProductItem.id);
+        return [newProductItem, ...filtered];
+      });
+
+      // Set initial quantity in basket if specified
+      if (Number(newProductForm.initial_quantity) > 0) {
+        setQuantities(prev => ({
+          ...prev,
+          [newProductItem.id]: Number(newProductForm.initial_quantity)
+        }));
+        setSelectedUoms(prev => ({
+          ...prev,
+          [newProductItem.id]: newProductItem.comparison_unit
+        }));
+      }
+
+      setIsAddProductModalOpen(false);
+
+      if (andRequestQuote) {
+        // Automatically trigger price quote broadcast for all sector suppliers
+        handleOpenPriceQuote(newProductItem);
+      } else {
+        setSaveSuccessMsg(`Prodotto "${created.canonical_name}" aggiunto con successo al carrello e al catalogo!`);
+        setTimeout(() => setSaveSuccessMsg(null), 5000);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Impossibile salvare il prodotto.");
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
+  // Copy Broadcast WhatsApp text
+  const handleCopyBroadcastQuote = () => {
+    if (!quoteData) return;
+    navigator.clipboard.writeText(quoteData.broadcast_whatsapp_text);
+    setQuoteCopied(true);
+    setTimeout(() => setQuoteCopied(false), 3000);
+  };
+
+  // Send Broadcast Email (BCC/Ccn to all sector suppliers)
+  const handleSendBroadcastEmail = () => {
+    if (!quoteData) return;
+    const emails = quoteData.fornitori
+      .map(f => (quoteSupplierEmails[f.supplier_id] || f.email_contatto || '').trim())
+      .filter(Boolean);
+    
+    const subjectEnc = encodeURIComponent(quoteData.broadcast_email_subject);
+    const bodyEnc = encodeURIComponent(quoteData.broadcast_email_body);
+    
+    const mailto = emails.length > 0 
+      ? `mailto:?bcc=${emails.join(',')}&subject=${subjectEnc}&body=${bodyEnc}`
+      : `mailto:?subject=${subjectEnc}&body=${bodyEnc}`;
+      
+    window.open(mailto, '_blank');
+    setQuoteSuccessMsg("Client email avviato con tutti i fornitori del settore in copia nascosta (Ccn)!");
+    setTimeout(() => setQuoteSuccessMsg(null), 5000);
+  };
+
+  // Open WhatsApp for single supplier in quote modal
+  const handleOpenSingleSupplierWhatsApp = (supplier: SectorPriceQuoteSupplierDetail) => {
+    const rawPhone = quoteSupplierPhones[supplier.supplier_id] || supplier.telefono_contatto || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    let url = supplier.whatsapp_url;
+    if (cleanPhone.length >= 8) {
+      const intlPhone = cleanPhone.startsWith('39') ? cleanPhone : `39${cleanPhone}`;
+      const msgEncoded = encodeURIComponent(supplier.whatsapp_message);
+      url = `https://wa.me/${intlPhone}?text=${msgEncoded}`;
+    }
+    window.open(url, '_blank');
+  };
+
+  // Open Email for single supplier in quote modal
+  const handleOpenSingleSupplierEmail = (supplier: SectorPriceQuoteSupplierDetail) => {
+    const email = (quoteSupplierEmails[supplier.supplier_id] || supplier.email_contatto || '').trim();
+    if (!email) {
+      alert("Nessun indirizzo email specificato per questo fornitore.");
+      return;
+    }
+    const subjectEnc = encodeURIComponent(supplier.email_subject);
+    const bodyEnc = encodeURIComponent(supplier.email_body);
+    window.open(`mailto:${email}?subject=${subjectEnc}&body=${bodyEnc}`, '_blank');
+  };
+
   const selectedLocObj = locations.find(l => l.id === Number(selectedLocation));
 
   return (
@@ -982,12 +1266,13 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           />
         </div>
 
-        {/* Subcategory dropdown and product count */}
+        {/* Subcategory dropdown and product count & Add Product Action */}
         <div style={{ 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between', 
-          gap: '8px',
+          gap: '10px',
+          flexWrap: 'wrap',
           width: isMobileScreen ? '100%' : 'auto'
         }}>
           {subcategories.length > 0 && (
@@ -1018,6 +1303,33 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               </select>
             </div>
           )}
+
+          {/* Button to Import / Add New Product and Request Quotes */}
+          <button
+            type="button"
+            onClick={handleOpenAddProduct}
+            style={{
+              padding: isMobileScreen ? '7px 12px' : '8px 14px',
+              borderRadius: '8px',
+              border: '1px solid rgba(59, 130, 246, 0.45)',
+              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(139, 92, 246, 0.35) 100%)',
+              color: 'white',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 0 15px rgba(59, 130, 246, 0.2)',
+              whiteSpace: 'nowrap',
+              transition: 'all 0.2s'
+            }}
+            title="Aggiungi nuovo articolo al catalogo e invia richiesta di prezzo ai fornitori del settore"
+          >
+            <Plus size={15} color="#93c5fd" />
+            <span>Nuovo Prodotto / Preventivo</span>
+            <Sparkles size={13} color="#f59e0b" />
+          </button>
 
           <div style={{ 
             color: 'var(--text-secondary)', 
@@ -1435,6 +1747,34 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         <Trash2 size={12} />
                       </button>
                     )}
+                  </div>
+
+                  {/* Single-Click RFQ Trigger for this product */}
+                  <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPriceQuote(prod)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(139, 92, 246, 0.35)',
+                        background: 'rgba(139, 92, 246, 0.12)',
+                        color: '#c4b5fd',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        transition: 'all 0.2s',
+                        width: '100%',
+                        justifyContent: 'center'
+                      }}
+                      title="Invia richiesta di quotazione prezzo a tutti i fornitori abilitati nel settore"
+                    >
+                      <Send size={11} color="#a78bfa" />
+                      <span>Richiedi Prezzo Fornitori Settore</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1973,6 +2313,724 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             </button>
           </div>
 
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 1: IMPORTA / AGGIUNGI NUOVO PRODOTTO NEL SELETTORE
+      ───────────────────────────────────────────────────────────── */}
+      {isAddProductModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, #182234 0%, #0d1424 100%)',
+            border: '1px solid rgba(59, 130, 246, 0.35)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '650px',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 35px rgba(59, 130, 246, 0.25)',
+            padding: '24px',
+            color: 'white',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '42px', height: '42px', borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)'
+                }}>
+                  <Plus size={22} color="white" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
+                    Nuovo Prodotto nel Selettore
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Aggiungi l'articolo al catalogo e invia la richiesta di prezzo ai fornitori del settore.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddProductModalOpen(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'var(--text-secondary)',
+                  padding: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Product Canonical Name */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#93c5fd' }}>
+                  Nome Prodotto Completo / Canonico *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Es. Gin Mare 70cl, Bicchieri Monouso 200cc..."
+                  value={newProductForm.canonical_name}
+                  onChange={e => setNewProductForm({ ...newProductForm, canonical_name: e.target.value })}
+                  style={{
+                    padding: '10px 14px',
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    outline: 'none'
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              {/* Order Rapido Name & SKU */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Nome Rapido d'Ordine
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Es. GIN MARE, BICCHIERI 200..."
+                    value={newProductForm.order_name}
+                    onChange={e => setNewProductForm({ ...newProductForm, order_name: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Brand / Marchio
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Es. San Benedetto, San Bernardo..."
+                    value={newProductForm.brand}
+                    onChange={e => setNewProductForm({ ...newProductForm, brand: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Category / Settore Pills Selector */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#93c5fd' }}>
+                  Settore / Categoria di Appartenenza *
+                </label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {MACRO_CATEGORIES.filter(c => c.id !== 'all').map(cat => {
+                    const isSel = newProductForm.category === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          const uoms = getSectorUoms(cat.id);
+                          setNewProductForm({ 
+                            ...newProductForm, 
+                            category: cat.id,
+                            comparison_unit: uoms[0]?.id || 'CT'
+                          });
+                        }}
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '20px',
+                          border: isSel ? `2px solid ${cat.color}` : '1px solid var(--border-glass)',
+                          background: isSel ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.3)',
+                          color: isSel ? 'white' : 'var(--text-secondary)',
+                          fontSize: '0.82rem',
+                          fontWeight: isSel ? 700 : 500,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <span>{cat.icon}</span>
+                        <span>{cat.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Subcategory & Unit of Measure */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Sottocategoria
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Es. Birre, Detergenza, Bibite..."
+                    value={newProductForm.subcategory}
+                    onChange={e => setNewProductForm({ ...newProductForm, subcategory: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Unità di Misura d'Ordine *
+                  </label>
+                  <select
+                    value={newProductForm.comparison_unit}
+                    onChange={e => setNewProductForm({ ...newProductForm, comparison_unit: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: '#93c5fd',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {getSectorUoms(newProductForm.category).map(u => (
+                      <option key={u.id} value={u.id} style={{ background: '#13131c', color: 'white' }}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Quantity to add to cart & SKU */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#34d399' }}>
+                    Quantità Iniziale nel Carrello
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Es. 1"
+                    value={newProductForm.initial_quantity}
+                    onChange={e => setNewProductForm({ ...newProductForm, initial_quantity: parseFloat(e.target.value) || '' })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      borderRadius: '8px',
+                      color: '#34d399',
+                      fontWeight: 700,
+                      fontSize: '0.9rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Codice SKU Interno (Opzionale)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Auto-generato se vuoto"
+                    value={newProductForm.sku_interno}
+                    onChange={e => setNewProductForm({ ...newProductForm, sku_interno: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsAddProductModalOpen(false)}
+                disabled={savingProduct}
+                style={{ padding: '10px 16px', fontSize: '0.85rem' }}
+              >
+                Annulla
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => handleSaveNewProduct(false)}
+                disabled={savingProduct || !newProductForm.canonical_name.trim()}
+                style={{ padding: '10px 18px', fontSize: '0.85rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {savingProduct ? <RefreshCw className="spinner" size={14} /> : <FileText size={14} />}
+                <span>Salva nel Catalogo</span>
+              </button>
+
+              {/* UNICO TASTO: SALVA E RICHIEDI PREZZO A TUTTI I FORNITORI DEL SETTORE */}
+              <button
+                type="button"
+                onClick={() => handleSaveNewProduct(true)}
+                disabled={savingProduct || !newProductForm.canonical_name.trim()}
+                style={{
+                  padding: '11px 22px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+                  color: 'white',
+                  fontWeight: 800,
+                  fontSize: '0.9rem',
+                  cursor: savingProduct || !newProductForm.canonical_name.trim() ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 0 25px rgba(139, 92, 246, 0.4)',
+                  opacity: savingProduct || !newProductForm.canonical_name.trim() ? 0.6 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {savingProduct ? <RefreshCw className="spinner" size={16} /> : <Send size={16} />}
+                <span>Salva e Richiedi Prezzo a Tutti i Fornitori 🚀</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL 2: RICHIESTA PREZZO MULTI-FORNITORE SETTORE (RFQ)
+      ───────────────────────────────────────────────────────────── */}
+      {isPriceQuoteModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, #161e2e 0%, #0c1220 100%)',
+            border: '1px solid rgba(139, 92, 246, 0.4)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '780px',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px rgba(139, 92, 246, 0.3)',
+            padding: '26px',
+            color: 'white',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 0 20px rgba(139, 92, 246, 0.4)'
+                }}>
+                  <Send size={22} color="white" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800 }}>
+                    Richiesta Prezzo Fornitori del Settore
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                    Invia la richiesta di quotazione per incrociare i prezzi e agganciare nuove offerte al sistema.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPriceQuoteModalOpen(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'var(--text-secondary)',
+                  padding: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {quoteSuccessMsg && (
+              <div style={{ padding: '12px 16px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <CheckCircle2 size={18} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{quoteSuccessMsg}</span>
+              </div>
+            )}
+
+            {loadingQuote ? (
+              <div style={{ padding: '50px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <RefreshCw className="spinner" size={32} style={{ margin: '0 auto 12px', color: '#8b5cf6' }} />
+                <div>Individuazione fornitori del settore per "{quoteProductTarget?.canonical_name || 'questo articolo'}" e generazione messaggi di quotazione...</div>
+              </div>
+            ) : quoteData ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                
+                {/* Target Product Summary Banner */}
+                <div style={{
+                  padding: '14px 18px',
+                  borderRadius: '12px',
+                  background: 'rgba(139, 92, 246, 0.12)',
+                  border: '1px solid rgba(139, 92, 246, 0.35)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '12px'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'white' }}>
+                      {quoteData.canonical_name}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', fontSize: '0.78rem', color: '#c4b5fd' }}>
+                      <span>Settore: <strong>{quoteData.settore_categoria}</strong></span>
+                      {quoteData.sottocategoria && <span>• {quoteData.sottocategoria}</span>}
+                      {quoteData.brand && <span>• Brand: {quoteData.brand}</span>}
+                      <span>• UoM: <strong>{quoteData.comparison_unit}</strong></span>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    fontSize: '0.78rem',
+                    color: 'var(--text-secondary)'
+                  }}>
+                    📍 Sede: <strong style={{ color: 'white' }}>{quoteData.location_nome || 'Tutte'}</strong>
+                  </div>
+                </div>
+
+                {/* Broadcast Master Action Bar (UNICO TASTO PER TUTTI I FORNITORI) */}
+                <div style={{
+                  padding: '16px 20px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Radio size={16} color="#60a5fa" />
+                      <span>Invia Richiesta di Prezzo a Tutti i Fornitori del Settore ({quoteData.total_fornitori_settore})</span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                      💬 {quoteData.fornitori_con_whatsapp} WhatsApp · ✉️ {quoteData.fornitori_con_email} Email
+                    </div>
+                  </div>
+
+                  {/* UNICO TASTO MASTER BROADCAST BUTTONS */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobileScreen ? '1fr' : '1fr 1fr', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={handleCopyBroadcastQuote}
+                      style={{
+                        padding: '12px 18px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(37, 211, 102, 0.4)',
+                        background: 'linear-gradient(135deg, rgba(37, 211, 102, 0.2) 0%, rgba(18, 140, 126, 0.3) 100%)',
+                        color: 'white',
+                        fontWeight: 800,
+                        fontSize: '0.88rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 0 20px rgba(37, 211, 102, 0.25)',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {quoteCopied ? <Check size={16} color="#34d399" /> : <Copy size={16} color="#25D366" />}
+                      <span>{quoteCopied ? '✓ Testo Broadcast Copiato!' : '📋 Copia Testo Broadcast WhatsApp'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSendBroadcastEmail}
+                      disabled={quoteData.fornitori_con_email === 0}
+                      style={{
+                        padding: '12px 18px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(59, 130, 246, 0.4)',
+                        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(99, 102, 241, 0.35) 100%)',
+                        color: 'white',
+                        fontWeight: 800,
+                        fontSize: '0.88rem',
+                        cursor: quoteData.fornitori_con_email === 0 ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 0 20px rgba(59, 130, 246, 0.25)',
+                        opacity: quoteData.fornitori_con_email === 0 ? 0.5 : 1,
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <Mail size={16} color="#93c5fd" />
+                      <span>✉️ Invia a Tutti via Email (BCC/Ccn)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Individual Supplier Cards List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Store size={14} />
+                    <span>Fornitori Abilitati nel Settore "{quoteData.settore_categoria}" ({quoteData.fornitori.length})</span>
+                  </div>
+
+                  {quoteData.fornitori.length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                      Nessun fornitore registrato con recapiti in questa categoria.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+                      {quoteData.fornitori.map(sup => {
+                        const hasPhone = !!(quoteSupplierPhones[sup.supplier_id] || sup.telefono_contatto);
+                        const hasEmail = !!(quoteSupplierEmails[sup.supplier_id] || sup.email_contatto);
+
+                        return (
+                          <div
+                            key={sup.supplier_id}
+                            style={{
+                              padding: '12px 16px',
+                              borderRadius: '10px',
+                              background: 'rgba(255, 255, 255, 0.03)',
+                              border: '1px solid var(--border-glass)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: '10px'
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span>{sup.supplier_name}</span>
+                                <span style={{
+                                  padding: '1px 6px', borderRadius: '4px',
+                                  background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd',
+                                  fontSize: '0.7rem', fontWeight: 600
+                                }}>
+                                  {sup.capability_reason || 'Settore'}
+                                </span>
+                              </div>
+
+                              {/* Editable contact pills */}
+                              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '6px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Phone size={12} color={hasPhone ? '#25D366' : 'var(--text-secondary)'} />
+                                  <input
+                                    type="text"
+                                    placeholder="Nessun tel."
+                                    value={quoteSupplierPhones[sup.supplier_id] ?? (sup.telefono_contatto || '')}
+                                    onChange={e => setQuoteSupplierPhones({ ...quoteSupplierPhones, [sup.supplier_id]: e.target.value })}
+                                    style={{
+                                      padding: '2px 6px',
+                                      background: 'rgba(0,0,0,0.3)',
+                                      border: '1px solid rgba(255,255,255,0.08)',
+                                      borderRadius: '4px',
+                                      color: 'white',
+                                      fontSize: '0.75rem',
+                                      width: '110px'
+                                    }}
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Mail size={12} color={hasEmail ? '#60a5fa' : 'var(--text-secondary)'} />
+                                  <input
+                                    type="text"
+                                    placeholder="Nessuna email"
+                                    value={quoteSupplierEmails[sup.supplier_id] ?? (sup.email_contatto || '')}
+                                    onChange={e => setQuoteSupplierEmails({ ...quoteSupplierEmails, [sup.supplier_id]: e.target.value })}
+                                    style={{
+                                      padding: '2px 6px',
+                                      background: 'rgba(0,0,0,0.3)',
+                                      border: '1px solid rgba(255,255,255,0.08)',
+                                      borderRadius: '4px',
+                                      color: 'white',
+                                      fontSize: '0.75rem',
+                                      width: '140px'
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Single Supplier Action Buttons */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSingleSupplierWhatsApp(sup)}
+                                style={{
+                                  padding: '7px 12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid rgba(37, 211, 102, 0.4)',
+                                  background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                                  color: 'white',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '5px'
+                                }}
+                                title="Invia richiesta specifica su WhatsApp"
+                              >
+                                <MessageSquare size={13} />
+                                <span>WhatsApp</span>
+                              </button>
+
+                              {hasEmail && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSingleSupplierEmail(sup)}
+                                  style={{
+                                    padding: '7px 12px',
+                                    borderRadius: '8px',
+                                    border: '1px solid rgba(59, 130, 246, 0.4)',
+                                    background: 'rgba(59, 130, 246, 0.2)',
+                                    color: '#93c5fd',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                  title="Invia email di richiesta prezzo"
+                                >
+                                  <Mail size={13} />
+                                  <span>Email</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Formatted Text Preview */}
+                <details style={{ background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#93c5fd' }}>
+                    👁️ Mostra anteprima del testo di richiesta quotazione
+                  </summary>
+                  <pre style={{
+                    marginTop: '10px',
+                    padding: '12px',
+                    background: '#0d1117',
+                    borderRadius: '6px',
+                    whiteSpace: 'pre-wrap',
+                    color: '#a7f3d0',
+                    fontSize: '0.8rem',
+                    fontFamily: 'monospace'
+                  }}>
+                    {quoteData.broadcast_whatsapp_text}
+                  </pre>
+                </details>
+
+                {/* System enrichment note */}
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  background: 'rgba(59, 130, 246, 0.08)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  fontSize: '0.78rem',
+                  color: '#93c5fd',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <Sparkles size={16} color="#f59e0b" style={{ flexShrink: 0 }} />
+                  <span>
+                    Quando i fornitori risponderanno con i loro listini o fatture, i dati verranno incrociati e agganciati in automatico a questo articolo per aggiornare le matrici e ottimizzare i futuri ordini.
+                  </span>
+                </div>
+
+              </div>
+            ) : null}
+
+            {/* Modal Footer */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsPriceQuoteModalOpen(false)}
+                style={{ padding: '9px 18px', fontSize: '0.85rem' }}
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -6,6 +6,7 @@ Modulo Sviluppo Ordini per Responsabili di Settore con invio WhatsApp.
 
 import urllib.parse
 import re
+import secrets
 from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional, Dict, Any, Tuple
@@ -22,8 +23,10 @@ from app.models.fornitori import Fornitore
 from app.models.location import Location
 from app.models.ordini import Ordine, RigaOrdine
 from app.models.products import Product, SupplierProductAlias
-from app.models.purchase_policy import ProductPurchasePolicy
+from app.models.purchase_policy import ProductPurchasePolicy, SupplierCategoryCapability, SupplierSubcategoryCapability
+from app.models.categories import MasterCategory
 from app.models.utenti import Utente
+from app.services.normalization import normalize_text
 
 router = APIRouter()
 
@@ -1108,4 +1111,386 @@ async def get_order_notifications(
         "count": len(items),
         "notifications": items
     }
+
+
+# ── Modulo Importazione Nuovo Prodotto & Richiesta Prezzi Fornitori Settore ──
+
+class CreateSectorProductRequest(BaseModel):
+    canonical_name: str = Field(..., min_length=2, max_length=255)
+    order_name: Optional[str] = Field(None, max_length=120)
+    category: Optional[str] = Field(None, max_length=100)
+    subcategory: Optional[str] = Field(None, max_length=100)
+    brand: Optional[str] = Field(None, max_length=100)
+    comparison_unit: str = Field("CT", max_length=50)
+    sku_interno: Optional[str] = Field(None, max_length=100)
+    variant: Optional[str] = None
+    volume_ml: Optional[int] = None
+    weight_g: Optional[int] = None
+    unit_count: Optional[int] = 1
+    container_type: Optional[str] = None
+    is_commodity: Optional[bool] = False
+    initial_quantity: Optional[float] = 0.0
+
+
+class SectorProductCreatedResponse(BaseModel):
+    id: int
+    sku_interno: Optional[str] = None
+    canonical_name: str
+    order_name: Optional[str] = None
+    brand: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    comparison_unit: str
+    is_active: bool
+    initial_quantity: float = 0.0
+    message: str
+
+
+class SectorPriceQuoteSupplierDetail(BaseModel):
+    supplier_id: int
+    supplier_name: str
+    partita_iva: Optional[str] = None
+    email_contatto: Optional[str] = None
+    telefono_contatto: Optional[str] = None
+    whatsapp_message: str
+    whatsapp_url: str
+    email_subject: str
+    email_body: str
+    email_mailto_url: str
+    has_capability: bool = True
+    capability_reason: Optional[str] = None
+
+
+class SectorPriceQuoteRequest(BaseModel):
+    product_id: Optional[int] = None
+    canonical_name: str
+    order_name: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    brand: Optional[str] = None
+    comparison_unit: str = "CT"
+    sku_interno: Optional[str] = None
+    location_id: Optional[int] = None
+    specifiche_extra: Optional[str] = None
+    quantita_stimata: Optional[float] = None
+    target_supplier_ids: Optional[List[int]] = None
+
+
+class SectorPriceQuoteResponse(BaseModel):
+    product_id: Optional[int]
+    canonical_name: str
+    settore_categoria: str
+    sottocategoria: Optional[str] = None
+    brand: Optional[str] = None
+    comparison_unit: str
+    location_nome: Optional[str] = None
+    total_fornitori_settore: int
+    fornitori_con_whatsapp: int
+    fornitori_con_email: int
+    broadcast_whatsapp_text: str
+    broadcast_email_subject: str
+    broadcast_email_body: str
+    fornitori: List[SectorPriceQuoteSupplierDetail]
+
+
+@router.post(
+    "/settore/prodotti/nuovo",
+    response_model=SectorProductCreatedResponse,
+    summary="Crea o importa un nuovo articolo direttamente dal selettore ordini",
+)
+async def crea_prodotto_settore(
+    data: CreateSectorProductRequest,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    clean_canonical = data.canonical_name.strip()
+    if not clean_canonical:
+        raise HTTPException(status_code=400, detail="Il nome prodotto è obbligatorio.")
+
+    norm_name = normalize_text(clean_canonical)
+    clean_order = data.order_name.strip() if data.order_name and data.order_name.strip() else None
+    norm_order = normalize_text(clean_order) if clean_order else None
+
+    # Verifica se esiste già un prodotto con questo nome normalizzato o SKU
+    existing_product = None
+    if data.sku_interno and data.sku_interno.strip():
+        existing_product = await db.scalar(
+            select(Product).where(Product.sku_interno == data.sku_interno.strip())
+        )
+    if not existing_product and norm_name:
+        existing_product = await db.scalar(
+            select(Product).where(Product.normalized_name == norm_name)
+        )
+
+    if existing_product:
+        # Riattiva se era disattivo
+        if not existing_product.is_active:
+            existing_product.is_active = True
+        if clean_order and not existing_product.order_name:
+            existing_product.order_name = clean_order
+            existing_product.normalized_order_name = norm_order
+        if data.category and not existing_product.category:
+            existing_product.category = data.category
+        if data.subcategory and not existing_product.subcategory:
+            existing_product.subcategory = data.subcategory
+        if data.brand and not existing_product.brand:
+            existing_product.brand = data.brand
+        await db.commit()
+        await db.refresh(existing_product)
+        return SectorProductCreatedResponse(
+            id=existing_product.id,
+            sku_interno=existing_product.sku_interno,
+            canonical_name=existing_product.canonical_name,
+            order_name=existing_product.order_name,
+            brand=existing_product.brand,
+            category=existing_product.category,
+            subcategory=existing_product.subcategory,
+            comparison_unit=existing_product.comparison_unit or data.comparison_unit,
+            is_active=existing_product.is_active,
+            initial_quantity=float(data.initial_quantity or 0.0),
+            message="Prodotto già presente a catalogo, aggiornato e collegato al selettore.",
+        )
+
+    # Genera SKU se non fornito
+    sku = data.sku_interno.strip() if data.sku_interno and data.sku_interno.strip() else None
+    if not sku:
+        cat_code = (data.category or "GEN")[:3].upper().replace(" ", "")
+        sku = f"SKU-{cat_code}-{secrets.token_hex(3).upper()}"
+
+    new_prod = Product(
+        sku_interno=sku,
+        canonical_name=clean_canonical,
+        normalized_name=norm_name,
+        order_name=clean_order,
+        normalized_order_name=norm_order,
+        brand=data.brand.strip() if data.brand and data.brand.strip() else None,
+        category=data.category.strip() if data.category and data.category.strip() else None,
+        subcategory=data.subcategory.strip() if data.subcategory and data.subcategory.strip() else None,
+        variant=data.variant.strip() if data.variant and data.variant.strip() else None,
+        volume_ml=data.volume_ml,
+        weight_g=data.weight_g,
+        unit_count=data.unit_count or 1,
+        container_type=data.container_type.strip() if data.container_type and data.container_type.strip() else None,
+        comparison_unit=data.comparison_unit.strip() if data.comparison_unit and data.comparison_unit.strip() else "CT",
+        is_commodity=bool(data.is_commodity),
+        is_active=True,
+    )
+    db.add(new_prod)
+    await db.commit()
+    await db.refresh(new_prod)
+
+    return SectorProductCreatedResponse(
+        id=new_prod.id,
+        sku_interno=new_prod.sku_interno,
+        canonical_name=new_prod.canonical_name,
+        order_name=new_prod.order_name,
+        brand=new_prod.brand,
+        category=new_prod.category,
+        subcategory=new_prod.subcategory,
+        comparison_unit=new_prod.comparison_unit,
+        is_active=new_prod.is_active,
+        initial_quantity=float(data.initial_quantity or 0.0),
+        message="Nuovo prodotto importato con successo nel catalogo e nel selettore!",
+    )
+
+
+@router.post(
+    "/settore/richiesta-prezzo",
+    response_model=SectorPriceQuoteResponse,
+    summary="Genera la richiesta preventivo/prezzo multi-fornitore per tutti i fornitori del settore",
+)
+async def genera_richiesta_prezzo_settore(
+    data: SectorPriceQuoteRequest,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    # Recupera nome sede se location_id fornito
+    location_name = "Tutte le Sedi / Direzione Acquisti"
+    if data.location_id:
+        loc = await db.get(Location, data.location_id)
+        if loc:
+            loc_addr = getattr(loc, "indirizzo", None)
+            location_name = loc.nome_struttura + (f" ({loc_addr})" if loc_addr else "")
+
+    category_str = data.category or "Generale"
+    cat_norm = category_str.strip().casefold()
+    subcat_str = data.subcategory or ""
+    subcat_norm = subcat_str.strip().casefold()
+
+    # 1. Recupera tutti i fornitori attivi non archiviati
+    suppliers_query = select(Fornitore).where(Fornitore.archived_at.is_(None)).order_by(Fornitore.nome_azienda)
+    all_suppliers = (await db.scalars(suppliers_query)).all()
+
+    # 2. Recupera capabilities
+    cap_query = select(SupplierCategoryCapability).where(SupplierCategoryCapability.enabled.is_(True))
+    all_caps = (await db.scalars(cap_query)).all()
+    caps_by_supplier: Dict[int, Set[str]] = {}
+    for c in all_caps:
+        if c.supplier_id not in caps_by_supplier:
+            caps_by_supplier[c.supplier_id] = set()
+        caps_by_supplier[c.supplier_id].add(c.category.strip().casefold())
+
+    # 3. Fornitori con fatture, alias o listini in questo settore / categoria
+    evidence_query = (
+        select(SupplierProductAlias.supplier_id)
+        .join(Product, Product.id == SupplierProductAlias.product_id)
+        .where(
+            Product.is_active.is_(True),
+            Product.category.ilike(f"%{category_str}%")
+        )
+    )
+    evidence_ids = set((await db.scalars(evidence_query)).all())
+
+    # 4. Determina fornitori appartenenti al settore
+    matched_suppliers: List[Fornitore] = []
+    matched_reasons: Dict[int, str] = {}
+
+    for s in all_suppliers:
+        if data.target_supplier_ids and s.id not in data.target_supplier_ids:
+            continue
+
+        s_cats = caps_by_supplier.get(s.id, set())
+        has_cat = False
+        reason = "Fornitore attivo nel settore"
+
+        if cat_norm in s_cats or any(c in cat_norm or cat_norm in c for c in s_cats):
+            has_cat = True
+            reason = f"Abilitato per categoria: {category_str}"
+        elif s.id in evidence_ids:
+            has_cat = True
+            reason = f"Storico listini nel settore: {category_str}"
+        elif not caps_by_supplier:  # Se non sono configurate capabilities specifiche, includi whitelist attivi
+            has_cat = bool(s.attivo_whitelist)
+            reason = "Fornitore attivo a catalogo"
+
+        # Se abbiamo target espliciti, includi sempre
+        if data.target_supplier_ids and s.id in data.target_supplier_ids:
+            has_cat = True
+
+        if has_cat:
+            matched_suppliers.append(s)
+            matched_reasons[s.id] = reason
+
+    # Se nessun fornitore è stato agganciato tramite capability, usa tutti i fornitori whitelist attivi
+    if not matched_suppliers and not data.target_supplier_ids:
+        for s in all_suppliers:
+            if s.attivo_whitelist:
+                matched_suppliers.append(s)
+                matched_reasons[s.id] = "Fornitore attivo whitelist"
+
+    # Costruisci testo broadcast e dettagli per singolo fornitore
+    product_title = data.canonical_name
+    if data.order_name and data.order_name != data.canonical_name:
+        product_title = f"{data.canonical_name} ({data.order_name})"
+
+    brand_line = f"🏷️ *Brand:* {data.brand}\n" if data.brand else ""
+    cat_line = f"📂 *Settore/Categoria:* {category_str}" + (f" > {subcat_str}" if subcat_str else "") + "\n"
+    uom_line = f"📏 *Unità di misura / Formato:* {data.comparison_unit}\n"
+    qty_line = f"📊 *Fabbisogno / Quantità stimata:* {data.quantita_stimata:.2f} {data.comparison_unit}\n" if data.quantita_stimata else ""
+    extra_line = f"📝 *Note & Specifiche:* {data.specifiche_extra}\n" if data.specifiche_extra else ""
+
+    broadcast_wa = (
+        f"🤝 *RICHIESTA QUOTAZIONE PREZZO / LISTINO*\n"
+        f"📍 *Destinazione / Struttura:* {location_name}\n\n"
+        f"Gentile fornitore,\n"
+        f"Vi richiediamo la vostra migliore offerta di prezzo e disponibilità per il seguente articolo:\n\n"
+        f"📦 *Articolo:* {product_title}\n"
+        f"{cat_line}"
+        f"{brand_line}"
+        f"{uom_line}"
+        f"{qty_line}"
+        f"{extra_line}\n"
+        f"Vi preghiamo di risponderci con quotazione unitaria, packaging di fornitura e tempi di consegna.\n"
+        f"Grazie per la collaborazione!"
+    )
+
+    email_subject = f"Richiesta Quotazione Prezzo: {data.canonical_name} — {location_name}"
+    email_body_text = (
+        f"Gentile Fornitore,\n\n"
+        f"Vi contattiamo per richiedere la vostra migliore offerta economica e condizioni di fornitura per il seguente prodotto:\n\n"
+        f"- Articolo: {data.canonical_name}\n"
+        + (f"- Nome rapido: {data.order_name}\n" if data.order_name else "")
+        + f"- Categoria / Settore: {category_str}" + (f" / {subcat_str}" if subcat_str else "") + "\n"
+        + (f"- Marchio/Brand: {data.brand}\n" if data.brand else "")
+        + f"- Unità di misura richiesta: {data.comparison_unit}\n"
+        + (f"- Quantità indicativa: {data.quantita_stimata} {data.comparison_unit}\n" if data.quantita_stimata else "")
+        + (f"- Specifiche / Note: {data.specifiche_extra}\n" if data.specifiche_extra else "")
+        + f"- Sede di destinazione: {location_name}\n\n"
+        f"Restiamo in attesa del vostro riscontro per l'aggiornamento dei nostri listini d'acquisto.\n\n"
+        f"Cordiali saluti,\n"
+        f"{user.nome_completo or user.email}\n"
+        f"Ufficio Acquisti & Gestione Ordini"
+    )
+
+    supplier_details: List[SectorPriceQuoteSupplierDetail] = []
+    whatsapp_count = 0
+    email_count = 0
+
+    for s in matched_suppliers:
+        phone = s.telefono_contatto or ""
+        clean_phone = re.sub(r"\D", "", phone)
+        wa_url = ""
+        if clean_phone:
+            whatsapp_count += 1
+            intl_phone = clean_phone if clean_phone.startswith("39") else f"39{clean_phone}"
+            wa_text = (
+                f"🤝 *RICHIESTA QUOTAZIONE — {s.nome_azienda.upper()}*\n"
+                f"📍 *Destinazione:* {location_name}\n\n"
+                f"Gentile {s.nome_azienda},\n"
+                f"Vi richiediamo la migliore quotazione di prezzo per:\n\n"
+                f"📦 *{product_title}*\n"
+                f"{cat_line}"
+                f"{brand_line}"
+                f"{uom_line}"
+                f"{qty_line}"
+                f"{extra_line}\n"
+                f"Potete confermarci disponibilità e prezzo netto? Grazie!"
+            )
+            encoded_text = urllib.parse.quote(wa_text)
+            wa_url = f"https://wa.me/{intl_phone}?text={encoded_text}"
+        else:
+            wa_text = broadcast_wa
+
+        email_to = s.email_contatto or ""
+        mailto_url = ""
+        if email_to:
+            email_count += 1
+            encoded_sub = urllib.parse.quote(email_subject)
+            encoded_b = urllib.parse.quote(email_body_text)
+            mailto_url = f"mailto:{email_to}?subject={encoded_sub}&body={encoded_b}"
+
+        supplier_details.append(
+            SectorPriceQuoteSupplierDetail(
+                supplier_id=s.id,
+                supplier_name=s.nome_azienda,
+                partita_iva=s.partita_iva,
+                email_contatto=s.email_contatto,
+                telefono_contatto=s.telefono_contatto,
+                whatsapp_message=wa_text,
+                whatsapp_url=wa_url,
+                email_subject=email_subject,
+                email_body=email_body_text,
+                email_mailto_url=mailto_url,
+                has_capability=True,
+                capability_reason=matched_reasons.get(s.id, "Settore affine")
+            )
+        )
+
+    return SectorPriceQuoteResponse(
+        product_id=data.product_id,
+        canonical_name=data.canonical_name,
+        settore_categoria=category_str,
+        sottocategoria=data.subcategory,
+        brand=data.brand,
+        comparison_unit=data.comparison_unit,
+        location_nome=location_name,
+        total_fornitori_settore=len(supplier_details),
+        fornitori_con_whatsapp=whatsapp_count,
+        fornitori_con_email=email_count,
+        broadcast_whatsapp_text=broadcast_wa,
+        broadcast_email_subject=email_subject,
+        broadcast_email_body=email_body_text,
+        fornitori=supplier_details
+    )
+
 
