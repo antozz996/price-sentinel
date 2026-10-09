@@ -64,8 +64,8 @@ async def execute(args: argparse.Namespace) -> int:
             print(f"- {candidate['sector']}/{candidate['source_cell']}: "
                   f"{candidate['status']} ({', '.join(candidate['reasons'])})")
     if args.output:
-        output = Path(args.output).expanduser()
-        if output.is_relative_to(Path.cwd().resolve()):
+        output = Path(args.output).expanduser().resolve()
+        if output.is_relative_to(Path(__file__).resolve().parents[2]):
             raise SystemExit("Choose an output path OUTSIDE the repository working directory")
         output.parent.mkdir(parents=True, exist_ok=True)
         if output.exists():
