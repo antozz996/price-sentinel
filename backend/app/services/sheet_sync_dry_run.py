@@ -177,6 +177,10 @@ def stage_snapshot(
     sector_summary: list[dict] = []
     missing_sources: list[str] = []
     for layout in SOURCES:
+        if layout.title == "FOOD" and EXCLUSION_TAB not in value_ranges:
+            missing_sources.append(EXCLUSION_TAB)
+            warnings.append({"tab": layout.title, "code": "missing_exclusions_fail_closed"})
+            continue
         rows = value_ranges.get(layout.title)
         if rows is None:
             missing_sources.append(layout.title)
