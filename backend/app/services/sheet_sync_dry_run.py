@@ -170,16 +170,23 @@ def stage_snapshot(
     """Return an immutable-in-spirit preview; no persistent writes or network calls."""
     notes = notes or {}
     food_rows = value_ranges.get("FOOD", [])
-    exclusions, warnings = _excluded_index(
-        value_ranges.get(EXCLUSION_TAB, []), food_rows
+    exclusion_rows = value_ranges.get(EXCLUSION_TAB, [])
+    expected_control_headers = {0: "RIGA", 1: "PRODOTTO", 2: "FORNITORE", 5: "STATO"}
+    exclusion_valid = bool(exclusion_rows) and all(
+        _label(_cell(exclusion_rows[0], index)) == _label(expected)
+        for index, expected in expected_control_headers.items()
     )
+    exclusions, warnings = _excluded_index(
+        exclusion_rows if exclusion_valid else [], food_rows
+    )
+    if not exclusion_valid:
+        warnings.append({"tab": EXCLUSION_TAB, "code": "invalid_exclusion_register_fail_closed"})
     candidates: list[dict] = []
     sector_summary: list[dict] = []
     missing_sources: list[str] = []
     for layout in SOURCES:
-        if layout.title == "FOOD" and EXCLUSION_TAB not in value_ranges:
+        if layout.title == "FOOD" and not exclusion_valid:
             missing_sources.append(EXCLUSION_TAB)
-            warnings.append({"tab": layout.title, "code": "missing_exclusions_fail_closed"})
             continue
         rows = value_ranges.get(layout.title)
         if rows is None:
