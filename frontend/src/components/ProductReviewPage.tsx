@@ -398,7 +398,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
           {filteredProducts.map(prod => {
             const currentFb = draftFeedback[prod.product_id] || (prod.mio_feedback?.feedback || 'SI');
             const currentRating = draftRating[prod.product_id] || (prod.mio_feedback?.rating || (currentFb === 'SI' ? 5 : 2));

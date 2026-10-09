@@ -278,7 +278,7 @@ export default function PriceListManager() {
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '32px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       
       {/* Colonna Sinistra: Importazione & Estrazione */}
       <div className="glass-panel" style={{ padding: '32px' }}>

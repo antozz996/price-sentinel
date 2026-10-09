@@ -72,100 +72,100 @@ export default function Dashboard() {
     { 
       title: 'Euro Recuperati (NC)', 
       value: `€ ${Number(kpi?.euro_recuperati || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <TrendingUp color="#10b981" />, 
+      icon: <TrendingUp color="#10b981" size={20} />, 
       bg: 'var(--status-green-bg)',
       subtitle: 'Contestazioni risolte con successo'
     },
     { 
       title: 'In Reclamo', 
       value: `€ ${Number(kpi?.euro_in_contestazione || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <ShieldCheck color="#3b82f6" />, 
+      icon: <ShieldCheck color="#3b82f6" size={20} />, 
       bg: 'rgba(59, 130, 246, 0.1)',
       subtitle: 'Contenziosi aperti con i fornitori'
     },
     { 
       title: 'Spreco Mensile Rilevato', 
       value: `€ ${Number(kpi?.euro_a_rischio || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <AlertCircle color="#ef4444" />, 
+      icon: <AlertCircle color="#ef4444" size={20} />, 
       bg: 'var(--status-red-bg)',
       subtitle: 'Rincari da verificare questo mese'
     },
     { 
       title: 'Attesa Validazione', 
       value: `€ ${Number(kpi?.euro_attesa_manager || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <BarChart3 color="#f59e0b" />, 
+      icon: <BarChart3 color="#f59e0b" size={20} />, 
       bg: 'var(--status-yellow-bg)',
       subtitle: 'Anomalie pendenti dai manager'
     },
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="dashboard-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* KPI Cards Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+      <div className="dashboard-kpi-grid">
         {cards.map((card, i) => (
-          <div key={i} className="glass-panel hover-glow" style={{ position: 'relative', overflow: 'hidden', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'default' }}>
+          <div key={i} className="glass-panel hover-glow" style={{ position: 'relative', overflow: 'hidden', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'default' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: card.bg.replace('0.1', '1').replace('bg', 'color') }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{card.title}</span>
-              <div style={{ padding: '10px', borderRadius: '12px', background: card.bg, backdropFilter: 'blur(10px)' }}>{card.icon}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{card.title}</span>
+              <div style={{ padding: '8px', borderRadius: '10px', background: card.bg, backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{card.icon}</div>
             </div>
             <div>
-              <div style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '-0.5px', marginBottom: '4px' }}>{card.value}</div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>{card.subtitle}</span>
+              <div style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.5px', marginBottom: '2px', wordBreak: 'break-word' }}>{card.value}</div>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>{card.subtitle}</span>
             </div>
           </div>
         ))}
       </div>
 
       {/* Analytics Main Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '20px' }}>
+      <div className="dashboard-analytics-grid">
         
         {/* Leaderboard Panel */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Award color="var(--primary-color)" size={20} />
-              <h4 style={{ margin: 0, fontWeight: 600 }}>Classifica Efficienza Acquisti</h4>
+              <Award color="var(--accent-blue)" size={20} />
+              <h4 style={{ margin: 0, fontWeight: 600, fontSize: '1rem' }}>Classifica Efficienza Acquisti</h4>
             </div>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '12px' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
               Target: &lt; 5% Min Storico
             </span>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <table style={{ width: '100%', minWidth: '420px', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
-                  <th style={{ padding: '12px' }}>Rank</th>
-                  <th style={{ padding: '12px' }}>Locale</th>
-                  <th style={{ padding: '12px' }}>Acquisti Ottimali</th>
-                  <th style={{ padding: '12px', textAlign: 'right' }}>Score Efficienza</th>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: '0.78rem', textAlign: 'left' }}>
+                  <th style={{ padding: '10px 8px', width: '60px' }}>Rank</th>
+                  <th style={{ padding: '10px 8px' }}>Locale</th>
+                  <th style={{ padding: '10px 8px' }}>Acquisti Ottimali</th>
+                  <th style={{ padding: '10px 8px', textAlign: 'right' }}>Score Efficienza</th>
                 </tr>
               </thead>
               <tbody>
                 {leaderboard.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                    <td colSpan={4} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                       Nessun dato di efficienza disponibile.
                     </td>
                   </tr>
                 ) : (
                   leaderboard.map((item) => (
-                    <tr key={item.location_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.9rem' }}>
-                      <td style={{ padding: '14px 12px', fontWeight: 'bold' }}>
+                    <tr key={item.location_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.88rem' }}>
+                      <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>
                         <span style={{ fontSize: '1.1rem' }}>{item.medal}</span>
                       </td>
-                      <td style={{ padding: '14px 12px', fontWeight: 500 }}>{item.nome_struttura}</td>
-                      <td style={{ padding: '14px 12px', color: 'var(--text-secondary)' }}>
+                      <td style={{ padding: '12px 8px', fontWeight: 500 }}>{item.nome_struttura}</td>
+                      <td style={{ padding: '12px 8px', color: 'var(--text-secondary)' }}>
                         {item.ottimali} / {item.totali}
                       </td>
-                      <td style={{ padding: '14px 12px', textAlign: 'right' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '1rem', color: item.score >= 80 ? '#10b981' : (item.score >= 50 ? '#f59e0b' : '#ef4444') }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: item.score >= 80 ? '#10b981' : (item.score >= 50 ? '#f59e0b' : '#ef4444') }}>
                             {item.score.toFixed(1)}%
                           </span>
-                          <div style={{ width: '100px', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                          <div style={{ width: '80px', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
                             <div style={{ 
                               width: `${item.score}%`, 
                               height: '100%', 
@@ -185,47 +185,47 @@ export default function Dashboard() {
         </div>
 
         {/* Projection and Optimization Panel */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', justifyContent: 'space-between' }}>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
               <Target color="#ef4444" size={20} />
-              <h4 style={{ margin: 0, fontWeight: 600 }}>Impatto Sprechi Proiettato</h4>
+              <h4 style={{ margin: 0, fontWeight: 600, fontSize: '1rem' }}>Impatto Sprechi Proiettato</h4>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.02))', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '24px', borderRadius: '16px', position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 0 20px rgba(239, 68, 68, 0.05)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.02))', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '18px 20px', borderRadius: '14px', position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 0 20px rgba(239, 68, 68, 0.05)' }}>
                 <div style={{ position: 'absolute', right: '-20px', top: '-20px', opacity: 0.05, transform: 'scale(2)' }}>
                   <AlertCircle size={100} color="#ef4444" />
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'rgba(239, 68, 68, 0.9)', fontWeight: 700, letterSpacing: '1px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(239, 68, 68, 0.9)', fontWeight: 700, letterSpacing: '0.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 10px #ef4444' }}></span>
-                  PERDITA ECONOMICA ANNUALE PROIETTATA
+                  PERDITA ANNUALE PROIETTATA
                 </div>
-                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#ef4444', letterSpacing: '-1px', textShadow: '0 0 20px rgba(239, 68, 68, 0.3)' }}>
+                <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ef4444', letterSpacing: '-0.5px', textShadow: '0 0 20px rgba(239, 68, 68, 0.3)', wordBreak: 'break-word' }}>
                   € {Number(annualLoss).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '12px', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.4 }}>
                   Calcolata come proiezione YTD su base 12 mesi dei rincari attivi non giustificati dai listini pattuiti.
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <div className="glass-panel" style={{ padding: '14px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Prezzo Baseline Medio</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Coalesce LAG/Listino</span>
+              <div className="dashboard-subcards-row">
+                <div className="glass-panel" style={{ padding: '12px 14px', flex: '1 1 140px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Baseline Prezzo</span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>Coalesce LAG/Listino</span>
                 </div>
-                <div className="glass-panel" style={{ padding: '14px', flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Risparmio Stimato YTD</span>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    100% Audit <ArrowUpRight size={16}/>
+                <div className="glass-panel" style={{ padding: '12px 14px', flex: '1 1 140px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Risparmio YTD</span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    100% Audit <ArrowUpRight size={15}/>
                   </span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Percent size={14} color="var(--primary-color)" />
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Percent size={14} color="var(--accent-blue)" style={{ flexShrink: 0 }} />
             <span>Gli acquisti ottimali riducono il costo unitario medio del locale fino al 7.4% YTD.</span>
           </div>
         </div>
@@ -233,59 +233,59 @@ export default function Dashboard() {
       </div>
 
       {/* Analisi Sprechi & Varianza Section */}
-      <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <TrendingUp color="#ef4444" size={20} />
-            <h4 style={{ margin: 0, fontWeight: 600 }}>Analisi Varianza & Sprechi (Perdite per Mancata Ottimizzazione)</h4>
+            <h4 style={{ margin: 0, fontWeight: 600, fontSize: '1rem' }}>Analisi Varianza & Sprechi (Perdite)</h4>
           </div>
-          <span style={{ fontSize: '0.75rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '4px 12px', borderRadius: '12px', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.72rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '4px 10px', borderRadius: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
             Top Prodotti Fuori-Prezzo
           </span>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', minWidth: '560px', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
-                <th style={{ padding: '12px' }}>Prodotto</th>
-                <th style={{ padding: '12px' }}>Fornitore</th>
-                <th style={{ padding: '12px', textAlign: 'center' }}>N. Acquisti</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Prezzo Minimo</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Prezzo Medio</th>
-                <th style={{ padding: '12px', textAlign: 'right' }}>Spreco Totale (YTD)</th>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: '0.78rem', textAlign: 'left' }}>
+                <th style={{ padding: '10px 8px' }}>Prodotto</th>
+                <th style={{ padding: '10px 8px' }}>Fornitore</th>
+                <th style={{ padding: '10px 8px', textAlign: 'center' }}>N. Acquisti</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Prezzo Minimo</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Prezzo Medio</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Spreco Totale (YTD)</th>
               </tr>
             </thead>
             <tbody>
               {varianceLoss.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan={6} style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                     Nessuna perdita per varianza rilevata sui prodotti mappati. Ottimo lavoro!
                   </td>
                 </tr>
               ) : (
                 varianceLoss.map((item) => (
-                  <tr key={item.sku_interno} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.9rem' }}>
-                    <td style={{ padding: '14px 12px', fontWeight: 500 }}>
+                  <tr key={item.sku_interno} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.88rem' }}>
+                    <td style={{ padding: '12px 8px', fontWeight: 500 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span>{item.prodotto_nome}</span>
                         <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.sku_interno}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '14px 12px', color: 'var(--text-secondary)' }}>{item.fornitore_nome}</td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>{item.numero_acquisti}</td>
-                    <td style={{ padding: '14px 12px', textAlign: 'right', color: '#10b981', fontWeight: 500 }}>
+                    <td style={{ padding: '12px 8px', color: 'var(--text-secondary)' }}>{item.fornitore_nome}</td>
+                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>{item.numero_acquisti}</td>
+                    <td style={{ padding: '12px 8px', textAlign: 'right', color: '#10b981', fontWeight: 500 }}>
                       € {item.prezzo_minimo.toFixed(2)}
                     </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'right', color: '#ef4444' }}>
+                    <td style={{ padding: '12px 8px', textAlign: 'right', color: '#ef4444' }}>
                       € {item.prezzo_medio.toFixed(2)}
                     </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#ef4444', textShadow: '0 0 10px rgba(239,68,68,0.2)' }}>
+                    <td style={{ padding: '12px 8px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#ef4444', textShadow: '0 0 10px rgba(239,68,68,0.2)' }}>
                           -€ {item.spreco_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
-                        <div style={{ width: '120px', height: '6px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        <div style={{ width: '100px', height: '5px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
                           <div style={{ 
                             width: `${Math.min(100, (item.spreco_totale / (Math.max(...varianceLoss.map(v => v.spreco_totale)) || 1)) * 100)}%`, 
                             height: '100%', 

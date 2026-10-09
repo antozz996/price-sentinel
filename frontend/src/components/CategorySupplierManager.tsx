@@ -946,7 +946,7 @@ export default function CategorySupplierManager() {
               </div>
             ) : viewMode === 'cards' ? (
               /* CARDS VIEW */
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '18px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '18px' }}>
                 {filteredSuppliers.map(supplier => {
                   const enabledCount = Object.values(supplier.categories).filter(Boolean).length;
                   return (
