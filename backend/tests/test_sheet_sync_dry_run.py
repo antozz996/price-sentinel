@@ -99,6 +99,13 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertIn("CONTROLLO_ESCLUSIONI", report["missing_sources"])
         self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
 
+    def test_corrupt_exclusion_register_fails_closed(self):
+        data = copy.deepcopy(self.snapshot)
+        data["values"]["CONTROLLO_ESCLUSIONI"][0][5] = "OTHER"
+        report = self.preview(data)
+        self.assertIn("CONTROLLO_ESCLUSIONI", report["missing_sources"])
+        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
+
     def test_name_duplicates_alert_without_merging(self):
         data = copy.deepcopy(self.snapshot)
         data["values"]["FOOD"].append(list(data["values"]["FOOD"][1]))
