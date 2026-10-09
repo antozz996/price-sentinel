@@ -40,7 +40,7 @@ jobs:
         run: python -m compileall -q backend/app/services/smart_price_sheet.py backend/app/api/v1/smart_price_sheet.py backend/tests/smart_price_sheet_unit.py backend/tests/smart_price_sheet_e2e.py
       - name: Run parser and supplier-ranking regressions (DB-free)
         working-directory: backend
-        run: python tests/smart_price_sheet_unit.py
+        run: PYTHONPATH=. python tests/smart_price_sheet_unit.py
 
 # Full API+Postgres tests remain an explicit release blocker.
 # Never run integration checks against a production database.
