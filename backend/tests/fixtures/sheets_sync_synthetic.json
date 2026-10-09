@@ -1,0 +1,236 @@
+{
+  "title": "santo graal",
+  "timeZone": "America/Los_Angeles",
+  "spreadsheet_id": "synthetic-spreadsheet-not-a-real-id",
+  "all_tab_names": [
+    "FOOD",
+    "BEVERAGE",
+    "COMPARAZIONE MATERIALI",
+    "FRUTTA E VERDURA",
+    "GIOCATTOLI",
+    "CONTROLLO_ESCLUSIONI",
+    "ORDINI DAC"
+  ],
+  "support_tabs": [
+    "CONTROLLO_ESCLUSIONI",
+    "ORDINI DAC"
+  ],
+  "unknown_tabs": [],
+  "notes": {
+    "FOOD": {
+      "F3": "Prezzo originario 5,90 € per busta da 2 kg"
+    }
+  },
+  "values": {
+    "FOOD": [
+      [
+        "PRODOTTO",
+        "PESO",
+        "MARR",
+        "MELIUS",
+        "DAC",
+        "ORIZZONTI",
+        "NOTE",
+        "DI PALO",
+        "FONTANELLA CARNI",
+        "FORNITORE SCELTO"
+      ],
+      [
+        "SALE FINO",
+        "KG",
+        0.5,
+        0.48,
+        0.49,
+        "NO",
+        "",
+        null,
+        0.52,
+        "MELIUS"
+      ],
+      [
+        "PATATA CHIPS",
+        "CT",
+        34,
+        31,
+        27.04,
+        5.9,
+        "busta 2 kg",
+        null,
+        null,
+        "DAC"
+      ],
+      [
+        "RISO",
+        "KG",
+        1.1,
+        1.2,
+        0,
+        "-",
+        null,
+        null,
+        null,
+        "MARR"
+      ]
+    ],
+    "BEVERAGE": [
+      [
+        "Prodotto",
+        "Unità di Misura",
+        "NAVAS",
+        "ORIZZONTI",
+        "3F",
+        "PASCARELLA",
+        "CASA D'AMBRA",
+        "MIGLIOR FORNITORE",
+        "DIFFERENZA",
+        "DELTA"
+      ],
+      [
+        "ACQUA PET 50 CL",
+        "CT",
+        3.5,
+        3.6,
+        3.7,
+        null,
+        null,
+        "NAVAS",
+        "#REF!",
+        "#REF!"
+      ],
+      [
+        "TONICA 20 CL",
+        "BT",
+        1,
+        1.2,
+        0.95001234,
+        null,
+        null,
+        "3F",
+        0,
+        "#REF!"
+      ]
+    ],
+    "COMPARAZIONE MATERIALI": [
+      [
+        "TAG",
+        "PRODOTTO",
+        "UNITA DI MISURA",
+        "VEMO",
+        "KITO",
+        "EUROCARTA",
+        "ALPHA",
+        "PROMOCART",
+        "MUNDO",
+        "NOTE",
+        "MIGLIOR FORNITORE",
+        "QUANTI PEZZI A CARTONE"
+      ],
+      [
+        "PULIZIA",
+        "DETERGENTE",
+        "FL",
+        "3,07,",
+        2.07,
+        1.6,
+        2.2,
+        3.22,
+        2.06,
+        "",
+        "EUROCARTA",
+        "6PZ X 1LT"
+      ]
+    ],
+    "FRUTTA E VERDURA": [
+      [
+        "Prodotto",
+        "Unità/collo osservato",
+        "MG FRUTTA",
+        "NOTE",
+        "DEMETRA",
+        "UM prezzo",
+        "NOTE3",
+        "BONTA DELL'ORTO",
+        "UM prezzo",
+        "NOTE"
+      ],
+      [
+        "ANANAS",
+        "PZ",
+        3.49,
+        "",
+        1.69,
+        "€/kg",
+        "",
+        4,
+        "pz",
+        ""
+      ],
+      [
+        "ALBICOCCHE",
+        "KG",
+        null,
+        "non è piu periodo",
+        0,
+        "€/kg",
+        "",
+        3,
+        "kg",
+        ""
+      ]
+    ],
+    "GIOCATTOLI": [
+      [
+        "Tipo",
+        "Codice",
+        "Descrizione",
+        "UM",
+        "Quantità",
+        "Prezzo",
+        "PRODOTTI N",
+        "Sconto",
+        "Prezzo netto ANTONIO",
+        "Prezzo PZ ANTONIO",
+        "IVA",
+        "ANTONIO",
+        "GIOVANNI",
+        "GIOVANNI PZ",
+        "DIFFERENZA"
+      ],
+      [
+        "A",
+        123,
+        "BISCOTTI 24 PZ",
+        "SC",
+        1,
+        16,
+        24,
+        0.02,
+        15.68,
+        0.6533,
+        10,
+        15.68,
+        16.15,
+        0.6729,
+        0.47
+      ]
+    ],
+    "CONTROLLO_ESCLUSIONI": [
+      [
+        "RIGA",
+        "PRODOTTO",
+        "FORNITORE",
+        "PREZZO",
+        "MOTIVAZIONE",
+        "STATO"
+      ],
+      [
+        3,
+        "PATATA CHIPS",
+        "ORIZZONTI",
+        5.9,
+        "busta anziché cartone",
+        "ESCLUSO"
+      ]
+    ]
+  }
+}
