@@ -50,20 +50,37 @@ Il fixture usa solo dati inventati. I dati reali non vengono aggiunti al reposit
 
 1. Creare una **service account Google Cloud** dedicata. Abilitare Google Sheets API.
 2. Condividere il singolo spreadsheet con l'indirizzo email della service account come **Visualizzatore**. Non rendere il documento pubblico e non concedere scrittura.
-3. Conservare il file credenziali JSON in un secret manager o percorso backend protetto, **fuori** dal repository. Non incollare JSON/chiavi nella chat o nel foglio.
-4. Impostare `SHEETS_SOURCE_ID` e `SHEETS_SERVICE_ACCOUNT_FILE` in un ambiente di test isolato; per eseguire una sola anteprima locale:
+3. **Non creare chiavi private JSON.** Il client ora usa Application Default Credentials (ADC). Per GitHub Actions, usare un provider OIDC Workload Identity Federation e `google-github-actions/auth@v3`, che genera durante il job un file *di configurazione federata*, non una chiave privata.
+4. Configurare `SHEETS_SOURCE_ID` e `SHEETS_EXPECTED_SOURCE_ID` sul runner autorizzato, entrambi con l'ID dello stesso workbook. L'azione Google imposta `GOOGLE_APPLICATION_CREDENTIALS` a un file di configurazione ADC effimero.
+5. Eseguire una singola anteprima (infrastruttura di test, senza log dei prezzi):
 
 ```bash
 cd backend
 PYTHONPATH=. python scripts/sheet_sync_preview.py \
   --spreadsheet-id "$SHEETS_SOURCE_ID" \
-  --service-account-file "$SHEETS_SERVICE_ACCOUNT_FILE" \
   --output /tmp/price-sentinel-sheets-preview.json
 ```
 
 Il token OAuth ha esclusivamente lo scope `spreadsheets.readonly`, e il client utilizza solo richieste HTTP GET. Legge i valori non formattati (per non scambiare un testo con un prezzo numerico) e, salvo `--skip-notes`, le note di cella. Confronta il titolo esatto `santo graal`, rifiutando un file diverso. Il fuso del documento attuale e' **America/Los_Angeles**; la futura decorrenza dei contratti si gestira' esplicitamente in **Europe/Rome**, non interpretando le date senza verifica.
 
 **Protezione del report:** il JSON contiene prezzi e note dei fornitori; salvarlo in una destinazione privata esterna al repository, con permessi ristretti; non caricarlo nei log di GitHub Actions.
+
+## Abilitazione GitHub Actions tramite Workload Identity Federation (separata dal codice)
+
+**NON ancora configurato**: l'API Google Sheets è abilitata nel progetto `price-sentinel-integrations` e `santo graal` è condiviso come Viewer con `ps-sheets-reader@price-sentinel-integrations.iam.gserviceaccount.com`. Non è stato creato un provider WIF, né concesso a GitHub il diritto di impersonare tale account.
+
+Operazioni riservate alla fase di configurazione controllata in Google Cloud:
+
+1. Creare un pool WIF dedicato, es. `price-sentinel-ci`, e un provider OIDC con issuer `https://token.actions.githubusercontent.com`. Non assegnare ruoli generali di progetto al service account.
+2. Mappare almeno `google.subject=assertion.sub` e `attribute.repository=assertion.repository`, in aggiunta a eventuali attributi necessari per le condizioni. Applicare una condizione che ammetta esclusivamente `antozz996/price-sentinel`, la *branch* `refs/heads/feat/google-sheets-multisheet-dry-run`, l'evento `workflow_dispatch` e, se disponibile, `assertion.repository_id` per prevenire repository-name reuse. **Verificare il claim OIDC nel provider prima di salvare**.
+3. Concedere `roles/iam.workloadIdentityUser` **sulla sola service account** a un principalSet del pool limitato all'attributo repository. L'ulteriore restrizione a branch/evento deve essere applicata dal provider. Non aggiungere ruoli Owner/Editor/Viewer al progetto.
+4. Sul job GitHub autorizzato utilizzare `permissions: {contents: read, id-token: write}` e `google-github-actions/auth@v3` con `workload_identity_provider` completo e `service_account`; l'azione deve precedere Python. Usare un workflow **manuale** con verifica dell'esatta branch e nessun evento `pull_request` per l'accesso live, perché il repository è pubblico.
+5. Prima eseguire un test minimo di metadata del workbook con token temporaneo; poi un dry-run dei 5 settori e del registro esclusioni. Non pubblicare JSON prezzi nei log o negli artifact non protetti.
+6. Se Google richiede altre API per impersonare la service account, abilitare solo quelle strettamente necessarie e dopo verifica. **Non creare chiavi private statiche**.
+
+Per la VPS Hetzner non presumere che esista una sorgente OIDC federabile. Il WIF del runner GitHub è un **collaudo separato**, non abilita automaticamente il backend di produzione sulla VPS. La soluzione server permanente richiede progettazione dedicata.
+
+La nuova `GoogleSheetsReadOnly` usa `google.auth.default(scopes=[READONLY_SCOPE])`. Sotto WIF l'ADC legge la configurazione temporanea creata dall'azione GitHub, che non contiene una private key permanente. Il test `test_sheet_sync_google_auth.py` verifica il percorso di caricamento senza credenziali reali.
 
 ## Significato degli stati
 
