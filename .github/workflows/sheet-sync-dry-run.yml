@@ -14,6 +14,15 @@ on:
       - "backend/requirements.txt"
       - ".github/workflows/sheet-sync-dry-run.yml"
   workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Read-only Google Sheets check (metadata first)'
+        type: choice
+        options:
+          - metadata
+          - dry_run
+        required: true
+        default: metadata
 
 permissions:
   contents: read
@@ -54,3 +63,92 @@ jobs:
 # This workflow uses synthetic rows only. It never receives Google credentials,
 # never reads the live workbook, never contacts the production database, and
 # never commits prices.
+
+
+  live-google-readonly:
+    name: Manual WIF Google Sheets read-only check
+    # Never authenticate on pull_request or push: repo is public.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'antozz996/price-sentinel' &&
+      github.repository_id == 1230041589 &&
+      github.ref == 'refs/heads/feat/google-sheets-multisheet-dry-run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout (trusted fixed branch only)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Validate selected private spreadsheet ID (never print it)
+        env:
+          SHEETS_SOURCE_ID: ${{ secrets.PS_SHEETS_SOURCE_ID }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import os
+          import sys
+          source = os.environ.get("SHEETS_SOURCE_ID", "")
+          known_sha256 = "1aa65c77049cefda3cc8bd614be8738640b10afe59478f1c6cb34ad9b1e3190f"
+          if hashlib.sha256(source.encode("utf-8")).hexdigest() != known_sha256:
+              sys.exit("Missing or unexpected spreadsheet ID: aborting before authentication")
+          print("Private source spreadsheet identity validated (no ID disclosed).")
+          PY
+      - name: Authenticate to Google Cloud (WIF, no service account private key)
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: price-sentinel-integrations
+          workload_identity_provider: projects/876130258139/locations/global/workloadIdentityPools/price-sentinel-github-actions/providers/github-oidc
+          service_account: ps-sheets-reader@price-sentinel-integrations.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Read-only API metadata smoke test
+        if: ${{ inputs.operation == 'metadata' }}
+        working-directory: backend
+        env:
+          SHEETS_SOURCE_ID: ${{ secrets.PS_SHEETS_SOURCE_ID }}
+        run: |
+          PYTHONPATH=. python - <<'PY'
+          import asyncio
+          import os
+          from app.services.sheet_sync_dry_run import SOURCES, EXCLUSION_TAB
+          from app.services.sheet_sync_google import GoogleSheetsReadOnly
+
+          async def smoke():
+              connector = GoogleSheetsReadOnly(os.environ["SHEETS_SOURCE_ID"])
+              metadata = await connector.metadata()
+              if metadata.get("properties", {}).get("title") != "santo graal":
+                  raise SystemExit("Unexpected workbook title; aborting")
+              tabs = {s["properties"]["title"] for s in metadata.get("sheets", [])}
+              required = {s.title for s in SOURCES} | {EXCLUSION_TAB}
+              if not required.issubset(tabs):
+                  raise SystemExit("Required source tabs missing; aborting")
+              print("PASS: temporary Google identity read the correct workbook metadata.")
+              print("PASS: all 5 source sectors and exclusions tab found; no prices read.")
+          asyncio.run(smoke())
+          PY
+      - name: Read-only full multi-sector staging (aggregate counts only)
+        if: ${{ inputs.operation == 'dry_run' }}
+        working-directory: backend
+        env:
+          SHEETS_SOURCE_ID: ${{ secrets.PS_SHEETS_SOURCE_ID }}
+        run: |
+          PYTHONPATH=. python scripts/sheet_sync_preview.py --spreadsheet-id "$SHEETS_SOURCE_ID" --show-samples 0
+
+# LIVE manual job reads only. It never writes Google Sheets or the database,
+# never deploys, creates no production commitments and stores no artifacts.
+# The Google auth action writes an ephemeral ADC federation config only,
+# NOT a service-account private key. Configure the repository secret
+# PS_SHEETS_SOURCE_ID before using this workflow.
