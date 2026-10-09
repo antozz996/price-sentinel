@@ -9,6 +9,7 @@ on:
       - "backend/app/services/sheet_sync_*.py"
       - "backend/scripts/sheet_sync_preview.py"
       - "backend/tests/test_sheet_sync_dry_run.py"
+      - "backend/tests/test_sheet_sync_google_auth.py"
       - "backend/tests/fixtures/sheets_sync_synthetic.json"
       - "backend/requirements.txt"
       - ".github/workflows/sheet-sync-dry-run.yml"
@@ -39,10 +40,13 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Compile reader and CLI
-        run: python -m compileall -q backend/app/services/sheet_sync_dry_run.py backend/app/services/sheet_sync_google.py backend/scripts/sheet_sync_preview.py backend/tests/test_sheet_sync_dry_run.py
+        run: python -m compileall -q backend/app/services/sheet_sync_dry_run.py backend/app/services/sheet_sync_google.py backend/scripts/sheet_sync_preview.py backend/tests/test_sheet_sync_dry_run.py backend/tests/test_sheet_sync_google_auth.py
       - name: Verify sector schemas, exclusions and fail-closed policies
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_sheet_sync_dry_run.py' -v
+      - name: Verify keyless Google ADC and ID validation (offline mocks)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_sheet_sync_google_auth.py' -v
       - name: Dry-run synthetic fixture; assert zero write paths
         working-directory: backend
         run: PYTHONPATH=. python scripts/sheet_sync_preview.py --fixture tests/fixtures/sheets_sync_synthetic.json --show-samples 2
