@@ -666,7 +666,9 @@ async def commit_preview(
 ):
     if payload.confirm is not True:
         raise HTTPException(422, "Conferma esplicita obbligatoria")
-    preview, result = await commit_price_preview(db, payload.preview_token, user.id)
+    preview, result = await commit_price_preview(
+        db, token=payload.preview_token, actor_id=user.id
+    )
     return {
         "preview_token": str(preview.id),
         "status": preview.status,

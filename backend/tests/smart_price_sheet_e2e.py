@@ -37,7 +37,8 @@ def seed() -> None:
                 values (1,'Test Venue','00000000001','ristorante') on conflict do nothing;
                 insert into utenti(id,email,password_hash,ruolo,location_id,attivo,refresh_token_version)
                 values (1,'admin@test.local','x','admin',null,true,1),
-                       (2,'manager@test.local','x','manager',1,true,1) on conflict do nothing;
+                       (2,'manager@test.local','x','manager',1,true,1),
+                       (3,'second-admin@test.local','x','admin',null,true,1) on conflict do nothing;
                 insert into fornitori(id,partita_iva,nome_azienda,attivo_whitelist)
                 values (1,'10000000001','Supplier A',true),(2,'10000000002','Supplier B',true),
                        (3,'10000000003','Supplier C Unrelated',true)
@@ -71,6 +72,7 @@ async def run() -> None:
     seed()
     admin = {"Authorization": f"Bearer {create_access_token(1, 'admin')}"}
     manager = {"Authorization": f"Bearer {create_access_token(2, 'manager')}"}
+    other_admin = {"Authorization": f"Bearer {create_access_token(3, 'admin')}"}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="https://testserver"
     ) as client:
@@ -122,6 +124,20 @@ async def run() -> None:
             and preview["counts"]["update"] == 1,
         )
         check("preview does not write prices", scalar("select count(*) from listino_master") == before)
+        check(
+            "preview owned by creator and ready",
+            scalar("select count(*) from smart_price_sheet_previews where status='ready' and created_by=1") >= 1,
+        )
+        response = await client.post(
+            "/api/v1/smart-price-sheet/commit",
+            headers=other_admin,
+            json={"preview_token": preview["preview_token"], "confirm": True},
+        )
+        check(
+            "another admin cannot commit somebody else's preview",
+            response.status_code == 403
+            and scalar("select count(*) from listino_master") == before,
+        )
 
         response = await client.post(
             "/api/v1/smart-price-sheet/preview",
