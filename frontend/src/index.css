@@ -663,8 +663,20 @@ h1, h2, h3, h4 {
   }
 
   .sector-order-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     gap: 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  .sector-order-product-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
   }
 
   .order-floating-bar-desktop-only {

@@ -1242,10 +1242,13 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         display: 'flex', 
         gap: '8px', 
         flexDirection: isMobileScreen ? 'column' : 'row',
-        alignItems: isMobileScreen ? 'stretch' : 'center' 
+        alignItems: isMobileScreen ? 'stretch' : 'center',
+        width: '100%',
+        boxSizing: 'border-box',
+        minWidth: 0
       }}>
         {/* Search Input */}
-        <div style={{ position: 'relative', flex: '1 1 280px', width: '100%' }}>
+        <div style={{ position: 'relative', flex: isMobileScreen ? 'none' : '1 1 280px', width: '100%', minWidth: 0 }}>
           <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
           <input
             type="text"
@@ -1271,13 +1274,14 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between', 
-          gap: '10px',
+          gap: '8px',
           flexWrap: 'wrap',
-          width: isMobileScreen ? '100%' : 'auto'
+          width: '100%',
+          minWidth: 0
         }}>
           {subcategories.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: isMobileScreen ? 1 : 'initial' }}>
-              <Filter size={13} color="var(--text-secondary)" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: isMobileScreen ? '1 1 100%' : 'initial', minWidth: 0 }}>
+              <Filter size={13} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
               <select
                 value={selectedSubcategory}
                 onChange={e => setSelectedSubcategory(e.target.value)}
@@ -1290,7 +1294,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   fontSize: '0.8rem',
                   outline: 'none',
                   cursor: 'pointer',
-                  width: isMobileScreen ? '100%' : 'auto',
+                  width: '100%',
                   textOverflow: 'ellipsis'
                 }}
               >
@@ -1319,9 +1323,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: isMobileScreen ? 'center' : 'flex-start',
               gap: '6px',
               boxShadow: '0 0 15px rgba(59, 130, 246, 0.2)',
               whiteSpace: 'nowrap',
+              width: isMobileScreen ? '100%' : 'auto',
               transition: 'all 0.2s'
             }}
             title="Aggiungi nuovo articolo al catalogo e invia richiesta di prezzo ai fornitori del settore"
@@ -1334,7 +1340,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           <div style={{ 
             color: 'var(--text-secondary)', 
             fontSize: '0.8rem', 
-            marginLeft: (isMobileScreen && subcategories.length === 0) ? '0' : 'auto',
+            marginLeft: isMobileScreen ? '0' : 'auto',
+            width: isMobileScreen ? '100%' : 'auto',
+            textAlign: isMobileScreen ? 'right' : 'left',
             whiteSpace: 'nowrap'
           }}>
             Visualizzati: <strong>{filteredProducts.length}</strong>
@@ -1454,28 +1462,34 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             return (
               <div
                 key={prod.id}
+                className="sector-order-product-card"
                 style={{
-                  padding: '16px 18px',
+                  padding: isMobileScreen ? '12px 14px' : '16px 18px',
                   borderRadius: '12px',
                   border: hasQty ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
                   background: hasQty ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255, 255, 255, 0.02)',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
-                  gap: '12px',
+                  gap: '10px',
                   boxShadow: hasQty ? '0 0 20px rgba(59, 130, 246, 0.15)' : 'none',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  width: '100%',
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                  minWidth: 0,
+                  overflow: 'hidden'
                 }}
               >
                 {/* Product Title & Badges */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.98rem', color: 'white', lineHeight: '1.3' }}>
+                <div style={{ width: '100%', minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: '0.98rem', color: 'white', lineHeight: '1.3', wordBreak: 'break-word' }}>
                         {prod.order_name || prod.canonical_name}
                       </div>
                       {prod.order_name && prod.canonical_name !== prod.order_name && (
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: '2px' }}>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', marginTop: '2px', wordBreak: 'break-word' }}>
                           {prod.canonical_name}
                         </div>
                       )}
@@ -1489,7 +1503,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         color: 'white', 
                         fontSize: '0.75rem', 
                         fontWeight: 800,
-                        whiteSpace: 'nowrap'
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
                       }}>
                         {currentQty} {getEffectiveUom(prod)}
                       </span>
@@ -1525,18 +1540,21 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
                   {/* Recommended / Selected Supplier & Price info */}
                   <div style={{ 
-                    marginTop: '10px', 
-                    padding: '6px 10px', 
+                    marginTop: '8px', 
+                    padding: '6px 8px', 
                     borderRadius: '8px', 
                     background: 'rgba(0, 0, 0, 0.3)', 
                     border: isSelectedSup ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
-                    gap: '8px',
-                    fontSize: '0.8rem'
+                    gap: '6px',
+                    fontSize: '0.8rem',
+                    width: '100%',
+                    minWidth: 0,
+                    boxSizing: 'border-box'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: '1 1 0', minWidth: 0, overflow: 'hidden' }}>
                       <Truck size={13} color={isSelectedSup ? 'var(--accent-blue)' : 'var(--text-secondary)'} style={{ flexShrink: 0 }} />
                       <select
                         value={effSup.supplier_id || ''}
@@ -1569,11 +1587,12 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                           color: isSelectedSup ? '#93c5fd' : 'white',
                           fontSize: '0.78rem',
                           fontWeight: 700,
-                          padding: '3px 6px',
+                          padding: '3px 4px',
                           outline: 'none',
                           cursor: 'pointer',
-                          flex: 1,
+                          width: '100%',
                           minWidth: 0,
+                          maxWidth: '100%',
                           textOverflow: 'ellipsis',
                           overflow: 'hidden',
                           whiteSpace: 'nowrap'
@@ -1612,7 +1631,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     </div>
 
                     {unitPrice !== null && unitPrice !== undefined ? (
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
                         <div style={{ fontWeight: 700, color: 'var(--status-green)', fontSize: '0.82rem' }}>
                           € {unitPrice.toFixed(2)} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 400 }}>/{getEffectiveUom(prod)}</span>
                         </div>
@@ -1623,20 +1642,20 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         )}
                       </div>
                     ) : (
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', flexShrink: 0 }}>A listino</div>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', flexShrink: 0, whiteSpace: 'nowrap' }}>A listino</div>
                     )}
                   </div>
                 </div>
 
                 {/* Quantity Controls & UoM Selector */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '100%', minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', minWidth: 0 }}>
                     <button
                       type="button"
                       onClick={() => handleAddPreset(prod.id, -1)}
                       disabled={currentQty <= 0}
                       style={{
-                        width: '34px', height: '34px', borderRadius: '8px',
+                        width: '34px', height: '34px', minWidth: '34px', flexShrink: 0, borderRadius: '8px',
                         border: '1px solid var(--border-glass)',
                         background: 'rgba(255,255,255,0.05)',
                         color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1655,8 +1674,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       placeholder="0"
                       onChange={e => handleQtyChange(prod.id, parseFloat(e.target.value) || 0)}
                       style={{
-                        flex: 1,
-                        padding: '6px 8px',
+                        flex: '1 1 0',
+                        width: '100%',
+                        minWidth: '40px',
+                        boxSizing: 'border-box',
+                        padding: '6px 4px',
                         textAlign: 'center',
                         fontWeight: 800,
                         fontSize: '1rem',
@@ -1664,8 +1686,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         border: hasQty ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
                         borderRadius: '8px',
                         color: hasQty ? '#60a5fa' : 'white',
-                        outline: 'none',
-                        minWidth: '40px'
+                        outline: 'none'
                       }}
                     />
 
@@ -1673,7 +1694,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       type="button"
                       onClick={() => handleAddPreset(prod.id, 1)}
                       style={{
-                        width: '34px', height: '34px', borderRadius: '8px',
+                        width: '34px', height: '34px', minWidth: '34px', flexShrink: 0, borderRadius: '8px',
                         border: '1px solid var(--border-glass)',
                         background: 'rgba(59, 130, 246, 0.2)',
                         color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1689,7 +1710,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       onChange={e => setSelectedUoms(prev => ({ ...prev, [prod.id]: e.target.value }))}
                       title="Unità di misura"
                       style={{
-                        padding: '6px 8px',
+                        padding: '6px 6px',
+                        flexShrink: 0,
+                        minWidth: '50px',
+                        maxWidth: '75px',
                         borderRadius: '8px',
                         background: 'rgba(59, 130, 246, 0.15)',
                         border: '1px solid rgba(59, 130, 246, 0.4)',
@@ -1709,14 +1733,15 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   </div>
 
                   {/* Quick Preset Buttons */}
-                  <div style={{ display: 'flex', gap: '5px', marginTop: '8px' }}>
+                  <div style={{ display: 'flex', gap: '5px', marginTop: '8px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
                     {[1, 5, 10, 20].map(preset => (
                       <button
                         key={preset}
                         type="button"
                         onClick={() => handleAddPreset(prod.id, preset)}
                         style={{
-                          flex: 1,
+                          flex: '1 1 0',
+                          minWidth: 0,
                           padding: '4px 0',
                           fontSize: '0.75rem',
                           borderRadius: '6px',
@@ -1735,6 +1760,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         onClick={() => handleQtyChange(prod.id, 0)}
                         title="Azzera quantità"
                         style={{
+                          flexShrink: 0,
                           padding: '4px 8px',
                           fontSize: '0.75rem',
                           borderRadius: '6px',
@@ -1750,12 +1776,12 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   </div>
 
                   {/* Single-Click RFQ Trigger for this product */}
-                  <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                  <div style={{ marginTop: '8px', display: 'flex', width: '100%' }}>
                     <button
                       type="button"
                       onClick={() => handleOpenPriceQuote(prod)}
                       style={{
-                        padding: '4px 10px',
+                        padding: '6px 10px',
                         borderRadius: '6px',
                         border: '1px solid rgba(139, 92, 246, 0.35)',
                         background: 'rgba(139, 92, 246, 0.12)',
@@ -1768,12 +1794,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         gap: '5px',
                         transition: 'all 0.2s',
                         width: '100%',
-                        justifyContent: 'center'
+                        boxSizing: 'border-box',
+                        justifyContent: 'center',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
                       }}
                       title="Invia richiesta di quotazione prezzo a tutti i fornitori abilitati nel settore"
                     >
-                      <Send size={11} color="#a78bfa" />
-                      <span>Richiedi Prezzo Fornitori Settore</span>
+                      <Send size={11} color="#a78bfa" style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Richiedi Prezzo Fornitori Settore</span>
                     </button>
                   </div>
                 </div>
