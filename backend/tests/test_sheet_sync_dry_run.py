@@ -110,6 +110,7 @@ class SheetSyncDryRunTests(unittest.TestCase):
         data = copy.deepcopy(self.snapshot)
         data["values"]["FOOD"].insert(1, ["", "", "", "", "", "", "", "", "", ""])
         data["values"]["CONTROLLO_ESCLUSIONI"][1][0] += 1
+        data["notes"]["FOOD"]["F4"] = data["notes"]["FOOD"].pop("F3")
         b = self.preview(data)
         h1 = next(c for c in a["candidates"] if c["source_sheet"] == "FOOD"
                   and c["source_cell"] == "F3")["observation_hash"]
