@@ -4,9 +4,10 @@ Examples, from backend directory:
 
     PYTHONPATH=. python scripts/sheet_sync_preview.py --fixture tests/fixtures/sheets_sync_synthetic.json
     PYTHONPATH=. python scripts/sheet_sync_preview.py --spreadsheet-id "$SHEETS_SOURCE_ID" \
-        --service-account-file "$SHEETS_SERVICE_ACCOUNT_FILE" --output /tmp/sentinel-preview.json
+        --output /tmp/sentinel-preview.json
 
 The output contains supplier prices: store outside the public repository.
+Auth uses Application Default Credentials (ADC): use keyless Workload Identity Federation.
 """
 from __future__ import annotations
 
@@ -24,14 +25,13 @@ async def execute(args: argparse.Namespace) -> int:
         snapshot = json.loads(Path(args.fixture).read_text(encoding="utf-8"))
     else:
         sid = args.spreadsheet_id or os.environ.get("SHEETS_SOURCE_ID", "")
-        secret = args.service_account_file or os.environ.get("SHEETS_SERVICE_ACCOUNT_FILE", "")
-        if not sid or not secret:
-            raise SystemExit(
-                "Missing SHEETS_SOURCE_ID and SHEETS_SERVICE_ACCOUNT_FILE. "
-                "Only read-only Google service accounts are supported."
-            )
+        if not sid:
+            raise SystemExit("Missing SHEETS_SOURCE_ID or --spreadsheet-id")
+        expected_sid = os.environ.get("SHEETS_EXPECTED_SOURCE_ID", "").strip()
+        if expected_sid and sid != expected_sid:
+            raise SystemExit("Source spreadsheet ID mismatch: refusing to read a different file")
         from app.services.sheet_sync_google import GoogleSheetsReadOnly
-        connector = GoogleSheetsReadOnly(sid, secret)
+        connector = GoogleSheetsReadOnly(sid)
         snapshot = await connector.read_snapshot(with_cell_notes=not args.skip_notes)
 
     if snapshot.get("title") not in {None, "", "santo graal"}:
@@ -85,10 +85,9 @@ def main() -> None:
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--fixture", help="Synthetic JSON snapshot (offline test)")
     source.add_argument("--spreadsheet-id", help="Google Sheets ID (also SHEETS_SOURCE_ID)")
-    parser.add_argument("--service-account-file", help="Google JSON credentials file path")
     parser.add_argument("--skip-notes", action="store_true", help="Skip optional Google cell notes")
     parser.add_argument("--output", help="Private JSON report OUTSIDE the repo")
-    parser.add_argument("--show-samples", type=int, default=3)
+    parser.add_argument("--show-samples", type=int, default=0)
     args = parser.parse_args()
     raise SystemExit(asyncio.run(execute(args)))
 
