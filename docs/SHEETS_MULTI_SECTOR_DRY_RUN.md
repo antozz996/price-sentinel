@@ -82,6 +82,34 @@ Per la VPS Hetzner non presumere che esista una sorgente OIDC federabile. Il WIF
 
 La nuova `GoogleSheetsReadOnly` usa `google.auth.default(scopes=[READONLY_SCOPE])`. Sotto WIF l'ADC legge la configurazione temporanea creata dall'azione GitHub, che non contiene una private key permanente. Il test `test_sheet_sync_google_auth.py` verifica il percorso di caricamento senza credenziali reali.
 
+## Collaudo live manuale WIF (preparato, non ancora eseguito)
+
+Configurazione Google Cloud **già verificata**:
+
+- Project: `price-sentinel-integrations` / project number `876130258139`.
+- Provider: `projects/876130258139/locations/global/workloadIdentityPools/price-sentinel-github-actions/providers/github-oidc`, issuer ufficiale GitHub, stato ACTIVE.
+- Condizione provider: repository `antozz996/price-sentinel`, repository ID `1230041589`, branch `refs/heads/feat/google-sheets-multisheet-dry-run`, evento `workflow_dispatch`.
+- La service account `ps-sheets-reader@price-sentinel-integrations.iam.gserviceaccount.com` ha un binding `roles/iam.workloadIdentityUser` **a livello di service account**, legato al principalSet del repository ID. Lo Sheet è condiviso come Viewer.
+
+Il file `.github/workflows/sheet-sync-dry-run.yml` include ora un job `live-google-readonly` che si attiva **solo manualmente** sul branch di collaudo. Il job originale per le fixture sintetiche continua a funzionare su push/PR ma **non riceve token OIDC né credenziali reali**.
+
+Per il primo collaudo:
+
+1. In GitHub → Settings → Secrets and variables → Actions, salvare un **repository secret** chiamato `PS_SHEETS_SOURCE_ID` con l'ID dello Spreadsheet privato originale. Non inserirlo nel workflow, nei commit, nelle issue o nei log. Il job verifica il digest SHA-256 dell'ID atteso prima di autenticarsi, senza stampare il valore.
+2. GitHub richiede normalmente che un workflow `workflow_dispatch` esista sul branch `main` per comparire nella UI. **Non modificare `main` senza approvazione.** Il workflow sul branch di sviluppo è già stato registrato tramite esecuzioni `push` e `pull_request`; è possibile tentare un dispatch manuale via GitHub CLI con un account autenticato e write access:
+
+   ```bash
+   gh workflow run sheet-sync-dry-run.yml -R antozz996/price-sentinel \
+     --ref feat/google-sheets-multisheet-dry-run -f operation=metadata
+   ```
+
+   Se GitHub restituisce `404` o `workflow does not have workflow_dispatch trigger`, fermarsi e richiedere autorizzazione a creare **solo** lo stub del workflow sul branch default; nessun merge di PR P0/P1 o deploy.
+3. Il primo test legge **esclusivamente i metadati** del documento (titolo e presenza delle 5 schede sorgente + esclusioni). Non legge prezzi.
+4. Soltanto dopo esito positivo e consenso al test completo, avviare con `-f operation=dry_run`. Questo legge i valori dei 5 settori e note, produce **solo conteggi aggregati nei log** e zero write/price commit/artifact.
+5. Per il test si usano **solo credenziali temporanee WIF** tramite `google-github-actions/auth@v3`. `gha-creds-*.json` è escluso tramite `.gitignore`.
+
+Il successo dei test offline su GitHub non significa che l'autenticazione WIF o l'accesso Google Sheets siano già stati testati con dati reali.
+
 ## Significato degli stati
 
 - `blocked`: esclusione, valore non affidabile, zero, unità per fornitore non comparabile.
