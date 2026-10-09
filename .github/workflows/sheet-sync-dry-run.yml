@@ -1,0 +1,32 @@
+# Registration-only workflow on default branch.
+# The real read-only WIF test is defined ONLY on:
+#   feat/google-sheets-multisheet-dry-run
+# This file cannot access Google Cloud, the workbook, or any secret.
+name: Google Sheets Multi-Sector Dry Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Read-only Sheets check (select the feature branch)"
+        required: true
+        default: metadata
+        type: choice
+        options:
+          - metadata
+          - dry_run
+
+permissions:
+  contents: read
+
+jobs:
+  registration-only:
+    name: Refuse default-branch execution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Select the isolated testing branch
+        shell: bash
+        run: |
+          echo "::error::This default-branch file only registers workflow_dispatch."
+          echo "::error::Run from branch feat/google-sheets-multisheet-dry-run."
+          exit 1
