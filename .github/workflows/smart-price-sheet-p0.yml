@@ -1,0 +1,46 @@
+name: Smart Price Sheet P0 Regression
+
+on:
+  push:
+    branches:
+      - fix/smart-price-sheet-sync-p0
+  pull_request:
+    paths:
+      - "backend/app/api/v1/smart_price_sheet.py"
+      - "backend/app/services/smart_price_sheet.py"
+      - "backend/tests/smart_price_sheet_*"
+      - ".github/workflows/smart-price-sheet-p0.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parser-and-ranking-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql+asyncpg://readonly:unused@127.0.0.1:5432/p0_disposable_only
+      SECRET_KEY: "p0-only-test-secret-is-not-a-production-secret-1234567"
+      ARUBA_WEBHOOK_API_KEY: "test-placeholder"
+      LIQUIDSTOCK_INTEGRATION_SECRET: "test-only-compatibility-value-1234567890"
+      ENVIRONMENT: "test"
+      AUTOMATION_ENABLED: "false"
+      DEBUG: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend test dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Compile modified Python modules
+        run: python -m compileall -q backend/app/services/smart_price_sheet.py backend/app/api/v1/smart_price_sheet.py backend/tests/smart_price_sheet_unit.py backend/tests/smart_price_sheet_e2e.py
+      - name: Run parser and supplier-ranking regressions (DB-free)
+        working-directory: backend
+        run: python tests/smart_price_sheet_unit.py
+
+# Full API+Postgres tests remain an explicit release blocker.
+# Never run integration checks against a production database.
