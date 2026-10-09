@@ -382,9 +382,10 @@ h1, h2, h3, h4 {
     padding: 14px 12px 140px 12px !important;
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  /* Header adjustments */
   .app-header {
     margin-bottom: 12px !important;
     gap: 8px !important;
@@ -413,39 +414,144 @@ h1, h2, h3, h4 {
   }
 }
 
+/* ============================================================
+   COMPREHENSIVE MOBILE LAYOUT (768px and below)
+   Uses attribute selectors to override inline styles in React
+   ============================================================ */
 @media (max-width: 768px) {
-  .glass-panel {
-    padding: 16px !important;
-    border-radius: var(--border-radius-md) !important;
+  body, #root {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
   }
 
-  /* ProductConsumptionReport details responsive adjustments */
-  .detail-kpi-row-1 {
+  .main-content {
+    padding: 12px 10px 140px 10px !important;
+    overflow-x: hidden !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .glass-panel {
+    padding: 14px !important;
+    border-radius: 10px !important;
+  }
+
+  /* Force all wide minmax grids to single column */
+  div[style*="minmax(400"],
+  div[style*="minmax(420"],
+  div[style*="minmax(450"],
+  div[style*="minmax(480"],
+  div[style*="minmax(500"],
+  div[style*="minmax(360"],
+  div[style*="minmax(340"],
+  div[style*="minmax(320"],
+  div[style*="minmax(300"],
+  div[style*="minmax(280"] {
     grid-template-columns: 1fr !important;
   }
 
+  /* Two column inline grids to single column */
+  div[style*="1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* All tables: scrollable */
+  table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  thead, tbody, tfoot {
+    display: table !important;
+    width: 100% !important;
+  }
+
+  /* Modals: full width */
+  div[style*="position: fixed"] > div[style*="maxWidth"],
+  div[style*="position: fixed"] > div[style*="max-width"] {
+    max-width: 96vw !important;
+    width: 96vw !important;
+    padding: 14px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ProductConsumptionReport */
+  .detail-kpi-row-1,
   .detail-kpi-row-2 {
     grid-template-columns: 1fr !important;
   }
 
   .detail-split-grid {
     grid-template-columns: 1fr !important;
-    gap: 20px !important;
+    gap: 16px !important;
   }
 
   .invoices-modal-content {
     max-height: 95vh !important;
-    padding: 16px !important;
+    padding: 14px !important;
   }
 
   .modal-header-container {
     flex-direction: column !important;
     align-items: flex-start !important;
-    gap: 12px !important;
+    gap: 10px !important;
   }
 
   .modal-header-container > div {
     width: 100% !important;
+  }
+
+  /* Fix DisputeManagement / OrderReconciliation split grids */
+  div[style*=".75fr"],
+  div[style*="2fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* SmartPriceSheet label grids */
+  label[style*="minmax(180px"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Dashboard grids */
+  .dashboard-kpi-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+
+  .dashboard-analytics-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .dashboard-subcards-row > * {
+    flex: 1 1 calc(50% - 4px) !important;
+    min-width: 120px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    padding: 8px 8px 140px 8px !important;
+  }
+
+  .glass-panel {
+    padding: 12px !important;
+  }
+
+  h4 {
+    font-size: 0.9rem !important;
+  }
+
+  .dashboard-kpi-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .dashboard-subcards-row > * {
+    flex: 1 1 100% !important;
   }
 }
 
