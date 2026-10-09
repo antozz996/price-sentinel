@@ -22,7 +22,7 @@ from app.models.fatture import RigaFattura, Fattura
 from app.models.fornitori import Fornitore
 from app.models.location import Location
 from app.models.ordini import Ordine, RigaOrdine
-from app.models.products import Product, SupplierProductAlias
+from app.models.products import Product, SupplierProductAlias, SupplierQuoteRequest
 from app.models.purchase_policy import ProductPurchasePolicy, SupplierCategoryCapability, SupplierSubcategoryCapability
 from app.models.categories import MasterCategory
 from app.models.utenti import Utente
@@ -1476,6 +1476,55 @@ async def genera_richiesta_prezzo_settore(
             )
         )
 
+    # 5. Salva o aggiorna automaticamente la richiesta in Standby
+    suppliers_payload = [
+        {
+            "supplier_id": sd.supplier_id,
+            "supplier_name": sd.supplier_name,
+            "phone": sd.telefono_contatto,
+            "email": sd.email_contatto,
+            "whatsapp_message": sd.whatsapp_message,
+            "whatsapp_url": sd.whatsapp_url,
+            "capability_reason": sd.capability_reason,
+            "quote_price": None,
+            "quote_uom": data.comparison_unit,
+            "notes": None,
+            "status": "pending"
+        }
+        for sd in supplier_details
+    ]
+
+    existing_quote_req = None
+    if data.product_id:
+        existing_quote_req = await db.scalar(
+            select(SupplierQuoteRequest).where(
+                SupplierQuoteRequest.product_id == data.product_id,
+                SupplierQuoteRequest.status == "standby"
+            )
+        )
+
+    if existing_quote_req:
+        existing_quote_req.suppliers_data = suppliers_payload
+        existing_quote_req.notes = f"Inviata a {len(supplier_details)} fornitori in {location_name}"
+        existing_quote_req.updated_at = datetime.utcnow()
+    else:
+        new_quote_req = SupplierQuoteRequest(
+            product_id=data.product_id,
+            canonical_name=data.canonical_name,
+            order_name=data.order_name,
+            category=category_str,
+            subcategory=data.subcategory,
+            brand=data.brand,
+            comparison_unit=data.comparison_unit,
+            sku_interno=data.sku_interno,
+            status="standby",
+            notes=f"Inviata a {len(supplier_details)} fornitori in {location_name}",
+            suppliers_data=suppliers_payload
+        )
+        db.add(new_quote_req)
+
+    await db.commit()
+
     return SectorPriceQuoteResponse(
         product_id=data.product_id,
         canonical_name=data.canonical_name,
@@ -1492,5 +1541,228 @@ async def genera_richiesta_prezzo_settore(
         broadcast_email_body=email_body_text,
         fornitori=supplier_details
     )
+
+
+# ── Schemas & Endpoints Standby Preventivi Fornitori ───────────────────
+
+class StandbySupplierItem(BaseModel):
+    supplier_id: int
+    supplier_name: str
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    whatsapp_message: Optional[str] = None
+    whatsapp_url: Optional[str] = None
+    capability_reason: Optional[str] = None
+    quote_price: Optional[float] = None
+    quote_uom: Optional[str] = "Pz"
+    notes: Optional[str] = None
+    status: str = "pending"
+
+
+class StandbyQuoteRequestUpdate(BaseModel):
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    suppliers_data: Optional[List[StandbySupplierItem]] = None
+
+
+class StandbyQuoteCompletePayload(BaseModel):
+    supplier_id: int
+    prezzo_concordato: float
+    unita_misura: Optional[str] = "Pz"
+    sku_interno: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    brand: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.get(
+    "/settore/richieste-prezzo/standby",
+    summary="Ottiene lo storico dei prodotti nuovi inviati ai fornitori in Standby Preventivo",
+)
+async def lista_richieste_prezzo_standby(
+    status_filter: Optional[str] = Query("all", description="all, standby, completed"),
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    query = select(SupplierQuoteRequest).order_by(SupplierQuoteRequest.updated_at.desc())
+    if status_filter and status_filter != "all":
+        query = query.where(SupplierQuoteRequest.status == status_filter)
+    
+    records = (await db.scalars(query)).all()
+    res = []
+    for r in records:
+        res.append({
+            "id": r.id,
+            "product_id": r.product_id,
+            "canonical_name": r.canonical_name,
+            "order_name": r.order_name,
+            "category": r.category,
+            "subcategory": r.subcategory,
+            "brand": r.brand,
+            "comparison_unit": r.comparison_unit,
+            "sku_interno": r.sku_interno,
+            "status": r.status,
+            "notes": r.notes,
+            "suppliers_data": r.suppliers_data or [],
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        })
+    return res
+
+
+@router.put(
+    "/settore/richieste-prezzo/standby/{request_id}",
+    summary="Aggiorna le informazioni o quotazioni fornitori per una richiesta in standby",
+)
+async def aggiorna_richiesta_prezzo_standby(
+    request_id: int,
+    data: StandbyQuoteRequestUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    req = await db.get(SupplierQuoteRequest, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Richiesta in standby non trovata.")
+
+    if data.notes is not None:
+        req.notes = data.notes
+    if data.status is not None:
+        req.status = data.status
+    if data.suppliers_data is not None:
+        req.suppliers_data = [s.dict() for s in data.suppliers_data]
+    
+    req.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(req)
+    return {"message": "Richiesta in standby aggiornata con successo.", "id": req.id, "status": req.status}
+
+
+@router.post(
+    "/settore/richieste-prezzo/standby/{request_id}/completa",
+    summary="Compila e attiva il prodotto a listino master con i dati ricevuti dai fornitori",
+)
+async def completa_richiesta_prezzo_standby(
+    request_id: int,
+    payload: StandbyQuoteCompletePayload,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    req = await db.get(SupplierQuoteRequest, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Richiesta in standby non trovata.")
+
+    # 1. Recupera o crea il prodotto canonico
+    product = None
+    if req.product_id:
+        product = await db.get(Product, req.product_id)
+    
+    if not product:
+        norm_name = normalize_text(req.canonical_name)
+        product = await db.scalar(select(Product).where(Product.normalized_name == norm_name))
+
+    if product:
+        if payload.sku_interno:
+            product.sku_interno = payload.sku_interno
+        if payload.category:
+            product.category = payload.category
+        if payload.subcategory:
+            product.subcategory = payload.subcategory
+        if payload.brand:
+            product.brand = payload.brand
+        product.is_active = True
+    else:
+        sku = payload.sku_interno or req.sku_interno or f"SKU-STANDBY-{secrets.token_hex(3).upper()}"
+        product = Product(
+            canonical_name=req.canonical_name,
+            normalized_name=normalize_text(req.canonical_name),
+            order_name=req.order_name,
+            brand=payload.brand or req.brand,
+            category=payload.category or req.category or "Food",
+            subcategory=payload.subcategory or req.subcategory,
+            comparison_unit=req.comparison_unit or "Pz",
+            sku_interno=sku,
+            is_active=True
+        )
+        db.add(product)
+        await db.flush()
+        req.product_id = product.id
+
+    # 2. Inserisci o aggiorna il listino master per il fornitore selezionato
+    if payload.supplier_id and payload.prezzo_concordato > 0:
+        fornitore = await db.get(Fornitore, payload.supplier_id)
+        if fornitore:
+            # Upsert alias
+            alias = await db.scalar(
+                select(SupplierProductAlias).where(
+                    SupplierProductAlias.supplier_id == payload.supplier_id,
+                    SupplierProductAlias.product_id == product.id
+                )
+            )
+            if not alias:
+                alias = SupplierProductAlias(
+                    supplier_id=payload.supplier_id,
+                    product_id=product.id,
+                    raw_description=product.canonical_name,
+                    normalized_description=product.normalized_name or normalize_text(product.canonical_name),
+                    source="manual_standby_resolution",
+                    status="approved",
+                    confidence_score=Decimal("1.00")
+                )
+                db.add(alias)
+
+            # Insert/Update ListinoMaster
+            listino_entry = await db.scalar(
+                select(ListinoMaster).where(
+                    ListinoMaster.fornitore_id == payload.supplier_id,
+                    ListinoMaster.descrizione_prodotto == product.canonical_name
+                )
+            )
+            if not listino_entry:
+                listino_entry = ListinoMaster(
+                    fornitore_id=payload.supplier_id,
+                    descrizione_prodotto=product.canonical_name,
+                    prezzo_unitario=Decimal(str(payload.prezzo_concordato)),
+                    unita_misura=payload.unita_misura or req.comparison_unit or "Pz",
+                    categoria=product.category or "Generale",
+                    sku_fornitore=product.sku_interno,
+                    is_active=True
+                )
+                db.add(listino_entry)
+            else:
+                listino_entry.prezzo_unitario = Decimal(str(payload.prezzo_concordato))
+                listino_entry.unita_misura = payload.unita_misura or req.comparison_unit or "Pz"
+                listino_entry.is_active = True
+
+    # 3. Aggiorna lo stato dello standby
+    req.status = "completed"
+    req.notes = payload.notes or f"Compilato ed attivato a listino per fornitore ID {payload.supplier_id} (€{payload.prezzo_concordato:.2f})"
+    req.updated_at = datetime.utcnow()
+
+    await db.commit()
+    return {
+        "message": f"Prodotto '{product.canonical_name}' attivato in archivio e listino master con successo!",
+        "product_id": product.id,
+        "request_id": req.id
+    }
+
+
+@router.delete(
+    "/settore/richieste-prezzo/standby/{request_id}",
+    summary="Cancella o rimuove una richiesta in standby",
+)
+async def elimina_richiesta_prezzo_standby(
+    request_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    req = await db.get(SupplierQuoteRequest, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Richiesta in standby non trovata.")
+    
+    await db.delete(req)
+    await db.commit()
+    return {"message": "Richiesta in standby rimossa con successo."}
+
 
 

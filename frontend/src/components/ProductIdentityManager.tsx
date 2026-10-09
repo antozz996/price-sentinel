@@ -267,7 +267,7 @@ export default function ProductIdentityManager() {
 
   const fetchCandidates = async () => {
     try {
-      const res = await fetch(`${API_BASE}/match-candidates/work-queue`, { headers: getHeaders() })
+      const res = await fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, { headers: getHeaders() })
       if (!res.ok) throw new Error("Errore nel recupero della coda prodotti")
       const data = await res.json()
       setWorkQueue(data)
@@ -404,7 +404,7 @@ export default function ProductIdentityManager() {
     setResolutionLoading(true)
     setResolutionError(null)
     try {
-      const res = await fetch(`${API_BASE}/match-candidates/work-queue/resolve`, {
+      const res = await fetch(`${API_BASE}/product-identity/match-candidates/work-queue/resolve`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify(payload)
@@ -449,7 +449,7 @@ export default function ProductIdentityManager() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/match-candidates/work-queue/resolve-bulk`, {
+      const res = await fetch(`${API_BASE}/product-identity/match-candidates/work-queue/resolve-bulk`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify(payload),

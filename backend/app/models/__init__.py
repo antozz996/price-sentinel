@@ -20,6 +20,7 @@ from app.models.products import (  # noqa: F401
     ProductEquivalenceGroup,
     ProductEquivalenceGroupItem,
     MatchCandidate,
+    SupplierQuoteRequest,
 )
 from app.models.liquidstock_integration import (  # noqa: F401
     LiquidStockIntegrationEvent,

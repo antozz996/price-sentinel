@@ -293,3 +293,45 @@ class ProductFeedback(Base):
     user = relationship("Utente", foreign_keys=[user_id], lazy="selectin")
     resolved_by = relationship("Utente", foreign_keys=[resolved_by_id], lazy="selectin")
     ordine = relationship("Ordine", foreign_keys=[ordine_id], lazy="selectin")
+
+
+class SupplierQuoteRequest(Base):
+    """
+    Rappresenta una richiesta di quotazione preventivo/prezzo inviata ai fornitori
+    per un nuovo prodotto non ancora totalmente catalogato (prodotti in Standby).
+    """
+    __tablename__ = "supplier_quote_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    product_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("products.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+    canonical_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    order_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    subcategory: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    comparison_unit: Mapped[str] = mapped_column(String(50), nullable=False, default="Pz")
+    sku_interno: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="standby", index=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    
+    suppliers_data: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    product = relationship("Product", lazy="selectin")
+

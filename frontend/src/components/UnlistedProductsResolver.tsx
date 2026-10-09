@@ -16,6 +16,12 @@ import {
   ChevronUp,
   Loader2,
   Zap,
+  MessageSquare,
+  Clock,
+  Edit3,
+  Trash2,
+  Store,
+  X,
 } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
@@ -80,6 +86,37 @@ interface ExistingProduct {
   comparison_unit: string;
 }
 
+interface StandbyQuoteSupplier {
+  supplier_id: number;
+  supplier_name: string;
+  phone?: string | null;
+  email?: string | null;
+  whatsapp_message?: string | null;
+  whatsapp_url?: string | null;
+  capability_reason?: string | null;
+  quote_price?: number | null;
+  quote_uom?: string | null;
+  notes?: string | null;
+  status: string;
+}
+
+interface StandbyQuoteRequestItem {
+  id: number;
+  product_id?: number | null;
+  canonical_name: string;
+  order_name?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  brand?: string | null;
+  comparison_unit: string;
+  sku_interno?: string | null;
+  status: string;
+  notes?: string | null;
+  suppliers_data: StandbyQuoteSupplier[];
+  created_at: string;
+  updated_at: string;
+}
+
 const CATEGORIES = [
   'Food',
   'Beverage',
@@ -92,6 +129,27 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Main view tab: 'unlisted' vs 'standby'
+  const [activeMainTab, setActiveMainTab] = useState<'unlisted' | 'standby'>('unlisted');
+  const [standbyItems, setStandbyItems] = useState<StandbyQuoteRequestItem[]>([]);
+  const [loadingStandby, setLoadingStandby] = useState(false);
+  const [standbyStatusFilter, setStandbyStatusFilter] = useState<'all' | 'standby' | 'completed'>('all');
+  const [standbySearch, setStandbySearch] = useState('');
+
+  // Standby item compile modal state
+  const [compilingItem, setCompilingItem] = useState<StandbyQuoteRequestItem | null>(null);
+  const [compileForm, setCompileForm] = useState({
+    supplier_id: 0,
+    prezzo_concordato: '',
+    unita_misura: 'Pz',
+    sku_interno: '',
+    category: 'Food',
+    subcategory: '',
+    brand: '',
+    notes: ''
+  });
+  const [submittingCompile, setSubmittingCompile] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -210,12 +268,126 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         const pData: ExistingProduct[] = await prodRes.json();
         setExistingProducts(pData);
       }
+      
+      await loadStandbyData();
     } catch (err: any) {
       setError(err.message || 'Errore di connessione');
     } finally {
       setLoading(false);
     }
   };
+
+  const loadStandbyData = async () => {
+    setLoadingStandby(true);
+    try {
+      const res = await fetch(`${API_BASE}/ordini/settore/richieste-prezzo/standby`, {
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStandbyItems(data);
+      }
+    } catch (err: any) {
+      console.error("Errore caricamento dati standby:", err);
+    } finally {
+      setLoadingStandby(false);
+    }
+  };
+
+  const handleOpenCompileModal = (item: StandbyQuoteRequestItem) => {
+    setCompilingItem(item);
+    const firstSupplierId = item.suppliers_data[0]?.supplier_id || 0;
+    setCompileForm({
+      supplier_id: firstSupplierId,
+      prezzo_concordato: '',
+      unita_misura: item.comparison_unit || 'Pz',
+      sku_interno: item.sku_interno || '',
+      category: item.category || 'Food',
+      subcategory: item.subcategory || '',
+      brand: item.brand || '',
+      notes: ''
+    });
+  };
+
+  const handleSaveCompile = async () => {
+    if (!compilingItem) return;
+    if (!compileForm.supplier_id) {
+      alert("Seleziona il fornitore che ha fornito la quotazione.");
+      return;
+    }
+    const priceVal = parseFloat(compileForm.prezzo_concordato);
+    if (isNaN(priceVal) || priceVal <= 0) {
+      alert("Inserisci un prezzo concordato valido maggiore di 0.");
+      return;
+    }
+
+    setSubmittingCompile(true);
+    try {
+      const payload = {
+        supplier_id: compileForm.supplier_id,
+        prezzo_concordato: priceVal,
+        unita_misura: compileForm.unita_misura,
+        sku_interno: compileForm.sku_interno.trim() || undefined,
+        category: compileForm.category.trim() || undefined,
+        subcategory: compileForm.subcategory.trim() || undefined,
+        brand: compileForm.brand.trim() || undefined,
+        notes: compileForm.notes.trim() || undefined
+      };
+
+      const res = await fetch(`${API_BASE}/ordini/settore/richieste-prezzo/standby/${compilingItem.id}/completa`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Errore durante il completamento del prodotto.");
+
+      setActionSuccess(`✅ Prodotto "${compilingItem.canonical_name}" compilato con successo, salvato in archivio ed inserito nel listino del fornitore!`);
+      setTimeout(() => setActionSuccess(null), 6000);
+      setCompilingItem(null);
+      await Promise.all([loadAll(), loadStandbyData()]);
+    } catch (err: any) {
+      alert(err.message || "Impossibile completare la scheda prodotto");
+    } finally {
+      setSubmittingCompile(false);
+    }
+  };
+
+  const handleDeleteStandby = async (id: number, canonicalName: string) => {
+    if (!window.confirm(`Sei sicuro di voler eliminare la richiesta in standby per "${canonicalName}"?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/ordini/settore/richieste-prezzo/standby/${id}`, {
+        method: 'DELETE',
+        headers: getHeaders()
+      });
+      if (!res.ok) throw new Error("Errore eliminazione");
+      setActionSuccess("Richiesta in standby eliminata.");
+      setTimeout(() => setActionSuccess(null), 3000);
+      await loadStandbyData();
+    } catch (err: any) {
+      alert(err.message || "Errore durante l'eliminazione");
+    }
+  };
+
+  const filteredStandbyItems = useMemo(() => {
+    return standbyItems.filter(item => {
+      if (standbyStatusFilter !== 'all' && item.status !== standbyStatusFilter) {
+        return false;
+      }
+      if (standbySearch.trim()) {
+        const q = standbySearch.toLowerCase();
+        const matchName = item.canonical_name.toLowerCase().includes(q);
+        const matchCat = (item.category || '').toLowerCase().includes(q);
+        const matchBrand = (item.brand || '').toLowerCase().includes(q);
+        const matchSupp = item.suppliers_data.some(s => s.supplier_name.toLowerCase().includes(q));
+        if (!matchName && !matchCat && !matchBrand && !matchSupp) return false;
+      }
+      return true;
+    });
+  }, [standbyItems, standbyStatusFilter, standbySearch]);
 
   // Open item form and prepopulate fields
   const handleOpenItem = (item: WorkQueueItem, defaultMode?: 'create' | 'associate') => {
@@ -716,8 +888,76 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         </div>
       )}
 
-      {/* Filters Bar */}
-      <div className="glass-panel" style={{ padding: '18px 24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* Main Navigation Tabs Bar */}
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('unlisted')}
+          style={{
+            padding: '12px 24px',
+            borderRadius: '12px',
+            border: activeMainTab === 'unlisted' ? '1px solid rgba(59, 130, 246, 0.6)' : '1px solid var(--border-glass)',
+            background: activeMainTab === 'unlisted' ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.35) 100%)' : 'rgba(0, 0, 0, 0.3)',
+            color: activeMainTab === 'unlisted' ? 'white' : 'var(--text-secondary)',
+            fontWeight: 800,
+            fontSize: '0.92rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: activeMainTab === 'unlisted' ? '0 0 20px rgba(59, 130, 246, 0.25)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <Layers size={18} color={activeMainTab === 'unlisted' ? '#93c5fd' : 'currentColor'} />
+          <span>Voci Fuori Listino da Fatture</span>
+          <span style={{
+            padding: '2px 8px', borderRadius: '12px',
+            background: activeMainTab === 'unlisted' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
+            fontSize: '0.78rem'
+          }}>
+            {queueData?.summary.work_items || 0}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveMainTab('standby');
+            loadStandbyData();
+          }}
+          style={{
+            padding: '12px 24px',
+            borderRadius: '12px',
+            border: activeMainTab === 'standby' ? '1px solid rgba(37, 211, 102, 0.6)' : '1px solid var(--border-glass)',
+            background: activeMainTab === 'standby' ? 'linear-gradient(135deg, rgba(37, 211, 102, 0.22) 0%, rgba(18, 140, 126, 0.35) 100%)' : 'rgba(0, 0, 0, 0.3)',
+            color: activeMainTab === 'standby' ? 'white' : 'var(--text-secondary)',
+            fontWeight: 800,
+            fontSize: '0.92rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: activeMainTab === 'standby' ? '0 0 20px rgba(37, 211, 102, 0.25)' : 'none',
+            transition: 'all 0.2s'
+          }}
+        >
+          <Clock size={18} color={activeMainTab === 'standby' ? '#34d399' : 'currentColor'} />
+          <span>💬 Storico Standby Fornitori (Prodotti Nuovi)</span>
+          <span style={{
+            padding: '2px 8px', borderRadius: '12px',
+            background: activeMainTab === 'standby' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
+            fontSize: '0.78rem'
+          }}>
+            {standbyItems.filter(i => i.status === 'standby').length}
+          </span>
+        </button>
+      </div>
+
+      {activeMainTab === 'unlisted' && (
+        <>
+          {/* Filters Bar */}
+          <div className="glass-panel" style={{ padding: '18px 24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', flex: 1, minWidth: '300px' }}>
           {/* Search Input */}
           <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
@@ -1846,6 +2086,556 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           })}
         </div>
       )}
+      </>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SEZIONE STORICO STANDBY FORNITORI / PREVENTIVI NUOVI PRODOTTI
+      ───────────────────────────────────────────────────────────── */}
+      {activeMainTab === 'standby' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Filters Bar Standby */}
+          <div className="glass-panel" style={{ padding: '18px 24px', display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', flex: 1, minWidth: '300px' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                <input
+                  type="text"
+                  placeholder="Cerca prodotto nuovo in standby, brand, fornitore..."
+                  value={standbySearch}
+                  onChange={e => setStandbySearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px 10px 38px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ minWidth: '200px' }}>
+                <select
+                  value={standbyStatusFilter}
+                  onChange={e => setStandbyStatusFilter(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.88rem',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="all" style={{ background: '#13131c' }}>Tutti gli Stati ({standbyItems.length})</option>
+                  <option value="standby" style={{ background: '#13131c' }}>⏳ Standby WhatsApp ({standbyItems.filter(i => i.status === 'standby').length})</option>
+                  <option value="completed" style={{ background: '#13131c' }}>✅ Attivati a Listino ({standbyItems.filter(i => i.status === 'completed').length})</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={loadStandbyData}
+              disabled={loadingStandby}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '9px 14px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-glass)',
+                borderRadius: '8px',
+                color: 'var(--text-primary)',
+                cursor: loadingStandby ? 'not-allowed' : 'pointer',
+                fontSize: '0.82rem',
+                fontWeight: 600
+              }}
+            >
+              <RefreshCw size={14} className={loadingStandby ? 'spin' : ''} />
+              <span>Aggiorna Storico Standby</span>
+            </button>
+          </div>
+
+          {/* Standby Items Cards Grid */}
+          {loadingStandby ? (
+            <div className="glass-panel" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <RefreshCw size={36} className="spin" style={{ color: '#25D366', margin: '0 auto 16px' }} />
+              <div>Caricamento dello storico dei prodotti in Standby Preventivo...</div>
+            </div>
+          ) : filteredStandbyItems.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <Clock size={42} style={{ color: '#64748b', margin: '0 auto 16px' }} />
+              <h3 style={{ color: 'white', margin: '0 0 8px', fontSize: '1.2rem' }}>Nessun Prodotto in Standby</h3>
+              <p style={{ margin: 0, fontSize: '0.9rem', maxWidth: '500px', marginInline: 'auto' }}>
+                Quando richiedi una quotazione a nuovi fornitori per un articolo non catalogato (es. dallo Sviluppo Ordini Settore), il prodotto comparirà qui in standby con i relativi pulsanti WhatsApp e form di compilazione finale.
+              </p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '16px' }}>
+              {filteredStandbyItems.map(item => {
+                const isStandby = item.status === 'standby';
+                const createdDate = item.created_at ? new Date(item.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+                return (
+                  <div
+                    key={item.id}
+                    className="glass-panel"
+                    style={{
+                      padding: '22px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '16px',
+                      border: isStandby ? '1px solid rgba(37, 211, 102, 0.35)' : '1px solid rgba(16, 185, 129, 0.2)',
+                      boxShadow: isStandby ? '0 0 20px rgba(37, 211, 102, 0.1)' : 'none',
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Status Badge & Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          padding: '4px 10px',
+                          borderRadius: '20px',
+                          background: isStandby ? 'rgba(37, 211, 102, 0.18)' : 'rgba(16, 185, 129, 0.2)',
+                          color: isStandby ? '#34d399' : '#10b981',
+                          border: isStandby ? '1px solid rgba(37, 211, 102, 0.4)' : '1px solid #10b981',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}>
+                          {isStandby ? <Clock size={13} /> : <CheckCircle2 size={13} />}
+                          <span>{isStandby ? '⏳ Standby WhatsApp (In attesa)' : '✅ Attivato in Listino'}</span>
+                        </span>
+
+                        {item.category && (
+                          <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', fontSize: '0.75rem', fontWeight: 600 }}>
+                            {item.category} {item.subcategory ? `> ${item.subcategory}` : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteStandby(item.id, item.canonical_name)}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.1)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          borderRadius: '6px',
+                          color: '#f87171',
+                          padding: '5px',
+                          cursor: 'pointer'
+                        }}
+                        title="Rimuovi dallo storico standby"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    {/* Title & Product Info */}
+                    <div>
+                      <h3 style={{ margin: '0 0 6px', fontSize: '1.15rem', fontWeight: 800, color: 'white' }}>
+                        {item.canonical_name}
+                      </h3>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {item.sku_interno && <span>SKU: <strong style={{ color: '#93c5fd' }}>{item.sku_interno}</strong></span>}
+                        {item.brand && <span>Brand: <strong style={{ color: 'white' }}>{item.brand}</strong></span>}
+                        <span>UoM: <strong style={{ color: '#f59e0b' }}>{item.comparison_unit}</strong></span>
+                        {createdDate && <span>Inviato il: {createdDate}</span>}
+                      </div>
+                      {item.notes && (
+                        <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#94a3b8', background: 'rgba(0,0,0,0.3)', padding: '6px 10px', borderRadius: '6px' }}>
+                          📝 {item.notes}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Suppliers Requested Section with Standby WhatsApp buttons */}
+                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '12px 14px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Store size={14} />
+                        <span>Fornitori Inoltrati ({item.suppliers_data?.length || 0}):</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                        {item.suppliers_data?.map(sup => {
+                          const waUrl = sup.whatsapp_url || (sup.phone ? `https://wa.me/39${sup.phone.replace(/\D/g, '')}` : '');
+
+                          return (
+                            <div
+                              key={sup.supplier_id}
+                              style={{
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'white' }}>
+                                  {sup.supplier_name}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                  {sup.phone ? `📞 ${sup.phone}` : ''} {sup.email ? `✉️ ${sup.email}` : ''}
+                                </div>
+                              </div>
+
+                              {waUrl && (
+                                <a
+                                  href={waUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    padding: '5px 10px',
+                                    borderRadius: '6px',
+                                    background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                                    color: 'white',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    textDecoration: 'none',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    boxShadow: '0 0 10px rgba(37, 211, 102, 0.3)'
+                                  }}
+                                >
+                                  <MessageSquare size={12} />
+                                  <span>Standby WhatsApp</span>
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Main Action Button: Compila Dati Prodotto */}
+                    <div style={{ marginTop: 'auto', paddingTop: '10px' }}>
+                      <button
+                        onClick={() => handleOpenCompileModal(item)}
+                        style={{
+                          width: '100%',
+                          padding: '11px',
+                          borderRadius: '10px',
+                          border: isStandby ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                          background: isStandby 
+                            ? 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)' 
+                            : 'rgba(255, 255, 255, 0.06)',
+                          color: 'white',
+                          fontWeight: 800,
+                          fontSize: '0.88rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          boxShadow: isStandby ? '0 0 20px rgba(139, 92, 246, 0.3)' : 'none',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        <Edit3 size={15} />
+                        <span>{isStandby ? '✏️ Compila Dati Prodotto con Risposta Fornitori' : '✏️ Aggiorna Dati Prodotto'}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          MODAL: COMPILA DATI PRODOTTO STANDBY CON RISPOSTA FORNITORI
+      ───────────────────────────────────────────────────────────── */}
+      {compilingItem && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, #182234 0%, #0d1424 100%)',
+            border: '1px solid rgba(37, 211, 102, 0.4)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '650px',
+            maxHeight: '92vh',
+            overflowY: 'auto',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 35px rgba(37, 211, 102, 0.25)',
+            padding: '26px',
+            color: 'white',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{
+                  width: '44px', height: '44px', borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 0 15px rgba(37, 211, 102, 0.4)'
+                }}>
+                  <Edit3 size={22} color="white" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
+                    Compila Dati Prodotto Ricevuti dai Fornitori
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Articolo: <strong style={{ color: 'white' }}>{compilingItem.canonical_name}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompilingItem(null)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'var(--text-secondary)',
+                  padding: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Fornitore aggiudicatario / che ha risposto */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
+                  Fornitore con Offerta / Quotazione *
+                </label>
+                <select
+                  value={compileForm.supplier_id}
+                  onChange={e => setCompileForm({ ...compileForm, supplier_id: Number(e.target.value) })}
+                  style={{
+                    padding: '10px 14px',
+                    background: 'rgba(0,0,0,0.4)',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    outline: 'none',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={0} style={{ background: '#13131c' }}>-- Seleziona Fornitore --</option>
+                  {compilingItem.suppliers_data?.map(s => (
+                    <option key={s.supplier_id} value={s.supplier_id} style={{ background: '#13131c' }}>
+                      {s.supplier_name} {s.phone ? `(${s.phone})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Prezzo e Unità di misura */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#93c5fd' }}>
+                    Prezzo Netto Concordato (€) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Es. 14.50"
+                    value={compileForm.prezzo_concordato}
+                    onChange={e => setCompileForm({ ...compileForm, prezzo_concordato: e.target.value })}
+                    style={{
+                      padding: '10px 12px',
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.4)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontWeight: 700,
+                      fontSize: '0.95rem',
+                      outline: 'none'
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Unità di Misura d'Acquisto
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Es. Pz, Ct, Kg, Bot, L..."
+                    value={compileForm.unita_misura}
+                    onChange={e => setCompileForm({ ...compileForm, unita_misura: e.target.value })}
+                    style={{
+                      padding: '10px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.9rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* SKU & Brand */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    SKU Interno Prodotto
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Auto-generato se vuoto"
+                    value={compileForm.sku_interno}
+                    onChange={e => setCompileForm({ ...compileForm, sku_interno: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Brand / Marchio
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Es. San Pellegrino..."
+                    value={compileForm.brand}
+                    onChange={e => setCompileForm({ ...compileForm, brand: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Categoria e Sottocategoria */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Categoria / Settore
+                  </label>
+                  <select
+                    value={compileForm.category}
+                    onChange={e => setCompileForm({ ...compileForm, category: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {CATEGORIES.map(c => (
+                      <option key={c} value={c} style={{ background: '#13131c' }}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Sottocategoria
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Es. Birre, Detergenza..."
+                    value={compileForm.subcategory}
+                    onChange={e => setCompileForm({ ...compileForm, subcategory: e.target.value })}
+                    style={{
+                      padding: '9px 12px',
+                      background: 'rgba(0,0,0,0.4)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setCompilingItem(null)}
+                disabled={submittingCompile}
+                style={{ padding: '10px 16px', fontSize: '0.85rem' }}
+              >
+                Annulla
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveCompile}
+                disabled={submittingCompile || !compileForm.supplier_id || !compileForm.prezzo_concordato}
+                style={{
+                  padding: '11px 22px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: 'white',
+                  fontWeight: 800,
+                  fontSize: '0.9rem',
+                  cursor: submittingCompile || !compileForm.supplier_id || !compileForm.prezzo_concordato ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 0 25px rgba(16, 185, 129, 0.4)',
+                  opacity: submittingCompile || !compileForm.supplier_id || !compileForm.prezzo_concordato ? 0.6 : 1,
+                  transition: 'all 0.2s'
+                }}
+              >
+                {submittingCompile ? <RefreshCw className="spinner" size={16} /> : <CheckCircle2 size={16} />}
+                <span>🚀 Salva & Attiva in Archivio Listino</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
