@@ -15,15 +15,21 @@ ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{15,200}$")
 
 
 class GoogleSheetsReadOnly:
-    def __init__(self, spreadsheet_id: str, service_account_file: str):
+    def __init__(self, spreadsheet_id: str, *, credentials: Any | None = None):
+        """Use Application Default Credentials (ADC), including keyless WIF.
+
+        The optional credentials argument is used by isolated tests only.
+        GitHub Actions should provide GOOGLE_APPLICATION_CREDENTIALS via
+        google-github-actions/auth, not a long-lived service-account key.
+        """
         if not ID_PATTERN.fullmatch(spreadsheet_id):
             raise ValueError("Invalid spreadsheet ID")
-        # Lazy import means the parser's offline unit tests have no Google dependency.
-        from google.oauth2 import service_account
+        if credentials is None:
+            # Import lazily; pure source/parser tests run without cloud auth.
+            import google.auth
 
-        self._credentials = service_account.Credentials.from_service_account_file(
-            service_account_file, scopes=[READONLY_SCOPE]
-        )
+            credentials, _project = google.auth.default(scopes=[READONLY_SCOPE])
+        self._credentials = credentials
         self._id = spreadsheet_id
 
     async def _request(self, *, suffix: str = "", **kwargs: Any) -> dict[str, Any]:
