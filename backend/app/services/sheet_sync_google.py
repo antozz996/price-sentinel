@@ -26,12 +26,12 @@ class GoogleSheetsReadOnly:
         )
         self._id = spreadsheet_id
 
-    async def _request(self, **kwargs: Any) -> dict[str, Any]:
+    async def _request(self, *, suffix: str = "", **kwargs: Any) -> dict[str, Any]:
         from google.auth.transport.requests import Request
 
         if not self._credentials.valid:
             await asyncio.to_thread(self._credentials.refresh, Request())
-        url = f"{API_ROOT}/{self._id}"
+        url = f"{API_ROOT}/{self._id}{suffix}"
         async with httpx.AsyncClient(timeout=50, follow_redirects=False) as client:
             # All access is GET, token has read-only scope, no mutation API exists.
             response = await client.get(
@@ -74,7 +74,7 @@ class GoogleSheetsReadOnly:
         )
         ranges.append(f"'{EXCLUSION_TAB}'!A1:F{exclusions_rows}")
         response = await self._request(
-            path="/values:batchGet",
+            suffix="/values:batchGet",
             params={
                 "ranges": ranges,
                 "valueRenderOption": "UNFORMATTED_VALUE",
