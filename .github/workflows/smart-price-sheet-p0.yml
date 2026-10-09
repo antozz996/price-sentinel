@@ -37,10 +37,49 @@ jobs:
       - name: Install backend test dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Compile modified Python modules
-        run: python -m compileall -q backend/app/services/smart_price_sheet.py backend/app/api/v1/smart_price_sheet.py backend/tests/smart_price_sheet_unit.py backend/tests/smart_price_sheet_e2e.py
+        run: python -m compileall -q backend/app/services/smart_price_sheet.py backend/app/api/v1/smart_price_sheet.py backend/tests/smart_price_sheet_unit.py backend/tests/smart_price_sheet_e2e.py backend/tests/smart_price_sheet_preview_transaction_e2e.py
       - name: Run parser and supplier-ranking regressions (DB-free)
         working-directory: backend
         run: PYTHONPATH=. python tests/smart_price_sheet_unit.py
 
-# Full API+Postgres tests remain an explicit release blocker.
+  preview-transaction-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: p0_test
+          POSTGRES_PASSWORD: p0_disposable_password
+          POSTGRES_DB: p0_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U p0_test -d p0_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://p0_test:p0_disposable_password@127.0.0.1:5432/p0_disposable
+      SECRET_KEY: "p0-only-test-secret-is-not-a-production-secret-1234567"
+      ARUBA_WEBHOOK_API_KEY: "test-placeholder"
+      LIQUIDSTOCK_INTEGRATION_SECRET: "test-only-compatibility-value-1234567890"
+      ENVIRONMENT: "test"
+      AUTOMATION_ENABLED: "false"
+      DEBUG: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend test dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Validate preview ownership, state, and retries (disposable Postgres)
+        working-directory: backend
+        run: PYTHONPATH=. python tests/smart_price_sheet_preview_transaction_e2e.py
+
+# The full endpoint and price-versioning API E2E still requires a migrated
+# disposable database, and remains an explicit gate before merge/deploy.
 # Never run integration checks against a production database.
