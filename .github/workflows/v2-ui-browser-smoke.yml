@@ -1,0 +1,54 @@
+name: Price Sentinel V2 — Offline Desktop & Mobile Browser Smoke
+
+on:
+  push:
+    branches:
+      - staging/price-sentinel-v2
+    paths:
+      - "frontend/**"
+      - ".github/workflows/v2-ui-browser-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies (no production access)
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Build checked-in V2 app
+        working-directory: frontend
+        run: npm run build
+      - name: Install isolated browser test runner
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Chromium desktop/mobile — mocked backend, no VPS calls
+        working-directory: frontend
+        run: npx playwright test --config=playwright.smoke.config.ts
+      - name: Upload traces only if a test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-ci-chromium-failure-traces
+          path: frontend/test-results/
+          retention-days: 3
+          if-no-files-found: ignore
+
+# Only a local Vite development process starts on this GitHub runner.
+# Every /api/v1 request is intercepted; no production or staging URL is used.
