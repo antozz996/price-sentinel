@@ -147,6 +147,7 @@ jobs:
           smoke=Path("backend/scripts/smoke_v2_staging.py").read_text()
           assert "time.monotonic()" in smoke
           assert 'type(exc).__name__' in smoke
+          assert "httpx.Limits(max_keepalive_connections=0)" in smoke
           print("PASS: KPI scopes through invoices, no invalid tenant columns, probe errors classified")
           PY
       - name: Typecheck and build V2 frontend (no deploy)
