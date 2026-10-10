@@ -403,10 +403,12 @@ h1, h2, h3, h4 {
 
   .header-subtitle {
     font-size: 0.75rem !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    max-width: 240px !important;
+    line-height: 1.45 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: min(100%, 420px) !important;
   }
 
   .profile-info {
