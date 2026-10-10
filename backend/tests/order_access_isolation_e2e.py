@@ -6,6 +6,7 @@ Real V1 and shared V2 staging databases must never be used.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import os
 
@@ -54,6 +55,9 @@ def seed() -> None:
                     is_commodity,is_active,unit_count,created_at,updated_at)
                 values (1,'CI-SKU','Synthetic food','synthetic food','Food','piece',
                         false,true,1,now(),now());
+                insert into listino_master(id,fornitore_id,sku_interno,descrizione,
+                    prezzo_pattuito,unita_misura,data_inizio_validita)
+                values (1,1,'CI-SKU','Synthetic food',4,'pz','2026-01-01');
                 insert into ordini(
                     id,fornitore_id,location_id,user_id,tenant_id,settore,data_ordine,
                     spesa_totale,stato,stato_ricezione)
@@ -131,6 +135,46 @@ async def run() -> None:
             json={**invalid_cross, "location_id": 1},
         )
         check("manager can draft within own venue and sector", r.status_code == 200)
+        bundle = r.json()["fornitori_ordini"][0]
+        save_payload = {"location_id": 1, "settore": "Food", "bundles": [bundle]}
+        check("server draft uses agreed supplier contract",
+              bundle["fornitore_id"] == 1
+              and bundle["items"][0]["is_concordato"]
+              and bundle["items"][0]["prezzo_unitario"] == 4)
+
+        altered_total = copy.deepcopy(save_payload)
+        altered_total["bundles"][0]["totale_ordine"] += 900
+        r = await client.post("/api/v1/ordini/settore/salva", headers=manager_a,
+                              json=altered_total)
+        check("browser-forged purchase total rejected without inserts",
+              r.status_code == 422 and scalar("select count(*) from ordini") == 2)
+
+        altered_price = copy.deepcopy(save_payload)
+        altered_price["bundles"][0]["items"][0]["prezzo_unitario"] = 1
+        altered_price["bundles"][0]["items"][0]["subtotale"] = bundle["items"][0]["quantita"]
+        altered_price["bundles"][0]["totale_ordine"] = bundle["items"][0]["quantita"]
+        r = await client.post("/api/v1/ordini/settore/salva", headers=manager_a,
+                              json=altered_price)
+        check("browser-forged agreed price rejected without inserts",
+              r.status_code == 422 and scalar("select count(*) from ordini") == 2)
+
+        altered_name = copy.deepcopy(save_payload)
+        altered_name["bundles"][0]["items"][0]["nome_prodotto"] = "Falso prodotto"
+        r = await client.post("/api/v1/ordini/settore/salva", headers=manager_a,
+                              json=altered_name)
+        check("browser-forged canonical item name rejected", r.status_code == 422)
+
+        forged_msg = copy.deepcopy(save_payload)
+        forged_msg["bundles"][0]["whatsapp_message"] = "FAKE-TRANSFER-SYNTHETIC"
+        r = await client.post("/api/v1/ordini/settore/salva", headers=manager_a,
+                              json=forged_msg)
+        check("genuine draft saved for own tenant", r.status_code == 200)
+        check("supplier-facing text regenerated on server, not trusted from browser",
+              "FAKE-TRANSFER-SYNTHETIC" not in scalar(
+                  "select whatsapp_message from ordini where user_id=2 and id not in (101,202) limit 1"
+              ))
+        check("saved draft owner and tenant retained",
+              scalar("select count(*) from ordini where user_id=2 and tenant_id=1") == 2)
 
         r = await client.post(
             "/api/v1/ordini/crea", headers=admin_a,
