@@ -89,13 +89,22 @@ jobs:
           from secrets import token_urlsafe
           root=Path("/etc/price-sentinel-v2")
           pwd=token_urlsafe(40)
-          (root/"postgres.env").write_text(
-              f"POSTGRES_USER=ps_v2_app\\nPOSTGRES_DB=price_sentinel_v2_staging\\nPOSTGRES_PASSWORD={pwd}\\n".replace("\\n", "\n")
-          )
-          (root/"backend.env").write_text(
-              f"ENVIRONMENT=staging\\nDEBUG=false\\nAUTOMATION_ENABLED=false\\nDATABASE_URL=postgresql+asyncpg://ps_v2_app:{pwd}@db:5432/price_sentinel_v2_staging\\n"
-              f"SECRET_KEY={token_urlsafe(48)}\\nARUBA_WEBHOOK_API_KEY={token_urlsafe(32)}\\nLIQUIDSTOCK_INTEGRATION_SECRET={token_urlsafe(48)}\\n".replace("\\n", "\n")
-          )
+          (root/"postgres.env").write_text(chr(10).join([
+              "POSTGRES_USER=ps_v2_app",
+              "POSTGRES_DB=price_sentinel_v2_staging",
+              f"POSTGRES_PASSWORD={pwd}",
+              "",
+          ]))
+          (root/"backend.env").write_text(chr(10).join([
+              "ENVIRONMENT=staging",
+              "DEBUG=false",
+              "AUTOMATION_ENABLED=false",
+              f"DATABASE_URL=postgresql+asyncpg://ps_v2_app:{pwd}@db:5432/price_sentinel_v2_staging",
+              f"SECRET_KEY={token_urlsafe(48)}",
+              f"ARUBA_WEBHOOK_API_KEY={token_urlsafe(32)}",
+              f"LIQUIDSTOCK_INTEGRATION_SECRET={token_urlsafe(48)}",
+              "",
+          ]))
           PY
           docker compose -p price_sentinel_v2 \
             -f docker-compose.v2-staging.yml \
