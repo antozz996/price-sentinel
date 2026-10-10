@@ -469,23 +469,30 @@ async def build_price_preview(
             if price is None:
                 continue
 
-            # Verifica se il settore è esplicitamente escluso per questo fornitore
-            norm_cat = (product.category or "").strip().casefold()
-            is_explicitly_disabled = bool(
-                norm_cat
-                and getattr(supplier, "id", None)
-                and supplier_scope.explicit_categories.get((supplier.id, norm_cat)) is False
+            # A supplier cannot propose prices for an existing product
+            # without being eligible for its category/product. Previously this
+            # checked only explicit exclusions and missed suppliers with NO
+            # commercial evidence or sector permission.
+            product_id = getattr(product, "id", None)
+            supplier_id = getattr(supplier, "id", None)
+            eligible_suppliers = supplier_scope.eligible_supplier_ids(
+                product_id=product_id if product_id is not None else -1,
+                category=getattr(product, "category", None),
+                subcategory=getattr(product, "subcategory", None),
+                supplier_ids={supplier_id} if supplier_id is not None else set(),
             )
-            if is_explicitly_disabled:
+            # New product drafts have no historical commercial evidence yet;
+            # allow their explicit creation workflow, not an existing SKU bypass.
+            if product_id is not None and supplier_id not in eligible_suppliers:
                 errors.append(
                     {
                         "type": "supplier_scope",
                         "row": source_row["row_number"],
-                        "product_id": getattr(product, "id", None),
-                        "supplier_id": getattr(supplier, "id", None),
+                        "product_id": product_id,
+                        "supplier_id": supplier_id,
                         "column": header,
                         "message": (
-                            f"{supplier.nome_azienda} è escluso esplicitamente per il settore "
+                            f"{supplier.nome_azienda} non è abilitato per il settore/prodotto "
                             f"“{product.category or product.canonical_name}”."
                         ),
                         "category": product.category,
