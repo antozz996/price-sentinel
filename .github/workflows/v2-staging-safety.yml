@@ -55,6 +55,22 @@ jobs:
           assert backend["environment"]["AUTOMATION_ENABLED"] == "false"
           assert "ensure_v2_staging.py" in " ".join(backend["command"])
           assert "pgdata" not in str(compose["services"]["backend"].get("volumes", []))
+          # Optional private V2 web overlay can bind only loopback, never production.
+          web_overlay = yaml.safe_load(Path("docker-compose.v2-staging-web.yml").read_text())
+          web = web_overlay["services"]["web"]
+          assert web["ports"] == ["127.0.0.1:18084:80"]
+          assert web["networks"] == ["v2_internal"]
+          assert web["depends_on"]["backend"]["condition"] == "service_healthy"
+          assert web["cpus"] <= 0.25
+          assert str(web["mem_limit"]).lower() == "128m"
+          nginx = Path("docs/staging/nginx.v2.conf").read_text()
+          assert "proxy_pass http://backend:8000;" in nginx
+          assert "location ^~ /api/v1/webhook" in nginx
+          assert "guadagnarefacileonline.it" not in nginx
+          assert "46.225.81.66" not in nginx
+          admin_bootstrap = Path("backend/scripts/create_v2_staging_admin.py").read_text()
+          assert "from scripts.ensure_v2_staging import validate" in admin_bootstrap
+          assert "getpass.getpass(" in admin_bootstrap
           vercel = json.loads(Path("vercel.json").read_text())
           assert not vercel.get("rewrites"), "Staging frontend must not proxy V1 backend"
           assert not vercel.get("redirects"), "Staging frontend must not redirect to V1"
