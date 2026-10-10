@@ -20,7 +20,7 @@ services:
       - v2_internal
     # No ports: PostgreSQL is inaccessible from the host or the Internet.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ps_v2_app -d price_sentinel_v2_staging"]
       interval: 10s
       timeout: 5s
       retries: 5
