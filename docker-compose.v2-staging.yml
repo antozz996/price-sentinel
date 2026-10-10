@@ -24,6 +24,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    cpus: 0.75
     mem_limit: 768m
     pids_limit: 256
     logging:
@@ -65,6 +66,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    cpus: 1.5
     mem_limit: 1500m
     pids_limit: 384
     logging:
