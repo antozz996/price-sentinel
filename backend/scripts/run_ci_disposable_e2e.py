@@ -26,7 +26,7 @@ CASES = {
 }
 
 
-def gate_environment() -> tuple[str, str]:
+def gate_environment() -> str:
     if (
         os.environ.get("GITHUB_ACTIONS") != "true"
         or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
@@ -47,7 +47,7 @@ def gate_environment() -> tuple[str, str]:
         or not u.password
     ):
         raise SystemExit("STOP: CI PostgreSQL may connect only to loopback ephemeral runner")
-    return dsn, u.password
+    return dsn
 
 
 async def create_tables(database_url: str) -> None:
@@ -60,7 +60,7 @@ async def create_tables(database_url: str) -> None:
     await engine.dispose()
 
 
-def execute_case(name: str, admin_dsn: str, password: str) -> bool:
+def execute_case(name: str, admin_dsn: str) -> bool:
     from sqlalchemy.engine import make_url
     import psycopg2
 
@@ -79,8 +79,8 @@ def execute_case(name: str, admin_dsn: str, password: str) -> bool:
             cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
 
     original_url = make_url(admin_dsn)
-    async_dsn = str(original_url.set(drivername="postgresql+asyncpg", database=db_name))
-    sync_dsn = str(original_url.set(database=db_name))
+    async_dsn = original_url.set(drivername="postgresql+asyncpg", database=db_name).render_as_string(hide_password=False)
+    sync_dsn = original_url.set(database=db_name).render_as_string(hide_password=False)
     env = dict(os.environ)
     env.update(
         {
@@ -133,11 +133,11 @@ def execute_case(name: str, admin_dsn: str, password: str) -> bool:
 def main() -> None:
     if sys.argv[1:] != ["--github-ephemeral-only"]:
         raise SystemExit("STOP: explicit --github-ephemeral-only required")
-    dsn, password = gate_environment()
+    dsn = gate_environment()
     print("PASS: GitHub-hosted disposable Postgres isolation guard", flush=True)
     failures: list[str] = []
     for name in CASES:
-        if not execute_case(name, dsn, password):
+        if not execute_case(name, dsn):
             failures.append(name)
     if failures:
         raise SystemExit("FAIL: isolated E2E suites: " + ", ".join(failures))
