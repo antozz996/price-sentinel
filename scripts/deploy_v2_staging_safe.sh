@@ -42,9 +42,11 @@ import json, sys
 d=json.load(sys.stdin)
 s=d["services"]
 assert set(s)=={"db","backend","web"}
-assert s["db"]["networks"]==["v2_internal"]
-assert s["backend"]["networks"]==["v2_internal"]
-assert s["web"]["networks"]==["v2_internal","v2_ingress"]
+# Docker Compose 'config --format json' encodes networks as an object,
+# even though the source YAML uses a list. Only check membership here.
+assert set(s["db"]["networks"])=={"v2_internal"}
+assert set(s["backend"]["networks"])=={"v2_internal"}
+assert set(s["web"]["networks"])=={"v2_internal","v2_ingress"}
 assert d["networks"]["v2_internal"]["internal"] is True
 assert all(p["host_ip"]=="127.0.0.1" and str(p["published"])=="18084" and p["target"]==80 for p in s["web"]["ports"])
 assert not s["db"].get("ports") and not s["backend"].get("ports")
