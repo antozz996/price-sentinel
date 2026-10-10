@@ -87,7 +87,7 @@ def execute_case(name: str, admin_dsn: str) -> bool:
 
     original_url = make_url(admin_dsn)
     async_dsn = original_url.set(drivername="postgresql+asyncpg", database=db_name).render_as_string(hide_password=False)
-    sync_dsn = original_url.set(database=db_name).render_as_string(hide_password=False)
+    sync_dsn = original_url.set(drivername="postgresql", database=db_name).render_as_string(hide_password=False)
     env = dict(os.environ)
     env.update(
         {
