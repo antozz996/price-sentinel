@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from datetime import timedelta
 
 import httpx
@@ -71,14 +72,18 @@ async def main() -> None:
             raise SystemExit("STOP: backend health does not identify staging")
 
         for name, path in GET_PROBES:
+            started = time.monotonic()
             try:
                 res = await client.get(path)
+                elapsed = time.monotonic() - started
                 ok = res.status_code == 200
-                print(f"{'PASS' if ok else 'FAIL'}: {name}: HTTP {res.status_code}")
+                print(f"{'PASS' if ok else 'FAIL'}: {name}: HTTP {res.status_code} ({elapsed:.2f}s)")
                 if not ok:
                     failures.append(name)
-            except httpx.RequestError:
-                print(f"FAIL: {name}: connection error")
+            except httpx.RequestError as exc:
+                elapsed = time.monotonic() - started
+                # Never print URLs, Authorization headers or response bodies.
+                print(f"FAIL: {name}: {type(exc).__name__} ({elapsed:.2f}s)")
                 failures.append(name)
 
         god = await client.get("/api/v1/god/overview")
