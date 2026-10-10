@@ -30,6 +30,7 @@ CASES = {
     "automation_alerts": ("automation_alerts_e2e.py", "ps_ci_disposable_alerts", True),
     # A CI-local Uvicorn listener is required for signed HTTP webhook tests.
     "liquidstock_inbound": ("liquidstock_integration_e2e.py", "ps_ci_disposable_liquidstock", True),
+    "invoice_ingestion": ("invoice_ingestion_e2e.py", "ps_ci_disposable_ingestion", True),
 }
 
 
