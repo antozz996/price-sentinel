@@ -106,6 +106,10 @@ jobs:
         working-directory: backend
         run: python -m unittest discover -s tests -p 'test_sheet_sync_dry_run.py' -v
 
+      - name: Unit — Google Sheets OAuth is mocked and strictly read-only
+        working-directory: backend
+        run: python -m unittest discover -s tests -p 'test_sheet_sync_google_auth.py' -v
+
       - name: E2E — Isolated PostgreSQL workflows (writes disposable DBs only)
         run: python backend/scripts/run_ci_disposable_e2e.py --github-ephemeral-only
 
