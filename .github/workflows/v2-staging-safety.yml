@@ -127,6 +127,28 @@ jobs:
           assert str(s["backend"]["environment"]["ENVIRONMENT"]).lower()=="staging"
           print("PASS: Docker Compose normalized network shape and staging port isolation")
           '
+      - name: Assert tenant-scoped KPI joins and safe smoke diagnostics
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          src=Path("backend/app/api/v1/intelligence.py").read_text()
+          module=ast.parse(src)
+          matches=[n for n in module.body if isinstance(n,ast.AsyncFunctionDef) and n.name=="get_kpi"]
+          assert len(matches)==1
+          snippet=ast.get_source_segment(src,matches[0])
+          assert snippet is not None
+          assert "Anomalia.tenant_id" not in snippet
+          assert "NotaDiCredito.tenant_id" not in snippet
+          assert snippet.count(".join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)") == 2
+          assert snippet.count(".join(Fattura, RigaFattura.fattura_id == Fattura.id)") == 2
+          assert snippet.count(".where(Fattura.tenant_id == tenant_id)") == 2
+          assert 'raise HTTPException(status_code=403' in snippet
+          smoke=Path("backend/scripts/smoke_v2_staging.py").read_text()
+          assert "time.monotonic()" in smoke
+          assert 'type(exc).__name__' in smoke
+          print("PASS: KPI scopes through invoices, no invalid tenant columns, probe errors classified")
+          PY
       - name: Typecheck and build V2 frontend (no deploy)
         uses: actions/setup-node@v4
         with:
