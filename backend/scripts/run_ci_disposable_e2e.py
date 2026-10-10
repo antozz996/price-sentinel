@@ -32,6 +32,7 @@ CASES = {
     "liquidstock_inbound": ("liquidstock_integration_e2e.py", "ps_ci_disposable_liquidstock", True),
     "invoice_ingestion": ("invoice_ingestion_e2e.py", "ps_ci_disposable_ingestion", True),
     "purchase_lifecycle": ("purchase_lifecycle_e2e.py", "ps_ci_disposable_purchase_lifecycle", True),
+    "order_access_isolation": ("order_access_isolation_e2e.py", "ps_ci_disposable_order_rbac", True),
 }
 
 
