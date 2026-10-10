@@ -113,7 +113,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 export function isItemPermitted(item: NavItem, profile: UserProfile | null): boolean {
   if (!profile) return false;
-  if (profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin') return true;
+  if (profile.ruolo === 'admin') return true;
 
   const det = profile.ruolo_dettagliato || 'manager_sede';
   if (det.startsWith('responsabile_')) {
@@ -291,7 +291,7 @@ export default function App() {
 
   useEffect(() => {
     if (profile) {
-      const isAdm = profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin';
+      const isAdm = profile.ruolo === 'admin';
       const det = profile.ruolo_dettagliato || 'manager_sede';
       if (det.startsWith('responsabile_')) {
         if (activeTab !== 'sectororders' && activeTab !== 'orderregistry' && activeTab !== 'crosssupplier' && activeTab !== 'fatture' && activeTab !== 'priceanalysis') {
@@ -423,7 +423,7 @@ export default function App() {
 
   const getRoleLabel = () => {
     if (!profile) return 'Operatore';
-    if (profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin') return '👑 Amministratore';
+    if (profile.ruolo === 'admin') return '👑 Amministratore';
     if (profile.ruolo_dettagliato === 'responsabile_beverage') return '🍹 Resp. Beverage';
     if (profile.ruolo_dettagliato === 'responsabile_materiali') return '📦 Resp. Materiali';
     if (profile.ruolo_dettagliato === 'responsabile_food') return '🍽️ Resp. Food';
@@ -600,7 +600,7 @@ export default function App() {
       case 'goodsreceipt': return <GoodsReceipt userProfile={profile} />;
       case 'orderregistry': return (
         <OrderRegistry
-          isAdmin={profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin'}
+          isAdmin={profile.ruolo === 'admin'}
           selectedOrderId={selectedOrderId}
           onOrderClose={() => setSelectedOrderId(null)}
         />
@@ -700,7 +700,7 @@ export default function App() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Navigazione principale">
-          {!isSectorResp && (profile?.ruolo === 'admin' || profile?.ruolo_dettagliato === 'admin') && (
+          {!isSectorResp && (profile?.ruolo === 'admin') && (
             <button
               className={`sidebar-nav-item ${activeTab === 'dashboard' ? 'is-active' : ''}`}
               onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
