@@ -69,7 +69,9 @@ def execute_case(name: str, admin_dsn: str) -> bool:
         raise SystemExit("STOP: non-disposable database name")
 
     # Unique DB per suite; CI postgres runs only for this workflow job.
-    with psycopg2.connect(admin_dsn) as connection:
+    # psycopg2 expects a PostgreSQL URI, not SQLAlchemy's "+psycopg2" dialect URL.
+    admin_uri = make_url(admin_dsn).set(drivername="postgresql").render_as_string(hide_password=False)
+    with psycopg2.connect(admin_uri) as connection:
         connection.autocommit = True
         with connection.cursor() as cursor:
             cursor.execute("select 1 from pg_database where datname=%s", (db_name,))
