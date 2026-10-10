@@ -1,0 +1,101 @@
+name: Price Sentinel V2 — Disposable PostgreSQL E2E
+
+on:
+  push:
+    branches:
+      - staging/price-sentinel-v2
+    paths:
+      - 'backend/**'
+      - '.github/workflows/v2-ephemeral-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # This PostgreSQL service exists ONLY within the disposable GitHub runner,
+    # never on Hetzner. No production/staging secrets or services are used.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: ps_ci_runner
+          POSTGRES_PASSWORD: github_runner_ephemeral_db_only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ps_ci_runner -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      CI: "true"
+      CI_POSTGRES_ADMIN_DSN: postgresql+psycopg2://ps_ci_runner:github_runner_ephemeral_db_only@127.0.0.1:5432/postgres
+      PYTHONPATH: backend
+      # Purely synthetic test config — intentionally never provided by V1/V2.
+      DATABASE_URL: postgresql+asyncpg://ps_ci_runner:github_runner_ephemeral_db_only@127.0.0.1:5432/postgres
+      SECRET_KEY: ci_only_dummy_jwt_secret_not_for_live_service_2026
+      ARUBA_WEBHOOK_API_KEY: synthetic_ci_only_webhook_disabled
+      LIQUIDSTOCK_INTEGRATION_SECRET: synthetic_ci_only_bridge_secret_no_real_bridge_1234567890
+      ENVIRONMENT: ci
+      DEBUG: "false"
+      AUTOMATION_ENABLED: "false"
+      GOD_MODE_TOKEN: ""
+
+    steps:
+      - name: Checkout V2 staging
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install runtime dependencies (no infrastructure deployment)
+        working-directory: backend
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate isolation of E2E harness
+        run: |
+          python -m compileall -q backend/scripts/run_ci_disposable_e2e.py
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('backend/scripts/run_ci_disposable_e2e.py').read_text()
+          assert 'GITHUB_ACTIONS' in s and 'github-hosted' in s
+          assert 'u.host != "127.0.0.1"' in s
+          assert 'u.username != "ps_ci_runner"' in s
+          assert 'ps_ci_disposable_' in s
+          assert 'original_url.set' in s
+          assert 'AUTOMATION_ENABLED": "false"' in s
+          assert 'GOD_MODE_TOKEN": ""' in s
+          assert 'subprocess.run(' in s
+          assert 'CREATE DATABASE' in s
+          assert 'DROP DATABASE' not in s
+          print("PASS: E2E targets only CI disposable databases")
+          PY
+
+      - name: Unit — Smart Price Sheet decimal parsing and recommendations
+        working-directory: backend
+        run: python tests/smart_price_sheet_unit.py
+
+      - name: Unit — Bulk product classification
+        working-directory: backend
+        run: python tests/product_bulk_classification_unit.py
+
+      - name: Unit — Order names and promotion rules
+        working-directory: backend
+        run: python tests/sector_orders_whatsapp_unit.py
+
+      - name: E2E — Isolated PostgreSQL workflows (writes disposable DBs only)
+        run: python backend/scripts/run_ci_disposable_e2e.py --github-ephemeral-only
+
+# No Hetzner, V1 database, V2 staging database or external secrets are present.
+# These E2E tests are allowed to write ONLY to service PostgreSQL on this runner.
