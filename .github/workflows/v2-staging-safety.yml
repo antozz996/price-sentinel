@@ -59,7 +59,13 @@ jobs:
           web_overlay = yaml.safe_load(Path("docker-compose.v2-staging-web.yml").read_text())
           web = web_overlay["services"]["web"]
           assert web["ports"] == ["127.0.0.1:18084:80"]
-          assert web["networks"] == ["v2_internal"]
+          assert web["networks"] == ["v2_internal", "v2_ingress"]
+          assert web_overlay["networks"]["v2_ingress"]["driver"] == "bridge"
+          assert "internal" not in web_overlay["networks"]["v2_ingress"]
+          assert "v2_ingress" not in compose["services"]["db"]["networks"]
+          assert "v2_ingress" not in compose["services"]["backend"]["networks"]
+          assert not web_overlay["services"].get("db")
+          assert not web_overlay["services"].get("backend")
           assert web["depends_on"]["backend"]["condition"] == "service_healthy"
           assert web["cpus"] <= 0.25
           assert str(web["mem_limit"]).lower() == "128m"
