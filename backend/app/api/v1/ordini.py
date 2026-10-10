@@ -7,6 +7,7 @@ Modulo Sviluppo Ordini per Responsabili di Settore con invio WhatsApp.
 import urllib.parse
 import re
 import secrets
+import math
 from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional, Dict, Any, Tuple
@@ -868,6 +869,102 @@ async def salva_ordini_settore(
     if location is None:
         raise HTTPException(status_code=404, detail="Sede non trovata")
     _require_order_location_access(_user, location, data.settore)
+    if not data.bundles:
+        raise HTTPException(status_code=422, detail="Nessun ordine fornitore da salvare")
+
+    # A saved bundle is supplied by the browser. Recheck supplier, canonical
+    # product identity, contractual prices and totals on the server BEFORE
+    # inserting any order. WhatsApp text must be regenerated, not trusted.
+    validated_messages: dict[int, str] = {}
+    seen_suppliers: set[int] = set()
+    today = date.today()
+    for bundle in data.bundles:
+        if bundle.fornitore_id in seen_suppliers or not bundle.items:
+            raise HTTPException(status_code=422, detail="Fornitore duplicato o ordine vuoto")
+        seen_suppliers.add(bundle.fornitore_id)
+        supplier = await db.get(Fornitore, bundle.fornitore_id)
+        if not supplier or not supplier.attivo_whitelist or supplier.archived_at is not None:
+            raise HTTPException(status_code=422, detail="Fornitore non disponibile")
+        product_by_id: dict[int, Product] = {}
+        expected_total = 0.0
+        expected_units = 0.0
+        for it in bundle.items:
+            product = await db.get(Product, it.product_id)
+            if not product or not product.is_active:
+                raise HTTPException(status_code=422, detail="Prodotto inattivo o inesistente")
+            product_by_id[it.product_id] = product
+            if it.sku_interno != product.sku_interno or it.nome_prodotto != product.canonical_name:
+                raise HTTPException(status_code=422, detail="Identità del prodotto modificata")
+            if not math.isfinite(it.quantita) or not math.isfinite(it.prezzo_unitario):
+                raise HTTPException(status_code=422, detail="Valore numerico non valido")
+            if it.quantita <= 0 or it.prezzo_unitario < 0:
+                raise HTTPException(status_code=422, detail="Quantità o prezzo non valido")
+            if not it.is_omaggio and it.prezzo_unitario == 0:
+                raise HTTPException(status_code=422, detail="Prezzo non definito: richiedere una quotazione")
+            if it.is_omaggio and it.prezzo_unitario != 0:
+                raise HTTPException(status_code=422, detail="Un omaggio non può avere prezzo")
+            subtotal = round(it.prezzo_unitario * it.quantita, 2)
+            if not math.isfinite(it.subtotale) or abs(it.subtotale - subtotal) > 0.01:
+                raise HTTPException(status_code=422, detail="Subtotale articolo alterato")
+            if it.is_concordato and not it.is_omaggio:
+                contract_stmt = (
+                    select(ListinoMaster)
+                    .where(
+                        ListinoMaster.fornitore_id == bundle.fornitore_id,
+                        ListinoMaster.sku_interno == product.sku_interno,
+                        ListinoMaster.data_inizio_validita <= today,
+                        or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+                    )
+                    .order_by(ListinoMaster.prezzo_pattuito.asc())
+                    .limit(1)
+                )
+                contract = (await db.execute(contract_stmt)).scalar_one_or_none()
+                if contract is None or Decimal(str(it.prezzo_unitario)) != Decimal(str(contract.prezzo_pattuito)):
+                    raise HTTPException(status_code=422, detail="Prezzo concordato differente dal listino")
+            expected_total += subtotal
+            expected_units += it.quantita
+
+        free_items = [it for it in bundle.items if it.is_omaggio]
+        if free_items:
+            paid_water = [
+                it for it in bundle.items
+                if not it.is_omaggio and is_water_product(
+                    canonical_name=it.nome_prodotto,
+                    order_name=getattr(product_by_id[it.product_id], "order_name", None),
+                    category=getattr(product_by_id[it.product_id], "category", None),
+                    subcategory=getattr(product_by_id[it.product_id], "subcategory", None),
+                    uom=it.uom,
+                )
+                and (it.uom or "").upper() not in ("BT", "BOTTIGLIA", "BOTTIGLIE", "PZ", "PIECE")
+            ]
+            allowed = int(sum(it.quantita for it in paid_water) // 5)
+            used = sum(it.quantita for it in free_items)
+            if (
+                used > allowed
+                or any(it.product_id not in {p.product_id for p in paid_water} for it in free_items)
+                or any(int(it.quantita) != it.quantita for it in free_items)
+            ):
+                raise HTTPException(status_code=422, detail="Omaggio non giustificato da acquisti 5+1")
+
+        if (
+            not math.isfinite(bundle.totale_ordine)
+            or not math.isfinite(bundle.totale_colli)
+            or abs(bundle.totale_ordine - round(expected_total, 2)) > 0.01
+            or abs(bundle.totale_colli - expected_units) > 0.0001
+            or bundle.numero_articoli != len(bundle.items)
+        ):
+            raise HTTPException(status_code=422, detail="Totali del fornitore non coerenti")
+        validated_messages[bundle.fornitore_id] = _format_whatsapp_text(
+            supplier_name=supplier.nome_azienda,
+            location_name=location.nome_struttura,
+            location_address=getattr(location, "indirizzo", None) or getattr(location, "citta", None),
+            delivery_date=data.data_consegna,
+            sector=data.settore,
+            order_notes=data.note,
+            items=bundle.items,
+            total_amount=round(expected_total, 2),
+        )
+
     saved_ids = []
     now = datetime.utcnow()
 
@@ -880,7 +977,7 @@ async def salva_ordini_settore(
             settore=data.settore,
             data_consegna=data.data_consegna,
             note=data.note,
-            whatsapp_message=bundle.whatsapp_message,
+            whatsapp_message=validated_messages[bundle.fornitore_id],
             data_ordine=now,
             spesa_totale=bundle.totale_ordine,
             stato="inviato",
