@@ -36,6 +36,9 @@ jobs:
 
           compose = yaml.safe_load(Path("docker-compose.v2-staging.yml").read_text())
           assert compose["name"] == "price_sentinel_v2"
+          assert compose["services"]["db"]["healthcheck"]["test"] == [
+              "CMD-SHELL", "pg_isready -U ps_v2_app -d price_sentinel_v2_staging"
+          ], "Healthcheck must not interpolate missing host env vars"
           assert compose["networks"]["v2_internal"]["internal"] is True
           assert set(compose["services"]) == {"db", "backend"}
           assert set(compose["volumes"]) == {"v2_pgdata"}
