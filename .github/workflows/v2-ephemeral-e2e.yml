@@ -94,6 +94,18 @@ jobs:
         working-directory: backend
         run: python tests/sector_orders_whatsapp_unit.py
 
+      - name: Unit — Signed LiquidStock request security
+        working-directory: backend
+        run: python tests/liquidstock_auth_unit.py
+
+      - name: Unit — RFQ routing and sector product import
+        working-directory: backend
+        run: python tests/sector_product_import_and_rfq_test.py
+
+      - name: Unit — Google Sheet dry-run without access tokens
+        working-directory: backend
+        run: python -m unittest discover -s tests -p 'test_sheet_sync_dry_run.py' -v
+
       - name: E2E — Isolated PostgreSQL workflows (writes disposable DBs only)
         run: python backend/scripts/run_ci_disposable_e2e.py --github-ephemeral-only
 
