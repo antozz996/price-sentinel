@@ -16,7 +16,10 @@ services:
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./docs/staging/nginx.v2.conf:/etc/nginx/nginx.conf:ro
     networks:
+      # Only web joins this conventional bridge, allowing loopback publishing.
+      # Backend and DB remain exclusively on the non-routable internal bridge.
       - v2_internal
+      - v2_ingress
     depends_on:
       backend:
         condition: service_healthy
@@ -30,3 +33,9 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+
+# Dedicated Docker bridge only for host -> web loopback port publishing.
+# Never add backend/db to this network; do not change the 127.0.0.1 bind.
+networks:
+  v2_ingress:
+    driver: bridge
