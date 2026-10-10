@@ -5,6 +5,7 @@ e gestione di tutte le istanze aziendali, impersonazione e statistiche SaaS.
 """
 
 import os
+import hmac
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -22,12 +23,22 @@ from app.services.auth import hash_password, create_access_token
 
 router = APIRouter()
 
-# Master Token per la God Mode Room (configurabile da env o default sicuro)
-GOD_MODE_TOKEN = os.getenv("GOD_MODE_TOKEN", "sentinel_god_master_key_2026")
+# Fail closed: no default superadmin token, including on staging.
+# Operators must provision a random, unique 32+ character token separately.
+GOD_MODE_TOKEN = os.getenv("GOD_MODE_TOKEN", "")
+
+
+def require_god_token_configured() -> None:
+    if len(GOD_MODE_TOKEN) < 32:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SuperAdmin non configurato",
+        )
 
 
 def verify_god_token(x_god_token: Optional[str] = Header(None)) -> bool:
-    if not x_god_token or x_god_token.strip() != GOD_MODE_TOKEN:
+    require_god_token_configured()
+    if not x_god_token or not hmac.compare_digest(x_god_token.strip(), GOD_MODE_TOKEN):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Master Token God Mode non valido o assente"
@@ -52,7 +63,8 @@ class ResetPasswordRequest(BaseModel):
 
 @router.post("/auth", summary="Verifica Master Token God Mode")
 async def authenticate_god_mode(data: GodAuthRequest):
-    if data.token.strip() != GOD_MODE_TOKEN:
+    require_god_token_configured()
+    if not hmac.compare_digest(data.token.strip(), GOD_MODE_TOKEN):
         raise HTTPException(status_code=401, detail="Master Token non valido")
     return {"status": "authenticated", "message": "Accesso God Mode autorizzato", "token": GOD_MODE_TOKEN}
 
