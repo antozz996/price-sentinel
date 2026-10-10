@@ -366,7 +366,26 @@ export default function App() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.detail || 'Credenziali non valide')
+        // FastAPI returns validation issues as an array, not a string.
+        // Coercing that array to an Error previously displayed "[object Object]".
+        const detail: unknown = errorData?.detail
+        let message = 'Credenziali non valide'
+        if (typeof detail === 'string') {
+          message = detail
+        } else if (Array.isArray(detail)) {
+          const issues = detail
+            .map((issue: unknown) => {
+              if (typeof issue === 'object' && issue !== null && 'msg' in issue && typeof issue.msg === 'string') {
+                return issue.msg
+              }
+              return null
+            })
+            .filter((issue): issue is string => typeof issue === 'string')
+          message = issues.join('; ') || 'Dati di accesso non validi'
+        } else if (res.status === 422) {
+          message = 'Controlla che email e password siano validi'
+        }
+        throw new Error(message)
       }
 
       const data = await res.json()
