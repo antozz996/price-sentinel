@@ -37,11 +37,8 @@ interface OverviewStats {
 }
 
 export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) {
-  // Token state: check url param or sessionStorage or default
-  const [tokenInput, setTokenInput] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('token') || sessionStorage.getItem('god_mode_token') || 'sentinel_god_master_key_2026';
-  });
+  // Never embed, prefill, cache, or accept SuperAdmin secrets via the URL.
+  const [tokenInput, setTokenInput] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -88,7 +85,6 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
         throw new Error('Master Token non valido o accesso negato');
       }
 
-      sessionStorage.setItem('god_mode_token', tokenToUse.trim());
       setIsAuthenticated(true);
 
       // Load data
@@ -123,12 +119,6 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
       setRefreshing(false);
     }
   };
-
-  useEffect(() => {
-    if (tokenInput) {
-      verifyAndLoadData(tokenInput);
-    }
-  }, []);
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
