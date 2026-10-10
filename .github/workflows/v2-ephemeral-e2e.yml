@@ -37,7 +37,7 @@ jobs:
     env:
       CI: "true"
       CI_POSTGRES_ADMIN_DSN: postgresql+psycopg2://ps_ci_runner:github_runner_ephemeral_db_only@127.0.0.1:5432/postgres
-      PYTHONPATH: backend
+      PYTHONPATH: ${{ github.workspace }}/backend
       # Purely synthetic test config — intentionally never provided by V1/V2.
       DATABASE_URL: postgresql+asyncpg://ps_ci_runner:github_runner_ephemeral_db_only@127.0.0.1:5432/postgres
       SECRET_KEY: ci_only_dummy_jwt_secret_not_for_live_service_2026
