@@ -28,6 +28,8 @@ CASES = {
     # Each gets its own NEW database, never sharing mutations with another test.
     "onboarding_settings": ("onboarding_settings_e2e.py", "ps_ci_disposable_onboarding", True),
     "automation_alerts": ("automation_alerts_e2e.py", "ps_ci_disposable_alerts", True),
+    # A CI-local Uvicorn listener is required for signed HTTP webhook tests.
+    "liquidstock_inbound": ("liquidstock_integration_e2e.py", "ps_ci_disposable_liquidstock", True),
 }
 
 
@@ -140,7 +142,40 @@ def execute_case(name: str, admin_dsn: str) -> bool:
             return False
 
     print(f"RUN: {name} against its independent CI-only disposable DB", flush=True)
+    # LiquidStock inbound E2E talks to a temporary HTTP server on GitHub's
+    # OWN 127.0.0.1 port; no external integration or Hetzner host is used.
+    server = None
+    if name == "liquidstock_inbound":
+        import httpx
+        import time
+        env["INTEGRATION_TEST_DATABASE_DSN"] = sync_dsn
+        env["INTEGRATION_TEST_BASE_URL"] = "http://127.0.0.1:18001"
+        server = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "app.main:app",
+             "--host", "127.0.0.1", "--port", "18001", "--no-access-log"],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
     try:
+        if server is not None:
+            healthy = False
+            for _ in range(60):
+                if server.poll() is not None:
+                    break
+                try:
+                    health = httpx.get("http://127.0.0.1:18001/api/v1/health", timeout=1.5)
+                    if health.status_code == 200 and health.json().get("environment") == "ci":
+                        healthy = True
+                        break
+                except httpx.RequestError:
+                    pass
+                time.sleep(0.25)
+            if not healthy:
+                print("FAIL: liquidstock_inbound — disposable loopback API did not start", flush=True)
+                return False
         result = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "tests" / test_file)],
             cwd=str(Path(__file__).resolve().parents[1]),
@@ -151,6 +186,14 @@ def execute_case(name: str, admin_dsn: str) -> bool:
     except subprocess.TimeoutExpired:
         print(f"FAIL: {name} — timeout after 150 seconds", flush=True)
         return False
+    finally:
+        if server is not None:
+            server.terminate()
+            try:
+                server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait(timeout=5)
     passed = result.returncode == 0
     print(f"{'PASS' if passed else 'FAIL'}: {name}", flush=True)
     return passed
