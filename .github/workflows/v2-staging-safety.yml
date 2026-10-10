@@ -81,6 +81,43 @@ jobs:
           assert "client.delete(" not in smoke
           print("PASS: redeploy script is scoped to V2, and API smoke is GET-only")
           PY
+      - name: Test normalized Compose JSON using disposable CI secrets
+        run: |
+          sudo mkdir -p /etc/price-sentinel-v2
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          from secrets import token_urlsafe
+          root=Path("/etc/price-sentinel-v2")
+          pwd=token_urlsafe(40)
+          (root/"postgres.env").write_text(
+              f"POSTGRES_USER=ps_v2_app\\nPOSTGRES_DB=price_sentinel_v2_staging\\nPOSTGRES_PASSWORD={pwd}\\n".replace("\\n", "\n")
+          )
+          (root/"backend.env").write_text(
+              f"ENVIRONMENT=staging\\nDEBUG=false\\nAUTOMATION_ENABLED=false\\nDATABASE_URL=postgresql+asyncpg://ps_v2_app:{pwd}@db:5432/price_sentinel_v2_staging\\n"
+              f"SECRET_KEY={token_urlsafe(48)}\\nARUBA_WEBHOOK_API_KEY={token_urlsafe(32)}\\nLIQUIDSTOCK_INTEGRATION_SECRET={token_urlsafe(48)}\\n".replace("\\n", "\n")
+          )
+          PY
+          docker compose -p price_sentinel_v2 \
+            -f docker-compose.v2-staging.yml \
+            -f docker-compose.v2-staging-web.yml config -q
+          docker compose -p price_sentinel_v2 \
+            -f docker-compose.v2-staging.yml \
+            -f docker-compose.v2-staging-web.yml config --format json | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)
+          s=d["services"]
+          assert set(s)=={"db","backend","web"}
+          assert set(s["db"]["networks"])=={"v2_internal"}, s["db"]["networks"]
+          assert set(s["backend"]["networks"])=={"v2_internal"}, s["backend"]["networks"]
+          assert set(s["web"]["networks"])=={"v2_internal","v2_ingress"}, s["web"]["networks"]
+          assert d["networks"]["v2_internal"]["internal"] is True
+          assert len(s["web"]["ports"])==1
+          assert all(p["host_ip"]=="127.0.0.1" and str(p["published"])=="18084" and p["target"]==80 for p in s["web"]["ports"])
+          assert not s["db"].get("ports") and not s["backend"].get("ports")
+          assert str(s["backend"]["environment"]["AUTOMATION_ENABLED"]).lower() in ("false","0")
+          assert str(s["backend"]["environment"]["ENVIRONMENT"]).lower()=="staging"
+          print("PASS: Docker Compose normalized network shape and staging port isolation")
+          '
       - name: Typecheck and build V2 frontend (no deploy)
         uses: actions/setup-node@v4
         with:
