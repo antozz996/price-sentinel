@@ -71,7 +71,10 @@ def execute_case(name: str, admin_dsn: str) -> bool:
     # Unique DB per suite; CI postgres runs only for this workflow job.
     # psycopg2 expects a PostgreSQL URI, not SQLAlchemy's "+psycopg2" dialect URL.
     admin_uri = make_url(admin_dsn).set(drivername="postgresql").render_as_string(hide_password=False)
-    with psycopg2.connect(admin_uri) as connection:
+    # CREATE DATABASE must not run inside a transaction: psycopg2's
+    # "with connection" context starts one even with autocommit enabled.
+    connection = psycopg2.connect(admin_uri)
+    try:
         connection.autocommit = True
         with connection.cursor() as cursor:
             cursor.execute("select 1 from pg_database where datname=%s", (db_name,))
@@ -79,6 +82,8 @@ def execute_case(name: str, admin_dsn: str) -> bool:
                 raise SystemExit("STOP: expected a brand-new disposable test DB")
             from psycopg2 import sql
             cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
+    finally:
+        connection.close()
 
     original_url = make_url(admin_dsn)
     async_dsn = original_url.set(drivername="postgresql+asyncpg", database=db_name).render_as_string(hide_password=False)
