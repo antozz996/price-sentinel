@@ -73,8 +73,8 @@ def seed() -> None:
     with psycopg2.connect(DSN) as connection:
         with connection.cursor() as cursor:
             cursor.execute("""
-                insert into location(id,nome_struttura,piva_riferimento,tipologia)
-                values (1,'Location CI Synthetic','00000000001','ristorante');
+                insert into location(id,nome_struttura,piva_riferimento,tipologia,tenant_id)
+                values (1,'Location CI Synthetic','00000000001','ristorante',1);
                 insert into utenti(id,email,password_hash,ruolo,location_id,attivo,tenant_id,refresh_token_version)
                 values (1,'admin@synthetic.test','x','admin',null,true,1,1),
                        (2,'manager@synthetic.test','x','manager',1,true,1,1);
