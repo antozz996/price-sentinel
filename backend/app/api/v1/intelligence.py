@@ -41,23 +41,36 @@ async def get_kpi(
     - Euro A Rischio (Anomalie contestate ma non ancora in reclamo)
     """
     tenant_id = getattr(_admin, "tenant_id", None)
+    if tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant amministratore non configurato")
 
-    # Optimized single query for Anomalia states
-    anomalie_stmt = select(
-        func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.in_reclamo, Anomalia.delta_totale), else_=0)), 0).label("in_contestazione"),
-        func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.contestata, Anomalia.delta_totale), else_=0)), 0).label("a_rischio"),
-        func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.da_verificare, Anomalia.delta_totale), else_=0)), 0).label("attesa_manager"),
+    # Tenant ownership belongs to Fattura, not Anomalia. Follow the
+    # anomaly -> invoice row -> invoice relation for a scoped aggregate.
+    anomalie_stmt = (
+        select(
+            func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.in_reclamo, Anomalia.delta_totale), else_=0)), 0).label("in_contestazione"),
+            func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.contestata, Anomalia.delta_totale), else_=0)), 0).label("a_rischio"),
+            func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.da_verificare, Anomalia.delta_totale), else_=0)), 0).label("attesa_manager"),
+        )
+        .select_from(Anomalia)
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+        .where(Fattura.tenant_id == tenant_id)
     )
-    if tenant_id:
-        anomalie_stmt = anomalie_stmt.where(Anomalia.tenant_id == tenant_id)
 
     anomalie_res = await db.execute(anomalie_stmt)
     anomalie_row = anomalie_res.one()
 
-    # Recuperati Totali (from NotaDiCredito table)
-    recup_stmt = select(func.coalesce(func.sum(NotaDiCredito.importo_recuperato), 0))
-    if tenant_id:
-        recup_stmt = recup_stmt.where(NotaDiCredito.tenant_id == tenant_id)
+    # Credit note ownership is inherited via NotaDiCredito -> Anomalia
+    # -> RigaFattura -> Fattura. Never filter nonexistent tenant columns.
+    recup_stmt = (
+        select(func.coalesce(func.sum(NotaDiCredito.importo_recuperato), 0))
+        .select_from(NotaDiCredito)
+        .join(Anomalia, NotaDiCredito.anomalia_id == Anomalia.id)
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+        .where(Fattura.tenant_id == tenant_id)
+    )
     recuperati_res = await db.execute(recup_stmt)
     recuperati = recuperati_res.scalar()
 
