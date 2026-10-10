@@ -40,6 +40,10 @@ jobs:
               "CMD-SHELL", "pg_isready -U ps_v2_app -d price_sentinel_v2_staging"
           ], "Healthcheck must not interpolate missing host env vars"
           assert compose["networks"]["v2_internal"]["internal"] is True
+          assert 0 < compose["services"]["db"]["cpus"] <= 0.75
+          assert 0 < compose["services"]["backend"]["cpus"] <= 1.5
+          assert str(compose["services"]["db"]["mem_limit"]).lower() == "768m"
+          assert str(compose["services"]["backend"]["mem_limit"]).lower() == "1500m"
           assert set(compose["services"]) == {"db", "backend"}
           assert set(compose["volumes"]) == {"v2_pgdata"}
           for service in compose["services"].values():
