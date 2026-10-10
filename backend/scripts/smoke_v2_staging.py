@@ -61,10 +61,14 @@ async def main() -> None:
 
     failures = []
     timeout = httpx.Timeout(12.0)
+    # Do not reuse the same TCP keepalive connection after an endpoint 500:
+    # an ASGI exception can close the previous connection, which would
+    # otherwise be misreported as a failure of the following endpoint.
     async with httpx.AsyncClient(
         base_url="http://127.0.0.1:8000",
         headers={"Authorization": f"Bearer {token}"},
         timeout=timeout,
+        limits=httpx.Limits(max_keepalive_connections=0),
         follow_redirects=False,
     ) as client:
         health = await client.get("/api/v1/health")
