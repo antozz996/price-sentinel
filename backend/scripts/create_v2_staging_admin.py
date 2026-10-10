@@ -25,7 +25,7 @@ async def main() -> None:
     import os
     validate(dict(os.environ))
 
-    email = "staging-admin@pricesentinel.local"
+    email = "staging-admin@example.com"
     async with async_session_factory() as session:
         result = await session.execute(select(Utente.id).limit(1))
         if result.first() is not None:
