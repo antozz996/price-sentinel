@@ -75,6 +75,12 @@ jobs:
           assert "require_god_token_configured()" in god
           assert "hmac.compare_digest" in god
           assert "sentinel_god_master_key" not in god
+          assert '"token": GOD_MODE_TOKEN' not in god
+          god_ui = Path("frontend/src/components/GodModeControlRoom.tsx").read_text()
+          assert "sentinel_god_master_key" not in god_ui
+          assert "params.get('token')" not in god_ui
+          assert "sessionStorage.setItem('god_mode_token'" not in god_ui
+          assert "sessionStorage.getItem('god_mode_token'" not in god_ui
           dashboard = Path("frontend/src/components/Dashboard.tsx").read_text()
           assert "Dati dashboard non disponibili" in dashboard
           assert "setLoadError(" in dashboard
