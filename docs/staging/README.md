@@ -1,6 +1,6 @@
 # PRICE SENTINEL V2 — Staging isolation plan
 
-**Status: infrastructure scaffold in Git only. NOT DEPLOYED.**
+**Status: shared Hetzner staging containers deployed; private browser access is under configuration. Production V1 remains separate.**
 
 This branch was cut from `feat/google-sheets-multisheet-dry-run`, which
 itself depends on P0 branch `fix/smart-price-sheet-sync-p0`.
@@ -33,13 +33,24 @@ rewrites into staging.
 - Backend startup first runs `backend/scripts/ensure_v2_staging.py`.
   It aborts on wrong DB host/name/user, missing/placeholder secrets,
   debug mode, enabled automations, or non-staging environment.
-- No production reverse proxy, no frontend host/preview, no webhook,
+- No production reverse proxy, no public V2 hostname, no webhook,
   no scheduled price sync. No production dataset copied.
+- On the shared Hetzner host, V2's database and backend have been started
+  in isolated containers; both reported `healthy`. The first web container
+  was healthy internally but port publishing failed while it had only an
+  `internal: true` network. The optional web overlay now adds a **web-only**
+  `v2_ingress` bridge alongside `v2_internal`, and keeps host publishing
+  strictly on `127.0.0.1:18084`. After pulling, ONLY recreate the web
+  container and verify port bindings. Backend and DB must remain exclusively
+  on `v2_internal`.
+- V2 Vite production frontend build succeeded; access via SSH tunnel is
+  next. Do not publicly expose a staging port or accept production webhooks.
 
-**Do not start the V2 stack on the production Hetzner VPS yet.**
-The production compose already allocates RAM and CPU. Provision a separate
-test host or first measure capacity and agree on safe isolation and resource
-budgets; avoid destabilizing V1 via memory pressure.
+**Shared VPS risk is accepted for this staging period, subject to monitoring.**
+The user's server has 15 GiB RAM, 8 vCPU and approximately 63 GB free
+at the last pre-deployment check. V2 container ceilings are DB 768 MB/0.75
+CPU, backend 1500 MB/1.5 CPU and web 128 MB/0.25 CPU. These are container
+limits, not a separate physical fault domain; avoid production disruption.
 
 ## Secret provisioning (when staging host is approved)
 
@@ -68,22 +79,25 @@ target only the V2 database, as enforced by the startup guard.
 4. the browser API base stays relative;
 5. repository data hygiene runs separately.
 
-Passing these tests is not proof that Docker, the backend, or a Vercel
-preview are deployed: no staging service has been started.
+Passing these offline tests does not replace host-level checks. The
+staging PostgreSQL/backend are running separately. Verify the new web-only
+ingress explicitly with `docker port`, `curl`, and network inspection
+after recreating ONLY the staging web container.
 
 ## Pending decisions / checkpoints
 
-1. Confirm where staging will run (prefer **dedicated test host** or
-   ephemeral isolated environment; shared VPS only with a measured
-   resource budget and explicit approval).
+1. Shared Hetzner server selected and resources checked. Continue monitoring
+   RAM, CPU and disk, and preserve V1 containers during V2 updates.
 2. Confirm actual V1 frontend hosting: the currently connected Vercel team
    does not list a project linked to `antozz996/price-sentinel`.
    It may be another Vercel account/team or separately hosted.
-3. Provision secure and private staging backend hostname, TLS, authentication
-   and frontend project. Until then, NEVER reconnect the V2 frontend to V1 API.
-4. Build and run Docker in isolated test host, validate database segregation
-   before starting the app, initialize schema on new empty DB, execute E2E
-   with synthetic or expressly sanitized test data only.
+3. For initial private testing, SSH tunnel to `127.0.0.1:18084` on the
+   shared server. Validate loopback publication and private Nginx proxy to
+   staging backend; DO NOT reconnect the V2 frontend to V1 API. A public
+   hostname and TLS are deferred and require approval.
+4. Confirm browser access via SSH tunnel, create a staging-specific test
+   admin without default passwords, and execute E2E with synthetic test
+   data only. Staging DB was initialized to 56 tables.
 5. Import P0/P1 features into the staging app (already present in branch),
    test full API flows, mapping and approvals; disable all automatic commits
    until the product owner signs off.
