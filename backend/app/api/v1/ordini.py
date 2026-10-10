@@ -219,6 +219,8 @@ async def ottimizza_ordine(
     - Regola B: Prodotti spot confrontati sulle fatture storiche per consigliare il prezzo minimo
     - Regola C: Calcolo del risparmio preventivo ed emissione di alert di anomalia precoce
     """
+    if getattr(_admin, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="Azienda non configurata")
     righe_ottimizzate: List[RigaOttimizzataResponse] = []
     avvisi_preventivi: List[str] = []
     spesa_totale_blindata = 0.0
@@ -297,11 +299,17 @@ async def ottimizza_ordine(
                 select(
                     Fornitore.id,
                     Fornitore.nome_azienda,
-                    func.min(RigaFattura.prezzo_unitario).label("prezzo_min")
+                    func.min(RigaFattura.prezzo_netto_normalizzato).label("prezzo_min")
                 )
                 .join(Fattura, RigaFattura.fattura_id == Fattura.id)
                 .join(Fornitore, Fattura.fornitore_id == Fornitore.id)
-                .where(RigaFattura.sku_interno == clean_sku)
+                .where(
+                    RigaFattura.sku_interno == clean_sku,
+                    RigaFattura.is_omaggio.is_(False),
+                    RigaFattura.prezzo_netto_normalizzato > 0,
+                    Fattura.tenant_id == _admin.tenant_id,
+                    Fornitore.attivo_whitelist.is_(True),
+                )
                 .group_by(Fornitore.id, Fornitore.nome_azienda)
                 .order_by("prezzo_min")
             )
