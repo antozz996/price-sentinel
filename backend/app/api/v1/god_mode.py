@@ -66,7 +66,7 @@ async def authenticate_god_mode(data: GodAuthRequest):
     require_god_token_configured()
     if not hmac.compare_digest(data.token.strip(), GOD_MODE_TOKEN):
         raise HTTPException(status_code=401, detail="Master Token non valido")
-    return {"status": "authenticated", "message": "Accesso God Mode autorizzato", "token": GOD_MODE_TOKEN}
+    return {"status": "authenticated", "message": "Accesso God Mode autorizzato"}
 
 
 @router.get("/overview", summary="Statistiche e telemetria globale SaaS")
