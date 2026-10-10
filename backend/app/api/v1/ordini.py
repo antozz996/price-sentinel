@@ -31,6 +31,35 @@ from app.services.normalization import normalize_text
 router = APIRouter()
 
 
+def _require_order_location_access(user: Utente, location: Location, sector: str | None = None) -> None:
+    """Authorize using the effective role and DB tenant, never a UI role label."""
+    tenant_id = getattr(user, "tenant_id", None)
+    if tenant_id is None or getattr(location, "tenant_id", None) != tenant_id:
+        raise HTTPException(status_code=403, detail="Sede non autorizzata per questa azienda")
+    if user.ruolo != "admin":
+        if user.location_id is None or user.location_id != location.id:
+            raise HTTPException(status_code=403, detail="Sede non autorizzata")
+        allowed = getattr(user, "settore_abilitato", None)
+        if sector and allowed and allowed.lower() != "all":
+            permitted = {part.strip().casefold() for part in allowed.split(",") if part.strip()}
+            if sector.strip().casefold() not in permitted:
+                raise HTTPException(status_code=403, detail="Settore non autorizzato")
+
+
+def _require_order_access(user: Utente, order: Ordine) -> None:
+    tenant_id = getattr(user, "tenant_id", None)
+    if tenant_id is None or getattr(order, "tenant_id", None) != tenant_id:
+        raise HTTPException(status_code=403, detail="Ordine non autorizzato per questa azienda")
+    if user.ruolo != "admin":
+        if user.location_id is None or user.location_id != order.location_id:
+            raise HTTPException(status_code=403, detail="Ordine di un'altra sede")
+        allowed = getattr(user, "settore_abilitato", None)
+        if order.settore and allowed and allowed.lower() != "all":
+            permitted = {part.strip().casefold() for part in allowed.split(",") if part.strip()}
+            if order.settore.strip().casefold() not in permitted:
+                raise HTTPException(status_code=403, detail="Settore dell'ordine non autorizzato")
+
+
 # ── Schemas per Settore & WhatsApp ───────────────────
 
 class SectorOrderItem(BaseModel):
@@ -392,6 +421,11 @@ async def crea_ordine(
     Esegue l'ottimizzazione e suddivide gli articoli del carrello,
     generando e salvando a database un documento d'ordine per ciascun fornitore coinvolto.
     """
+    location = await db.get(Location, data.location_id)
+    if location is None:
+        raise HTTPException(status_code=404, detail="Sede non trovata")
+    _require_order_location_access(_admin, location)
+
     # 1. Chiama internamente l'ottimizzatore
     ottimizzazione = await ottimizza_ordine(items=data.items, db=db, _admin=_admin)
     
@@ -411,6 +445,8 @@ async def crea_ordine(
         ordine = Ordine(
             fornitore_id=fornitore_id,
             location_id=data.location_id,
+            user_id=_admin.id,
+            tenant_id=_admin.tenant_id,
             data_ordine=datetime.utcnow(),
             spesa_totale=totale,
             stato="inviato"
@@ -561,7 +597,8 @@ async def elabora_ordine_settore(
     loc = await db.get(Location, data.location_id)
     if not loc:
         raise HTTPException(status_code=404, detail="Location selezionata non trovata")
-    
+    _require_order_location_access(_user, loc, data.settore)
+
     # 2. Recupera tutti i fornitori per lookup
     fornitori_db = (await db.scalars(select(Fornitore))).all()
     fornitori_map = {f.id: f for f in fornitori_db}
@@ -819,6 +856,10 @@ async def salva_ordini_settore(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user),
 ):
+    location = await db.get(Location, data.location_id)
+    if location is None:
+        raise HTTPException(status_code=404, detail="Sede non trovata")
+    _require_order_location_access(_user, location, data.settore)
     saved_ids = []
     now = datetime.utcnow()
 
@@ -827,6 +868,7 @@ async def salva_ordini_settore(
             fornitore_id=bundle.fornitore_id,
             location_id=data.location_id,
             user_id=_user.id,
+            tenant_id=_user.tenant_id,
             settore=data.settore,
             data_consegna=data.data_consegna,
             note=data.note,
@@ -881,14 +923,15 @@ async def list_ordini(
     """Restituisce la lista filtrata e paginata del Registro Ordini."""
     stmt = select(Ordine).order_by(Ordine.id.desc())
 
-    # Isolamento Multi-Tenant per Azienda
-    if getattr(_user, "tenant_id", None):
-        stmt = stmt.where(Ordine.tenant_id == _user.tenant_id)
+    # Mandatory tenant scope — never fall back to all orders.
+    if getattr(_user, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="Azienda non configurata")
+    stmt = stmt.where(Ordine.tenant_id == _user.tenant_id)
 
-    # User Scoping
-    if _user.ruolo != "admin" and _user.ruolo_dettagliato != "admin":
-        if _user.location_id:
-            stmt = stmt.where(Ordine.location_id == _user.location_id)
+    if _user.ruolo != "admin":
+        if _user.location_id is None:
+            raise HTTPException(status_code=403, detail="Sede non configurata")
+        stmt = stmt.where(Ordine.location_id == _user.location_id)
         if _user.settore_abilitato and _user.settore_abilitato != "all":
             allowed_sectors = [s.strip() for s in _user.settore_abilitato.split(",") if s.strip()]
             if allowed_sectors:
@@ -964,10 +1007,7 @@ async def get_ordine_detail(
     if not ordine:
         raise HTTPException(status_code=404, detail="Ordine non trovato")
 
-    # Check permission
-    if _user.ruolo != "admin" and _user.ruolo_dettagliato != "admin":
-        if _user.location_id and ordine.location_id != _user.location_id:
-            raise HTTPException(status_code=403, detail="Accesso non autorizzato all'ordine di questa sede")
+    _require_order_access(_user, ordine)
 
     return {
         "id": ordine.id,
@@ -1031,18 +1071,21 @@ async def convalida_ricezione_ordine(
     if not ordine:
         raise HTTPException(status_code=404, detail="Ordine non trovato")
 
-    if user.ruolo != "admin" and user.ruolo_dettagliato != "admin":
-        if user.location_id and ordine.location_id != user.location_id:
-            raise HTTPException(status_code=403, detail="Non puoi validare ordini di un'altra sede")
+    _require_order_access(user, ordine)
 
     righe_map = {r.id: r for r in ordine.righe}
-
+    submitted_ids = [item.riga_id for item in data.righe]
+    if len(submitted_ids) != len(set(submitted_ids)) or set(submitted_ids) != set(righe_map):
+        raise HTTPException(status_code=422, detail="Indicare ogni riga dell'ordine una sola volta")
     for item in data.righe:
-        if item.riga_id in righe_map:
-            r = righe_map[item.riga_id]
-            r.quantita_ricevuta = item.quantita_ricevuta
-            r.stato_riga = item.stato_riga
-            r.note_riga = item.note_riga
+        r = righe_map[item.riga_id]
+        if Decimal(str(item.quantita_ricevuta)) > Decimal(str(r.quantita)):
+            raise HTTPException(status_code=422, detail="Quantità ricevuta superiore a quella ordinata")
+    for item in data.righe:
+        r = righe_map[item.riga_id]
+        r.quantita_ricevuta = item.quantita_ricevuta
+        r.stato_riga = item.stato_riga
+        r.note_riga = item.note_riga
 
     ordine.stato_ricezione = data.stato_ricezione
     ordine.data_ricezione = datetime.utcnow()
@@ -1076,11 +1119,18 @@ async def get_order_notifications(
     Restituisce gli ultimi ordini emessi con indicazione esplicita dell'autore dell'ordine,
     sede, fornitore, importo e data per il centro notifiche.
     """
-    stmt = select(Ordine).order_by(Ordine.data_ordine.desc()).limit(limit)
-
-    if user.ruolo != "admin" and user.ruolo_dettagliato != "admin":
-        if user.location_id:
-            stmt = stmt.where(Ordine.location_id == user.location_id)
+    if getattr(user, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="Azienda non configurata")
+    stmt = select(Ordine).where(Ordine.tenant_id == user.tenant_id)
+    if user.ruolo != "admin":
+        if user.location_id is None:
+            raise HTTPException(status_code=403, detail="Sede non configurata")
+        stmt = stmt.where(Ordine.location_id == user.location_id)
+        if user.settore_abilitato and user.settore_abilitato.lower() != "all":
+            allowed = [x.strip() for x in user.settore_abilitato.split(",") if x.strip()]
+            if allowed:
+                stmt = stmt.where(Ordine.settore.in_(allowed))
+    stmt = stmt.order_by(Ordine.data_ordine.desc()).limit(max(1, min(limit, 100)))
 
     ordini = (await db.scalars(stmt)).all()
 
