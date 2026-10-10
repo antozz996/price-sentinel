@@ -41,6 +41,17 @@ def validate(environment: dict[str, str]) -> None:
         raise ValueError("Staging guard: unexpected PostgreSQL port")
     if not url.password or len(url.password) < 16:
         raise ValueError("Staging guard: set a unique random database password")
+    marker_words = ("REPLACE", "CHANGE_ME", "CHANGEME", "EXAMPLE")
+    for label, secret in (
+        ("database password", url.password),
+        ("SECRET_KEY", environment.get("SECRET_KEY", "")),
+        ("ARUBA_WEBHOOK_API_KEY", environment.get("ARUBA_WEBHOOK_API_KEY", "")),
+        ("LIQUIDSTOCK_INTEGRATION_SECRET", environment.get("LIQUIDSTOCK_INTEGRATION_SECRET", "")),
+    ):
+        if not secret or any(word in secret.upper() for word in marker_words):
+            raise ValueError(f"Staging guard: configure a non-placeholder {label}")
+    if len(environment.get("SECRET_KEY", "")) < 32:
+        raise ValueError("Staging guard: use an independent strong JWT secret")
 
 
 def main() -> None:
