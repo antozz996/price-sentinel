@@ -54,6 +54,33 @@ jobs:
           assert "message = issues.join(" in app
           print("PASS: staging admin email and readable auth validation errors")
           PY
+      - name: Verify safe staging redeploy scripts without execution
+        run: |
+          bash -n scripts/deploy_v2_staging_safe.sh
+          python -m compileall -q backend/scripts/smoke_v2_staging.py
+          python - <<'PY'
+          from pathlib import Path
+          deploy = Path("scripts/deploy_v2_staging_safe.sh").read_text()
+          smoke = Path("backend/scripts/smoke_v2_staging.py").read_text()
+          assert "docker compose" in deploy
+          assert "ps_backend ps_db" in deploy
+          assert "config --format json" in deploy
+          assert "127.0.0.1:18084" in deploy
+          assert "up -d --no-deps --build --force-recreate" in deploy
+          assert "scripts.smoke_v2_staging" in deploy
+          assert "git -C \"$ROOT\" rev-parse HEAD" in deploy
+          assert "docker compose down" not in deploy
+          assert "docker system prune" not in deploy
+          assert "docker volume prune" not in deploy
+          assert "docker exec" in smoke or "async_session_factory" in smoke
+          assert "validate(dict(os.environ))" in smoke
+          assert "client.get(" in smoke
+          assert "client.post(" not in smoke
+          assert "client.put(" not in smoke
+          assert "client.patch(" not in smoke
+          assert "client.delete(" not in smoke
+          print("PASS: redeploy script is scoped to V2, and API smoke is GET-only")
+          PY
       - name: Typecheck and build V2 frontend (no deploy)
         uses: actions/setup-node@v4
         with:
