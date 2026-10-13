@@ -260,9 +260,22 @@ async def import_multi_supplier(
     parse_result = parse_multi_supplier_excel(file_data)
 
     if dry_run or not parse_result.is_valid:
+        preview = {
+            "records_preview": [
+                {
+                    "sku_interno": record["sku_interno"],
+                    "descrizione": record["descrizione"],
+                    "unita_misura": record["unita_misura"],
+                    "prezzi": {supplier: str(price) for supplier, price in record["prezzi"].items()},
+                }
+                for record in parse_result.records[:50]
+            ],
+            "records_preview_truncated": len(parse_result.records) > 50,
+        }
         return {
             "mode": "dry_run" if dry_run else "validation_failed",
             **parse_result.to_dict(),
+            **preview,
         }
 
     # Mappa i nomi dei fornitori rilevati ad ID del database (o creali)

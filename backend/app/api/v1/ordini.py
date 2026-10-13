@@ -1459,31 +1459,43 @@ async def genera_richiesta_prezzo_settore(
     db: AsyncSession = Depends(get_db),
     user: Utente = Depends(get_current_user),
 ):
+    category_str = (data.category or "Generale").strip()
+    cat_norm = category_str.casefold()
+    subcat_str = data.subcategory or ""
+
+    # A manager can request quotes only for their assigned location and sector.
+    # An explicit supplier list narrows the eligible set; it never grants access.
+    if user.ruolo != "admin":
+        if not data.location_id:
+            raise HTTPException(status_code=403, detail="Sede obbligatoria per la richiesta di settore")
+        allowed = (getattr(user, "settore_abilitato", None) or "").strip()
+        if allowed.casefold() != "all":
+            permitted = {part.strip().casefold() for part in allowed.split(",") if part.strip()}
+            if cat_norm not in permitted:
+                raise HTTPException(status_code=403, detail="Settore non autorizzato")
+
     # Recupera nome sede se location_id fornito
     location_name = "Tutte le Sedi / Direzione Acquisti"
     if data.location_id:
         loc = await db.get(Location, data.location_id)
-        if loc:
-            loc_addr = getattr(loc, "indirizzo", None)
-            location_name = loc.nome_struttura + (f" ({loc_addr})" if loc_addr else "")
-
-    category_str = data.category or "Generale"
-    cat_norm = category_str.strip().casefold()
-    subcat_str = data.subcategory or ""
-    subcat_norm = subcat_str.strip().casefold()
+        if not loc:
+            raise HTTPException(status_code=404, detail="Sede non trovata")
+        _require_order_location_access(user, loc, category_str)
+        loc_addr = getattr(loc, "indirizzo", None)
+        location_name = loc.nome_struttura + (f" ({loc_addr})" if loc_addr else "")
 
     # 1. Recupera tutti i fornitori attivi non archiviati
     suppliers_query = select(Fornitore).where(Fornitore.archived_at.is_(None)).order_by(Fornitore.nome_azienda)
     all_suppliers = (await db.scalars(suppliers_query)).all()
 
     # 2. Recupera capabilities
-    cap_query = select(SupplierCategoryCapability).where(SupplierCategoryCapability.enabled.is_(True))
+    cap_query = select(SupplierCategoryCapability)
     all_caps = (await db.scalars(cap_query)).all()
     caps_by_supplier: Dict[int, Set[str]] = {}
+    disabled_caps_by_supplier: Dict[int, Set[str]] = {}
     for c in all_caps:
-        if c.supplier_id not in caps_by_supplier:
-            caps_by_supplier[c.supplier_id] = set()
-        caps_by_supplier[c.supplier_id].add(c.category.strip().casefold())
+        target = caps_by_supplier if c.enabled else disabled_caps_by_supplier
+        target.setdefault(c.supplier_id, set()).add(c.category.strip().casefold())
 
     # 3. Fornitori con fatture, alias o listini in questo settore / categoria
     evidence_query = (
@@ -1501,37 +1513,26 @@ async def genera_richiesta_prezzo_settore(
     matched_reasons: Dict[int, str] = {}
 
     for s in all_suppliers:
+        if not s.attivo_whitelist:
+            continue
         if data.target_supplier_ids and s.id not in data.target_supplier_ids:
             continue
 
         s_cats = caps_by_supplier.get(s.id, set())
+        disabled_cats = disabled_caps_by_supplier.get(s.id, set())
         has_cat = False
         reason = "Fornitore attivo nel settore"
 
-        if cat_norm in s_cats or any(c in cat_norm or cat_norm in c for c in s_cats):
+        category_disabled = cat_norm in disabled_cats or any(c in cat_norm or cat_norm in c for c in disabled_cats)
+        if not category_disabled and (cat_norm in s_cats or any(c in cat_norm or cat_norm in c for c in s_cats)):
             has_cat = True
             reason = f"Abilitato per categoria: {category_str}"
-        elif s.id in evidence_ids:
+        elif not category_disabled and s.id in evidence_ids:
             has_cat = True
             reason = f"Storico listini nel settore: {category_str}"
-        elif not caps_by_supplier:  # Se non sono configurate capabilities specifiche, includi whitelist attivi
-            has_cat = bool(s.attivo_whitelist)
-            reason = "Fornitore attivo a catalogo"
-
-        # Se abbiamo target espliciti, includi sempre
-        if data.target_supplier_ids and s.id in data.target_supplier_ids:
-            has_cat = True
-
         if has_cat:
             matched_suppliers.append(s)
             matched_reasons[s.id] = reason
-
-    # Se nessun fornitore è stato agganciato tramite capability, usa tutti i fornitori whitelist attivi
-    if not matched_suppliers and not data.target_supplier_ids:
-        for s in all_suppliers:
-            if s.attivo_whitelist:
-                matched_suppliers.append(s)
-                matched_reasons[s.id] = "Fornitore attivo whitelist"
 
     # Costruisci testo broadcast e dettagli per singolo fornitore
     product_title = data.canonical_name

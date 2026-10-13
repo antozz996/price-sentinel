@@ -96,7 +96,8 @@ body {
 .app-container {
   display: flex;
   height: 100vh;
-  width: 100vw;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -266,8 +267,11 @@ body {
 
 .main-content {
   flex: 1;
+  min-width: 0;
   padding: 40px;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
   position: relative;
 }
 

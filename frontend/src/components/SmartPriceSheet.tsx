@@ -200,7 +200,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [sheetInitialized, setSheetInitialized] = useState(false)
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
   const [defaultUom, setDefaultUom] = useState('Pz')
-  const [autoCreateProducts, setAutoCreateProducts] = useState(true)
+  const [autoCreateProducts, setAutoCreateProducts] = useState(false)
   const [supplierMapping, setSupplierMapping] = useState<Record<string, number>>({})
   const [productMapping, setProductMapping] = useState<Record<string, number>>({})
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -1187,7 +1187,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           {sectorData?.suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
         </select>
       </label>
-      {loading && !sectorData ? <div>Caricamento settori…</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12 }}>
+      {loading && !sectorData ? <div role="status">Caricamento settori…</div> : !sectorData?.suppliers.length ? <div role="status" style={{ padding: 20, color: 'var(--text-secondary)' }}>Nessun fornitore disponibile per configurare i settori.</div> : !sectorData.suppliers.find(supplier => supplier.id === sectorSupplierId)?.sectors.length ? <div role="status" style={{ padding: 20, color: 'var(--text-secondary)' }}>Nessun settore configurabile per questo fornitore.</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12 }}>
         {sectorData?.suppliers.find(supplier => supplier.id === sectorSupplierId)?.sectors.map(sector => {
           const key = `${sectorSupplierId}:${sector.category}`
           const choices: Array<{ mode: SectorMode; label: string }> = [

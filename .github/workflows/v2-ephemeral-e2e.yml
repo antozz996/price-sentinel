@@ -102,6 +102,10 @@ jobs:
         working-directory: backend
         run: python tests/sector_product_import_and_rfq_test.py
 
+      - name: Unit — comparative supplier preview never writes
+        working-directory: backend
+        run: python tests/multi_supplier_preview_test.py
+
       - name: Unit — Google Sheet dry-run without access tokens
         working-directory: backend
         run: python -m unittest discover -s tests -p 'test_sheet_sync_dry_run.py' -v

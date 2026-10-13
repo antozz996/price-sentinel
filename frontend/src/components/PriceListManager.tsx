@@ -33,6 +33,15 @@ export default function PriceListManager() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadingMulti, setUploadingMulti] = useState(false);
+  const [multiPreview, setMultiPreview] = useState<{
+    total_rows: number;
+    valid_records: number;
+    suppliers_detected: string[];
+    errors_count: number;
+    records_preview: Array<{ sku_interno: string; descrizione: string; unita_misura: string; prezzi: Record<string, string> }>;
+    records_preview_truncated: boolean;
+  } | null>(null);
+  const [confirmMultiImport, setConfirmMultiImport] = useState(false);
   const [activeTab, setActiveTab] = useState<'standard' | 'multi' | 'extract'>('extract');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ row: number, column: string, message: string }[]>([]);
@@ -134,6 +143,13 @@ export default function PriceListManager() {
     setMessage(null);
     setValidationErrors([]);
 
+    const isPreview = multiPreview === null;
+    if (!isPreview && !confirmMultiImport) {
+      setMessage({ text: 'Conferma di aver verificato l’anteprima prima di importare.', type: 'error' });
+      setUploadingMulti(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -141,7 +157,7 @@ export default function PriceListManager() {
       const headers = getHeaders();
       delete headers['Content-Type'];
 
-      const res = await fetch(`${API_BASE}/listino/import-multi-supplier`, {
+      const res = await fetch(`${API_BASE}/listino/import-multi-supplier?dry_run=${isPreview ? 'true' : 'false'}`, {
         method: 'POST',
         headers,
         body: formData,
@@ -149,9 +165,21 @@ export default function PriceListManager() {
 
       const result = await res.json();
       if (res.ok) {
+        if (isPreview && result.mode === 'dry_run') {
+          if (result.errors_count) {
+            setMessage({ text: `Anteprima non valida. Errori: ${result.errors_count}. Correggi il file e riprova.`, type: 'error' });
+            setValidationErrors(result.errors || []);
+            return;
+          }
+          setMultiPreview(result);
+          setConfirmMultiImport(false);
+          setMessage({ text: 'Anteprima pronta. Nessun dato è stato scritto.', type: 'success' });
+          return;
+        }
         if (result.mode === 'validation_failed') {
           setMessage({ text: `Validazione fallita. Errori: ${result.errors?.length || 0}`, type: 'error' });
           setValidationErrors(result.errors || []);
+          setMultiPreview(null);
           return;
         }
         
@@ -161,6 +189,8 @@ export default function PriceListManager() {
         
         setMessage({ text: msg, type: 'success' });
         setFile(null);
+        setMultiPreview(null);
+        setConfirmMultiImport(false);
         await loadFornitori(); // Refresh active list of suppliers to show new ones
       } else {
         let errorMsg = result.detail || 'Impossibile caricare il listino comparativo';
@@ -623,7 +653,7 @@ export default function PriceListManager() {
               <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
                 <h4 style={{ marginBottom: '4px' }}>Come funziona l'importazione comparativa</h4>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
-                  Carica un file Excel con colonne multiple. Le prime due colonne devono identificare il <strong>PRODOTTO</strong> e l'<strong>UNITA DI MISURA (o PESO)</strong>. Le colonne successive conterranno i prezzi di listino di ciascun fornitore (es: <em>MARR</em>, <em>MELIUS</em>, <em>DAC</em>). I fornitori mancanti verranno creati automaticamente.
+                  Carica un file Excel con colonne multiple. L’anteprima mostra righe, fornitori e possibili errori senza scrivere dati. Dopo averla verificata potrai confermare esplicitamente l’importazione; i fornitori mancanti saranno creati solo allora.
                 </p>
               </div>
 
@@ -633,7 +663,7 @@ export default function PriceListManager() {
                   type="file" 
                   id="fileInputMulti" 
                   accept=".xlsx" 
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  onChange={(e) => { setFile(e.target.files?.[0] || null); setMultiPreview(null); setConfirmMultiImport(false); }}
                   style={{ display: 'none' }}
                 />
                 <label htmlFor="fileInputMulti" style={{ cursor: 'pointer' }}>
@@ -644,6 +674,31 @@ export default function PriceListManager() {
                   </div>
                 </label>
               </div>
+
+              {multiPreview && (
+                <div role="region" aria-label="Anteprima importazione comparativa" style={{ padding: 16, border: '1px solid rgba(59,130,246,.4)', borderRadius: 10, display: 'grid', gap: 10 }}>
+                  <strong>Anteprima senza scritture</strong>
+                  <span>Righe: {multiPreview.total_rows} · valide: {multiPreview.valid_records} · errori: {multiPreview.errors_count}</span>
+                  <div><b>Fornitori rilevati:</b> {multiPreview.suppliers_detected.length ? multiPreview.suppliers_detected.join(', ') : 'Nessuno'}</div>
+                  <div style={{ overflowX: 'auto', maxHeight: 280, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead><tr><th style={{ textAlign: 'left', padding: 8 }}>Prodotto</th><th style={{ textAlign: 'left', padding: 8 }}>Unità</th><th style={{ textAlign: 'left', padding: 8 }}>Prezzi per fornitore</th></tr></thead>
+                      <tbody>{multiPreview.records_preview.map(record => (
+                        <tr key={record.sku_interno}>
+                          <td style={{ padding: 8 }}>{record.descrizione}</td>
+                          <td style={{ padding: 8 }}>{record.unita_misura}</td>
+                          <td style={{ padding: 8 }}>{Object.entries(record.prezzi).map(([supplier, price]) => `${supplier}: ${price}`).join(' · ')}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  {multiPreview.records_preview_truncated && <small>Mostrate le prime 50 righe valide; il file contiene {multiPreview.valid_records} righe valide.</small>}
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <input type="checkbox" checked={confirmMultiImport} onChange={e => setConfirmMultiImport(e.target.checked)} />
+                    <span>Ho verificato righe e fornitori nell’anteprima e confermo l’importazione con eventuali creazioni e aggiornamenti.</span>
+                  </label>
+                </div>
+              )}
 
               {message && (
                 <div style={{ 
@@ -684,11 +739,11 @@ export default function PriceListManager() {
 
               <button 
                 className="btn btn-primary" 
-                disabled={uploadingMulti || !file}
+                disabled={uploadingMulti || !file || (!!multiPreview && !confirmMultiImport)}
                 onClick={handleUploadMulti}
                 style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '12px', opacity: (uploadingMulti || !file) ? 0.6 : 1 }}
               >
-                {uploadingMulti ? 'Caricamento in corso...' : 'Importa Listino Comparativo'}
+                {uploadingMulti ? 'Caricamento in corso...' : multiPreview ? 'Conferma e importa' : 'Mostra anteprima'}
               </button>
             </>
           )}

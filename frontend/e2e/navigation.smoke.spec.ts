@@ -37,6 +37,11 @@ async function mockIsolatedBackend(page: Page) {
       body = { summary: { work_items: 0, invoice_lines: 0, weak_candidates_hidden: 0 }, items: [] }
     } else if (path === '/api/v1/auth/logout') {
       status = 204
+    } else if (path === '/api/v1/listino/import-multi-supplier') {
+      const dryRun = new URL(route.request().url()).searchParams.get('dry_run')
+      body = dryRun === 'true'
+        ? { mode: 'dry_run', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
+        : { total_rows: 12, suppliers_detected: ['MARR', 'DAC'], inserted: 11, updated: 0, skipped_duplicates: 0 }
     }
     await route.fulfill({ status, contentType: 'application/json', body: status === 204 ? '' : JSON.stringify(body) })
   })
@@ -63,7 +68,33 @@ test('admin can log in and render the main dashboard without API errors', async 
   await expect(page.getByText('Dati dashboard non disponibili')).toHaveCount(0)
   await expect(page.getByText('Caricamento profilo…')).toHaveCount(0)
   await expect(page.locator('.header-title')).toBeVisible()
+  const pageFitsViewport = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+  expect(pageFitsViewport, 'the application should not introduce page-level horizontal scrolling').toBe(true)
   expect(errors).toEqual([])
+})
+
+test('comparative price import previews data and requires explicit confirmation before writes', async ({ page }) => {
+  const dryRunModes: string[] = []
+  await page.route('**/api/v1/listino/import-multi-supplier**', async route => {
+    dryRunModes.push(new URL(route.request().url()).searchParams.get('dry_run') || '')
+    const dryRun = new URL(route.request().url()).searchParams.get('dry_run') === 'true'
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(dryRun
+      ? { mode: 'dry_run', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
+      : { total_rows: 12, suppliers_detected: ['MARR', 'DAC'], inserted: 11, updated: 0, skipped_duplicates: 0 }) })
+  })
+  await login(page, 'admin@synthetic.test')
+  await page.locator('.sidebar-nav').getByText('Listini master', { exact: true }).click()
+  await page.getByRole('button', { name: 'Listino Comparativo' }).click()
+  await page.locator('#fileInputMulti').setInputFiles({ name: 'comparativo.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('synthetic') })
+  await page.getByRole('button', { name: 'Mostra anteprima' }).click()
+  await expect(page.getByRole('region', { name: 'Anteprima importazione comparativa' })).toContainText('MARR, DAC')
+  await expect(page.getByRole('region', { name: 'Anteprima importazione comparativa' })).toContainText('Pomodori pelati')
+  await expect(page.getByRole('button', { name: 'Conferma e importa' })).toBeDisabled()
+  expect(dryRunModes).toEqual(['true'])
+  await page.getByRole('checkbox', { name: /Ho verificato righe e fornitori/ }).check()
+  await page.getByRole('button', { name: 'Conferma e importa' }).click()
+  await expect(page.getByText(/Importato con successo/)).toBeVisible()
+  expect(dryRunModes).toEqual(['true', 'false'])
 })
 
 test('manager with forged descriptive admin label never sees admin-only navigation', async ({ page }) => {
