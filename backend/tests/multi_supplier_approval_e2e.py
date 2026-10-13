@@ -200,12 +200,12 @@ async def run() -> None:
     check("only one historical version added and two active prices remain",
           await count("listino_master") == 3)
     async with async_session_factory() as db:
-        active = (await db.execute(text(
-            """SELECT count(*) FROM listino_master
+        active = (await db.execute(
+            text("""SELECT count(*) FROM listino_master
                WHERE data_inizio_validita <= :today
-                 AND (data_scadenza IS NULL OR data_scadenza >= :today)""",
+                 AND (data_scadenza IS NULL OR data_scadenza >= :today)"""),
             {"today": datetime.now(ZoneInfo("Europe/Rome")).date()},
-        ))).scalar_one()
+        )).scalar_one()
     check("single active record per supplier after concurrent approvals", active == 2)
 
     # Immutable date-only history: revisions approved today take effect tomorrow.
