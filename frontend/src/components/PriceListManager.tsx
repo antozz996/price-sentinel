@@ -41,7 +41,24 @@ export default function PriceListManager() {
     expires_at?: string;
     suppliers_detected: string[];
     errors_count: number;
-    records_preview: Array<{ sku_interno: string; descrizione: string; unita_misura: string; prezzi: Record<string, string> }>;
+    records_preview: Array<{
+      sku_interno: string;
+      descrizione: string;
+      unita_misura: string;
+      prezzi: Record<string, string>;
+      confronti: Array<{
+        fornitore: string;
+        prezzo_corrente: string | null;
+        unita_corrente: string | null;
+        prezzo_proposto: string;
+        unita_proposta: string;
+        delta_unitario: string | null;
+        delta_percentuale: string | null;
+        decorrenza_proposta: string;
+        scadenza_proposta: string | null;
+        stato: string;
+      }>;
+    }>;
     records_preview_truncated: boolean;
   } | null>(null);
   const [confirmMultiImport, setConfirmMultiImport] = useState(false);
@@ -663,12 +680,42 @@ export default function PriceListManager() {
                   <div><b>Fornitori rilevati:</b> {multiPreview.suppliers_detected.length ? multiPreview.suppliers_detected.join(', ') : 'Nessuno'}</div>
                   <div style={{ overflowX: 'auto', maxHeight: 280, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                      <thead><tr><th style={{ textAlign: 'left', padding: 8 }}>Prodotto</th><th style={{ textAlign: 'left', padding: 8 }}>Unità</th><th style={{ textAlign: 'left', padding: 8 }}>Prezzi per fornitore</th></tr></thead>
+                      <thead><tr>
+                        <th style={{ textAlign: 'left', padding: 8 }}>Prodotto</th>
+                        <th style={{ textAlign: 'left', padding: 8 }}>U.M.</th>
+                        <th style={{ textAlign: 'left', padding: 8 }}>Prezzo pattuito → proposta</th>
+                      </tr></thead>
                       <tbody>{multiPreview.records_preview.map(record => (
                         <tr key={record.sku_interno}>
-                          <td style={{ padding: 8 }}>{record.descrizione}</td>
+                          <td style={{ padding: 8 }}>
+                            <div>{record.descrizione}</div>
+                            <small style={{ color: 'var(--text-secondary)' }}>{record.sku_interno}</small>
+                          </td>
                           <td style={{ padding: 8 }}>{record.unita_misura}</td>
-                          <td style={{ padding: 8 }}>{Object.entries(record.prezzi).map(([supplier, price]) => `${supplier}: ${price}`).join(' · ')}</td>
+                          <td style={{ padding: 8, minWidth: 360 }}>
+                            <div style={{ display: 'grid', gap: 8 }}>
+                              {record.confronti.map(offer => (
+                                <div key={offer.fornitore} style={{ padding: 8, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                                  <strong>{offer.fornitore}</strong>
+                                  <span style={{ marginLeft: 8, color: 'var(--text-secondary)' }}>{offer.stato}</span>
+                                  <div>
+                                    {offer.prezzo_corrente === null
+                                      ? 'Nessun contratto attivo'
+                                      : `€ ${offer.prezzo_corrente} / ${offer.unita_corrente}`}
+                                    {' → '}
+                                    <strong>€ {offer.prezzo_proposto} / {offer.unita_proposta}</strong>
+                                  </div>
+                                  <small>
+                                    Delta: {offer.delta_unitario === null
+                                      ? 'non comparabile (unità diverse)'
+                                      : `€ ${offer.delta_unitario} / unità${offer.delta_percentuale ? ` (${offer.delta_percentuale}%)` : ''}`}
+                                    {' · Decorrenza: '}{new Date(offer.decorrenza_proposta).toLocaleDateString('it-IT')}
+                                    {' · Scadenza: '}{offer.scadenza_proposta ? new Date(offer.scadenza_proposta).toLocaleDateString('it-IT') : 'da definire'}
+                                  </small>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
                         </tr>
                       ))}</tbody>
                     </table>
@@ -676,7 +723,7 @@ export default function PriceListManager() {
                   {multiPreview.records_preview_truncated && <small>Mostrate le prime 50 righe valide; il file contiene {multiPreview.valid_records} righe valide.</small>}
                   <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                     <input type="checkbox" checked={confirmMultiImport} onChange={e => setConfirmMultiImport(e.target.checked)} />
-                    <span>Ho verificato righe e fornitori nell’anteprima e confermo l’importazione con eventuali creazioni e aggiornamenti.</span>
+                    <span>Ho verificato prezzo pattuito, proposta, delta, unità di misura, decorrenza e scadenza per ogni fornitore; confermo questa approvazione.</span>
                   </label>
                 </div>
               )}
