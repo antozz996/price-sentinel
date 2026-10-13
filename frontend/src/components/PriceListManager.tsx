@@ -36,6 +36,9 @@ export default function PriceListManager() {
   const [multiPreview, setMultiPreview] = useState<{
     total_rows: number;
     valid_records: number;
+    preview_token: string;
+    warning?: string;
+    expires_at?: string;
     suppliers_detected: string[];
     errors_count: number;
     records_preview: Array<{ sku_interno: string; descrizione: string; unita_misura: string; prezzi: Record<string, string> }>;
@@ -152,6 +155,10 @@ export default function PriceListManager() {
 
     const formData = new FormData();
     formData.append('file', file);
+    if (!isPreview && multiPreview) {
+      formData.append('approval_token', multiPreview.preview_token);
+      formData.append('confirm_import', 'true');
+    }
 
     try {
       const headers = getHeaders();
@@ -166,6 +173,10 @@ export default function PriceListManager() {
       const result = await res.json();
       if (res.ok) {
         if (isPreview && result.mode === 'dry_run') {
+          if (!result.preview_token) {
+            setMessage({ text: 'Anteprima priva di autorizzazione: impossibile procedere.', type: 'error' });
+            return;
+          }
           if (result.errors_count) {
             setMessage({ text: `Anteprima non valida. Errori: ${result.errors_count}. Correggi il file e riprova.`, type: 'error' });
             setValidationErrors(result.errors || []);
@@ -679,6 +690,8 @@ export default function PriceListManager() {
                 <div role="region" aria-label="Anteprima importazione comparativa" style={{ padding: 16, border: '1px solid rgba(59,130,246,.4)', borderRadius: 10, display: 'grid', gap: 10 }}>
                   <strong>Anteprima senza scritture</strong>
                   <span>Righe: {multiPreview.total_rows} · valide: {multiPreview.valid_records} · errori: {multiPreview.errors_count}</span>
+                  {multiPreview.warning && <p role="alert" style={{ color: '#fbbf24', margin: 0 }}>{multiPreview.warning}</p>}
+                  {multiPreview.expires_at && <small>Autorizzazione valida fino a: {new Date(multiPreview.expires_at).toLocaleString('it-IT')}</small>}
                   <div><b>Fornitori rilevati:</b> {multiPreview.suppliers_detected.length ? multiPreview.suppliers_detected.join(', ') : 'Nessuno'}</div>
                   <div style={{ overflowX: 'auto', maxHeight: 280, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
