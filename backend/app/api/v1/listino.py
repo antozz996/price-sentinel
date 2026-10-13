@@ -39,6 +39,18 @@ from app.services.excel_import import (
 router = APIRouter()
 
 
+def _deny_ungoverned_contract_write(reason: str) -> None:
+    """Fail closed until a reviewed, signed contract-approval flow exists."""
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"{reason} Nessun prezzo concordato o dato storico è stato modificato. "
+            "Usa l'anteprima e il percorso di approvazione autorizzato."
+        ),
+    )
+
+
+
 # ─────────────────────────────────────────────
 # Listino Master
 # ─────────────────────────────────────────────
@@ -88,26 +100,11 @@ async def create_listino(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    listino = ListinoMaster(
-        fornitore_id=data.fornitore_id,
-        sku_interno=data.sku_interno,
-        descrizione=data.descrizione,
-        prezzo_pattuito=data.prezzo_pattuito,
-        unita_misura=data.unita_misura,
-        data_inizio_validita=data.data_inizio_validita,
-        data_scadenza=data.data_scadenza,
-        pfa_tipo=PFATipo(data.pfa_tipo) if data.pfa_tipo else None,
-        pfa_valore=data.pfa_valore,
+    # API remains registered for compatibility, but direct contract writes are
+    # forbidden until they require a reviewed and bound approval token.
+    _deny_ungoverned_contract_write(
+        "Creazione diretta del prezzo contrattuale disabilitata."
     )
-    db.add(listino)
-    await db.flush()
-    await db.refresh(listino)
-    return listino
-
-
-# ─────────────────────────────────────────────
-# Import / Export Excel — Sprint 1
-# ─────────────────────────────────────────────
 
 @router.get(
     "/template-excel",
@@ -143,95 +140,29 @@ async def import_listino_excel(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    # Validazione tipo file
-    if not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(
-            status_code=400,
-            detail="Formato non supportato. Usa un file .xlsx (Excel)",
+    # The standard import remains useful for validation, but MUST NOT commit
+    # directly. The comparative importer implements signed human approval.
+    if not dry_run:
+        _deny_ungoverned_contract_write(
+            "Importazione listino standard senza approvazione disabilitata."
         )
-
-    # Verifica fornitore esiste
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(status_code=400, detail="Formato non supportato. Usa un file .xlsx")
     from app.models.fornitori import Fornitore
     forn_result = await db.execute(select(Fornitore).where(Fornitore.id == fornitore_id))
     fornitore = forn_result.scalar_one_or_none()
-    if not fornitore:
+    if fornitore is None:
         raise HTTPException(status_code=404, detail="Fornitore non trovato")
 
-    # Parse e valida
     import io
     file_data = io.BytesIO(await file.read())
     parse_result = parse_listino_excel(file_data, fornitore_id)
-
-    if dry_run or not parse_result.is_valid:
-        return {
-            "mode": "dry_run" if dry_run else "validation_failed",
-            "fornitore": fornitore.nome_azienda,
-            **parse_result.to_dict(),
-        }
-
-    inserted = 0
-    skipped = 0
-    updated = 0
-    from datetime import date
-
-    for record in parse_result.records:
-        # Check duplicato SKU attivo per lo stesso fornitore
-        existing = await db.execute(
-            select(ListinoMaster).where(
-                and_(
-                    ListinoMaster.fornitore_id == fornitore_id,
-                    ListinoMaster.sku_interno == record["sku_interno"],
-                    ListinoMaster.data_scadenza.is_(None),
-                )
-            )
-        )
-        existing_listino = existing.scalar_one_or_none()
-        
-        new_pfa_tipo = PFATipo(record["pfa_tipo"].lower()) if record.get("pfa_tipo") else None
-        
-        if existing_listino:
-            # Check se i valori sono identici (nessun aggiornamento necessario)
-            old_pfa_tipo = existing_listino.pfa_tipo
-            old_pfa_valore = existing_listino.pfa_valore
-            
-            if (float(existing_listino.prezzo_pattuito) == float(record["prezzo_pattuito"]) and
-                existing_listino.unita_misura == record["unita_misura"] and
-                old_pfa_tipo == new_pfa_tipo and
-                old_pfa_valore == record.get("pfa_valore")):
-                skipped += 1
-                continue
-            
-            # Valori cambiati: storicizza il vecchio
-            existing_listino.data_scadenza = date.today()
-            updated += 1
-        else:
-            inserted += 1
-
-        listino = ListinoMaster(
-            fornitore_id=record["fornitore_id"],
-            sku_interno=record["sku_interno"],
-            descrizione=record["descrizione"],
-            prezzo_pattuito=record["prezzo_pattuito"],
-            unita_misura=record["unita_misura"],
-            data_inizio_validita=record["data_inizio_validita"],
-            data_scadenza=None,
-            pfa_tipo=new_pfa_tipo,
-            pfa_valore=record.get("pfa_valore"),
-        )
-        db.add(listino)
-
-    await db.flush()
-
     return {
-        "mode": "imported",
+        "mode": "dry_run" if parse_result.is_valid else "validation_failed",
         "fornitore": fornitore.nome_azienda,
-        "total_rows": parse_result.total_rows,
-        "inserted": inserted,
-        "updated": updated,
-        "skipped_duplicates": skipped,
-        "errors_count": 0,
+        "warning": "Anteprima di sola lettura: per approvare prezzi usa il flusso comparativo con token.",
+        **parse_result.to_dict(),
     }
-
 
 @router.post(
     "/import-multi-supplier",
@@ -592,128 +523,11 @@ async def import_from_invoices_direct(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.fornitori import Fornitore
-    from app.models.fatture import Fattura, RigaFattura, TipoDocumento
-    from decimal import Decimal
-
-    fornitore = await db.get(Fornitore, fornitore_id)
-    if not fornitore:
-        raise HTTPException(status_code=404, detail="Fornitore non trovato")
-
-    # Fetch and aggregate
-    stmt = (
-        select(
-            RigaFattura.codice_fornitore_raw,
-            RigaFattura.descrizione_fornitore_raw,
-            RigaFattura.unita_misura_fattura,
-            RigaFattura.prezzo_netto_normalizzato,
-            RigaFattura.quantita,
-            RigaFattura.sku_interno,
-            Fattura.data_documento,
-        )
-        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
-        .where(
-            Fattura.fornitore_id == fornitore_id,
-            Fattura.tipo_documento.in_([TipoDocumento.TD01, TipoDocumento.TD24, TipoDocumento.TD25]),
-            RigaFattura.is_omaggio.is_(False),
-            RigaFattura.descrizione_fornitore_raw.is_not(None),
-        )
-        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc())
+    # Invoiced prices are observations, NOT negotiated commercial terms.
+    # The GET extract-from-invoices endpoint remains available for analysis.
+    _deny_ungoverned_contract_write(
+        "Importazione diretta da fatture disabilitata: un prezzo fatturato non prova un accordo."
     )
-    rows = (await db.execute(stmt)).all()
-
-    grouped = {}
-    for code, desc, uom, price, qty, sku, doc_date in rows:
-        clean_desc = (desc or "").strip()
-        if not clean_desc:
-            continue
-        clean_code = (code or "").strip()
-        key = (clean_code.upper(), clean_desc.upper(), (uom or "Pz").upper())
-
-        if key not in grouped:
-            supp_prefix = "".join(c for c in fornitore.nome_azienda[:3] if c.isalnum()).upper() or "SKU"
-            clean_sku = sku or (f"{supp_prefix}-{clean_code}" if clean_code else f"{supp_prefix}-{clean_desc[:12].replace(' ', '-').upper()}")
-            grouped[key] = {
-                "sku_interno": clean_sku,
-                "descrizione": clean_desc,
-                "unita_misura": uom or "Pz",
-                "prices": [],
-                "quantities": [],
-                "latest_price": price or Decimal("0"),
-                "latest_date": doc_date,
-            }
-
-        grouped[key]["prices"].append(Decimal(str(price or 0)))
-        grouped[key]["quantities"].append(Decimal(str(qty or 1)))
-
-    inserted = 0
-    updated = 0
-    skipped = 0
-    today = date.today()
-
-    for g in grouped.values():
-        prices = g["prices"]
-        qtys = g["quantities"]
-
-        if price_strategy == "min":
-            chosen_price = min(prices) if prices else Decimal("0")
-        elif price_strategy == "avg":
-            total_spend = sum(p * q for p, q in zip(prices, qtys))
-            total_qty = sum(qtys)
-            chosen_price = (total_spend / total_qty).quantize(Decimal("0.0001")) if total_qty > 0 else (sum(prices) / len(prices)).quantize(Decimal("0.0001"))
-        else:
-            chosen_price = g["latest_price"]
-
-        sku = g["sku_interno"]
-        desc = g["descrizione"]
-        uom = g["unita_misura"]
-
-        # Check if already in listino
-        existing = await db.execute(
-            select(ListinoMaster).where(
-                and_(
-                    ListinoMaster.fornitore_id == fornitore_id,
-                    ListinoMaster.sku_interno == sku,
-                    ListinoMaster.data_scadenza.is_(None),
-                )
-            )
-        )
-        existing_listino = existing.scalar_one_or_none()
-
-        if existing_listino:
-            if float(existing_listino.prezzo_pattuito) == float(chosen_price):
-                skipped += 1
-                continue
-            existing_listino.data_scadenza = today
-            updated += 1
-        else:
-            inserted += 1
-
-        listino = ListinoMaster(
-            fornitore_id=fornitore_id,
-            sku_interno=sku,
-            descrizione=desc,
-            prezzo_pattuito=chosen_price,
-            unita_misura=uom,
-            data_inizio_validita=g["latest_date"] or today,
-            data_scadenza=None,
-            pfa_tipo=None,
-            pfa_valore=None,
-        )
-        db.add(listino)
-
-    await db.flush()
-
-    return {
-        "status": "ok",
-        "fornitore": fornitore.nome_azienda,
-        "total_extracted": len(grouped),
-        "inserted": inserted,
-        "updated": updated,
-        "skipped": skipped,
-        "message": f"Listino generato da fatture: {inserted} inseriti, {updated} aggiornati, {skipped} invariati.",
-    }
-
 
 @router.delete(
     "/fornitore/{fornitore_id}",
@@ -725,21 +539,11 @@ async def delete_listino_fornitore(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verifica fornitore esiste
-    from app.models.fornitori import Fornitore
-    forn_result = await db.execute(select(Fornitore).where(Fornitore.id == fornitore_id))
-    fornitore = forn_result.scalar_one_or_none()
-    if not fornitore:
-        raise HTTPException(status_code=404, detail="Fornitore non trovato")
-        
-    # Elimina tutti gli articoli in listino per questo fornitore
-    await db.execute(
-        ListinoMaster.__table__.delete().where(ListinoMaster.fornitore_id == fornitore_id)
+    # Historical prices are audit evidence referenced by invoice controls.
+    # Hard deletion would silently destroy the economic record.
+    _deny_ungoverned_contract_write(
+        "Cancellazione fisica del listino e del suo storico disabilitata."
     )
-    await db.commit()
-    return {"detail": f"Listino del fornitore {fornitore.nome_azienda} eliminato con successo."}
-
-
 
 @router.post(
     "/{listino_id}/aggiorna-prezzo",
@@ -754,61 +558,9 @@ async def aggiorna_prezzo_listino(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Workflow Versioning Append-Only — Spec §4.4:
-    1. Setta data_scadenza = OGGI sul record attuale
-    2. Crea nuovo record con nuovo prezzo e data_inizio_validita = DOMANI
-    3. Le fatture storiche continuano a puntare al record con il prezzo valido
-    """
-    # Trova record attuale
-    result = await db.execute(
-        select(ListinoMaster).where(
-            and_(
-                ListinoMaster.id == listino_id,
-                ListinoMaster.data_scadenza.is_(None),
-            )
-        )
+    _deny_ungoverned_contract_write(
+        "Aggiornamento manuale del prezzo senza approvazione disabilitato."
     )
-    attuale = result.scalar_one_or_none()
-    if not attuale:
-        raise HTTPException(status_code=404, detail="Voce listino attiva non trovata")
-
-    oggi = date.today()
-
-    # Step 1: scadenza il record corrente
-    attuale.data_scadenza = oggi
-
-    # Step 2: crea nuova versione
-    pfa_tipo_val = attuale.pfa_tipo
-    pfa_valore_val = attuale.pfa_valore
-    
-    if data.pfa_tipo is not None:
-        if data.pfa_tipo.lower() == "none" or data.pfa_tipo == "":
-            pfa_tipo_val = None
-            pfa_valore_val = None
-        else:
-            pfa_tipo_val = PFATipo(data.pfa_tipo)
-            if data.pfa_valore is not None:
-                pfa_valore_val = data.pfa_valore
-    elif data.pfa_valore is not None:
-        pfa_valore_val = data.pfa_valore
-
-    nuovo = ListinoMaster(
-        fornitore_id=attuale.fornitore_id,
-        sku_interno=attuale.sku_interno,
-        descrizione=attuale.descrizione,
-        prezzo_pattuito=data.prezzo_pattuito or attuale.prezzo_pattuito,
-        unita_misura=attuale.unita_misura,
-        data_inizio_validita=data.data_inizio_validita or (oggi + timedelta(days=1)),
-        data_scadenza=None,
-        pfa_tipo=pfa_tipo_val,
-        pfa_valore=pfa_valore_val,
-    )
-    db.add(nuovo)
-    await db.flush()
-    await db.refresh(nuovo)
-    return nuovo
-
 
 @router.get(
     "/{listino_id}",
