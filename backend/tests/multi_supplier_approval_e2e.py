@@ -6,6 +6,7 @@ run_ci_disposable_e2e.py. No existing V1/V2 staging data is touched.
 from __future__ import annotations
 
 import asyncio
+from datetime import date, timedelta
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -21,6 +22,8 @@ from app.api.v1.listino import (
 )
 from app.config import settings
 from app.database import async_session_factory
+from app.models.listino import ListinoMaster
+from app.services.matching import _get_listino_attivo
 
 ADMIN = SimpleNamespace(id=1, tenant_id=1)
 SECOND_USER = SimpleNamespace(id=2, tenant_id=1)
@@ -199,6 +202,57 @@ async def run() -> None:
             "SELECT count(*) FROM listino_master WHERE data_scadenza IS NULL"
         ))).scalar_one()
     check("single active record per supplier after concurrent approvals", active == 2)
+
+    # Immutable date-only history: revisions approved today take effect tomorrow.
+    today, tomorrow = date.today(), date.today() + timedelta(days=1)
+    async with async_session_factory() as db:
+        marr_id = (await db.execute(text(
+            "SELECT id FROM fornitori WHERE nome_azienda='MARR'"
+        ))).scalar_one()
+        versions = (await db.execute(text("""
+            SELECT prezzo_pattuito, data_inizio_validita, data_scadenza
+            FROM listino_master
+            WHERE fornitore_id=:fid AND sku_interno='POMODORI-PELATI'
+            ORDER BY data_inizio_validita ASC
+        """), {"fid": marr_id})).all()
+        check("revised agreement has old price through today and new price tomorrow",
+              len(versions) == 2
+              and float(versions[0][0]) == 2.5
+              and versions[0][2] == today
+              and float(versions[1][0]) == 3.1
+              and versions[1][1] == tomorrow
+              and versions[1][2] is None)
+        billed_today = await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", today.isoformat())
+        billed_tomorrow = await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", tomorrow.isoformat())
+        check("today's invoice uses old agreed price, tomorrow's uses new agreed price",
+              billed_today is not None and float(billed_today.prezzo_pattuito) == 2.5
+              and billed_tomorrow is not None and float(billed_tomorrow.prezzo_pattuito) == 3.1)
+        check("malformed invoice date cannot silently select today's contract",
+              await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", "date-is-invalid") is None)
+
+    # A conflicting second change must not replace tomorrow's already-approved version.
+    changed_twice = workbook_bytes(4.2)
+    change_preview = await call(changed_twice)
+    await denied("conflicting second price change before future effective date",
+                 call(changed_twice, dry_run=False, token=change_preview["preview_token"], confirm=True), 409)
+    check("conflicting future revisions do not add financial records",
+          await count("listino_master") == 3)
+
+    # Pre-existing overlapping history must never lead to an arbitrary invoice price.
+    # Simulate ONLY inside an uncommitted transaction in the disposable CI database.
+    async with async_session_factory() as db:
+        db.add(ListinoMaster(
+            fornitore_id=marr_id, sku_interno="POMODORI-PELATI",
+            descrizione="Synthetic conflicting contract", prezzo_pattuito=4.9,
+            unita_misura="Kg", data_inizio_validita=today,
+            data_scadenza=today,
+        ))
+        await db.flush()
+        check("ambiguous historical overlap refuses price selection",
+              await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", today) is None)
+        await db.rollback()
+    check("overlap simulation leaves persisted price history unchanged",
+          await count("listino_master") == 3)
 
     full_preview = await call(workbook_bytes(count=60))
     check("all 60 Excel rows are visible for human approval",
