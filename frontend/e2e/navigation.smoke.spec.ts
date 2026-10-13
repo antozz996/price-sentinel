@@ -83,6 +83,9 @@ test('comparative price import previews data and requires explicit confirmation 
       : { total_rows: 12, suppliers_detected: ['MARR', 'DAC'], inserted: 11, updated: 0, skipped_duplicates: 0 }) })
   })
   await login(page, 'admin@synthetic.test')
+  if (page.viewportSize()?.width && page.viewportSize()!.width <= 768) {
+    await page.locator('.hamburger-btn').click()
+  }
   await page.locator('.sidebar-nav').getByText('Listini master', { exact: true }).click()
   await page.getByRole('button', { name: 'Listino Comparativo' }).click()
   await page.locator('#fileInputMulti').setInputFiles({ name: 'comparativo.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('synthetic') })
