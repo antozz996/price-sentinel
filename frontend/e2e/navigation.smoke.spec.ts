@@ -40,7 +40,7 @@ async function mockIsolatedBackend(page: Page) {
     } else if (path === '/api/v1/listino/import-multi-supplier') {
       const dryRun = new URL(route.request().url()).searchParams.get('dry_run')
       body = dryRun === 'true'
-        ? { mode: 'dry_run', preview_token: 'signed-synthetic-preview-token', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
+        ? { mode: 'dry_run', preview_token: 'signed-synthetic-preview-token', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' }, confronti: [{ fornitore: 'MARR', prezzo_corrente: '2.40', unita_corrente: 'Kg', prezzo_proposto: '2.50', unita_proposta: 'Kg', delta_unitario: '0.10', delta_percentuale: '4.17', decorrenza_proposta: '2026-10-14', scadenza_proposta: '2026-11-12', stato: 'revisione' }, { fornitore: 'DAC', prezzo_corrente: null, unita_corrente: null, prezzo_proposto: '2.70', unita_proposta: 'Kg', delta_unitario: null, delta_percentuale: null, decorrenza_proposta: '2026-10-14', scadenza_proposta: '2026-11-12', stato: 'nuovo accordo' }] }], records_preview_truncated: false }
         : { total_rows: 12, suppliers_detected: ['MARR', 'DAC'], inserted: 11, updated: 0, skipped_duplicates: 0 }
     }
     await route.fulfill({ status, contentType: 'application/json', body: status === 204 ? '' : JSON.stringify(body) })
@@ -84,7 +84,7 @@ test('comparative price import previews data and requires explicit confirmation 
       expect(sent).toContain('confirm_import')
     }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(dryRun
-      ? { mode: 'dry_run', preview_token: 'signed-synthetic-preview-token', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
+      ? { mode: 'dry_run', preview_token: 'signed-synthetic-preview-token', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' }, confronti: [{ fornitore: 'MARR', prezzo_corrente: '2.40', unita_corrente: 'Kg', prezzo_proposto: '2.50', unita_proposta: 'Kg', delta_unitario: '0.10', delta_percentuale: '4.17', decorrenza_proposta: '2026-10-14', scadenza_proposta: '2026-11-12', stato: 'revisione' }, { fornitore: 'DAC', prezzo_corrente: null, unita_corrente: null, prezzo_proposto: '2.70', unita_proposta: 'Kg', delta_unitario: null, delta_percentuale: null, decorrenza_proposta: '2026-10-14', scadenza_proposta: '2026-11-12', stato: 'nuovo accordo' }] }], records_preview_truncated: false }
       : { total_rows: 12, suppliers_detected: ['MARR', 'DAC'], inserted: 11, updated: 0, skipped_duplicates: 0 }) })
   })
   await login(page, 'admin@synthetic.test')
