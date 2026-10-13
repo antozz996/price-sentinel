@@ -195,8 +195,10 @@ async def run() -> None:
         call(alt, dry_run=False, token=first_new["preview_token"], confirm=True),
         call(alt, dry_run=False, token=second_new["preview_token"], confirm=True),
     )
-    check("two distinct valid concurrent approvals avoid duplicate price versions",
-          sorted(result["updated"] for result in simultaneous) == [0, 1])
+    successful = [result for result in simultaneous if isinstance(result, dict) and result.get("mode") == "imported"]
+    stale_refusals = [result for result in simultaneous if isinstance(result, HTTPException) and result.status_code == 409]
+    check("concurrent approvals allow one write and reject the now-stale comparison",
+          len(successful) == 1 and successful[0]["updated"] == 1 and len(stale_refusals) == 1)
     check("only one historical version added and two active prices remain",
           await count("listino_master") == 3)
     async with async_session_factory() as db:
