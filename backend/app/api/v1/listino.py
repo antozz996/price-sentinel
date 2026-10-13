@@ -411,7 +411,8 @@ async def import_multi_supplier(
                 unita_misura=record["unita_misura"],
                 data_inizio_validita=effective_date,
                 # Commercial policy: every approved agreement is guaranteed for
-                # 30 calendar days, inclusive of its effective date.
+                # 30 calendar days, inclusive of its effective date. Expiry never
+                # triggers a silent renewal; it requires a new signed approval.
                 data_scadenza=effective_date + timedelta(days=29),
                 pfa_tipo=None,
                 pfa_valore=None,
