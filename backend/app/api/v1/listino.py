@@ -5,6 +5,8 @@ Include gestione PFA Scaglioni, UoM Conversioni, Import/Export Excel.
 """
 
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+import json
 from hashlib import sha256
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -172,6 +174,102 @@ async def import_listino_excel(
         **parse_result.to_dict(),
     }
 
+async def _build_comparative_contract_context(
+    db: AsyncSession,
+    records: list[dict],
+    supplier_ids: dict[str, int | None],
+    today: date,
+) -> tuple[dict[str, list[dict]], list[dict], str, list[str]]:
+    """Build the human-readable proposal and a stable snapshot of all matching history."""
+    pairs = {
+        (supplier_ids.get(supplier), record["sku_interno"])
+        for record in records
+        for supplier in record["prezzi"]
+        if supplier_ids.get(supplier) is not None
+    }
+    supplier_values = {supplier_id for supplier_id, _ in pairs}
+    sku_values = {sku for _, sku in pairs}
+    history_by_pair: dict[tuple[int, str], list[ListinoMaster]] = {}
+    if supplier_values and sku_values:
+        result = await db.execute(
+            select(ListinoMaster)
+            .where(
+                ListinoMaster.fornitore_id.in_(supplier_values),
+                ListinoMaster.sku_interno.in_(sku_values),
+            )
+            .order_by(ListinoMaster.data_inizio_validita, ListinoMaster.id)
+        )
+        for item in result.scalars().all():
+            key = (item.fornitore_id, item.sku_interno)
+            if key in pairs:
+                history_by_pair.setdefault(key, []).append(item)
+
+    comparison: dict[str, list[dict]] = {}
+    snapshot: list[dict] = []
+    errors: list[str] = []
+    for record in records:
+        sku = record["sku_interno"]
+        sku_comparisons = []
+        for supplier, proposed_price in record["prezzi"].items():
+            supplier_id = supplier_ids.get(supplier)
+            history = history_by_pair.get((supplier_id, sku), []) if supplier_id is not None else []
+            versions = [
+                {
+                    "id": item.id,
+                    "price": str(item.prezzo_pattuito),
+                    "unit": item.unita_misura,
+                    "start": item.data_inizio_validita.isoformat(),
+                    "end": item.data_scadenza.isoformat() if item.data_scadenza else None,
+                }
+                for item in history
+            ]
+            snapshot.append({"supplier": supplier, "sku": sku, "versions": versions})
+            active = [
+                item for item in history
+                if item.data_inizio_validita <= today
+                and (item.data_scadenza is None or item.data_scadenza >= today)
+            ]
+            future = [
+                item for item in history
+                if item.data_inizio_validita > today
+                and (item.data_scadenza is None or item.data_scadenza >= today)
+            ]
+            if len(active) > 1:
+                errors.append(f"{supplier} / {sku}: più contratti risultano validi oggi.")
+            if future:
+                errors.append(f"{supplier} / {sku}: esiste già una revisione con decorrenza futura.")
+            current = active[0] if len(active) == 1 else None
+            unchanged = bool(
+                current
+                and current.prezzo_pattuito == proposed_price
+                and current.unita_misura == record["unita_misura"]
+            )
+            effective = current.data_inizio_validita if unchanged else (today + timedelta(days=1) if current else today)
+            expires = current.data_scadenza if unchanged else effective + timedelta(days=29)
+            delta = None
+            delta_percent = None
+            if current and current.unita_misura == record["unita_misura"]:
+                delta = proposed_price - current.prezzo_pattuito
+                if current.prezzo_pattuito:
+                    delta_percent = (delta / current.prezzo_pattuito) * Decimal("100")
+            sku_comparisons.append({
+                "fornitore": supplier,
+                "prezzo_corrente": str(current.prezzo_pattuito) if current else None,
+                "unita_corrente": current.unita_misura if current else None,
+                "prezzo_proposto": str(proposed_price),
+                "unita_proposta": record["unita_misura"],
+                "delta_unitario": str(delta) if delta is not None else None,
+                "delta_percentuale": str(delta_percent.quantize(Decimal("0.01"))) if delta_percent is not None else None,
+                "decorrenza_proposta": effective.isoformat(),
+                "scadenza_proposta": expires.isoformat() if expires else None,
+                "stato": "Invariato" if unchanged else ("Nuovo accordo" if current is None else "Revisione accordo"),
+            })
+        comparison[sku] = sku_comparisons
+
+    digest = sha256(json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return comparison, snapshot, digest, errors
+
+
 @router.post(
     "/import-multi-supplier",
     summary="Importa Listino Comparativo Multi-Fornitore — approvazione obbligatoria",
@@ -221,6 +319,38 @@ async def import_multi_supplier(
         if approval_token or confirm_import:
             raise HTTPException(status_code=400, detail="Anteprima e conferma devono essere richieste separatamente")
 
+        # Resolve existing suppliers read-only; new suppliers remain only proposals.
+        preview_supplier_ids: dict[str, int | None] = {}
+        for name in parse_result.suppliers_detected:
+            found = (await db.execute(
+                select(Fornitore).where(func.lower(Fornitore.nome_azienda) == name.lower())
+            )).scalar_one_or_none()
+            if found is None:
+                piva = generate_deterministic_piva(name)
+                found = (await db.execute(
+                    select(Fornitore).where(Fornitore.partita_iva == piva)
+                )).scalar_one_or_none()
+                if found and found.nome_azienda.strip().casefold() != name.strip().casefold():
+                    raise HTTPException(status_code=409, detail="Identità fornitore ambigua: verifica il fornitore prima dell'anteprima")
+            preview_supplier_ids[name] = found.id if found else None
+
+        commercial_today = datetime.now(ZoneInfo("Europe/Rome")).date()
+        comparison, contract_snapshot, baseline_digest, comparison_errors = await _build_comparative_contract_context(
+            db, parse_result.records, preview_supplier_ids, commercial_today
+        )
+        if comparison_errors:
+            return {
+                "mode": "validation_failed",
+                **parse_result.to_dict(),
+                "errors": [
+                    {"row": 0, "column": "CONTRATTO", "message": message}
+                    for message in comparison_errors
+                ],
+                "errors_count": len(comparison_errors),
+                "records_preview": [],
+                "preview_token": None,
+            }
+
         # Preview writes ONLY the control record. No supplier or contract changes.
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(minutes=15)
@@ -233,6 +363,8 @@ async def import_multi_supplier(
                 "file_sha256": digest,
                 "total_rows": parse_result.total_rows,
                 "suppliers_detected": parse_result.suppliers_detected,
+                "contract_snapshot": contract_snapshot,
+                "baseline_digest": baseline_digest,
             },
             status="ready",
             location_id=None,
@@ -249,6 +381,7 @@ async def import_multi_supplier(
                 "sub": str(_admin.id),
                 "tid": tenant_id,
                 "sha256": digest,
+                "baseline": baseline_digest,
                 "exp": int(expires_at.timestamp()),
             },
             settings.SECRET_KEY, algorithm=settings.ALGORITHM,
@@ -262,6 +395,7 @@ async def import_multi_supplier(
                     "descrizione": record["descrizione"],
                     "unita_misura": record["unita_misura"],
                     "prezzi": {supplier: str(price) for supplier, price in record["prezzi"].items()},
+                    "confronti": comparison[record["sku_interno"]],
                 }
                 for record in parse_result.records
             ],
@@ -348,9 +482,23 @@ async def import_multi_supplier(
                 await db.flush()
         suppliers_map[name] = forn
 
-    inserted = updated = skipped = 0
-    # Agreements use the commercial calendar of the Italian venues, not the host's UTC date.
+    # Detect any contract/history change since the administrator reviewed the preview.
     today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    current_ids = {name: supplier.id for name, supplier in suppliers_map.items()}
+    _, _, current_baseline_digest, context_errors = await _build_comparative_contract_context(
+        db, parse_result.records, current_ids, today
+    )
+    if (
+        preview.preview_payload.get("baseline_digest") != current_baseline_digest
+        or claims.get("baseline") != current_baseline_digest
+        or context_errors
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Il contratto è cambiato dopo l'anteprima o non è più univoco. Ricarica il file e verifica il nuovo confronto.",
+        )
+
+    inserted = updated = skipped = 0
     for record in parse_result.records:
         for name, price in record["prezzi"].items():
             fornitore_id = suppliers_map[name].id
