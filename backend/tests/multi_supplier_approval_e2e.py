@@ -15,7 +15,10 @@ from openpyxl import Workbook
 from sqlalchemy import text
 from starlette.datastructures import UploadFile
 
-from app.api.v1.listino import import_multi_supplier
+from app.api.v1.listino import (
+    import_multi_supplier, import_listino_excel, import_from_invoices_direct,
+    create_listino, aggiorna_prezzo_listino, delete_listino_fornitore,
+)
 from app.config import settings
 from app.database import async_session_factory
 
@@ -85,6 +88,32 @@ async def run() -> None:
     raw = workbook_bytes()
     alt = workbook_bytes(3.1)
     check("starts without suppliers or contracts", await count("fornitori") == 0 and await count("listino_master") == 0)
+
+    # Five legacy mutation routes must fail BEFORE reading or writing to a DB.
+    # All fixture identities and invoice prices are synthetic.
+    async with async_session_factory() as db:
+        prohibited = (
+            ("unreviewed manual contract creation", create_listino(
+                data=None, _admin=ADMIN, db=db,
+            )),
+            ("standard Excel writes without approval", import_listino_excel(
+                fornitore_id=999, file=UploadFile(filename="listino-ci.xlsx", file=BytesIO(raw)),
+                dry_run=False, _admin=ADMIN, db=db,
+            )),
+            ("unapproved invoiced price promotion", import_from_invoices_direct(
+                fornitore_id=999, price_strategy="latest", _admin=ADMIN, db=db,
+            )),
+            ("permanent deletion of historic contract prices", delete_listino_fornitore(
+                fornitore_id=999, _admin=ADMIN, db=db,
+            )),
+            ("unreviewed manual price update", aggiorna_prezzo_listino(
+                listino_id=999, data=None, _admin=ADMIN, db=db,
+            )),
+        )
+        for label, request in prohibited:
+            await denied(label, request, 409)
+    check("blocked legacy writes did not touch suppliers or contract history",
+          await count("fornitori") == 0 and await count("listino_master") == 0)
 
     await denied("direct write without token prohibited", call(raw, dry_run=False, confirm=True))
     check("direct write denial performed no business writes", await count("fornitori") == 0 and await count("listino_master") == 0)
