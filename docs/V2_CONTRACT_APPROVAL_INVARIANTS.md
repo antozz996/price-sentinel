@@ -16,6 +16,7 @@ Il modello attuale memorizza date `DATE` senza ora. Per impedire sovrapposizioni
 | --- | --- | --- |
 | Nuovo prodotto senza accordi applicabili | Oggi | N/A |
 | Cambio prezzo o UoM di contratto attivo | Domani | Oggi incluso |
+| Nuovo accordo approvato | 30 giorni di calendario, decorrenza inclusa | Scade alla fine del 30° giorno |
 | Seconda modifica prima dell'inizio di un prezzo futuro | Bloccata 409 | Nessuna modifica |
 | Conflitto con intervallo già presente nello storico | Bloccato 409 | Nessuna modifica |
 
@@ -24,7 +25,7 @@ La selezione del contratto per una fattura richiede **esattamente una** versione
 **Limitazione del modello:** l'import da file comparativo non implementa una data di decorrenza scelta da utente o un'approvazione con ora. Pertanto un cambio accettato oggi è applicabile alle fatture datate **domani**, non alle fatture datate oggi. La regola va mantenuta esplicita in anteprima.
 
 ## 3. Validità mensile
-Gli accordi vengono spesso negoziati mensilmente, ma **non devono scadere automaticamente dopo 30 giorni**: restano applicabili fino a una nuova revisione approvata, salvo presenza di una scadenza esplicita prevista dal contratto. La gestione delle scadenze esplicite non è ancora completa in questa PR.
+La regola commerciale per Price Sentinel è una validità garantita di **30 giorni di calendario, inclusa la data di decorrenza**. Alla scadenza il prezzo non è più applicabile automaticamente alle nuove fatture: il documento resta senza prezzo contrattuale e passa a revisione fino a una nuova approvazione. Un rinnovo è una nuova revisione append-only, non un'estensione silenziosa dello storico.
 
 ## 4. Sicurezza / limiti
 - Qualsiasi approvazione che tenti un inserimento ambiguo fallisce prima del commit. Transazione atomica e advisory lock restano attivi.
