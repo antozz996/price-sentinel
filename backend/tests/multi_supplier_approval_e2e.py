@@ -201,7 +201,10 @@ async def run() -> None:
           await count("listino_master") == 3)
     async with async_session_factory() as db:
         active = (await db.execute(text(
-            "SELECT count(*) FROM listino_master WHERE data_scadenza IS NULL"
+            """SELECT count(*) FROM listino_master
+               WHERE data_inizio_validita <= :today
+                 AND (data_scadenza IS NULL OR data_scadenza >= :today)""",
+            {"today": datetime.now(ZoneInfo("Europe/Rome")).date()},
         ))).scalar_one()
     check("single active record per supplier after concurrent approvals", active == 2)
 
@@ -224,12 +227,22 @@ async def run() -> None:
               and versions[0][2] == today
               and float(versions[1][0]) == 3.1
               and versions[1][1] == tomorrow
-              and versions[1][2] is None)
+              and versions[1][2] == tomorrow + timedelta(days=29))
         billed_today = await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", today.isoformat())
         billed_tomorrow = await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", tomorrow.isoformat())
-        check("today's invoice uses old agreed price, tomorrow's uses new agreed price",
+        check("today's invoice uses old price; tomorrow uses new price for its 30-day term",
               billed_today is not None and float(billed_today.prezzo_pattuito) == 2.5
               and billed_tomorrow is not None and float(billed_tomorrow.prezzo_pattuito) == 3.1)
+        expires_on = tomorrow + timedelta(days=29)
+        billed_on_expiry = await _get_listino_attivo(
+            db, marr_id, "POMODORI-PELATI", expires_on.isoformat()
+        )
+        billed_after_expiry = await _get_listino_attivo(
+            db, marr_id, "POMODORI-PELATI", (expires_on + timedelta(days=1)).isoformat()
+        )
+        check("30-day contract covers its last day and expires the following day",
+              billed_on_expiry is not None and float(billed_on_expiry.prezzo_pattuito) == 3.1
+              and billed_after_expiry is None)
         currently_visible = await list_listino(
             response=Response(), fornitore_id=marr_id, include_scaduti=False,
             limit=50, offset=0, _user=ADMIN, db=db,
