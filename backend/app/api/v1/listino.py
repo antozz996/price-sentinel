@@ -262,7 +262,9 @@ async def import_multi_supplier(
             "expires_at": expires_at.isoformat(),
             "warning": (
                 "I nuovi fornitori vengono creati provvisori e disabilitati, "
-                "con Partita IVA tecnica da verificare prima dell'attivazione commerciale."
+                "con Partita IVA tecnica da verificare prima dell'attivazione commerciale. "
+                "I nuovi prezzi partono oggi; le variazioni di accordi esistenti decorrono "
+                "da domani per evitare sovrapposizioni nelle fatture datate oggi."
             ),
         }
 
@@ -349,6 +351,7 @@ async def import_multi_supplier(
                     ListinoMaster.data_scadenza.is_(None),
                 ).with_for_update()
             )).scalar_one_or_none()
+            effective_date = today
             if existing_listino:
                 if (
                     existing_listino.prezzo_pattuito == price
@@ -356,7 +359,37 @@ async def import_multi_supplier(
                 ):
                     skipped += 1
                     continue
+                # Date-only contract history: the old price remains applicable
+                # to invoices dated today; updated terms start tomorrow.
+                # A second different change before an already-scheduled price
+                # has begun would be ambiguous, so reject the entire import.
+                if existing_listino.data_inizio_validita > today:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Esiste già un aggiornamento con decorrenza futura: attendi la sua validità o richiedi una revisione contrattuale.",
+                    )
                 existing_listino.data_scadenza = today
+                effective_date = today + timedelta(days=1)
+
+            # Legacy contracts can already have overlapping date intervals.
+            # Never silently insert another contract into an ambiguous interval.
+            overlapping = (await db.execute(
+                select(ListinoMaster.id).where(
+                    ListinoMaster.fornitore_id == fornitore_id,
+                    ListinoMaster.sku_interno == record["sku_interno"],
+                    ListinoMaster.data_inizio_validita <= effective_date,
+                    (ListinoMaster.data_scadenza.is_(None)) |
+                    (ListinoMaster.data_scadenza >= effective_date),
+                    *([ListinoMaster.id != existing_listino.id] if existing_listino else []),
+                ).limit(1)
+            )).scalar_one_or_none()
+            if overlapping is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Intervalli di validità sovrapposti nello storico del prodotto: importazione bloccata per revisione.",
+                )
+
+            if existing_listino:
                 updated += 1
             else:
                 inserted += 1
@@ -366,7 +399,7 @@ async def import_multi_supplier(
                 descrizione=record["descrizione"],
                 prezzo_pattuito=price,
                 unita_misura=record["unita_misura"],
-                data_inizio_validita=today,
+                data_inizio_validita=effective_date,
                 data_scadenza=None,
                 pfa_tipo=None,
                 pfa_valore=None,
