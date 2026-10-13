@@ -131,6 +131,7 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
 
     # Trova le colonne dei fornitori
     supplier_cols: list[tuple[int, str]] = [] # list of (col_index, supplier_name)
+    seen_supplier_names: set[str] = set()
     for idx, h in enumerate(headers):
         if not h:
             continue
@@ -140,6 +141,13 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
             continue
         if idx == fornitore_scelto_idx:
             continue
+        normalized_supplier = h.strip().casefold()
+        if normalized_supplier in seen_supplier_names:
+            result.errors.append(MultiExcelValidationError(
+                header_row_idx, h, "Colonna fornitore duplicata: rinomina o rimuovi la colonna."
+            ))
+            continue
+        seen_supplier_names.add(normalized_supplier)
         supplier_cols.append((idx, h))
         result.suppliers_detected.append(h)
 
@@ -152,6 +160,7 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
 
     # 3. Leggi i dati a partire dalla riga successiva all'intestazione
     data_start = header_row_idx + 1
+    seen_skus: dict[str, int] = {}
 
     for row_idx, row in enumerate(
         ws.iter_rows(min_row=data_start, values_only=True),
@@ -180,6 +189,18 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
             uom_str = "Pz"
 
         sku = generate_stable_sku(prod_desc)
+        if not sku or len(sku) > 100:
+            result.errors.append(MultiExcelValidationError(
+                row_idx, "PRODOTTO", "Codice SKU generato vuoto o superiore a 100 caratteri."
+            ))
+            continue
+        if sku in seen_skus:
+            result.errors.append(MultiExcelValidationError(
+                row_idx, "PRODOTTO",
+                f"SKU duplicato: stessa identità della riga {seen_skus[sku]}. Unifica le quotazioni prima di importare."
+            ))
+            continue
+        seen_skus[sku] = row_idx
 
         # Estrai i prezzi dei fornitori
         prezzi_fornitori = {}
@@ -191,14 +212,18 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
                 continue
                 
             price_raw_str = str(price_val).strip()
-            match_num = re.search(r'([0-9]+(?:[.,][0-9]+)?)', price_raw_str)
-            if not match_num:
+            # Never extract a positive substring from a negative, a percentage,
+            # a mixed-unit string or a value with excess decimal precision.
+            # Excel numeric cells and simple Italian/English monetary strings are allowed.
+            price_clean = re.sub(r"^(?:€|EUR)\s*", "", price_raw_str, flags=re.IGNORECASE)
+            price_clean = re.sub(r"\s*(?:€|EUR)$", "", price_clean, flags=re.IGNORECASE).strip()
+            if not re.fullmatch(r"[0-9]+(?:[.,][0-9]{1,4})?", price_clean):
                 result.errors.append(
                     MultiExcelValidationError(row_idx, supplier_name, f"Formato prezzo non valido: '{price_val}'")
                 )
                 continue
 
-            price_str = match_num.group(1).replace(",", ".")
+            price_str = price_clean.replace(",", ".")
             try:
                 price_dec = Decimal(price_str)
                 if price_dec <= 0:
@@ -227,4 +252,8 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
             })
 
     wb.close()
+    if not result.records:
+        result.errors.append(MultiExcelValidationError(
+            header_row_idx, "PREZZI", "Nessuna quotazione valida: importazione senza prezzi vietata."
+        ))
     return result

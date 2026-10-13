@@ -24,7 +24,7 @@ SECOND_USER = SimpleNamespace(id=2, tenant_id=1)
 SECOND_TENANT = SimpleNamespace(id=3, tenant_id=2)
 
 
-def workbook_bytes(price: float = 2.5, count: int = 1) -> bytes:
+def workbook_bytes(price: float | str = 2.5, count: int = 1) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.append(["PRODOTTO", "UNITA DI MISURA", "MARR", "DAC"])
@@ -88,6 +88,23 @@ async def run() -> None:
 
     await denied("direct write without token prohibited", call(raw, dry_run=False, confirm=True))
     check("direct write denial performed no business writes", await count("fornitori") == 0 and await count("listino_master") == 0)
+
+    # Invalid comparative offers must not even issue an approval token.
+    # DAC remains valid in the fixture, so accepting a partial preview would be unsafe.
+    for unsafe_value in ("-2,50", "2.12345", "circa 2,50"):
+        rejected = await call(workbook_bytes(price=unsafe_value))
+        check(
+            f"unsafe supplier quote {unsafe_value!r} cannot produce an approval",
+            rejected["mode"] == "validation_failed"
+            and rejected["errors_count"] > 0
+            and "preview_token" not in rejected,
+        )
+    check(
+        "rejected Excel previews create no approval metadata or business rows",
+        await count("smart_price_sheet_previews") == 0
+        and await count("fornitori") == 0
+        and await count("listino_master") == 0,
+    )
 
     preview = await call(raw)
     check("preview returns signed token and rows", preview["mode"] == "dry_run"

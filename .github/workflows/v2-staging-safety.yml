@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - staging/price-sentinel-v2
+  pull_request:
+    branches:
+      - staging/price-sentinel-v2
   workflow_dispatch:
 
 permissions:
