@@ -1,14 +1,14 @@
 # Price Sentinel — Google Sheets Sync Engine (design esecutivo v1)
 
-**Stato:** specifica tecnica; nessun connettore attivo, nessun deploy o aggiornamento DB.
+**Stato:** reader e dry-run multi-settore implementati; nessun collegamento operativo nell'interfaccia, nessun deploy o aggiornamento DB.
 **Decisione di business (2026-10-09):** Price Sentinel e' il sistema autorevole per i prezzi pattuiti e il controllo fatture. LiquidStock e' dismesso. Gli accordi hanno cadenza normalmente mensile, ma **rimangono validi fino al nuovo listino approvato, a meno che sia indicata una scadenza esplicita**. Nessuna scadenza automatica a 30 giorni.
 
 ## Confini e fonti di verita'
 
-- Google Sheets FOOD + Gemini: raccolta e bonifica dei listini ricevuti; e' un'area di lavoro e non un contratto in se'.
+- Il Google Sheet santo graal registra prezzi fornitore gia' pattuiti dall'utente. Ogni valore numerico valido e' candidato a prezzo pattuito; Price Sentinel resta autorevole per attivazione, approvazione e storico.
 - Price Sentinel: catalogo canonico, identita' del fornitore, accordi accettati, storico prezzi e controllo delle fatture.
 - In una successiva fase, un portale fornitori inviera' proposte usando **la medesima API di staging e approvazione**. Nessun fornitore modifica direttamente un accordo in vigore.
-- Le quotazioni spot o di mercato restano distinte dai prezzi **pattuiti**. I prezzi estratti dalle fatture non riscrivono automaticamente i pattuiti.
+- I prezzi pattuiti del foglio restano distinti da eventuali quotazioni spot o di mercato esterne. I prezzi estratti dalle fatture non riscrivono automaticamente i pattuiti.
 
 ## Contratto economico e validita'
 
@@ -31,7 +31,7 @@ Per ciascuna coppia `product_id + supplier_id` (e ove necessario `location_id`, 
 - `CONTROLLO_ESCLUSIONI!A:F`: righe, prodotti, fornitori, prezzi, motivazione, stato; sei quotazioni ORIZZONTI inizialmente non comparabili.
 - 240 referenze dichiarate: 201 con due o piu' fornitori numerici, 34 con uno, 5 senza; questi sono conteggi del foglio, non una verifica automatica di equivalenza commerciale.
 
-Il connettore legge **valori non formattati**, metadati e note (per prezzi/confezioni originarie). Valori di formula non numerici, stringhe "NO", vuoti e prezzi di mercato non sono pattuiti aggiornabili. Le righe del foglio possono essere spostate: i **numeri di riga non sono ID persistenti**. Creare una mapping registry in Price Sentinel `(spreadsheet_id, sheet_id, source_product_key, product_id, supplier_key, supplier_id)`, inizialmente approvata dall'operatore. Non riassegnare prodotti con matching fuzzy automatico.
+Il connettore legge **valori non formattati**, metadati e note (per prezzi/confezioni originarie). I valori numerici nelle colonne fornitore rappresentano prezzi pattuiti secondo la conferma dell'utente. Valori di formula non numerici, stringhe "NO", vuoti, celle derivate e dati non comparabili restano esclusi o in revisione. Le righe del foglio possono essere spostate: i **numeri di riga non sono ID persistenti**. Creare una mapping registry in Price Sentinel `(spreadsheet_id, sheet_id, source_product_key, product_id, supplier_key, supplier_id)`, inizialmente approvata dall'operatore. Non riassegnare prodotti con matching fuzzy automatico.
 
 ## Connettore
 
@@ -56,7 +56,7 @@ Il connettore legge **valori non formattati**, metadati e note (per prezzi/confe
 
 Altrimenti il dato rimane *needs_approval* o *blocked*. Le soglie economiche sono configurabili per fornitore/categoria/periodo; **nessuna soglia unica hardcoded**. Un prezzo escluso nel foglio puo' tornare a *comparabile* solo dopo conferma in Price Sentinel. Nuove referenze, nuovi fornitori, alias ambigui e cambio di marca/composizione non si auto-creano.
 
-**Importante:** una quotazione ben formata non diventa prezzo pattuito se manca la prova di accordo o la policy di pre-autorizzazione. Per il primo rilascio: riconciliazione iniziale e attivazione per fornitore con conferma esplicita dell'acquirente; solo gli aggiornamenti successivi coperti da regole autorizzate possono essere automatici.
+**Importante:** il dato sorgente e' gia' pattuito secondo la regola operativa confermata dall'utente; questo non autorizza l'attivazione automatica. Ogni nuova versione entra nel listino master solo dopo validazione e approvazione esplicita in Price Sentinel. La normalizzazione delle unità di misura resta una fase successiva.
 
 ## API proposte (da implementare, non ancora esistenti)
 
