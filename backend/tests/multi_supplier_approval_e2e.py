@@ -6,7 +6,8 @@ run_ci_disposable_e2e.py. No existing V1/V2 staging data is touched.
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -204,7 +205,8 @@ async def run() -> None:
     check("single active record per supplier after concurrent approvals", active == 2)
 
     # Immutable date-only history: revisions approved today take effect tomorrow.
-    today, tomorrow = date.today(), date.today() + timedelta(days=1)
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    tomorrow = today + timedelta(days=1)
     async with async_session_factory() as db:
         marr_id = (await db.execute(text(
             "SELECT id FROM fornitori WHERE nome_azienda='MARR'"
