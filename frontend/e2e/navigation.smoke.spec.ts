@@ -102,7 +102,7 @@ test('comparative price import previews data and requires explicit confirmation 
   await expect(confirmButton).toHaveCSS('opacity', '0.55')
   await expect(confirmButton).toHaveCSS('cursor', 'not-allowed')
   expect(dryRunModes).toEqual(['true'])
-  await page.getByRole('checkbox', { name: /Ho verificato righe e fornitori/ }).check()
+  await page.getByRole('checkbox', { name: /Ho verificato prezzo pattuito, proposta, delta/ }).check()
   await page.getByRole('button', { name: 'Conferma e importa' }).click()
   await expect(page.getByText(/Importato con successo/)).toBeVisible()
   expect(dryRunModes).toEqual(['true', 'false'])
