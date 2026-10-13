@@ -271,8 +271,9 @@ async def import_multi_supplier(
             "warning": (
                 "I nuovi fornitori vengono creati provvisori e disabilitati, "
                 "con Partita IVA tecnica da verificare prima dell'attivazione commerciale. "
+                "Ogni accordo approvato vale 30 giorni di calendario, inclusa la decorrenza. "
                 "I nuovi prezzi partono oggi; le variazioni di accordi esistenti decorrono "
-                "da domani per evitare sovrapposizioni nelle fatture datate oggi."
+                "da domani e valgono 30 giorni, così le fatture di oggi restano sul prezzo precedente."
             ),
         }
 
@@ -409,7 +410,9 @@ async def import_multi_supplier(
                 prezzo_pattuito=price,
                 unita_misura=record["unita_misura"],
                 data_inizio_validita=effective_date,
-                data_scadenza=None,
+                # Commercial policy: every approved agreement is guaranteed for
+                # 30 calendar days, inclusive of its effective date.
+                data_scadenza=effective_date + timedelta(days=29),
                 pfa_tipo=None,
                 pfa_valore=None,
             ))
