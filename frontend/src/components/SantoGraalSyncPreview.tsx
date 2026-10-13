@@ -1,0 +1,232 @@
+import { useState } from 'react'
+import { fetchWithAuth } from '../api'
+
+const GOOGLE_CLIENT_ID = '52128477187-k0hkvu9vj0v3sbk7tf07rehhvosg0ors.apps.googleusercontent.com'
+const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
+const GOOGLE_API = 'https://sheets.googleapis.com/v4/spreadsheets'
+
+const SOURCE_RANGES = [
+  { title: 'FOOD', range: "'FOOD'!A1:J1000" },
+  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:L1000" },
+  { title: 'COMPARAZIONE MATERIALI', range: "'COMPARAZIONE MATERIALI'!A1:N1000" },
+  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:J1000" },
+  { title: 'GIOCATTOLI', range: "'GIOCATTOLI'!A1:O1000" },
+  { title: 'CONTROLLO_ESCLUSIONI', range: "'CONTROLLO_ESCLUSIONI'!A1:F100" },
+]
+
+type Candidate = {
+  source_sheet: string
+  source_cell: string
+  product: string
+  supplier: string
+  quoted_value: unknown
+  status: string
+  reasons: string[]
+}
+type SectorSummary = {
+  sector: string
+  tab: string
+  products: number
+  quotes: number
+  excluded: number
+  blocked: number
+  review: number
+  skipped_empty: number
+}
+type DryRunReport = {
+  candidate_count: number
+  missing_sources: string[]
+  warnings: unknown[]
+  no_contract_writes: boolean
+  rules: { price_semantics: string; auto_commit_enabled: boolean }
+  sector_summary: SectorSummary[]
+  candidates: Candidate[]
+}
+
+function spreadsheetIdFromUrl(value: string): string {
+  const match = value.match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/)
+  if (!match) throw new Error('Incolla il link del Google Sheet “santo graal”.')
+  return match[1]
+}
+
+function loadGoogleIdentityServices(): Promise<void> {
+  const google = (window as any).google
+  if (google?.accounts?.oauth2) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity-services]')
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true })
+      existing.addEventListener('error', () => reject(new Error('Impossibile caricare il login Google.')), { once: true })
+      return
+    }
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    script.async = true
+    script.defer = true
+    script.dataset.googleIdentityServices = 'true'
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Impossibile caricare il login Google.'))
+    document.head.appendChild(script)
+  })
+}
+
+function requestReadToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const google = (window as any).google
+    if (!google?.accounts?.oauth2) {
+      reject(new Error('Servizio di autorizzazione Google non disponibile.'))
+      return
+    }
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: GOOGLE_SCOPE,
+      callback: (response: any) => {
+        if (response?.error || !response?.access_token) {
+          reject(new Error(response?.error_description || response?.error || 'Accesso Google non completato.'))
+          return
+        }
+        resolve(response.access_token as string)
+      },
+      error_callback: (error: any) => reject(new Error(error?.message || 'Popup Google non disponibile.')),
+    })
+    client.requestAccessToken({ prompt: 'consent' })
+  })
+}
+
+async function googleGet(url: string, token: string): Promise<any> {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Authorization: 'Bearer ' + token },
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    const message = body?.error?.message || 'Google Sheets ha restituito HTTP ' + response.status
+    throw new Error(message)
+  }
+  return response.json()
+}
+
+export default function SantoGraalSyncPreview() {
+  const [sourceUrl, setSourceUrl] = useState(() => localStorage.getItem('ps.santo-graal.url') || '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [report, setReport] = useState<DryRunReport | null>(null)
+
+  async function runReadOnlyPreview() {
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    setReport(null)
+    let token: string | null = null
+    try {
+      localStorage.setItem('ps.santo-graal.url', sourceUrl.trim())
+      const spreadsheetId = spreadsheetIdFromUrl(sourceUrl.trim())
+      await loadGoogleIdentityServices()
+      token = await requestReadToken()
+
+      const metadataUrl = GOOGLE_API + '/' + encodeURIComponent(spreadsheetId)
+        + '?fields=' + encodeURIComponent('spreadsheetId,properties(title),sheets.properties(title)')
+      const metadata = await googleGet(metadataUrl, token)
+      const title = String(metadata?.properties?.title || '')
+      if (title.trim().toLocaleLowerCase() !== 'santo graal') {
+        throw new Error('Il file selezionato non è il Google Sheet “santo graal”.')
+      }
+
+      const sheetTitles = new Set((metadata.sheets || []).map((sheet: any) => sheet?.properties?.title))
+      const missing = SOURCE_RANGES.map(item => item.title).filter(title => !sheetTitles.has(title))
+      if (missing.length) {
+        throw new Error('Mancano schede richieste: ' + missing.join(', '))
+      }
+
+      const params = new URLSearchParams()
+      SOURCE_RANGES.forEach(item => params.append('ranges', item.range))
+      params.set('valueRenderOption', 'UNFORMATTED_VALUE')
+      const valuesUrl = GOOGLE_API + '/' + encodeURIComponent(spreadsheetId)
+        + '/values:batchGet?' + params.toString()
+      const valuesResponse = await googleGet(valuesUrl, token)
+      const values: Record<string, unknown[][]> = {}
+      const ranges = valuesResponse?.valueRanges || []
+      if (ranges.length !== SOURCE_RANGES.length) {
+        throw new Error('Google ha restituito un insieme incompleto di schede. Nessun dato è stato importato.')
+      }
+      SOURCE_RANGES.forEach((item, index) => {
+        values[item.title] = ranges[index]?.values || []
+      })
+
+      const preview = await fetchWithAuth('/smart-price-sheet/google-dry-run', {
+        method: 'POST',
+        body: JSON.stringify({ spreadsheet_id: spreadsheetId, title, values }),
+      }) as DryRunReport
+      setReport(preview)
+      setNotice('Lettura completata. È un’anteprima: nessun prezzo è stato scritto o attivato.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Importazione non riuscita.')
+    } finally {
+      if (token) {
+        try { (window as any).google?.accounts?.oauth2?.revoke(token, () => undefined) } catch { /* token remains memory-only */ }
+      }
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="glass-panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <h3 style={{ margin: 0 }}>Collega il Santo Graal</h3>
+        <p style={{ color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: 900 }}>
+          Legge le schede sorgente in sola lettura e prepara un controllo. I prezzi inseriti sono considerati pattuiti; l’anteprima non li attiva nel listino. Le unità di misura non vengono convertite in questa fase.
+        </p>
+      </div>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 900 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Link Google Sheet</span>
+        <input
+          value={sourceUrl}
+          onChange={event => setSourceUrl(event.target.value)}
+          placeholder="https://docs.google.com/spreadsheets/d/…"
+          style={{ padding: '10px 12px', background: 'rgba(255,255,255,.035)', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}
+          autoComplete="off"
+        />
+      </label>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn btn-primary" disabled={busy || !sourceUrl.trim()} onClick={() => void runReadOnlyPreview()}>
+          {busy ? 'Lettura e controllo…' : 'Accedi a Google e prepara anteprima'}
+        </button>
+        <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
+          Scope richiesto: spreadsheets.readonly · il token resta in memoria e viene revocato al termine
+        </span>
+      </div>
+      {error && <div role="alert" style={{ color: '#fca5a5', padding: 10, border: '1px solid rgba(248,113,113,.35)', borderRadius: 8 }}>{error}</div>}
+      {notice && <div role="status" style={{ color: '#6ee7b7', padding: 10, border: '1px solid rgba(110,231,183,.3)', borderRadius: 8 }}>{notice}</div>}
+      {report && <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 8 }}>
+          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.candidate_count}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>righe prezzo rilevate</div></div>
+          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.review, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>da approvare o verificare</div></div>
+          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.blocked, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>bloccate dai controlli</div></div>
+          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.warnings.length}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>avvisi</div></div>
+        </div>
+        {report.missing_sources.length > 0 && <div role="alert" style={{ color: '#fca5a5' }}>Schede mancanti: {report.missing_sources.join(', ')}</div>}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
+            <thead><tr>{['Settore', 'Cella', 'Prodotto', 'Fornitore', 'Prezzo', 'Esito', 'Motivi'].map(label => <th key={label} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid var(--border-glass)' }}>{label}</th>)}</tr></thead>
+            <tbody>
+              {report.candidates.slice(0, 40).map(item => (
+                <tr key={item.source_sheet + item.source_cell}>
+                  <td style={{ padding: 8 }}>{item.source_sheet}</td>
+                  <td style={{ padding: 8 }}>{item.source_cell}</td>
+                  <td style={{ padding: 8 }}>{item.product}</td>
+                  <td style={{ padding: 8 }}>{item.supplier}</td>
+                  <td style={{ padding: 8 }}>{String(item.quoted_value ?? '—')}</td>
+                  <td style={{ padding: 8, color: item.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>{item.status}</td>
+                  <td style={{ padding: 8, color: 'var(--text-secondary)' }}>{item.reasons.join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {report.candidates.length > 40 && <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Mostro le prime 40 righe: il riepilogo include tutte le {report.candidates.length} righe rilevate.</p>}
+        </div>
+        <strong style={{ color: '#6ee7b7' }}>Nessuna modifica al foglio o al listino Price Sentinel.</strong>
+      </>}
+    </section>
+  )
+}
