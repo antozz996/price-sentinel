@@ -194,6 +194,7 @@ async def run() -> None:
     simultaneous = await asyncio.gather(
         call(alt, dry_run=False, token=first_new["preview_token"], confirm=True),
         call(alt, dry_run=False, token=second_new["preview_token"], confirm=True),
+        return_exceptions=True,
     )
     successful = [result for result in simultaneous if isinstance(result, dict) and result.get("mode") == "imported"]
     stale_refusals = [result for result in simultaneous if isinstance(result, HTTPException) and result.status_code == 409]
