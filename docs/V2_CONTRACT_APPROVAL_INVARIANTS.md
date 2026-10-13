@@ -25,7 +25,7 @@ La selezione del contratto per una fattura richiede **esattamente una** versione
 **Limitazione del modello:** l'import da file comparativo non implementa una data di decorrenza scelta da utente o un'approvazione con ora. Pertanto un cambio accettato oggi è applicabile alle fatture datate **domani**, non alle fatture datate oggi. La regola va mantenuta esplicita in anteprima.
 
 ## 3. Validità mensile
-La regola commerciale per Price Sentinel è una validità garantita di **30 giorni di calendario, inclusa la data di decorrenza**. Alla scadenza il prezzo non è più applicabile automaticamente alle nuove fatture: il documento resta senza prezzo contrattuale e passa a revisione fino a una nuova approvazione. Un rinnovo è una nuova revisione append-only, non un'estensione silenziosa dello storico.
+La regola commerciale per Price Sentinel è una validità garantita di **30 giorni di calendario, inclusa la data di decorrenza**. Alla scadenza il prezzo non è più applicabile automaticamente alle nuove fatture: il documento resta senza prezzo contrattuale e passa a revisione fino a una nuova approvazione. Un rinnovo è una nuova revisione append-only, non un'estensione silenziosa dello storico. Il sistema non rinnova né proroga un accordo alla scadenza; il rinnovo richiede un nuovo file, un'anteprima aggiornata e una nuova conferma firmata.
 
 ## 4. Sicurezza / limiti
 - Qualsiasi approvazione che tenti un inserimento ambiguo fallisce prima del commit. Transazione atomica e advisory lock restano attivi.
