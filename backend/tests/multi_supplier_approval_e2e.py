@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from io import BytesIO
 from types import SimpleNamespace
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from jose import jwt
 from openpyxl import Workbook
 from sqlalchemy import text
@@ -20,6 +20,7 @@ from starlette.datastructures import UploadFile
 from app.api.v1.listino import (
     import_multi_supplier, import_listino_excel, import_from_invoices_direct,
     create_listino, aggiorna_prezzo_listino, delete_listino_fornitore,
+    list_listino,
 )
 from app.config import settings
 from app.database import async_session_factory
@@ -229,6 +230,13 @@ async def run() -> None:
         check("today's invoice uses old agreed price, tomorrow's uses new agreed price",
               billed_today is not None and float(billed_today.prezzo_pattuito) == 2.5
               and billed_tomorrow is not None and float(billed_tomorrow.prezzo_pattuito) == 3.1)
+        currently_visible = await list_listino(
+            response=Response(), fornitore_id=marr_id, include_scaduti=False,
+            limit=50, offset=0, _user=ADMIN, db=db,
+        )
+        check("listino dashboard shows only today's price, not tomorrow's pending revision",
+              len(currently_visible) == 1
+              and float(currently_visible[0].prezzo_pattuito) == 2.5)
         check("malformed invoice date cannot silently select today's contract",
               await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", "date-is-invalid") is None)
 
