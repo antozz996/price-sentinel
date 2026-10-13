@@ -314,8 +314,8 @@ async def run() -> None:
           Decimal(marr_offer["prezzo_corrente"]) == Decimal("3.1")
           and Decimal(marr_offer["prezzo_proposto"]) == Decimal("4.0")
           and Decimal(marr_offer["delta_unitario"]) == Decimal("0.9")
-          and marr_offer["decorrenza_proposta"] == today.isoformat()
-          and marr_offer["scadenza_proposta"] == (today + timedelta(days=29)).isoformat())
+          and marr_offer["decorrenza_proposta"] == (today + timedelta(days=1)).isoformat()
+          and marr_offer["scadenza_proposta"] == (today + timedelta(days=30)).isoformat())
 
     async with async_session_factory() as db:
         async with db.begin():
