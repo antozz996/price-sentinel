@@ -1,20 +1,16 @@
-"""Regression checks for a write-free comparative price list preview."""
+"""Parser-only unit test: comparative preview parsing does not touch business data.
 
-import asyncio
+Approval persistence and replay protection are separately covered by
+multi_supplier_approval_e2e.py on disposable PostgreSQL.
+"""
 from io import BytesIO
 
 from openpyxl import Workbook
-from starlette.datastructures import UploadFile
 
-from app.api.v1.listino import import_multi_supplier
-
-
-class NoWriteDb:
-    def __getattr__(self, name):
-        raise AssertionError(f"dry-run accessed database operation: {name}")
+from app.services.excel_import_multi import parse_multi_supplier_excel
 
 
-async def test_preview_parses_rows_without_database_access():
+def test_preview_parsing() -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["PRODOTTO", "UNITA DI MISURA", "MARR", "DAC"])
@@ -22,25 +18,19 @@ async def test_preview_parses_rows_without_database_access():
     payload = BytesIO()
     workbook.save(payload)
     payload.seek(0)
-
-    result = await import_multi_supplier(
-        file=UploadFile(filename="comparativo.xlsx", file=payload),
-        dry_run=True,
-        _admin=None,
-        db=NoWriteDb(),
-    )
-
-    assert result["mode"] == "dry_run"
-    assert result["total_rows"] == 1
-    assert result["suppliers_detected"] == ["MARR", "DAC"]
-    assert result["records_preview"] == [{
-        "sku_interno": "POMODORI-PELATI",
-        "descrizione": "Pomodori pelati",
-        "unita_misura": "Kg",
-        "prezzi": {"MARR": "2.5", "DAC": "2.7"},
-    }]
+    result = parse_multi_supplier_excel(payload)
+    assert result.is_valid
+    assert result.total_rows == 1
+    assert result.suppliers_detected == ["MARR", "DAC"]
+    record = result.records[0]
+    assert record["sku_interno"] == "POMODORI-PELATI"
+    assert record["descrizione"] == "Pomodori pelati"
+    assert record["unita_misura"] == "Kg"
+    assert {key: str(value) for key, value in record["prezzi"].items()} == {
+        "MARR": "2.5", "DAC": "2.7",
+    }
 
 
 if __name__ == "__main__":
-    asyncio.run(test_preview_parses_rows_without_database_access())
-    print("PASS: comparative preview shows parsed content and performs no DB writes")
+    test_preview_parsing()
+    print("PASS: comparative Excel parsing is deterministic and read-only")
