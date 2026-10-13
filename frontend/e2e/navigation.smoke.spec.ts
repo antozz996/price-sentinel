@@ -40,7 +40,7 @@ async function mockIsolatedBackend(page: Page) {
     } else if (path === '/api/v1/listino/import-multi-supplier') {
       const dryRun = new URL(route.request().url()).searchParams.get('dry_run')
       body = dryRun === 'true'
-        ? { mode: 'dry_run', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
+        ? { mode: 'dry_run', preview_token: 'signed-synthetic-preview-token', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
         : { total_rows: 12, suppliers_detected: ['MARR', 'DAC'], inserted: 11, updated: 0, skipped_duplicates: 0 }
     }
     await route.fulfill({ status, contentType: 'application/json', body: status === 204 ? '' : JSON.stringify(body) })
@@ -78,8 +78,13 @@ test('comparative price import previews data and requires explicit confirmation 
   await page.route('**/api/v1/listino/import-multi-supplier**', async route => {
     dryRunModes.push(new URL(route.request().url()).searchParams.get('dry_run') || '')
     const dryRun = new URL(route.request().url()).searchParams.get('dry_run') === 'true'
+    if (!dryRun) {
+      const sent = route.request().postData() || ''
+      expect(sent).toContain('signed-synthetic-preview-token')
+      expect(sent).toContain('confirm_import')
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(dryRun
-      ? { mode: 'dry_run', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
+      ? { mode: 'dry_run', preview_token: 'signed-synthetic-preview-token', total_rows: 12, valid_records: 11, suppliers_detected: ['MARR', 'DAC'], errors_count: 0, errors: [], records_preview: [{ sku_interno: 'POMODORI', descrizione: 'Pomodori pelati', unita_misura: 'Kg', prezzi: { MARR: '2.50', DAC: '2.70' } }], records_preview_truncated: false }
       : { total_rows: 12, suppliers_detected: ['MARR', 'DAC'], inserted: 11, updated: 0, skipped_duplicates: 0 }) })
   })
   await login(page, 'admin@synthetic.test')
