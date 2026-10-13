@@ -741,7 +741,14 @@ export default function PriceListManager() {
                 className="btn btn-primary" 
                 disabled={uploadingMulti || !file || (!!multiPreview && !confirmMultiImport)}
                 onClick={handleUploadMulti}
-                style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '12px', opacity: (uploadingMulti || !file) ? 0.6 : 1 }}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '1rem',
+                  marginTop: '12px',
+                  opacity: (uploadingMulti || !file || (!!multiPreview && !confirmMultiImport)) ? 0.55 : 1,
+                  cursor: (uploadingMulti || !file || (!!multiPreview && !confirmMultiImport)) ? 'not-allowed' : 'pointer',
+                }}
               >
                 {uploadingMulti ? 'Caricamento in corso...' : multiPreview ? 'Conferma e importa' : 'Mostra anteprima'}
               </button>
