@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 from io import BytesIO
 from types import SimpleNamespace
@@ -310,9 +311,9 @@ async def run() -> None:
         if offer["fornitore"] == "MARR"
     )
     check("preview shows current contract, proposed price, delta and 30-day dates",
-          marr_offer["prezzo_corrente"] == "3.1000"
-          and marr_offer["prezzo_proposto"] == "4.0"
-          and marr_offer["delta_unitario"] == "0.9000"
+          Decimal(marr_offer["prezzo_corrente"]) == Decimal("3.1")
+          and Decimal(marr_offer["prezzo_proposto"]) == Decimal("4.0")
+          and Decimal(marr_offer["delta_unitario"]) == Decimal("0.9")
           and marr_offer["decorrenza_proposta"] == today.isoformat()
           and marr_offer["scadenza_proposta"] == (today + timedelta(days=29)).isoformat())
 
