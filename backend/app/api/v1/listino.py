@@ -7,6 +7,7 @@ Include gestione PFA Scaglioni, UoM Conversioni, Import/Export Excel.
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from jose import JWTError, jwt
 
@@ -75,7 +76,14 @@ async def list_listino(
         query = query.where(ListinoMaster.fornitore_id == fornitore_id)
 
     if not include_scaduti:
-        query = query.where(ListinoMaster.data_scadenza.is_(None))
+        # Display the contract legally applicable TODAY, not a pending
+        # future-dated revision that is already marked as the next open version.
+        commercial_date = datetime.now(ZoneInfo("Europe/Rome")).date()
+        query = query.where(
+            ListinoMaster.data_inizio_validita <= commercial_date,
+            (ListinoMaster.data_scadenza.is_(None)) |
+            (ListinoMaster.data_scadenza >= commercial_date),
+        )
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -262,7 +270,10 @@ async def import_multi_supplier(
             "expires_at": expires_at.isoformat(),
             "warning": (
                 "I nuovi fornitori vengono creati provvisori e disabilitati, "
-                "con Partita IVA tecnica da verificare prima dell'attivazione commerciale."
+                "con Partita IVA tecnica da verificare prima dell'attivazione commerciale. "
+                "Ogni accordo approvato vale 30 giorni di calendario, inclusa la decorrenza. "
+                "I nuovi prezzi partono oggi; le variazioni di accordi esistenti decorrono "
+                "da domani e valgono 30 giorni, così le fatture di oggi restano sul prezzo precedente."
             ),
         }
 
@@ -338,7 +349,8 @@ async def import_multi_supplier(
         suppliers_map[name] = forn
 
     inserted = updated = skipped = 0
-    today = date.today()
+    # Agreements use the commercial calendar of the Italian venues, not the host's UTC date.
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
     for record in parse_result.records:
         for name, price in record["prezzi"].items():
             fornitore_id = suppliers_map[name].id
@@ -346,9 +358,12 @@ async def import_multi_supplier(
                 select(ListinoMaster).where(
                     ListinoMaster.fornitore_id == fornitore_id,
                     ListinoMaster.sku_interno == record["sku_interno"],
-                    ListinoMaster.data_scadenza.is_(None),
-                ).with_for_update()
+                    (ListinoMaster.data_scadenza.is_(None)) |
+                    (ListinoMaster.data_scadenza >= today),
+                ).order_by(ListinoMaster.data_inizio_validita.desc())
+                 .limit(1).with_for_update()
             )).scalar_one_or_none()
+            effective_date = today
             if existing_listino:
                 if (
                     existing_listino.prezzo_pattuito == price
@@ -356,7 +371,37 @@ async def import_multi_supplier(
                 ):
                     skipped += 1
                     continue
+                # Date-only contract history: the old price remains applicable
+                # to invoices dated today; updated terms start tomorrow.
+                # A second different change before an already-scheduled price
+                # has begun would be ambiguous, so reject the entire import.
+                if existing_listino.data_inizio_validita > today:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Esiste già un aggiornamento con decorrenza futura: attendi la sua validità o richiedi una revisione contrattuale.",
+                    )
                 existing_listino.data_scadenza = today
+                effective_date = today + timedelta(days=1)
+
+            # Legacy contracts can already have overlapping date intervals.
+            # Never silently insert another contract into an ambiguous interval.
+            overlapping = (await db.execute(
+                select(ListinoMaster.id).where(
+                    ListinoMaster.fornitore_id == fornitore_id,
+                    ListinoMaster.sku_interno == record["sku_interno"],
+                    ListinoMaster.data_inizio_validita <= effective_date,
+                    (ListinoMaster.data_scadenza.is_(None)) |
+                    (ListinoMaster.data_scadenza >= effective_date),
+                    *([ListinoMaster.id != existing_listino.id] if existing_listino else []),
+                ).limit(1)
+            )).scalar_one_or_none()
+            if overlapping is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Intervalli di validità sovrapposti nello storico del prodotto: importazione bloccata per revisione.",
+                )
+
+            if existing_listino:
                 updated += 1
             else:
                 inserted += 1
@@ -366,8 +411,11 @@ async def import_multi_supplier(
                 descrizione=record["descrizione"],
                 prezzo_pattuito=price,
                 unita_misura=record["unita_misura"],
-                data_inizio_validita=today,
-                data_scadenza=None,
+                data_inizio_validita=effective_date,
+                # Commercial policy: every approved agreement is guaranteed for
+                # 30 calendar days, inclusive of its effective date. Expiry never
+                # triggers a silent renewal; it requires a new signed approval.
+                data_scadenza=effective_date + timedelta(days=29),
                 pfa_tipo=None,
                 pfa_valore=None,
             ))
