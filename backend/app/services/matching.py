@@ -539,9 +539,12 @@ async def _get_listino_attivo(
         try:
             doc_date = date_type.fromisoformat(data_documento)
         except ValueError:
-            doc_date = date_type.today()
-    else:
+            # Invalid invoice dates must NEVER fall back to today's agreement.
+            return None
+    elif isinstance(data_documento, date_type):
         doc_date = data_documento
+    else:
+        return None
 
     def active_query(alias_id: int | None = None):
         query = (
@@ -559,10 +562,17 @@ async def _get_listino_attivo(
         )
         if alias_id is not None:
             query = query.where(ListinoMaster.supplier_product_alias_id == alias_id)
-        return query.order_by(ListinoMaster.data_inizio_validita.desc()).limit(1)
+        # Two contracts valid on the same day are financially ambiguous:
+        # fetch up to 2 so we can refuse an arbitrary price selection.
+        return query.order_by(
+            ListinoMaster.data_inizio_validita.desc(), ListinoMaster.id.desc()
+        ).limit(2)
 
     if supplier_alias_id is not None:
-        exact = (await db.execute(active_query(supplier_alias_id))).scalar_one_or_none()
-        if exact is not None:
-            return exact
-    return (await db.execute(active_query())).scalar_one_or_none()
+        exact = (await db.execute(active_query(supplier_alias_id))).scalars().all()
+        if len(exact) > 1:
+            return None
+        if exact:
+            return exact[0]
+    candidates = (await db.execute(active_query())).scalars().all()
+    return candidates[0] if len(candidates) == 1 else None
