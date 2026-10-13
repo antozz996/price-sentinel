@@ -259,8 +259,10 @@ async def run() -> None:
     # A conflicting second change must not replace tomorrow's already-approved version.
     changed_twice = workbook_bytes(4.2)
     change_preview = await call(changed_twice)
-    await denied("conflicting second price change before future effective date",
-                 call(changed_twice, dry_run=False, token=change_preview["preview_token"], confirm=True), 409)
+    check("conflicting future revision is blocked before token issuance",
+          change_preview["mode"] == "validation_failed"
+          and change_preview["errors_count"] > 0
+          and not change_preview.get("preview_token"))
     check("conflicting future revisions do not add financial records",
           await count("listino_master") == 3)
 
