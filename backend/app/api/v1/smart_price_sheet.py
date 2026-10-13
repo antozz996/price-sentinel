@@ -30,6 +30,7 @@ from app.schemas.smart_price_sheet import (
     AssessmentUpsertRequest,
     CellPreviewRequest,
     ClipboardPreviewRequest,
+    GoogleSheetDryRunRequest,
     CommitPreviewRequest,
     DeviationCreateRequest,
     DeviationUpdateRequest,
@@ -41,6 +42,7 @@ from app.services.purchase_recommendation import (
     rank_supplier_offers,
 )
 from app.services.smart_price_sheet import build_price_preview, commit_price_preview
+from app.services.sheet_sync_dry_run import stage_snapshot
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
@@ -603,6 +605,22 @@ async def update_supplier_sector(
         "category": category,
         "mode": payload.mode,
     }
+
+
+@router.post("/google-dry-run")
+async def google_sheet_dry_run(
+    payload: GoogleSheetDryRunRequest,
+    user: Utente = Depends(require_admin),
+):
+    """Read-only staging report. It deliberately has no database dependency."""
+    if payload.title.strip().casefold() != "santo graal":
+        raise HTTPException(422, "Il file sorgente deve chiamarsi “santo graal”")
+    report = stage_snapshot(
+        payload.values,
+        spreadsheet_id=payload.spreadsheet_id,
+    )
+    report["workbook_title"] = payload.title.strip()
+    return report
 
 
 @router.post("/preview")
