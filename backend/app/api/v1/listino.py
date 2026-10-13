@@ -12,7 +12,7 @@ from jose import JWTError, jwt
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, File, status
 from fastapi.responses import Response
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
@@ -345,6 +345,11 @@ async def import_multi_supplier(
         or claims.get("sha256") != digest
     ):
         raise HTTPException(status_code=403, detail="Anteprima diversa da file, utente o azienda")
+
+    # Serialize imports even when TWO DIFFERENT approved tokens overlap:
+    # global, transaction-scoped lock for this V2 database, then the token row lock.
+    # Without this, concurrent first-time supplier inserts can duplicate contracts.
+    await db.execute(text("SELECT pg_advisory_xact_lock(481991, 2004)"))
 
     # Pessimistic row lock serializes simultaneous requests to spend a token.
     # The transaction commits atomically with supplier/price writes (get_db).
