@@ -76,7 +76,14 @@ async def list_listino(
         query = query.where(ListinoMaster.fornitore_id == fornitore_id)
 
     if not include_scaduti:
-        query = query.where(ListinoMaster.data_scadenza.is_(None))
+        # Display the contract legally applicable TODAY, not a pending
+        # future-dated revision that is already marked as the next open version.
+        commercial_date = datetime.now(ZoneInfo("Europe/Rome")).date()
+        query = query.where(
+            ListinoMaster.data_inizio_validita <= commercial_date,
+            (ListinoMaster.data_scadenza.is_(None)) |
+            (ListinoMaster.data_scadenza >= commercial_date),
+        )
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
