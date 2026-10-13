@@ -70,6 +70,16 @@ async def denied(label: str, awaitable, status: int = 403) -> None:
 
 
 async def run() -> None:
+    # Real preview metadata references the authenticated principal via FK.
+    async with async_session_factory() as db:
+        async with db.begin():
+            await db.execute(text("""
+                INSERT INTO utenti(id, email, password_hash, ruolo, tenant_id, attivo, refresh_token_version)
+                VALUES
+                    (1, 'comparative-admin-a@synthetic.test', 'x', 'admin', 1, true, 1),
+                    (2, 'comparative-admin-b@synthetic.test', 'x', 'admin', 1, true, 1),
+                    (3, 'comparative-admin-c@synthetic.test', 'x', 'admin', 2, true, 1)
+            """))
     raw = workbook_bytes()
     alt = workbook_bytes(3.1)
     check("starts without suppliers or contracts", await count("fornitori") == 0 and await count("listino_master") == 0)
