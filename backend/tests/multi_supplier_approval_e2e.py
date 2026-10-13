@@ -32,12 +32,12 @@ SECOND_USER = SimpleNamespace(id=2, tenant_id=1)
 SECOND_TENANT = SimpleNamespace(id=3, tenant_id=2)
 
 
-def workbook_bytes(price: float | str = 2.5, count: int = 1) -> bytes:
+def workbook_bytes(price: float | str = 2.5, count: int = 1, product_label: str = "Pomodori pelati") -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.append(["PRODOTTO", "UNITA DI MISURA", "MARR", "DAC"])
     for index in range(count):
-        label = "Pomodori pelati" if count == 1 else f"Pomodori pelati {index+1}"
+        label = product_label if count == 1 else f"{product_label} {index+1}"
         ws.append([label, "Kg", price, 2.7])
     bio = BytesIO()
     wb.save(bio)
@@ -285,6 +285,40 @@ async def run() -> None:
                  call(workbook_bytes(count=2001)), 413)
     check("large previews and invalid approvals leave business records untouched",
           await count("listino_master") == 3 and await count("fornitori") == 2)
+
+    # An existing contract must be visible beside the proposed price and bind approval.
+    async with async_session_factory() as db:
+        async with db.begin():
+            marr_id = (await db.execute(text(
+                "SELECT id FROM fornitori WHERE nome_azienda='MARR'"
+            ))).scalar_one()
+            db.add(ListinoMaster(
+                fornitore_id=marr_id, sku_interno="CACAO-AMARO",
+                descrizione="Synthetic cacao contract", prezzo_pattuito=3.1,
+                unita_misura="Kg", data_inizio_validita=today,
+                data_scadenza=today + timedelta(days=29),
+            ))
+    approval_file = workbook_bytes(price=4.0, product_label="Cacao amaro")
+    reviewed = await call(approval_file)
+    marr_offer = next(
+        offer for offer in reviewed["records_preview"][0]["confronti"]
+        if offer["fornitore"] == "MARR"
+    )
+    check("preview shows current contract, proposed price, delta and 30-day dates",
+          marr_offer["prezzo_corrente"] == "3.1000"
+          and marr_offer["prezzo_proposto"] == "4.0"
+          and marr_offer["delta_unitario"] == "0.9000"
+          and marr_offer["decorrenza_proposta"] == today.isoformat()
+          and marr_offer["scadenza_proposta"] == (today + timedelta(days=29)).isoformat())
+
+    async with async_session_factory() as db:
+        async with db.begin():
+            await db.execute(text(
+                "UPDATE listino_master SET prezzo_pattuito=3.2 WHERE sku_interno='CACAO-AMARO'"
+            ))
+    await denied("approval is rejected if contract changed after preview",
+                 call(approval_file, dry_run=False, token=reviewed["preview_token"], confirm=True), 409)
+    check("stale approval creates no contract rows", await count("listino_master") == 4)
 
     print("PASS: signed one-time comparative approval / replay / expiry / tenant / file digest E2E", flush=True)
 
