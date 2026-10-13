@@ -252,4 +252,8 @@ def parse_multi_supplier_excel(file_data: BinaryIO) -> MultiExcelParseResult:
             })
 
     wb.close()
+    if not result.records:
+        result.errors.append(MultiExcelValidationError(
+            header_row_idx, "PREZZI", "Nessuna quotazione valida: importazione senza prezzi vietata."
+        ))
     return result
