@@ -271,6 +271,12 @@ async def import_multi_supplier(
 
     if not parse_result.is_valid:
         return {"mode": "validation_failed", **parse_result.to_dict()}
+    # The admin must be able to review EVERY line, not only the first 50.
+    if len(parse_result.records) > 2000:
+        raise HTTPException(
+            status_code=413,
+            detail="Il file supera 2000 righe: suddividi il listino per consentire la revisione completa",
+        )
 
     if dry_run:
         if approval_token or confirm_import:
@@ -318,9 +324,9 @@ async def import_multi_supplier(
                     "unita_misura": record["unita_misura"],
                     "prezzi": {supplier: str(price) for supplier, price in record["prezzi"].items()},
                 }
-                for record in parse_result.records[:50]
+                for record in parse_result.records
             ],
-            "records_preview_truncated": len(parse_result.records) > 50,
+            "records_preview_truncated": False,
             "preview_token": token,
             "expires_at": expires_at.isoformat(),
             "warning": (
@@ -386,6 +392,11 @@ async def import_multi_supplier(
             forn = (await db.execute(
                 select(Fornitore).where(Fornitore.partita_iva == piva)
             )).scalar_one_or_none()
+            if forn and forn.nome_azienda.strip().casefold() != name.strip().casefold():
+                raise HTTPException(
+                    status_code=409,
+                    detail="Identità fornitore ambigua: partita IVA tecnica già associata ad altro nome",
+                )
             if not forn:
                 # Never silently authorize synthetic VAT identities to receive orders.
                 forn = Fornitore(
