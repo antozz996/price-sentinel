@@ -135,6 +135,23 @@ async def run() -> None:
     check("reimport skips identical prices", result["skipped_duplicates"] == 2 and result["inserted"] == 0 and result["updated"] == 0)
     check("identical reimport creates no duplicate contracts", await count("listino_master") == 2)
 
+    # Different signed approvals are also serialized at the DB level.
+    # Only one actual price update should occur for the changed MARR quotation.
+    first_new, second_new = await call(alt), await call(alt)
+    simultaneous = await asyncio.gather(
+        call(alt, dry_run=False, token=first_new["preview_token"], confirm=True),
+        call(alt, dry_run=False, token=second_new["preview_token"], confirm=True),
+    )
+    check("two distinct valid concurrent approvals avoid duplicate price versions",
+          sorted(result["updated"] for result in simultaneous) == [0, 1])
+    check("only one historical version added and two active prices remain",
+          await count("listino_master") == 3)
+    async with async_session_factory() as db:
+        active = (await db.execute(text(
+            "SELECT count(*) FROM listino_master WHERE data_scadenza IS NULL"
+        ))).scalar_one()
+    check("single active record per supplier after concurrent approvals", active == 2)
+
     print("PASS: signed one-time comparative approval / replay / expiry / tenant / file digest E2E", flush=True)
 
 
