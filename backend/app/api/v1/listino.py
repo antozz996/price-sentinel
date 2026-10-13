@@ -358,8 +358,10 @@ async def import_multi_supplier(
                 select(ListinoMaster).where(
                     ListinoMaster.fornitore_id == fornitore_id,
                     ListinoMaster.sku_interno == record["sku_interno"],
-                    ListinoMaster.data_scadenza.is_(None),
-                ).with_for_update()
+                    (ListinoMaster.data_scadenza.is_(None)) |
+                    (ListinoMaster.data_scadenza >= today),
+                ).order_by(ListinoMaster.data_inizio_validita.desc())
+                 .limit(1).with_for_update()
             )).scalar_one_or_none()
             effective_date = today
             if existing_listino:
