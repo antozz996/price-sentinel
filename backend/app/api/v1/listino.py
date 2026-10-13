@@ -7,6 +7,7 @@ Include gestione PFA Scaglioni, UoM Conversioni, Import/Export Excel.
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from jose import JWTError, jwt
 
@@ -340,7 +341,8 @@ async def import_multi_supplier(
         suppliers_map[name] = forn
 
     inserted = updated = skipped = 0
-    today = date.today()
+    # Agreements use the commercial calendar of the Italian venues, not the host's UTC date.
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
     for record in parse_result.records:
         for name, price in record["prezzi"].items():
             fornitore_id = suppliers_map[name].id
