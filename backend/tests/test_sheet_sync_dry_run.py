@@ -34,6 +34,7 @@ class SheetSyncDryRunTests(unittest.TestCase):
         )
         self.assertTrue(report["no_contract_writes"])
         self.assertFalse(report["rules"]["auto_commit_enabled"])
+        self.assertEqual(report["rules"]["price_semantics"], "negotiated_agreement_candidate")
         self.assertTrue(all(c["status"] != "auto_eligible" for c in report["candidates"]))
 
     def test_sheet_exclusion_keeps_original_quote_and_note(self):
@@ -49,6 +50,9 @@ class SheetSyncDryRunTests(unittest.TestCase):
         other = next(c for c in report["candidates"] if
                      c["source_sheet"] == "FOOD" and c["source_cell"] == "E3")
         self.assertEqual(other["status"], "needs_approval")
+        self.assertEqual(other["price_role"], "negotiated_agreement")
+        self.assertTrue(other["requires_approval"])
+        self.assertIn("agreement_approval_required", other["reasons"])
 
     def test_unit_conflict_zero_and_malformed_price(self):
         candidates = self.preview()["candidates"]

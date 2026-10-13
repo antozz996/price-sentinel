@@ -2,7 +2,7 @@
 
 ## Stato / safety
 
-**Solo lettura.** Questo modulo NON ha endpoint di scrittura, non usa il database Price Sentinel, non registra prezzi pattuiti, non lancia job periodici, non modifica Google Sheets e non manda ordini. I valori di Google Sheets/Gemini sono osservazioni e proposte, **non prezzi pattuiti finche' approvati**.
+**Solo lettura.** Questo modulo NON ha endpoint di scrittura, non usa il database Price Sentinel, non registra o attiva prezzi, non lancia job periodici, non modifica Google Sheets e non manda ordini. L'utente conferma che i prezzi inseriti nel Santo Graal sono gia' pattuiti con i fornitori. Il dry run li classifica come candidati di prezzo pattuito; diventano attivi in Price Sentinel solo dopo validazione e approvazione esplicita. La normalizzazione delle unità di misura e' rinviata a una fase successiva.
 
 Dipendenza: PR P0 `fix/smart-price-sheet-sync-p0` (revisione del flusso anteprima/commit). Il ramo P1 va valutato separatamente: nessun deploy e nessun merge senza gate.
 

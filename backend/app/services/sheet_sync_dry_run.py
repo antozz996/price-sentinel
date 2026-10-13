@@ -257,9 +257,9 @@ def stage_snapshot(
                     issues.append("precision_review")
                 if layout.title == "BEVERAGE" and supplier.name == "ORIZZONTI":
                     issues.append("derived_supplier_lookup")
-                # An item is not a pattuito until Price Sentinel confirms the
-                # agreed price, source and effective date.
-                issues.extend(("canonical_id_not_mapped", "agreement_not_approved"))
+                # User confirms populated supplier prices in this workbook are already agreed prices.
+                # They remain candidates and NEVER become active without Price Sentinel approval.
+                issues.extend(("canonical_id_not_mapped", "agreement_approval_required"))
                 if status == "blocked":
                     tally["blocked"] += 1
                 else:
@@ -274,7 +274,8 @@ def stage_snapshot(
                 data = {
                     "sector": layout.sector, "source_sheet": layout.title,
                     "source_row": rownum, "source_cell": cellref, "product": product,
-                    "supplier": supplier.name, "reference_unit": base_uom,
+                    "supplier": supplier.name, "price_role": "negotiated_agreement",
+                    "requires_approval": True, "reference_unit": base_uom,
                     "supplier_price_unit": price_uom, "quoted_value": raw,
                     "numeric_price": value, "status": status, "reasons": sorted(set(issues)),
                     "row_note": supplier_note or None,
@@ -303,7 +304,8 @@ def stage_snapshot(
             "agreement": "valid_until_next_approved_listino_unless_explicit_expiry",
             "auto_commit_enabled": False,
             "canonical_product_mapping": "requires_explicit_approval",
-            "source": "Google Sheets staging, not approved supplier contract",
+            "source": "Santo Graal records negotiated supplier prices; Price Sentinel approval is still required.",
+            "price_semantics": "negotiated_agreement_candidate",
         },
     }
     return report

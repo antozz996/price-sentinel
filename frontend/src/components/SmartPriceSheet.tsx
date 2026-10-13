@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Building2, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Search, Table2, Trash2 } from 'lucide-react'
 import { fetchWithAuth } from '../api'
+import SantoGraalSyncPreview from './SantoGraalSyncPreview'
 
 type Supplier = { id: number; name: string; vat: string }
 type Product = { id: number; sku_interno?: string | null; canonical_name: string; order_name?: string | null }
@@ -82,6 +83,7 @@ const input: React.CSSProperties = { padding: '10px 12px', background: 'rgba(255
 const tabs = [
   { id: 'matrix', label: 'Matrice', icon: Table2 },
   { id: 'paste', label: 'Foglio prezzi', icon: ClipboardPaste },
+  { id: 'google', label: 'Santo Graal', icon: RefreshCw },
   { id: 'sectors', label: 'Settori fornitori', icon: Building2 },
   { id: 'history', label: 'Storico e audit', icon: History },
 ] as const
@@ -989,6 +991,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
       <PreviewPanel />
     </>}
+
+    {activeTab === 'google' && isAdmin && <SantoGraalSyncPreview />}
 
     {activeTab === 'paste' && <>
       <div className="glass-panel" style={{ ...panel, gap: 14 }}>

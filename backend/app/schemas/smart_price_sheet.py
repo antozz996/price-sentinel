@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -16,6 +16,35 @@ class ClipboardPreviewRequest(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     subcategory: str | None = Field(default=None, max_length=100)
     location_id: int | None = Field(default=None, gt=0)
+
+
+class GoogleSheetDryRunRequest(BaseModel):
+    spreadsheet_id: str = Field(pattern=r"^[A-Za-z0-9_-]{15,200}$")
+    title: str = Field(min_length=1, max_length=200)
+    values: dict[str, list[list[Any]]]
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def bound_google_snapshot(self):
+        widths = {
+            "FOOD": (1000, 10),
+            "BEVERAGE": (1000, 12),
+            "COMPARAZIONE MATERIALI": (1000, 14),
+            "FRUTTA E VERDURA": (1000, 10),
+            "GIOCATTOLI": (1000, 15),
+            "CONTROLLO_ESCLUSIONI": (100, 6),
+        }
+        if set(self.values) - set(widths):
+            raise ValueError("La richiesta contiene schede non previste")
+        cells = 0
+        for tab, rows in self.values.items():
+            max_rows, max_columns = widths[tab]
+            if len(rows) > max_rows or any(len(row) > max_columns for row in rows):
+                raise ValueError(f"Dimensioni non valide per la scheda {tab}")
+            cells += sum(len(row) for row in rows)
+        if cells > 65000:
+            raise ValueError("Il controllo supera il limite di celle consentito")
+        return self
 
 
 class CellPreviewRequest(BaseModel):
