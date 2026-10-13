@@ -24,11 +24,13 @@ SECOND_USER = SimpleNamespace(id=2, tenant_id=1)
 SECOND_TENANT = SimpleNamespace(id=3, tenant_id=2)
 
 
-def workbook_bytes(price: float = 2.5) -> bytes:
+def workbook_bytes(price: float = 2.5, count: int = 1) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.append(["PRODOTTO", "UNITA DI MISURA", "MARR", "DAC"])
-    ws.append(["Pomodori pelati", "Kg", price, 2.7])
+    for index in range(count):
+        label = "Pomodori pelati" if count == 1 else f"Pomodori pelati {index+1}"
+        ws.append([label, "Kg", price, 2.7])
     bio = BytesIO()
     wb.save(bio)
     return bio.getvalue()
@@ -151,6 +153,15 @@ async def run() -> None:
             "SELECT count(*) FROM listino_master WHERE data_scadenza IS NULL"
         ))).scalar_one()
     check("single active record per supplier after concurrent approvals", active == 2)
+
+    full_preview = await call(workbook_bytes(count=60))
+    check("all 60 Excel rows are visible for human approval",
+          len(full_preview["records_preview"]) == 60
+          and full_preview["records_preview_truncated"] is False)
+    await denied("file above review cap is rejected before approval",
+                 call(workbook_bytes(count=2001)), 413)
+    check("large previews and invalid approvals leave business records untouched",
+          await count("listino_master") == 3 and await count("fornitori") == 2)
 
     print("PASS: signed one-time comparative approval / replay / expiry / tenant / file digest E2E", flush=True)
 
