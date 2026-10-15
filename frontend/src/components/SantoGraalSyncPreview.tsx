@@ -24,11 +24,26 @@ type Candidate = {
   status: string
   reasons: string[]
   reference_unit?: string | null
+  supplier_price_unit?: string | null
+  numeric_price?: string | number | null
 }
 type CatalogProduct = { id: number; sku_interno: string | null; canonical_name: string; order_name: string | null; comparison_unit: string; is_active: boolean }
 type MappingOption = { value: string; label: string; group: 'Catalogo prodotti' | 'Listino attivo' }
 type ListinoMappingRow = { sku_interno: string; descrizione: string; unita_misura: string }
 type CandidateGroup = { key: string; sheet: string; product: string; unit: string; rows: Candidate[] }
+type SupplierRecord = { id: number; nome_azienda: string; partita_iva?: string }
+type ContractPreview = {
+  preview_token: string
+  status: string
+  can_commit: boolean
+  expires_at: string
+  counts: { create: number; update: number; unchanged: number; errors: number }
+  errors: Array<{ type?: string; row?: number; message: string }>
+}
+type ContractCommitResult = {
+  status: string
+  result: { created?: number; updated?: number; unchanged?: number; products_created?: number; suppliers_created?: number; aliases_created?: number }
+}
 type SectorSummary = {
   sector: string
   tab: string
@@ -159,6 +174,14 @@ export default function SantoGraalSyncPreview() {
   const [groupSearch, setGroupSearch] = useState('')
   const [stagedMappings, setStagedMappings] = useState<Record<string, string>>({})
   const [catalogBootstrapBusy, setCatalogBootstrapBusy] = useState(false)
+  const [supplierOptions, setSupplierOptions] = useState<SupplierRecord[]>([])
+  const [supplierMappings, setSupplierMappings] = useState<Record<string, string>>({})
+  const [supplierLoadError, setSupplierLoadError] = useState<string | null>(null)
+  const [priceImportBusy, setPriceImportBusy] = useState(false)
+  const [priceCommitBusy, setPriceCommitBusy] = useState(false)
+  const [priceImportError, setPriceImportError] = useState<string | null>(null)
+  const [pricePreview, setPricePreview] = useState<ContractPreview | null>(null)
+  const [priceCommitResult, setPriceCommitResult] = useState<ContractCommitResult | null>(null)
 
   async function runReadOnlyPreview() {
     setBusy(true)
@@ -209,6 +232,9 @@ export default function SantoGraalSyncPreview() {
       }) as DryRunReport
       setReport(preview)
       setStagedMappings({})
+      setPricePreview(null)
+      setPriceCommitResult(null)
+      setPriceImportError(null)
       setNotice('Lettura completata. È un’anteprima: nessun prezzo è stato scritto o attivato.')
       setCatalogError(null)
       setCatalogProducts([])
@@ -251,6 +277,29 @@ export default function SantoGraalSyncPreview() {
         setCatalogProducts([])
         setMappingOptions([])
         setCatalogError('Non riesco a leggere il catalogo prodotti. Riprova aggiornando l’anteprima; nessun dato è stato modificato.')
+      }
+      try {
+        const supplierData = await fetchWithAuth('/fornitori') as SupplierRecord[]
+        const activeSuppliers = Array.isArray(supplierData) ? supplierData : []
+        setSupplierOptions(activeSuppliers)
+        setSupplierLoadError(null)
+        const sourceNames = Array.from(new Map(preview.candidates
+          .filter(isImportableCandidate)
+          .map(item => [normalizeName(item.supplier), item.supplier] as const)).values())
+        const automatic: Record<string, string> = {}
+        sourceNames.forEach(name => {
+          const normalized = normalizeName(name)
+          let matches = activeSuppliers.filter(item => normalizeName(item.nome_azienda) === normalized)
+          if (matches.length !== 1) {
+            const compact = normalized.replace(/\s+/g, '')
+            matches = activeSuppliers.filter(item => normalizeName(item.nome_azienda).replace(/\s+/g, '').includes(compact))
+          }
+          if (matches.length === 1) automatic[normalized] = String(matches[0].id)
+        })
+        setSupplierMappings(previous => ({ ...automatic, ...previous }))
+      } catch {
+        setSupplierOptions([])
+        setSupplierLoadError('Non riesco a leggere i fornitori di Price Sentinel. Senza una corrispondenza fornitore non importo i prezzi.')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Anteprima non riuscita.'
@@ -303,6 +352,18 @@ export default function SantoGraalSyncPreview() {
     })
     return result
   }
+
+  const isImportableCandidate = (item: Candidate) => {
+    const blockedReasons = new Set([
+      'unit_mapping_needed', 'unit_mismatch_needs_conversion', 'unit_not_specified',
+      'precision_review', 'supplier_identity_and_net_price_need_verification',
+    ])
+    return item.status === 'needs_mapping'
+      && Boolean(item.reference_unit?.trim())
+      && item.numeric_price !== null && item.numeric_price !== undefined
+      && !item.reasons.some(reason => blockedReasons.has(reason))
+      && normalizeName(item.reference_unit || '') === normalizeName(item.supplier_price_unit || item.reference_unit || '')
+  }
   const bootstrapProducts = Array.from((report?.candidates || [])
     .filter(item => item.status === 'needs_mapping' && item.reference_unit?.trim())
     .reduce((map, item) => {
@@ -349,6 +410,103 @@ export default function SantoGraalSyncPreview() {
       setCatalogError('Catalogo non creato. ' + message)
     } finally {
       setCatalogBootstrapBusy(false)
+    }
+  }
+
+  const importableCandidates = (report?.candidates || []).filter(isImportableCandidate)
+  const importableSupplierNames = Array.from(new Map(importableCandidates
+    .map(item => [normalizeName(item.supplier), item.supplier] as const)).values())
+
+  async function preparePriceImport() {
+    if (!report || priceImportBusy) return
+    setPriceImportBusy(true)
+    setPriceImportError(null)
+    setPricePreview(null)
+    setPriceCommitResult(null)
+    try {
+      const rowsBySku = new Map<string, { productId: number; unit: string; prices: Map<string, string> }>()
+      const productMapping: Record<string, number> = {}
+      const supplierHeaders = importableSupplierNames
+      const supplierMapping: Record<string, number> = {}
+      const missingSuppliers = supplierHeaders.filter(name => !supplierMappings[normalizeName(name)])
+      if (missingSuppliers.length) throw new Error('Associa prima questi fornitori agli omonimi presenti in Price Sentinel: ' + missingSuppliers.join(', '))
+      supplierHeaders.forEach(name => { supplierMapping[name] = Number(supplierMappings[normalizeName(name)]) })
+
+      const conflicts: string[] = []
+      for (const item of importableCandidates) {
+        const groupKey = [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
+        const selectedValue = stagedMappings[groupKey]
+        const product = selectedValue?.startsWith('sku:')
+          ? catalogProducts.find(row => row.sku_interno === selectedValue.slice(4))
+          : selectedValue?.startsWith('product:')
+            ? catalogProducts.find(row => String(row.id) === selectedValue.slice(8))
+            : undefined
+        if (!product?.sku_interno) continue
+        if (normalizeName(product.comparison_unit) !== normalizeName(item.reference_unit || '')) continue
+        const row = rowsBySku.get(product.sku_interno) || { productId: product.id, unit: item.reference_unit!.trim(), prices: new Map<string, string>() }
+        if (normalizeName(row.unit) !== normalizeName(item.reference_unit || '')) {
+          conflicts.push(product.sku_interno + ': unità di misura diverse')
+          continue
+        }
+        const supplierKey = normalizeName(item.supplier)
+        const price = String(item.numeric_price)
+        const previous = row.prices.get(supplierKey)
+        if (previous !== undefined && previous !== price) {
+          conflicts.push(product.canonical_name + ' / ' + item.supplier + ': prezzi discordanti in più righe del foglio')
+          continue
+        }
+        row.prices.set(supplierKey, price)
+        rowsBySku.set(product.sku_interno, row)
+        productMapping[product.sku_interno] = product.id
+      }
+      if (conflicts.length) throw new Error('Conflitti nel foglio: ' + conflicts.slice(0, 8).join('; '))
+      if (!rowsBySku.size) throw new Error('Nessuna riga pronta: prima inizializza il catalogo e completa le associazioni prodotto.')
+
+      const header = ['Prodotto', 'Unita di misura', ...supplierHeaders].join('\t')
+      const bodyRows = Array.from(rowsBySku.entries()).map(([sku, row]) => [
+        sku, row.unit, ...supplierHeaders.map(name => row.prices.get(normalizeName(name)) || ''),
+      ].join('\t'))
+      const textValue = [header, ...bodyRows].join('\n')
+      const result = await fetchWithAuth('/smart-price-sheet/preview', {
+        method: 'POST',
+        body: JSON.stringify({
+          text: textValue, supplier_mapping: supplierMapping, product_mapping: productMapping,
+          default_uom: 'Pz', create_missing_products: false,
+        }),
+      }) as ContractPreview
+      setPricePreview(result)
+      if (!result.can_commit) {
+        const firstErrors = (result.errors || []).slice(0, 5).map(item => item.message).filter(Boolean)
+        throw new Error('L’anteprima ha ' + (result.counts?.errors || result.errors?.length || 0) + ' controlli bloccanti. ' + firstErrors.join(' · '))
+      }
+    } catch (err) {
+      setPriceImportError(err instanceof Error ? err.message : 'Anteprima import prezzi non riuscita.')
+    } finally {
+      setPriceImportBusy(false)
+    }
+  }
+
+  async function commitPriceImport() {
+    if (!pricePreview?.can_commit || priceCommitBusy) return
+    const counts = pricePreview.counts
+    const confirmed = window.confirm(
+      'REGISTRAZIONE PREZZI GIÀ PATTUITI\n\nVerranno registrati nel Listino Master Price Sentinel solo i prezzi dell’anteprima, con aggiornamento storico append-only e creazione degli alias fornitore. Le righe bloccate o non comparabili restano escluse. Il Google Sheet non verrà modificato. Creazioni: ' + counts.create + ', revisioni: ' + counts.update + ', invariati: ' + counts.unchanged + '. Procedere?'
+    )
+    if (!confirmed) return
+    setPriceCommitBusy(true)
+    setPriceImportError(null)
+    try {
+      const result = await fetchWithAuth('/smart-price-sheet/commit', {
+        method: 'POST',
+        body: JSON.stringify({ preview_token: pricePreview.preview_token, confirm: true }),
+      }) as ContractCommitResult
+      setPriceCommitResult(result)
+      const summary = result.result || {}
+      setNotice('Import completato. Creati: ' + (summary.created ?? 0) + ', aggiornati: ' + (summary.updated ?? 0) + ', invariati: ' + (summary.unchanged ?? 0) + '.')
+    } catch (err) {
+      setPriceImportError(err instanceof Error ? err.message : 'Import prezzi non riuscito.')
+    } finally {
+      setPriceCommitBusy(false)
     }
   }
 
