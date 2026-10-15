@@ -34,7 +34,7 @@ class SheetSyncDryRunTests(unittest.TestCase):
         )
         self.assertTrue(report["no_contract_writes"])
         self.assertFalse(report["rules"]["auto_commit_enabled"])
-        self.assertEqual(report["rules"]["price_semantics"], "negotiated_agreement_candidate")
+        self.assertEqual(report["rules"]["price_semantics"], "negotiated_agreement")
         self.assertTrue(all(c["status"] != "auto_eligible" for c in report["candidates"]))
 
     def test_sheet_exclusion_keeps_original_quote_and_note(self):
@@ -49,10 +49,10 @@ class SheetSyncDryRunTests(unittest.TestCase):
         # A valid competitor on the same row must remain available for review.
         other = next(c for c in report["candidates"] if
                      c["source_sheet"] == "FOOD" and c["source_cell"] == "E3")
-        self.assertEqual(other["status"], "needs_approval")
+        self.assertEqual(other["status"], "needs_mapping")
         self.assertEqual(other["price_role"], "negotiated_agreement")
-        self.assertTrue(other["requires_approval"])
-        self.assertIn("agreement_approval_required", other["reasons"])
+        self.assertTrue(other["requires_product_mapping"])
+        self.assertIn("canonical_id_not_mapped", other["reasons"])\n        self.assertNotIn("agreement_approval_required", other["reasons"])
 
     def test_unit_conflict_zero_and_malformed_price(self):
         candidates = self.preview()["candidates"]
@@ -87,7 +87,7 @@ class SheetSyncDryRunTests(unittest.TestCase):
             "supplier_identity_and_net_price_need_verification" in c["reasons"]
             for c in candidates
         ))
-        self.assertTrue(all(c["status"] == "needs_approval" for c in candidates))
+        self.assertTrue(all(c["status"] == "needs_mapping" for c in candidates))
 
     def test_mismatched_supplier_header_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
