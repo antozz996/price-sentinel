@@ -3,7 +3,9 @@
   "timeZone": "America/Los_Angeles",
   "spreadsheet_id": "synthetic-spreadsheet-not-a-real-id",
   "all_tab_names": [
-    "FOOD",
+    "Carne",
+    "Pesce",
+    "Varie",
     "BEVERAGE",
     "COMPARAZIONE MATERIALI",
     "FRUTTA E VERDURA",
@@ -17,61 +19,11 @@
   ],
   "unknown_tabs": [],
   "notes": {
-    "FOOD": {
+    "Varie": {
       "F3": "Prezzo originario 5,90 € per busta da 2 kg"
     }
   },
   "values": {
-    "FOOD": [
-      [
-        "PRODOTTO",
-        "PESO",
-        "MARR",
-        "MELIUS",
-        "DAC",
-        "ORIZZONTI",
-        "NOTE",
-        "DI PALO",
-        "FONTANELLA CARNI",
-        "FORNITORE SCELTO"
-      ],
-      [
-        "SALE FINO",
-        "KG",
-        0.5,
-        0.48,
-        0.49,
-        "NO",
-        "",
-        null,
-        0.52,
-        "MELIUS"
-      ],
-      [
-        "PATATA CHIPS",
-        "CT",
-        34,
-        31,
-        27.04,
-        5.9,
-        "busta 2 kg",
-        null,
-        null,
-        "DAC"
-      ],
-      [
-        "RISO",
-        "KG",
-        1.1,
-        1.2,
-        0,
-        "-",
-        null,
-        null,
-        null,
-        "MARR"
-      ]
-    ],
     "BEVERAGE": [
       [
         "Prodotto",
@@ -230,6 +182,116 @@
         5.9,
         "busta anziché cartone",
         "ESCLUSO"
+      ]
+    ],
+    "Carne": [
+      [
+        "PRODOTTO",
+        "PESO",
+        "MARR",
+        "MELIUS",
+        "DAC",
+        "ORIZZONTI",
+        "NOTE",
+        "DI PALO",
+        "FONTANELLA CARNI",
+        "FORNITORE SCELTO",
+        "RIGA FOOD ORIGINALE"
+      ],
+      [
+        "POLLO TEST",
+        "KG",
+        9.2,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "MARR",
+        20
+      ]
+    ],
+    "Pesce": [
+      [
+        "PRODOTTO",
+        "PESO",
+        "MARR",
+        "MELIUS",
+        "DAC",
+        "ORIZZONTI",
+        "NOTE",
+        "DI PALO",
+        "FONTANELLA CARNI",
+        "FORNITORE SCELTO",
+        "RIGA FOOD ORIGINALE"
+      ],
+      [
+        "ALICE TEST",
+        "KG",
+        4.5,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "MARR",
+        21
+      ]
+    ],
+    "Varie": [
+      [
+        "PRODOTTO",
+        "PESO",
+        "MARR",
+        "MELIUS",
+        "DAC",
+        "ORIZZONTI",
+        "NOTE",
+        "DI PALO",
+        "FONTANELLA CARNI",
+        "FORNITORE SCELTO",
+        "RIGA FOOD ORIGINALE"
+      ],
+      [
+        "SALE FINO",
+        "KG",
+        0.5,
+        0.48,
+        0.49,
+        "NO",
+        "",
+        null,
+        0.52,
+        "MELIUS",
+        2
+      ],
+      [
+        "PATATA CHIPS",
+        "CT",
+        34,
+        31,
+        27.04,
+        5.9,
+        "busta 2 kg",
+        null,
+        null,
+        "DAC",
+        3
+      ],
+      [
+        "RISO",
+        "KG",
+        1.1,
+        1.2,
+        0,
+        "-",
+        null,
+        null,
+        null,
+        "MARR",
+        4
       ]
     ]
   }
