@@ -29,6 +29,7 @@ class SheetLayout:
     unit_index: int
     columns: tuple[SupplierColumn, ...]
     subcategory: str | None = None
+    source_row_index: int | None = None
     first_row: int = 2
     reference_only: bool = False
     packaging_note_index: int | None = None
@@ -37,11 +38,21 @@ class SheetLayout:
 
 
 SOURCES = (
-    SheetLayout("FOOD", "Food", 0, 1, (
+    SheetLayout("Carne", "Food", 0, 1, (
         SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
         SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
         SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
-    ), max_columns="J"),
+    ), subcategory="Carne", source_row_index=10, max_columns="K"),
+    SheetLayout("Pesce", "Food", 0, 1, (
+        SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
+        SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
+        SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
+    ), subcategory="Pesce", source_row_index=10, max_columns="K"),
+    SheetLayout("Varie", "Food", 0, 1, (
+        SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
+        SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
+        SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
+    ), source_row_index=10, max_columns="K"),
     SheetLayout("BEVERAGE", "Beverage", 0, 1, (
         SupplierColumn(2, "NAVAS"), SupplierColumn(3, "ORIZZONTI"),
         SupplierColumn(4, "3F"), SupplierColumn(5, "PASCARELLA"),
@@ -62,6 +73,7 @@ SOURCES = (
         SupplierColumn(11, "ANTONIO"), SupplierColumn(12, "GIOVANNI"),
     ), reference_only=True, packaging_note_index=6, max_columns="O"),
 )
+FOOD_CATEGORY_TABS = frozenset({"Carne", "Pesce", "Varie"})
 
 # Supporting and derived tabs must never be imported twice.
 SUPPORT_TABS = (
@@ -134,8 +146,43 @@ def _base_unit(text: str) -> str | None:
     return None  # CT, CS, FS and custom pack sizes require explicit mapping.
 
 
-def _excluded_index(rows: list[list[Any]], food_rows: list[list[Any]]) -> tuple[set[tuple[str, str]], list[dict]]:
-    exclusions: set[tuple[str, str]] = set()
+def _food_origin_index(value_ranges: Mapping[str, list[list[Any]]]) -> tuple[dict[int, str], list[dict]]:
+    """Map original FOOD row numbers to products using the trace column in split tabs."""
+    origins: dict[int, str] = {}
+    warnings: list[dict] = []
+    for title in FOOD_CATEGORY_TABS:
+        rows = value_ranges.get(title)
+        if not rows:
+            continue
+        if _label(_cell(rows[0], 10)) != _label("RIGA FOOD ORIGINALE"):
+            warnings.append({"tab": title, "code": "invalid_food_origin_header"})
+            continue
+        for rownum, row in enumerate(rows[1:], start=2):
+            product = _text(_cell(row, 0))
+            if not product:
+                continue
+            try:
+                original_row = int(_cell(row, 10))
+            except (ValueError, TypeError):
+                warnings.append({"tab": title, "row": rownum,
+                                 "code": "invalid_food_origin_row"})
+                continue
+            if original_row < 2:
+                warnings.append({"tab": title, "row": rownum,
+                                 "code": "invalid_food_origin_row"})
+                continue
+            if original_row in origins:
+                warnings.append({"tab": title, "row": rownum,
+                                 "code": "duplicate_food_origin_row"})
+                continue
+            origins[original_row] = product
+    return origins, warnings
+
+
+def _excluded_index(
+    rows: list[list[Any]], food_origins: Mapping[int, str]
+) -> tuple[set[tuple[int | None, str, str]], list[dict]]:
+    exclusions: set[tuple[int | None, str, str]] = set()
     anomalies: list[dict] = []
     for rownum, r in enumerate(rows[1:], start=2):
         if _text(_cell(r, 5)).upper() != "ESCLUSO":
@@ -148,17 +195,17 @@ def _excluded_index(rows: list[list[Any]], food_rows: list[list[Any]]) -> tuple[
         except (ValueError, TypeError):
             anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
                               "code": "invalid_exclusion_row"})
-            # Still exclude by verified product + supplier.
             source_row = None
-        if source_row and (source_row < 2 or source_row > len(food_rows)
-                           or _label(_cell(food_rows[source_row - 1], 0)) != _label(product)):
+        if source_row is not None and (
+            source_row < 2 or _label(food_origins.get(source_row)) != _label(product)
+        ):
             anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
                               "code": "exclusion_row_drift", "product": product})
         if not product or not supplier:
             anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
                               "code": "incomplete_exclusion"})
             continue
-        exclusions.add((_label(product), _label(supplier)))
+        exclusions.add((source_row, _label(product), _label(supplier)))
     return exclusions, anomalies
 
 
@@ -170,7 +217,7 @@ def stage_snapshot(
 ) -> dict[str, Any]:
     """Return an immutable-in-spirit preview; no persistent writes or network calls."""
     notes = notes or {}
-    food_rows = value_ranges.get("FOOD", [])
+    food_origins, origin_warnings = _food_origin_index(value_ranges)
     exclusion_rows = value_ranges.get(EXCLUSION_TAB, [])
     expected_control_headers = {0: "RIGA", 1: "PRODOTTO", 2: "FORNITORE", 5: "STATO"}
     exclusion_valid = bool(exclusion_rows) and all(
@@ -178,15 +225,16 @@ def stage_snapshot(
         for index, expected in expected_control_headers.items()
     )
     exclusions, warnings = _excluded_index(
-        exclusion_rows if exclusion_valid else [], food_rows
+        exclusion_rows if exclusion_valid else [], food_origins
     )
+    warnings.extend(origin_warnings)
     if not exclusion_valid:
         warnings.append({"tab": EXCLUSION_TAB, "code": "invalid_exclusion_register_fail_closed"})
     candidates: list[dict] = []
     sector_summary: list[dict] = []
     missing_sources: list[str] = []
     for layout in SOURCES:
-        if layout.title == "FOOD" and not exclusion_valid:
+        if layout.title in FOOD_CATEGORY_TABS and not exclusion_valid:
             missing_sources.append(EXCLUSION_TAB)
             continue
         rows = value_ranges.get(layout.title)
@@ -197,6 +245,12 @@ def stage_snapshot(
             warnings.append({"tab": layout.title, "code": "empty_source"})
             continue
         hdr = rows[0]
+        if layout.source_row_index is not None and _label(
+            _cell(hdr, layout.source_row_index)
+        ) != _label("RIGA FOOD ORIGINALE"):
+            warnings.append({"tab": layout.title, "code": "invalid_food_origin_header"})
+            missing_sources.append(layout.title)
+            continue
         # Fail closed if the supplier order in Sheets diverges from our mapping.
         for col in layout.columns:
             actual = _text(_cell(hdr, col.index))
@@ -227,6 +281,14 @@ def stage_snapshot(
             seen_products.add(_label(product))
             tally["products"] += 1
             base_uom = _text(_cell(row, layout.unit_index))
+            source_original_row = None
+            if layout.source_row_index is not None:
+                try:
+                    source_original_row = int(_cell(row, layout.source_row_index))
+                    if source_original_row < 2:
+                        source_original_row = None
+                except (ValueError, TypeError):
+                    source_original_row = None
             for supplier in layout.columns:
                 raw = _cell(row, supplier.index)
                 value, value_state = _price(raw)
@@ -240,9 +302,16 @@ def stage_snapshot(
                 if value_state != "valid":
                     status = "blocked"
                     issues.append(value_state)
-                if (_label(product), _label(supplier.name)) in exclusions and layout.title == "FOOD":
-                    status = "blocked"
-                    issues.append("sheet_exclusion")
+                if layout.source_row_index is not None:
+                    if source_original_row is None:
+                        status = "blocked"
+                        issues.append("source_row_reference_missing")
+                    elif (
+                        (source_original_row, _label(product), _label(supplier.name)) in exclusions
+                        or (None, _label(product), _label(supplier.name)) in exclusions
+                    ):
+                        status = "blocked"
+                        issues.append("sheet_exclusion")
                 if layout.reference_only:
                     issues.append("supplier_identity_and_net_price_need_verification")
                 if layout.title == "FRUTTA E VERDURA" and supplier.unit_index is not None:
@@ -274,7 +343,8 @@ def stage_snapshot(
                 data = {
                     "sector": layout.sector, "subcategory": layout.subcategory,
                     "source_sheet": layout.title,
-                    "source_row": rownum, "source_cell": cellref, "product": product,
+                    "source_row": rownum, "source_original_row": source_original_row,
+                    "source_cell": cellref, "product": product,
                     "supplier": supplier.name, "price_role": "negotiated_agreement",
                     "requires_product_mapping": True, "reference_unit": base_uom,
                     "supplier_price_unit": price_uom, "quoted_value": raw,
@@ -284,7 +354,8 @@ def stage_snapshot(
                     "cell_note": original_note or None,
                 }
                 # Hash is an observation fingerprint, NOT the canonical product key.
-                stable = {k: v for k, v in data.items() if k not in {"source_row", "source_cell"}}
+                stable = {k: v for k, v in data.items()
+                          if k not in {"source_row", "source_original_row", "source_cell"}}
                 data["observation_hash"] = hashlib.sha256(
                     json.dumps(stable, ensure_ascii=False, sort_keys=True, default=str)
                     .encode("utf-8")
