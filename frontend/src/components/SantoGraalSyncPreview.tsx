@@ -22,7 +22,10 @@ type Candidate = {
   quoted_value: unknown
   status: string
   reasons: string[]
+  reference_unit?: string | null
 }
+type CatalogProduct = { id: number; sku_interno: string | null; canonical_name: string; order_name: string | null; comparison_unit: string; is_active: boolean }
+type CandidateGroup = { key: string; sheet: string; product: string; unit: string; rows: Candidate[] }
 type SectorSummary = {
   sector: string
   tab: string
@@ -57,6 +60,10 @@ const REASON_LABELS: Record<string, string> = {
   sheet_exclusion: 'Quotazione esclusa nel foglio',
   precision_review: 'Precisione del prezzo da verificare',
   derived_supplier_lookup: 'Prezzo letto da una formula/lookup derivata',
+}
+
+function normalizeName(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
 }
 
 function displayStatus(status: string): string {
@@ -142,6 +149,11 @@ export default function SantoGraalSyncPreview() {
   const [googleToken, setGoogleToken] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('blocked')
   const [sheetFilter, setSheetFilter] = useState('all')
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
+  const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'groups' | 'rows'>('groups')
+  const [groupSearch, setGroupSearch] = useState('')
+  const [stagedMappings, setStagedMappings] = useState<Record<string, string>>({})
 
   async function runReadOnlyPreview() {
     setBusy(true)
@@ -191,7 +203,16 @@ export default function SantoGraalSyncPreview() {
         body: JSON.stringify({ spreadsheet_id: spreadsheetId, title, values }),
       }) as DryRunReport
       setReport(preview)
+      setStagedMappings({})
       setNotice('Lettura completata. È un’anteprima: nessun prezzo è stato scritto o attivato.')
+      setCatalogError(null)
+      try {
+        const catalog = await fetchWithAuth('/products') as CatalogProduct[]
+        setCatalogProducts(Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : [])
+      } catch {
+        setCatalogProducts([])
+        setCatalogError('Catalogo non disponibile: puoi consultare i gruppi, ma non selezionare un prodotto Price Sentinel.')
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Anteprima non riuscita.'
       if (message.includes('HTTP 401')) setGoogleToken(null)
@@ -207,6 +228,21 @@ export default function SantoGraalSyncPreview() {
   const visibleCandidates = (report?.candidates || []).filter(item =>
     (statusFilter === 'all' || item.status === statusFilter)
     && (sheetFilter === 'all' || item.source_sheet === sheetFilter)
+  )
+  const groups = Array.from(visibleCandidates.reduce((map, item) => {
+    const unit = item.reference_unit || ''
+    const key = [item.source_sheet, normalizeName(item.product), normalizeName(unit)].join('|')
+    const group = map.get(key) || { key, sheet: item.source_sheet, product: item.product, unit, rows: [] as Candidate[] }
+    group.rows.push(item)
+    map.set(key, group)
+    return map
+  }, new Map<string, CandidateGroup>()).values()).filter(group =>
+    !groupSearch.trim() || normalizeName(group.product).includes(normalizeName(groupSearch))
+      || group.rows.some(row => normalizeName(row.supplier).includes(normalizeName(groupSearch)))
+  ).sort((a, b) => a.sheet.localeCompare(b.sheet) || a.product.localeCompare(b.product))
+  const exactProductsFor = (name: string) => catalogProducts.filter(product =>
+    normalizeName(product.canonical_name) === normalizeName(name)
+    || Boolean(product.order_name && normalizeName(product.order_name) === normalizeName(name))
   )
 
   return (
@@ -263,25 +299,58 @@ export default function SantoGraalSyncPreview() {
           </label>
           <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{visibleCandidates.length} righe visualizzate · la cella indica dove controllare il dato nello Sheet</span>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" className={viewMode === 'groups' ? 'btn btn-primary' : 'btn'} onClick={() => setViewMode('groups')}>Raggruppa prodotti</button>
+          <button type="button" className={viewMode === 'rows' ? 'btn btn-primary' : 'btn'} onClick={() => setViewMode('rows')}>Mostra righe singole</button>
+          {viewMode === 'groups' && <input aria-label="Cerca prodotto o fornitore" value={groupSearch} onChange={event => setGroupSearch(event.target.value)} placeholder="Cerca prodotto o fornitore…" style={{ minWidth: 230, padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }} />}
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{viewMode === 'groups' ? groups.length + ' gruppi · ' + visibleCandidates.length + ' righe prezzo' : visibleCandidates.length + ' righe visualizzate'}</span>
+        </div>
+        {catalogError && <div role="status" style={{ color: '#fbbf24', fontSize: 12 }}>{catalogError}</div>}
+        {viewMode === 'groups' ? <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
+            <thead><tr>{['Scheda', 'Prodotto nel foglio', 'Unità', 'Offerte (fornitore · cella · prezzo)', 'Suggerimento esatto', 'Associa in anteprima'].map(label => <th key={label} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid var(--border-glass)', verticalAlign: 'top' }}>{label}</th>)}</tr></thead>
+            <tbody>
+              {groups.map(group => {
+                const exact = exactProductsFor(group.product)
+                const suggested = exact.length === 1 ? exact[0] : null
+                const selected = stagedMappings[group.key] || ''
+                return <tr key={group.key}>
+                  <td style={{ padding: 8, verticalAlign: 'top' }}>{group.sheet}</td>
+                  <td style={{ padding: 8, verticalAlign: 'top' }}><strong>{group.product}</strong><div style={{ color: 'var(--text-secondary)', marginTop: 4 }}>{group.rows.length} offerte</div></td>
+                  <td style={{ padding: 8, verticalAlign: 'top' }}>{group.unit || '—'}</td>
+                  <td style={{ padding: 8, verticalAlign: 'top', minWidth: 260 }}>{group.rows.map(row => <div key={row.source_cell + row.supplier} style={{ marginBottom: 4 }}>{row.supplier} · {row.source_cell} · {String(row.quoted_value ?? '—')} <span style={{ color: row.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>({displayStatus(row.status)})</span></div>)}</td>
+                  <td style={{ padding: 8, verticalAlign: 'top' }}>{suggested ? <>{suggested.canonical_name}<div style={{ color: 'var(--text-secondary)' }}>corrispondenza esatta</div></> : exact.length > 1 ? <span style={{ color: '#fbbf24' }}>Più corrispondenze esatte: scegli manualmente</span> : <span style={{ color: 'var(--text-secondary)' }}>Nessuna corrispondenza esatta</span>}</td>
+                  <td style={{ padding: 8, verticalAlign: 'top', minWidth: 220 }}>
+                    <select aria-label={'Associa ' + group.product} value={selected} onChange={event => setStagedMappings(previous => ({ ...previous, [group.key]: event.target.value }))} disabled={catalogProducts.length === 0} style={{ width: '100%', padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                      <option value="">Da valutare</option>
+                      {suggested && !catalogProducts.some(product => String(product.id) === selected) && <option value={String(suggested.id)}>{suggested.canonical_name}</option>}
+                      {catalogProducts.map(product => <option key={product.id} value={String(product.id)}>{product.canonical_name}{product.sku_interno ? ' · ' + product.sku_interno : ''}</option>)}
+                    </select>
+                    {selected && <small style={{ display: 'block', color: '#fbbf24', marginTop: 4 }}>Scelta provvisoria, non salvata</small>}
+                  </td>
+                </tr>
+              })}
+            </tbody>
+          </table>
+          {groups.length === 0 && <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Nessun gruppo corrisponde ai filtri selezionati.</p>}
+        </div> : <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
             <thead><tr>{['Scheda', 'Cella', 'Prodotto', 'Fornitore', 'Prezzo letto', 'Esito', 'Motivo del controllo'].map(label => <th key={label} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid var(--border-glass)' }}>{label}</th>)}</tr></thead>
             <tbody>
-              {visibleCandidates.map(item => (
-                <tr key={item.source_sheet + item.source_cell}>
-                  <td style={{ padding: 8 }}>{item.source_sheet}</td>
-                  <td style={{ padding: 8 }}>{item.source_cell}</td>
-                  <td style={{ padding: 8 }}>{item.product}</td>
-                  <td style={{ padding: 8 }}>{item.supplier}</td>
-                  <td style={{ padding: 8 }}>{String(item.quoted_value ?? '—')}</td>
-                  <td style={{ padding: 8, color: item.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>{displayStatus(item.status)}</td>
-                  <td style={{ padding: 8, color: 'var(--text-secondary)' }}>{displayReasons(item.reasons)}</td>
-                </tr>
-              ))}
+              {visibleCandidates.map(item => <tr key={item.source_sheet + item.source_cell}>
+                <td style={{ padding: 8 }}>{item.source_sheet}</td><td style={{ padding: 8 }}>{item.source_cell}</td>
+                <td style={{ padding: 8 }}>{item.product}</td><td style={{ padding: 8 }}>{item.supplier}</td>
+                <td style={{ padding: 8 }}>{String(item.quoted_value ?? '—')}</td>
+                <td style={{ padding: 8, color: item.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>{displayStatus(item.status)}</td>
+                <td style={{ padding: 8, color: 'var(--text-secondary)' }}>{displayReasons(item.reasons)}</td>
+              </tr>)}
             </tbody>
           </table>
           {visibleCandidates.length === 0 && <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Nessuna riga corrisponde ai filtri selezionati.</p>}
-        </div>
+        </div>}
+        {viewMode === 'groups' && <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
+          {Object.values(stagedMappings).filter(Boolean).length} associazioni selezionate in questa sessione. Le selezioni si azzerano aggiornando l’anteprima e non sono ancora salvate nel catalogo.
+        </div>}
         <strong style={{ color: '#6ee7b7' }}>Nessuna modifica al foglio o al listino Price Sentinel.</strong>
       </>}
     </section>
