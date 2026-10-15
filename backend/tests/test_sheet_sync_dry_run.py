@@ -23,14 +23,15 @@ class SheetSyncDryRunTests(unittest.TestCase):
             notes=snapshot.get("notes", {}),
         )
 
-    def test_five_sector_sources(self):
+    def test_seven_sheet_sources(self):
         report = self.preview()
-        self.assertEqual(len(SOURCES), 5)
-        self.assertEqual(len(report["sector_summary"]), 5)
-        self.assertEqual(report["candidate_count"], 30)
+        self.assertEqual(len(SOURCES), 7)
+        self.assertNotIn("FOOD", {source.title for source in SOURCES})
+        self.assertEqual(len(report["sector_summary"]), 7)
+        self.assertEqual(report["candidate_count"], 32)
         self.assertEqual(report["missing_sources"], [])
         self.assertEqual(
-            sum(section["products"] for section in report["sector_summary"]), 9
+            sum(section["products"] for section in report["sector_summary"]), 11
         )
         self.assertTrue(report["no_contract_writes"])
         self.assertFalse(report["rules"]["auto_commit_enabled"])
@@ -39,19 +40,27 @@ class SheetSyncDryRunTests(unittest.TestCase):
         fruit = next(c for c in report["candidates"] if c["source_sheet"] == "FRUTTA E VERDURA")
         self.assertEqual(fruit["sector"], "Food")
         self.assertEqual(fruit["subcategory"], "Frutta")
+        carne = next(c for c in report["candidates"] if c["source_sheet"] == "Carne")
+        self.assertEqual(carne["subcategory"], "Carne")
+        self.assertEqual(carne["source_original_row"], 20)
+        pesce = next(c for c in report["candidates"] if c["source_sheet"] == "Pesce")
+        self.assertEqual(pesce["subcategory"], "Pesce")
+        varie = next(c for c in report["candidates"] if c["source_sheet"] == "Varie")
+        self.assertIsNone(varie["subcategory"])
 
     def test_sheet_exclusion_keeps_original_quote_and_note(self):
         report = self.preview()
         q = next(c for c in report["candidates"] if
-                 c["source_sheet"] == "FOOD" and c["source_cell"] == "F3")
+                 c["source_sheet"] == "Varie" and c["source_cell"] == "F3")
         self.assertEqual(q["supplier"], "ORIZZONTI")
+        self.assertEqual(q["source_original_row"], 3)
         self.assertEqual(q["numeric_price"], "5.9")
         self.assertEqual(q["status"], "blocked")
         self.assertIn("sheet_exclusion", q["reasons"])
         self.assertIn("5,90", q["cell_note"])
         # A valid competitor on the same row must remain available for review.
         other = next(c for c in report["candidates"] if
-                     c["source_sheet"] == "FOOD" and c["source_cell"] == "E3")
+                     c["source_sheet"] == "Varie" and c["source_cell"] == "E3")
         self.assertEqual(other["status"], "needs_mapping")
         self.assertEqual(other["price_role"], "negotiated_agreement")
         self.assertTrue(other["requires_product_mapping"])
@@ -95,41 +104,49 @@ class SheetSyncDryRunTests(unittest.TestCase):
 
     def test_mismatched_supplier_header_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
-        data["values"]["FOOD"][0][2] = "UNKNOWN"
+        data["values"]["Carne"][0][2] = "UNKNOWN"
         report = self.preview(data)
-        self.assertIn("FOOD", report["missing_sources"])
-        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
+        self.assertIn("Carne", report["missing_sources"])
+        self.assertFalse(any(c["source_sheet"] == "Carne" for c in report["candidates"]))
+
+    def test_missing_food_origin_header_fails_closed_for_that_tab(self):
+        data = copy.deepcopy(self.snapshot)
+        data["values"]["Carne"][0][10] = "RIFERIMENTO ERRATO"
+        report = self.preview(data)
+        self.assertIn("Carne", report["missing_sources"])
+        self.assertFalse(any(c["source_sheet"] == "Carne" for c in report["candidates"]))
 
     def test_missing_exclusion_control_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
         del data["values"]["CONTROLLO_ESCLUSIONI"]
         report = self.preview(data)
         self.assertIn("CONTROLLO_ESCLUSIONI", report["missing_sources"])
-        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
+        food_tabs = {"Carne", "Pesce", "Varie"}
+        self.assertFalse(any(c["source_sheet"] in food_tabs for c in report["candidates"]))
 
     def test_corrupt_exclusion_register_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
         data["values"]["CONTROLLO_ESCLUSIONI"][0][5] = "OTHER"
         report = self.preview(data)
         self.assertIn("CONTROLLO_ESCLUSIONI", report["missing_sources"])
-        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
+        food_tabs = {"Carne", "Pesce", "Varie"}
+        self.assertFalse(any(c["source_sheet"] in food_tabs for c in report["candidates"]))
 
     def test_name_duplicates_alert_without_merging(self):
         data = copy.deepcopy(self.snapshot)
-        data["values"]["FOOD"].append(list(data["values"]["FOOD"][1]))
+        data["values"]["Varie"].append(list(data["values"]["Varie"][1]))
         report = self.preview(data)
         self.assertTrue(any(w["code"] == "duplicate_product_name" for w in report["warnings"]))
 
     def test_observation_hash_ignores_row_position(self):
         a = self.preview()
         data = copy.deepcopy(self.snapshot)
-        data["values"]["FOOD"].insert(1, ["", "", "", "", "", "", "", "", "", ""])
-        data["values"]["CONTROLLO_ESCLUSIONI"][1][0] += 1
-        data["notes"]["FOOD"]["F4"] = data["notes"]["FOOD"].pop("F3")
+        data["values"]["Varie"].insert(1, ["", "", "", "", "", "", "", "", "", "", ""])
+        data["notes"]["Varie"]["F4"] = data["notes"]["Varie"].pop("F3")
         b = self.preview(data)
-        h1 = next(c for c in a["candidates"] if c["source_sheet"] == "FOOD"
+        h1 = next(c for c in a["candidates"] if c["source_sheet"] == "Varie"
                   and c["source_cell"] == "F3")["observation_hash"]
-        h2 = next(c for c in b["candidates"] if c["source_sheet"] == "FOOD"
+        h2 = next(c for c in b["candidates"] if c["source_sheet"] == "Varie"
                   and c["source_cell"] == "F4")["observation_hash"]
         self.assertEqual(h1, h2)
 
