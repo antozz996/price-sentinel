@@ -6,7 +6,7 @@ import io
 import json
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -55,7 +55,10 @@ def parse_decimal_price(raw: object) -> Decimal | None:
     if parsed >= Decimal("100000000"):
         raise ValueError(f"Prezzo fuori intervallo: {raw}")
     if parsed.as_tuple().exponent < -4:
-        raise ValueError("Sono ammesse al massimo quattro cifre decimali per il prezzo.")
+        # The database stores negotiated prices at four decimal places.
+        # Round formula-derived sheet values consistently instead of rejecting
+        # the entire import (for example 3.733821 -> 3.7338).
+        parsed = parsed.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
     return parsed
 
 
