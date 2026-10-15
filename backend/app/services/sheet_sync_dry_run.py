@@ -1,7 +1,7 @@
-"""Read-only normalization of sector price matrices for the Google Sheets Sync Engine.
+"""Read-only normalization of agreed supplier prices from the Santo Graal workbook.
 
-NO database imports or writes. Everything stays a staged *candidate*: Sheet edits
-and Gemini output are not contractual price agreements.
+NO database imports or writes. Commercial agreement is established by the source
+workbook; candidates still need product/supplier identity mapping and data checks.
 """
 from __future__ import annotations
 
@@ -233,7 +233,7 @@ def stage_snapshot(
                     tally["skipped_empty"] += 1
                     continue
                 issues: list[str] = []
-                status = "needs_approval"  # NEVER auto-authorize from a spreadsheet.
+                status = "needs_mapping"  # Prices are agreed; canonical product/supplier linkage is still needed.
                 price_uom = (_text(_cell(row, supplier.unit_index))
                              if supplier.unit_index is not None else base_uom)
                 if value_state != "valid":
@@ -257,9 +257,8 @@ def stage_snapshot(
                     issues.append("precision_review")
                 if layout.title == "BEVERAGE" and supplier.name == "ORIZZONTI":
                     issues.append("derived_supplier_lookup")
-                # User confirms populated supplier prices in this workbook are already agreed prices.
-                # They remain candidates and NEVER become active without Price Sentinel approval.
-                issues.extend(("canonical_id_not_mapped", "agreement_approval_required"))
+                # The price is already commercially agreed; only target identity mapping remains.
+                issues.append("canonical_id_not_mapped")
                 if status == "blocked":
                     tally["blocked"] += 1
                 else:
@@ -275,7 +274,7 @@ def stage_snapshot(
                     "sector": layout.sector, "source_sheet": layout.title,
                     "source_row": rownum, "source_cell": cellref, "product": product,
                     "supplier": supplier.name, "price_role": "negotiated_agreement",
-                    "requires_approval": True, "reference_unit": base_uom,
+                    "requires_product_mapping": True, "reference_unit": base_uom,
                     "supplier_price_unit": price_uom, "quoted_value": raw,
                     "numeric_price": value, "status": status, "reasons": sorted(set(issues)),
                     "row_note": supplier_note or None,
@@ -303,9 +302,9 @@ def stage_snapshot(
         "rules": {
             "agreement": "valid_until_next_approved_listino_unless_explicit_expiry",
             "auto_commit_enabled": False,
-            "canonical_product_mapping": "requires_explicit_approval",
-            "source": "Santo Graal records negotiated supplier prices; Price Sentinel approval is still required.",
-            "price_semantics": "negotiated_agreement_candidate",
+            "canonical_product_mapping": "required_before_import",
+            "source": "Santo Graal records negotiated supplier prices; no separate commercial approval is required.",
+            "price_semantics": "negotiated_agreement",
         },
     }
     return report

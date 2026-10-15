@@ -2,7 +2,7 @@
 
 ## Stato / safety
 
-**Solo lettura.** Questo modulo NON ha endpoint di scrittura, non usa il database Price Sentinel, non registra o attiva prezzi, non lancia job periodici, non modifica Google Sheets e non manda ordini. L'utente conferma che i prezzi inseriti nel Santo Graal sono gia' pattuiti con i fornitori. Il dry run li classifica come candidati di prezzo pattuito; diventano attivi in Price Sentinel solo dopo validazione e approvazione esplicita. La normalizzazione delle unità di misura e' rinviata a una fase successiva.
+**Solo lettura.** Questo modulo NON ha endpoint di scrittura, non usa il database Price Sentinel, non registra o attiva prezzi, non lancia job periodici, non modifica Google Sheets e non manda ordini. L'utente conferma che i prezzi inseriti nel Santo Graal sono gia' pattuiti con i fornitori. Il dry run li classifica come accordi già pattuiti. Non è prevista una seconda approvazione commerciale; prima dell'importazione vanno completati l'associazione ai prodotti/fornitori Price Sentinel e i controlli sui dati. La normalizzazione delle unità di misura e' rinviata a una fase successiva.
 
 Dipendenza: PR P0 `fix/smart-price-sheet-sync-p0` (revisione del flusso anteprima/commit). Il ramo P1 va valutato separatamente: nessun deploy e nessun merge senza gate.
 
@@ -113,7 +113,7 @@ Il successo dei test offline su GitHub non significa che l'autenticazione WIF o 
 ## Significato degli stati
 
 - `blocked`: esclusione, valore non affidabile, zero, unità per fornitore non comparabile.
-- `needs_approval`: quota positiva leggibile ma manca il mapping canonico e l'approvazione delle condizioni pattuite.
+- `needs_mapping`: prezzo pattuito leggibile, ma prodotto/fornitore non è ancora associato all'anagrafica canonica Price Sentinel.
 - `auto_eligible`: **non emesso da P1**; sara' possibile solo con registro mapping e policy contrattuali preautorizzate da Price Sentinel.
 
 I prezzi possono avere piu' di quattro decimali nelle formule Sheets; vengono preservati e marcati per revisione, mai arrotondati silenziosamente.
@@ -123,7 +123,7 @@ I prezzi possono avere piu' di quattro decimali nelle formule Sheets; vengono pr
 - Convalidare collaudo su dati reali in read-only (5 settori, note, esclusioni).
 - Creare registry canonico `product_id/supplier_id` con mapping esplicito. Non usare fuzzy matching o il solo numero di riga.
 - Distinguere il prezzo net-to-pay dalla quotazione, il prezzo pattuito e le risultanze delle fatture.
-- Definire workflow di approvazione accordo per fornitore/periodo; **gli accordi restano validi fino al nuovo listino approvato salvo scadenza esplicita**.
+- Definire il flusso di importazione dei prezzi già pattuiti dopo il mapping prodotto/fornitore; gli accordi restano validi fino al nuovo listino salvo scadenza esplicita.
 - Eseguire P0 E2E su DB usa-e-getta; solo dopo valutare il merge P0/P1 e il lavoro P2 staging DB.
 
 ## Verifiche e limiti
