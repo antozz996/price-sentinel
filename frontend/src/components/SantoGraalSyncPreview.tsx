@@ -50,6 +50,9 @@ const REASON_LABELS: Record<string, string> = {
   unit_mismatch_needs_conversion: 'Unità diverse: conversione rinviata',
   unit_not_specified: 'Unità di misura mancante',
   zero_or_negative: 'Prezzo nullo o negativo',
+  formula_error: 'La formula della cella restituisce un errore',
+  invalid_price: 'Prezzo non valido',
+  unsupported_price: 'Formato del prezzo non supportato',
   textual_price: 'Valore prezzo non numerico',
   sheet_exclusion: 'Quotazione esclusa nel foglio',
   precision_review: 'Precisione del prezzo da verificare',
@@ -135,6 +138,8 @@ export default function SantoGraalSyncPreview() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [report, setReport] = useState<DryRunReport | null>(null)
+  const [statusFilter, setStatusFilter] = useState('blocked')
+  const [sheetFilter, setSheetFilter] = useState('all')
 
   async function runReadOnlyPreview() {
     setBusy(true)
@@ -193,6 +198,14 @@ export default function SantoGraalSyncPreview() {
     }
   }
 
+  const blockedCount = report?.candidates.filter(item => item.status === 'blocked').length || 0
+  const mappingCount = report?.candidates.filter(item => item.status === 'needs_mapping').length || 0
+  const sheetTitles = Array.from(new Set(report?.candidates.map(item => item.source_sheet) || [])).sort()
+  const visibleCandidates = (report?.candidates || []).filter(item =>
+    (statusFilter === 'all' || item.status === statusFilter)
+    && (sheetFilter === 'all' || item.source_sheet === sheetFilter)
+  )
+
   return (
     <section className="glass-panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
@@ -229,11 +242,29 @@ export default function SantoGraalSyncPreview() {
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.warnings.length}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>avvisi</div></div>
         </div>
         {report.missing_sources.length > 0 && <div role="alert" style={{ color: '#fca5a5' }}>Schede mancanti: {report.missing_sources.join(', ')}</div>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, color: 'var(--text-secondary)', fontSize: 12 }}>
+            Mostra esito
+            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} style={{ padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+              <option value="blocked">Bloccate dai controlli ({blockedCount})</option>
+              <option value="needs_mapping">Da associare ({mappingCount})</option>
+              <option value="all">Tutte ({report.candidate_count})</option>
+            </select>
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, color: 'var(--text-secondary)', fontSize: 12 }}>
+            Scheda dello Sheet
+            <select value={sheetFilter} onChange={event => setSheetFilter(event.target.value)} style={{ padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+              <option value="all">Tutte le schede</option>
+              {sheetTitles.map(title => <option key={title} value={title}>{title}</option>)}
+            </select>
+          </label>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{visibleCandidates.length} righe visualizzate · la cella indica dove controllare il dato nello Sheet</span>
+        </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
-            <thead><tr>{['Settore', 'Cella', 'Prodotto', 'Fornitore', 'Prezzo', 'Esito', 'Motivi'].map(label => <th key={label} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid var(--border-glass)' }}>{label}</th>)}</tr></thead>
+            <thead><tr>{['Scheda', 'Cella', 'Prodotto', 'Fornitore', 'Prezzo letto', 'Esito', 'Motivo del controllo'].map(label => <th key={label} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid var(--border-glass)' }}>{label}</th>)}</tr></thead>
             <tbody>
-              {report.candidates.slice(0, 40).map(item => (
+              {visibleCandidates.map(item => (
                 <tr key={item.source_sheet + item.source_cell}>
                   <td style={{ padding: 8 }}>{item.source_sheet}</td>
                   <td style={{ padding: 8 }}>{item.source_cell}</td>
@@ -246,7 +277,7 @@ export default function SantoGraalSyncPreview() {
               ))}
             </tbody>
           </table>
-          {report.candidates.length > 40 && <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Mostro le prime 40 righe: il riepilogo include tutte le {report.candidates.length} righe rilevate.</p>}
+          {visibleCandidates.length === 0 && <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Nessuna riga corrisponde ai filtri selezionati.</p>}
         </div>
         <strong style={{ color: '#6ee7b7' }}>Nessuna modifica al foglio o al listino Price Sentinel.</strong>
       </>}
