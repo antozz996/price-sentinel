@@ -115,7 +115,8 @@ function requestReadToken(): Promise<string> {
       },
       error_callback: (error: any) => reject(new Error(error?.message || 'Popup Google non disponibile.')),
     })
-    client.requestAccessToken({ prompt: 'consent' })
+    // Google ricorda il consenso già concesso; non forziamo una nuova schermata di consenso a ogni lettura.
+    client.requestAccessToken()
   })
 }
 
@@ -138,6 +139,7 @@ export default function SantoGraalSyncPreview() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [report, setReport] = useState<DryRunReport | null>(null)
+  const [googleToken, setGoogleToken] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('blocked')
   const [sheetFilter, setSheetFilter] = useState('all')
 
@@ -145,13 +147,15 @@ export default function SantoGraalSyncPreview() {
     setBusy(true)
     setError(null)
     setNotice(null)
-    setReport(null)
-    let token: string | null = null
+    let token: string | null = googleToken
     try {
       localStorage.setItem('ps.santo-graal.url', sourceUrl.trim())
       const spreadsheetId = spreadsheetIdFromUrl(sourceUrl.trim())
-      await loadGoogleIdentityServices()
-      token = await requestReadToken()
+      if (!token) {
+        await loadGoogleIdentityServices()
+        token = await requestReadToken()
+        setGoogleToken(token)
+      }
 
       const metadataUrl = GOOGLE_API + '/' + encodeURIComponent(spreadsheetId)
         + '?fields=' + encodeURIComponent('spreadsheetId,properties(title),sheets.properties(title)')
@@ -189,11 +193,10 @@ export default function SantoGraalSyncPreview() {
       setReport(preview)
       setNotice('Lettura completata. È un’anteprima: nessun prezzo è stato scritto o attivato.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Anteprima non riuscita.')
+      const message = err instanceof Error ? err.message : 'Anteprima non riuscita.'
+      if (message.includes('HTTP 401')) setGoogleToken(null)
+      setError(message.includes('HTTP 401') ? 'La sessione di Google è scaduta. Premi di nuovo “Aggiorna dal foglio” per rinnovarla.' : message)
     } finally {
-      if (token) {
-        try { (window as any).google?.accounts?.oauth2?.revoke(token, () => undefined) } catch { /* token remains memory-only */ }
-      }
       setBusy(false)
     }
   }
@@ -226,10 +229,10 @@ export default function SantoGraalSyncPreview() {
       </label>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className="btn btn-primary" disabled={busy || !sourceUrl.trim()} onClick={() => void runReadOnlyPreview()}>
-          {busy ? 'Lettura e controllo…' : 'Accedi a Google e prepara anteprima'}
+          {busy ? 'Lettura e controllo…' : report ? 'Aggiorna dal foglio' : 'Accedi a Google e prepara anteprima'}
         </button>
         <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
-          Scope richiesto: spreadsheets.readonly · il token resta in memoria e viene revocato al termine
+          Accesso in sola lettura · dopo il primo consenso, il pulsante aggiorna i dati senza rifare il login
         </span>
       </div>
       {error && <div role="alert" style={{ color: '#fca5a5', padding: 10, border: '1px solid rgba(248,113,113,.35)', borderRadius: 8 }}>{error}</div>}
