@@ -37,6 +37,37 @@ export function getHeaders(customHeaders: Record<string, string> = {}): Record<s
   return headers;
 }
 
+function formatApiErrorDetail(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const messages = value.map(item => {
+      if (item && typeof item === 'object') {
+        const entry = item as Record<string, unknown>;
+        const message = entry.msg ?? entry.message ?? entry.detail;
+        const location = Array.isArray(entry.loc) ? entry.loc.filter(Boolean).join('.') : '';
+        if (typeof message === 'string') return location ? `${location}: ${message}` : message;
+      }
+      return formatApiErrorDetail(item);
+    }).filter(Boolean);
+    return messages.join('; ');
+  }
+  if (value && typeof value === 'object') {
+    const entry = value as Record<string, unknown>;
+    for (const key of ['message', 'detail', 'error', 'msg']) {
+      if (entry[key] !== undefined && entry[key] !== value) {
+        const message = formatApiErrorDetail(entry[key]);
+        if (message) return message;
+      }
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'Errore API con dettagli non leggibili.';
+    }
+  }
+  return value == null ? '' : String(value);
+}
+
 // Funzione base per gestire le chiamate per bypassare Axios temporaneamente
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const headers = getHeaders(options.headers as Record<string, string>);
@@ -56,7 +87,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     let detail = '';
     try {
       const payload = await response.json();
-      detail = payload?.detail || payload?.error || '';
+      detail = formatApiErrorDetail(payload?.detail ?? payload?.error);
     } catch {
       detail = '';
     }
