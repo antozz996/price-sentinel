@@ -25,6 +25,8 @@ type Candidate = {
   reference_unit?: string | null
 }
 type CatalogProduct = { id: number; sku_interno: string | null; canonical_name: string; order_name: string | null; comparison_unit: string; is_active: boolean }
+type MappingOption = { value: string; label: string; group: 'Catalogo prodotti' | 'Listino attivo' }
+type ListinoMappingRow = { sku_interno: string; descrizione: string; unita_misura: string }
 type CandidateGroup = { key: string; sheet: string; product: string; unit: string; rows: Candidate[] }
 type SectorSummary = {
   sector: string
@@ -150,6 +152,7 @@ export default function SantoGraalSyncPreview() {
   const [statusFilter, setStatusFilter] = useState('blocked')
   const [sheetFilter, setSheetFilter] = useState('all')
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
+  const [mappingOptions, setMappingOptions] = useState<MappingOption[]>([])
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'groups' | 'rows'>('groups')
   const [groupSearch, setGroupSearch] = useState('')
@@ -206,12 +209,45 @@ export default function SantoGraalSyncPreview() {
       setStagedMappings({})
       setNotice('Lettura completata. È un’anteprima: nessun prezzo è stato scritto o attivato.')
       setCatalogError(null)
+      setCatalogProducts([])
+      setMappingOptions([])
       try {
         const catalog = await fetchWithAuth('/products') as CatalogProduct[]
-        setCatalogProducts(Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : [])
+        const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
+        setCatalogProducts(activeProducts)
+        const productOptions: MappingOption[] = activeProducts.map(product => ({
+          value: product.sku_interno ? 'sku:' + product.sku_interno : 'product:' + product.id,
+          label: product.canonical_name + (product.sku_interno ? ' · ' + product.sku_interno : ''),
+          group: 'Catalogo prodotti',
+        }))
+        let listinoOptions: MappingOption[] = []
+        try {
+          const currentListino = await fetchWithAuth('/listini/?limit=10000') as ListinoMappingRow[]
+          const unique = new Map<string, ListinoMappingRow>()
+          if (Array.isArray(currentListino)) {
+            currentListino.forEach(row => {
+              if (row.sku_interno && !unique.has(row.sku_interno)) unique.set(row.sku_interno, row)
+            })
+          }
+          listinoOptions = Array.from(unique.values()).map(row => ({
+            value: 'sku:' + row.sku_interno,
+            label: row.descrizione + ' · ' + row.sku_interno + (row.unita_misura ? ' · ' + row.unita_misura : ''),
+            group: 'Listino attivo',
+          }))
+        } catch {
+          // Il catalogo canonico resta utilizzabile anche se il listino non è disponibile.
+        }
+        const combined = [...productOptions, ...listinoOptions.filter(option => !productOptions.some(product => product.value === option.value))]
+        setMappingOptions(combined)
+        if (combined.length === 0) {
+          setCatalogError('Il catalogo prodotti e il listino attivo non restituiscono SKU selezionabili. Il raggruppamento funziona, ma prima di associare devi caricare/creare gli articoli nel Price Sentinel.')
+        } else if (activeProducts.length === 0) {
+          setCatalogError('Catalogo canonico vuoto: puoi associare i gruppi agli SKU già presenti nel listino attivo. Le scelte restano provvisorie.')
+        }
       } catch {
         setCatalogProducts([])
-        setCatalogError('Catalogo non disponibile: puoi consultare i gruppi, ma non selezionare un prodotto Price Sentinel.')
+        setMappingOptions([])
+        setCatalogError('Non riesco a leggere il catalogo prodotti. Riprova aggiornando l’anteprima; nessun dato è stato modificato.')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Anteprima non riuscita.'
@@ -313,6 +349,7 @@ export default function SantoGraalSyncPreview() {
               {groups.map(group => {
                 const exact = exactProductsFor(group.product)
                 const suggested = exact.length === 1 ? exact[0] : null
+                const suggestedValue = suggested ? (suggested.sku_interno ? 'sku:' + suggested.sku_interno : 'product:' + suggested.id) : ''
                 const selected = stagedMappings[group.key] || ''
                 return <tr key={group.key}>
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{group.sheet}</td>
@@ -321,10 +358,13 @@ export default function SantoGraalSyncPreview() {
                   <td style={{ padding: 8, verticalAlign: 'top', minWidth: 260 }}>{group.rows.map(row => <div key={row.source_cell + row.supplier} style={{ marginBottom: 4 }}>{row.supplier} · {row.source_cell} · {String(row.quoted_value ?? '—')} <span style={{ color: row.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>({displayStatus(row.status)})</span></div>)}</td>
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{suggested ? <>{suggested.canonical_name}<div style={{ color: 'var(--text-secondary)' }}>corrispondenza esatta</div></> : exact.length > 1 ? <span style={{ color: '#fbbf24' }}>Più corrispondenze esatte: scegli manualmente</span> : <span style={{ color: 'var(--text-secondary)' }}>Nessuna corrispondenza esatta</span>}</td>
                   <td style={{ padding: 8, verticalAlign: 'top', minWidth: 220 }}>
-                    <select aria-label={'Associa ' + group.product} value={selected} onChange={event => setStagedMappings(previous => ({ ...previous, [group.key]: event.target.value }))} disabled={catalogProducts.length === 0} style={{ width: '100%', padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                    <select aria-label={'Associa ' + group.product} value={selected} onChange={event => setStagedMappings(previous => ({ ...previous, [group.key]: event.target.value }))} disabled={mappingOptions.length === 0} style={{ width: '100%', padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
                       <option value="">Da valutare</option>
-                      {suggested && !catalogProducts.some(product => String(product.id) === selected) && <option value={String(suggested.id)}>{suggested.canonical_name}</option>}
-                      {catalogProducts.map(product => <option key={product.id} value={String(product.id)}>{product.canonical_name}{product.sku_interno ? ' · ' + product.sku_interno : ''}</option>)}
+                      {suggested && !mappingOptions.some(option => option.value === suggestedValue) && <option value={suggestedValue}>{suggested.canonical_name}</option>}
+                      {(['Catalogo prodotti', 'Listino attivo'] as const).map(groupName => {
+                        const options = mappingOptions.filter(option => option.group === groupName)
+                        return options.length ? <optgroup key={groupName} label={groupName}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup> : null
+                      })}
                     </select>
                     {selected && <small style={{ display: 'block', color: '#fbbf24', marginTop: 4 }}>Scelta provvisoria, non salvata</small>}
                   </td>
