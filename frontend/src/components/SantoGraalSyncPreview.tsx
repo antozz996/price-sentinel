@@ -15,6 +15,7 @@ const SOURCE_RANGES = [
 ]
 
 type Candidate = {
+  sector?: string
   source_sheet: string
   source_cell: string
   product: string
@@ -157,6 +158,7 @@ export default function SantoGraalSyncPreview() {
   const [viewMode, setViewMode] = useState<'groups' | 'rows'>('groups')
   const [groupSearch, setGroupSearch] = useState('')
   const [stagedMappings, setStagedMappings] = useState<Record<string, string>>({})
+  const [catalogBootstrapBusy, setCatalogBootstrapBusy] = useState(false)
 
   async function runReadOnlyPreview() {
     setBusy(true)
@@ -280,6 +282,53 @@ export default function SantoGraalSyncPreview() {
     normalizeName(product.canonical_name) === normalizeName(name)
     || Boolean(product.order_name && normalizeName(product.order_name) === normalizeName(name))
   )
+  const bootstrapProducts = Array.from((report?.candidates || [])
+    .filter(item => item.status === 'needs_mapping' && item.reference_unit?.trim())
+    .reduce((map, item) => {
+      const unit = item.reference_unit!.trim()
+      const key = [item.source_sheet, normalizeName(item.product), normalizeName(unit)].join('|')
+      if (!map.has(key)) {
+        map.set(key, {
+          source_sheet: item.source_sheet,
+          canonical_name: item.product.trim(),
+          comparison_unit: unit,
+          category: item.sector || item.source_sheet,
+        })
+      }
+      return map
+    }, new Map<string, { source_sheet: string; canonical_name: string; comparison_unit: string; category: string }>()).values())
+
+  async function initializeCatalogFromSheet() {
+    if (!bootstrapProducts.length || catalogBootstrapBusy) return
+    const confirmed = window.confirm(
+      'CREAZIONE CATALOGO INIZIALE\\n\\nVerranno creati nel Price Sentinel gli articoli presenti nelle righe prezzo valide del Santo Graal, con SKU tecnici stabili e unità così come indicate nel foglio. Non verranno creati fornitori, alias o prezzi. Nessun dato del Google Sheet verrà modificato. Continuare?'
+    )
+    if (!confirmed) return
+    setCatalogBootstrapBusy(true)
+    setCatalogError(null)
+    try {
+      const result = await fetchWithAuth('/product-identity/santo-graal/bootstrap-catalog', {
+        method: 'POST',
+        body: JSON.stringify({ items: bootstrapProducts }),
+      }) as { created_count: number; already_present_count: number; total_count: number }
+      const catalog = await fetchWithAuth('/products') as CatalogProduct[]
+      const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
+      setCatalogProducts(activeProducts)
+      setMappingOptions(activeProducts.map(product => ({
+        value: product.sku_interno ? 'sku:' + product.sku_interno : 'product:' + product.id,
+        label: product.canonical_name + (product.sku_interno ? ' · ' + product.sku_interno : ''),
+        group: 'Catalogo prodotti',
+      })))
+      setStagedMappings({})
+      setCatalogError(null)
+      setNotice('Catalogo inizializzato: ' + result.created_count + ' nuovi articoli, ' + result.already_present_count + ' già presenti. Prezzi e fornitori non sono stati modificati.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Inizializzazione catalogo non riuscita.'
+      setCatalogError('Catalogo non creato. ' + message)
+    } finally {
+      setCatalogBootstrapBusy(false)
+    }
+  }
 
   return (
     <section className="glass-panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -342,6 +391,15 @@ export default function SantoGraalSyncPreview() {
           <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{viewMode === 'groups' ? groups.length + ' gruppi · ' + visibleCandidates.length + ' righe prezzo' : visibleCandidates.length + ' righe visualizzate'}</span>
         </div>
         {catalogError && <div role="status" style={{ color: '#fbbf24', fontSize: 12 }}>{catalogError}</div>}
+        {catalogProducts.length === 0 && bootstrapProducts.length > 0 && <button
+          type="button"
+          className="btn btn-primary"
+          disabled={catalogBootstrapBusy}
+          onClick={() => void initializeCatalogFromSheet()}
+          style={{ alignSelf: 'flex-start' }}
+        >
+          {catalogBootstrapBusy ? 'Creazione catalogo…' : 'Crea catalogo iniziale (' + bootstrapProducts.length + ' articoli validi)'}
+        </button>}
         {viewMode === 'groups' ? <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
             <thead><tr>{['Scheda', 'Prodotto nel foglio', 'Unità', 'Offerte (fornitore · cella · prezzo)', 'Suggerimento esatto', 'Associa in anteprima'].map(label => <th key={label} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid var(--border-glass)', verticalAlign: 'top' }}>{label}</th>)}</tr></thead>
