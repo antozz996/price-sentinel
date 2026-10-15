@@ -63,7 +63,7 @@ function displayStatus(status: string): string {
 }
 
 function displayReasons(reasons: string[]): string {
-  return reasons.map(reason => REASON_LABELS[reason] || reason.replaceAll('_', ' ')).join(', ')
+  return reasons.map(reason => REASON_LABELS[reason] || reason.replace(/_/g, ' ')).join(', ')
 }
 
 function spreadsheetIdFromUrl(value: string): string {
