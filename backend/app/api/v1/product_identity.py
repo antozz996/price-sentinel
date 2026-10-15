@@ -1,9 +1,10 @@
 from datetime import datetime, date
+import hashlib
 from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, and_, or_
+from sqlalchemy import select, delete, and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -59,6 +60,17 @@ class ProductUpdate(BaseModel):
     comparison_unit: Optional[str] = None
     is_commodity: Optional[bool] = None
     is_active: Optional[bool] = None
+
+class SantoGraalCatalogSeedItem(BaseModel):
+    source_sheet: str = Field(min_length=1, max_length=100)
+    canonical_name: str = Field(min_length=1, max_length=255)
+    comparison_unit: str = Field(min_length=1, max_length=50)
+    category: Optional[str] = Field(default=None, max_length=100)
+
+
+class SantoGraalCatalogSeedRequest(BaseModel):
+    items: List[SantoGraalCatalogSeedItem] = Field(min_length=1, max_length=1000)
+
 
 class ProductBulkClassificationUpdate(BaseModel):
     product_ids: List[int] = Field(min_length=1, max_length=1000)
@@ -179,6 +191,88 @@ class OrderOptimizeRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 # Endpoints: Products
 # ──────────────────────────────────────────────────────────────────────
+
+@router.post(
+    "/santo-graal/bootstrap-catalog",
+    summary="Crea in modo idempotente i prodotti base dal Santo Graal",
+)
+async def bootstrap_santo_graal_catalog(
+    payload: SantoGraalCatalogSeedRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: Utente = Depends(require_admin),
+):
+    # Product and contract tables are global in this V2 schema. Keep the initial
+    # catalog operation scoped to the primary tenant until tenant scoping exists.
+    if getattr(admin, "tenant_id", None) != 1:
+        raise HTTPException(403, "Inizializzazione catalogo disponibile solo per l'azienda principale")
+
+    await db.execute(text("SELECT pg_advisory_xact_lock(481991, 2014)"))
+
+    requested: dict[str, SantoGraalCatalogSeedItem] = {}
+    for item in payload.items:
+        name = item.canonical_name.strip()
+        unit = item.comparison_unit.strip()
+        sheet = item.source_sheet.strip()
+        if not name or not unit or not sheet:
+            raise HTTPException(422, "Prodotto, scheda e unità sono obbligatori")
+        normalized = normalize_text(name)
+        stable_source_key = "|".join((sheet.casefold(), normalized, normalize_text(unit)))
+        sku = "SG-" + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
+        if sku in requested and normalize_text(requested[sku].canonical_name) != normalized:
+            raise HTTPException(409, "Collisione SKU durante la preparazione del catalogo")
+        requested[sku] = item
+
+    skus = list(requested)
+    existing_rows = list((await db.scalars(
+        select(Product).where(Product.sku_interno.in_(skus))
+    )).all())
+    existing_by_sku = {row.sku_interno: row for row in existing_rows}
+    conflicts = [
+        sku for sku, row in existing_by_sku.items()
+        if normalize_text(row.canonical_name) != normalize_text(requested[sku].canonical_name)
+        or normalize_text(row.comparison_unit) != normalize_text(requested[sku].comparison_unit)
+    ]
+    if conflicts:
+        raise HTTPException(
+            409,
+            detail={
+                "message": "Uno SKU generato dal foglio esiste già con dati diversi; nessun articolo è stato creato.",
+                "conflicting_skus": conflicts[:20],
+            },
+        )
+
+    created = []
+    for sku, item in requested.items():
+        if sku in existing_by_sku:
+            continue
+        name = item.canonical_name.strip()
+        unit = item.comparison_unit.strip()
+        product = Product(
+            sku_interno=sku,
+            canonical_name=name,
+            normalized_name=normalize_text(name),
+            category=item.category.strip() if item.category and item.category.strip() else None,
+            comparison_unit=unit,
+            unit_count=1,
+            is_commodity=False,
+            is_active=True,
+        )
+        db.add(product)
+        created.append(product)
+
+    await db.flush()
+    return {
+        "created_count": len(created),
+        "already_present_count": len(existing_by_sku),
+        "total_count": len(requested),
+        "products": [
+            {"sku_interno": row.sku_interno, "canonical_name": row.canonical_name}
+            for row in [*existing_rows, *created]
+        ],
+        "prices_written": 0,
+        "aliases_written": 0,
+    }
+
 
 @router.get("/products", response_model=List[ProductResponse], summary="Ottiene tutti i prodotti canonici")
 async def list_products(
