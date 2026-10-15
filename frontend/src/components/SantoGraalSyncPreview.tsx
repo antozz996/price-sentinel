@@ -6,7 +6,9 @@ const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 const GOOGLE_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 const SOURCE_RANGES = [
-  { title: 'FOOD', range: "'FOOD'!A1:J1000" },
+  { title: 'Carne', range: "'Carne'!A1:K1000" },
+  { title: 'Pesce', range: "'Pesce'!A1:K1000" },
+  { title: 'Varie', range: "'Varie'!A1:K1000" },
   { title: 'BEVERAGE', range: "'BEVERAGE'!A1:L1000" },
   { title: 'COMPARAZIONE MATERIALI', range: "'COMPARAZIONE MATERIALI'!A1:N1000" },
   { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:J1000" },
@@ -18,6 +20,8 @@ type Candidate = {
   sector?: string
   subcategory?: string | null
   source_sheet: string
+  source_row: number
+  source_original_row?: number | null
   source_cell: string
   product: string
   supplier: string
@@ -67,6 +71,7 @@ type DryRunReport = {
 
 const REASON_LABELS: Record<string, string> = {
   canonical_id_not_mapped: 'Prodotto da associare al catalogo Price Sentinel',
+  source_row_reference_missing: 'Riga originale FOOD assente o non valida',
   supplier_identity_and_net_price_need_verification: 'Identità fornitore e prezzo netto da verificare',
   unit_mapping_needed: 'Unità di misura da chiarire',
   unit_mismatch_needs_conversion: 'Unità diverse: conversione rinviata',
@@ -266,18 +271,26 @@ export default function SantoGraalSyncPreview() {
         setCatalogProducts(activeProducts)
         const automaticMappings = exactStagedMappings(preview.candidates, activeProducts)
         const savedMappings = loadSavedProductMappings(spreadsheetId)
-        const validSavedMappings = Object.fromEntries(Object.entries(savedMappings).filter(([key, value]) => {
-          const candidate = preview.candidates.find(item =>
-            [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|') === key
-          )
+        const validSavedMappings: Record<string, string> = {}
+        Object.entries(savedMappings).forEach(([savedKey, value]) => {
+          const candidate = preview.candidates.find(item => {
+            const currentKey = [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
+            const legacyFoodKey = ['Carne', 'Pesce', 'Varie'].includes(item.source_sheet)
+              ? ['FOOD', normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
+              : null
+            return currentKey === savedKey || legacyFoodKey === savedKey
+          })
           const product = value.startsWith('sku:')
             ? activeProducts.find(row => row.sku_interno === value.slice(4))
             : value.startsWith('product:')
               ? activeProducts.find(row => String(row.id) === value.slice(8))
               : undefined
-          return Boolean(candidate?.reference_unit && product?.sku_interno
-            && normalizeName(product.comparison_unit) === normalizeName(candidate.reference_unit))
-        }))
+          if (candidate?.reference_unit && product?.sku_interno
+            && normalizeName(product.comparison_unit) === normalizeName(candidate.reference_unit)) {
+            const currentKey = [candidate.source_sheet, normalizeName(candidate.product), normalizeName(candidate.reference_unit)].join('|')
+            validSavedMappings[currentKey] = value
+          }
+        })
         setStagedMappings({ ...automaticMappings, ...validSavedMappings })
         const productOptions: MappingOption[] = activeProducts.map(product => ({
           value: product.sku_interno ? 'sku:' + product.sku_interno : 'product:' + product.id,
