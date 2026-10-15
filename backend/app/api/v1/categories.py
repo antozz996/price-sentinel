@@ -37,22 +37,11 @@ router = APIRouter()
 
 # Default Ho.Re.Ca categories list
 DEFAULT_HORECA_CATEGORIES = [
-    {"nome": "Beverage & Soft Drinks", "descrizione": "Bibite gassate, succhi di frutta, energy drink, tonica", "colore": "#0ea5e9"},
-    {"nome": "Birre", "descrizione": "Birre in bottiglia, fusti e lattine", "colore": "#f59e0b"},
-    {"nome": "Alcolici & Superalcolici", "descrizione": "Liquori, amari, distillati, gin, rum, vodka, whisky", "colore": "#8b5cf6"},
-    {"nome": "Vini, Spumanti & Champagne", "descrizione": "Vini bianchi, rossi, rosati, bollicine, prosecco e champagne", "colore": "#ec4899"},
-    {"nome": "Acqua Minerale", "descrizione": "Acque minerali naturali ed effervescenti in vetro o PET", "colore": "#06b6d4"},
-    {"nome": "Caffetteria & Bar", "descrizione": "Caffè in grani, cialde, tè, tisane, sciroppi bar", "colore": "#78350f"},
-    {"nome": "Monouso & Tovagliato", "descrizione": "Bicchieri, cannucce, tovaglioli, tovaglie e posate monouso", "colore": "#10b981"},
-    {"nome": "Detergenza & Igiene", "descrizione": "Detergenti pavimenti, lavastoviglie, sanificanti HACCP, carta mani", "colore": "#14b8a6"},
-    {"nome": "Packaging & Asporto", "descrizione": "Vaschette, scatole pizza, sacchetti e contenitori delivery", "colore": "#64748b"},
-    {"nome": "Ortofrutta Fresca", "descrizione": "Frutta e verdura fresca per cucina e bar", "colore": "#84cc16"},
-    {"nome": "Carni & Salumi", "descrizione": "Carni fresche, hamburger, salumi e affettati", "colore": "#ef4444"},
-    {"nome": "Ittico & Pesce", "descrizione": "Pesce fresco, crostacei, molluschi e congelato mare", "colore": "#3b82f6"},
-    {"nome": "Latticini & Formaggi", "descrizione": "Latte, panna, burro, mozzarelle, formaggi freschi e stagionati", "colore": "#facc15"},
-    {"nome": "Surgelati & Congelati", "descrizione": "Patate fritte, basi pizza surgelate, pane, dessert surgelati", "colore": "#6366f1"},
-    {"nome": "Alimentari & Dispensa", "descrizione": "Olio, farina, pasta, salse, conserve, spezie e condimenti", "colore": "#d97706"},
-    {"nome": "Attrezzature & Accessori", "descrizione": "Bicchieri in vetro, stoviglie, accessori bar e cucina", "colore": "#94a3b8"},
+    {"nome": "Food", "descrizione": "Alimenti e prodotti per la cucina", "colore": "#16a34a"},
+    {"nome": "Beverage", "descrizione": "Bevande, acqua, alcolici e caffetteria", "colore": "#0ea5e9"},
+    {"nome": "Materiali", "descrizione": "Materiali, attrezzature, monouso, detergenza e packaging", "colore": "#64748b"},
+    {"nome": "Giocattoli", "descrizione": "Giocattoli", "colore": "#8b5cf6"},
+    {"nome": "Snack", "descrizione": "Snack e prodotti da spuntino", "colore": "#f59e0b"},
 ]
 
 
@@ -498,17 +487,9 @@ async def bulk_update_supplier_subcategories(
 # ─────────────────────────────────────────────
 
 DEFAULT_FOOD_SUBCATEGORIES = [
-    {"nome": "Carni & Hamburger", "descrizione": "Carni fresche, tagli bovino/suino/pollame, hamburger"},
-    {"nome": "Ittico & Pesce", "descrizione": "Pesce fresco, crostacei, molluschi, filetti e surgelato mare"},
-    {"nome": "Latticini & Formaggi", "descrizione": "Mozzarelle, burrate, formaggi stagionati, latte, panna"},
-    {"nome": "Salumi & Affettati", "descrizione": "Prosciutti, salami, speck, bresaola, salumi tipici"},
-    {"nome": "Ortofrutta Fresca", "descrizione": "Frutta e verdura fresca di stagione per cucina e decorazione"},
-    {"nome": "Pane, Pizza & Pasticceria", "descrizione": "Basi pizza, pane, focacce, lievitati, cornetti"},
-    {"nome": "Pasta, Riso & Cereali", "descrizione": "Pasta secca, pasta fresca, riso per risotti, farine"},
-    {"nome": "Surgelati & Congelati", "descrizione": "Patate fritte, verdure surgelate, basi dolci, gelati"},
-    {"nome": "Olio, Condimenti & Salse", "descrizione": "Olio EVO, aceti, salse, maionese, ketchup, senape"},
-    {"nome": "Conserve, Sottoli & Spezie", "descrizione": "Pomodori pelati, passata, sottoli, spezie, aromi"},
-    {"nome": "Dolci & Dessert", "descrizione": "Dessert pronti, monoporzioni, dolci al cucchiaio, torte"},
+    {"nome": "Pesce", "descrizione": "Pesce fresco e surgelato, crostacei e molluschi"},
+    {"nome": "Carne", "descrizione": "Carni fresche, hamburger, salumi e affettati"},
+    {"nome": "Frutta", "descrizione": "Frutta fresca"},
 ]
 
 
