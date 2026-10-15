@@ -76,7 +76,7 @@ const REASON_LABELS: Record<string, string> = {
   unsupported_price: 'Formato del prezzo non supportato',
   textual_price: 'Valore prezzo non numerico',
   sheet_exclusion: 'Quotazione esclusa nel foglio',
-  precision_review: 'Precisione del prezzo da verificare',
+  precision_review: 'Oltre 4 decimali: normalizzato a 4 decimali in importazione',
   derived_supplier_lookup: 'Prezzo letto da una formula/lookup derivata',
 }
 
@@ -390,7 +390,7 @@ export default function SantoGraalSyncPreview() {
   const isImportableCandidate = (item: Candidate) => {
     const blockedReasons = new Set([
       'unit_mapping_needed', 'unit_mismatch_needs_conversion', 'unit_not_specified',
-      'precision_review', 'supplier_identity_and_net_price_need_verification',
+      'supplier_identity_and_net_price_need_verification',
     ])
     return item.status === 'needs_mapping'
       && Boolean(item.reference_unit?.trim())
@@ -448,6 +448,7 @@ export default function SantoGraalSyncPreview() {
   }
 
   const importableCandidates = (report?.candidates || []).filter(isImportableCandidate)
+  const precisionReviewCount = importableCandidates.filter(item => item.reasons.includes('precision_review')).length
   const importableSupplierNames = Array.from(new Map(importableCandidates
     .map(item => [normalizeName(item.supplier), item.supplier] as const)).values())
 
@@ -620,6 +621,7 @@ export default function SantoGraalSyncPreview() {
             <strong>Fornitori del Santo Graal</strong>
             <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 3 }}>
               {importableSupplierNames.length} fornitori · {importableCandidates.length} quotazioni importabili · unità non confrontabili e righe escluse restano fuori
+              {precisionReviewCount > 0 && <div style={{ color: '#fbbf24', marginTop: 3 }}>{precisionReviewCount} prezzi con oltre 4 decimali saranno arrotondati a 4 (es. 3,733821 → 3,7338) e riportati nell’anteprima.</div>}
             </div>
           </div>
           {supplierLoadError && <div role="alert" style={{ color: '#fca5a5', fontSize: 12 }}>{supplierLoadError}</div>}
