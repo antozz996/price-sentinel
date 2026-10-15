@@ -52,7 +52,8 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertEqual(other["status"], "needs_mapping")
         self.assertEqual(other["price_role"], "negotiated_agreement")
         self.assertTrue(other["requires_product_mapping"])
-        self.assertIn("canonical_id_not_mapped", other["reasons"])\n        self.assertNotIn("agreement_approval_required", other["reasons"])
+        self.assertIn("canonical_id_not_mapped", other["reasons"])
+        self.assertNotIn("agreement_approval_required", other["reasons"])
 
     def test_unit_conflict_zero_and_malformed_price(self):
         candidates = self.preview()["candidates"]
