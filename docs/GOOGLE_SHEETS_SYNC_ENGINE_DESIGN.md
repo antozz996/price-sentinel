@@ -5,7 +5,7 @@
 
 ## Confini e fonti di verita'
 
-- Il Google Sheet santo graal registra prezzi fornitore gia' pattuiti dall'utente. Ogni valore numerico valido e' candidato a prezzo pattuito; Price Sentinel resta autorevole per attivazione, approvazione e storico.
+- Il Google Sheet santo graal registra prezzi fornitore gia' pattuiti dall'utente. Ogni valore numerico valido e' candidato a prezzo pattuito; Price Sentinel resta autorevole per associazione al catalogo, importazione e storico; il prezzo e' gia' pattuito alla fonte.
 - Price Sentinel: catalogo canonico, identita' del fornitore, accordi accettati, storico prezzi e controllo delle fatture.
 - In una successiva fase, un portale fornitori inviera' proposte usando **la medesima API di staging e approvazione**. Nessun fornitore modifica direttamente un accordo in vigore.
 - I prezzi pattuiti del foglio restano distinti da eventuali quotazioni spot o di mercato esterne. I prezzi estratti dalle fatture non riscrivono automaticamente i pattuiti.
@@ -44,7 +44,7 @@ Il connettore legge **valori non formattati**, metadati e note (per prezzi/confe
 
 ## Macchina a stati proposta
 
-`detected -> normalized -> validated -> (auto_eligible | needs_approval | blocked) -> (committed | rejected)`.
+`detected -> parsed -> (needs_mapping | blocked) -> ready_to_import -> imported`. L'accordo e' gia' pattuito; `needs_mapping` segnala l'associazione anagrafica, non un'approvazione commerciale.
 
 **Auto-eligible** solo se tutte queste condizioni risultano vere:
 - prodotto/fornitore associati in modo esplicito e gia' approvato, stessa entita' commerciale;
@@ -54,16 +54,16 @@ Il connettore legge **valori non formattati**, metadati e note (per prezzi/confe
 - decorrenza corretta e assenza di scadenza esplicita incompatibile;
 - appartenenza al tenant/sede e privilegi di approvazione verificati.
 
-Altrimenti il dato rimane *needs_approval* o *blocked*. Le soglie economiche sono configurabili per fornitore/categoria/periodo; **nessuna soglia unica hardcoded**. Un prezzo escluso nel foglio puo' tornare a *comparabile* solo dopo conferma in Price Sentinel. Nuove referenze, nuovi fornitori, alias ambigui e cambio di marca/composizione non si auto-creano.
+Altrimenti il dato rimane *needs_mapping* o *blocked*. Le soglie economiche sono configurabili per fornitore/categoria/periodo; **nessuna soglia unica hardcoded**. Un prezzo escluso nel foglio puo' tornare a *comparabile* solo dopo conferma in Price Sentinel. Nuove referenze, nuovi fornitori, alias ambigui e cambio di marca/composizione non si auto-creano.
 
-**Importante:** il dato sorgente e' gia' pattuito secondo la regola operativa confermata dall'utente; questo non autorizza l'attivazione automatica. Ogni nuova versione entra nel listino master solo dopo validazione e approvazione esplicita in Price Sentinel. La normalizzazione delle unità di misura resta una fase successiva.
+**Importante:** il dato sorgente e' gia' pattuito secondo la regola operativa confermata dall'utente; non serve una seconda approvazione commerciale. Prima dell'importazione vanno completati il mapping prodotto/fornitore e i controlli tecnici. La conversione delle unità di misura resta una fase successiva.
 
 ## API proposte (da implementare, non ancora esistenti)
 
 - `POST /api/v1/sheet-sync/connections` — lega lo Spreadsheet (admin).
 - `POST /api/v1/sheet-sync/pull?dry_run=true` — importa uno snapshot in staging senza cambiare i listini.
 - `GET /api/v1/sheet-sync/batches/{id}` — anteprima create/update/unchanged/conflict con evidenze.
-- `POST /api/v1/sheet-sync/candidates/{id}/approve` — approvazione con motivazione e decorrenza.
+- `POST /api/v1/sheet-sync/candidates/{id}/map` — associazione esplicita del prodotto e del fornitore canonici.
 - `POST /api/v1/sheet-sync/batches/{id}/commit` — commit idempotente **solo** delle voci auto-eligible o approvate, transazione e audit.
 - `GET /api/v1/sheet-sync/history` — variazioni e rollback tramite nuova versione, mai tramite overwrite distruttivo.
 
