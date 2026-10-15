@@ -28,6 +28,7 @@ class SheetLayout:
     product_index: int
     unit_index: int
     columns: tuple[SupplierColumn, ...]
+    subcategory: str | None = None
     first_row: int = 2
     reference_only: bool = False
     packaging_note_index: int | None = None
@@ -36,28 +37,28 @@ class SheetLayout:
 
 
 SOURCES = (
-    SheetLayout("FOOD", "food", 0, 1, (
+    SheetLayout("FOOD", "Food", 0, 1, (
         SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
         SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
         SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
     ), max_columns="J"),
-    SheetLayout("BEVERAGE", "beverage", 0, 1, (
+    SheetLayout("BEVERAGE", "Beverage", 0, 1, (
         SupplierColumn(2, "NAVAS"), SupplierColumn(3, "ORIZZONTI"),
         SupplierColumn(4, "3F"), SupplierColumn(5, "PASCARELLA"),
         SupplierColumn(6, "CASA D'AMBRA"),
     ), max_columns="L"),
-    SheetLayout("COMPARAZIONE MATERIALI", "materiali", 1, 2, (
+    SheetLayout("COMPARAZIONE MATERIALI", "Materiali", 1, 2, (
         SupplierColumn(3, "VEMO"), SupplierColumn(4, "KITO"),
         SupplierColumn(5, "EUROCARTA"), SupplierColumn(6, "ALPHA"),
         SupplierColumn(7, "PROMOCART", note_index=9),
         SupplierColumn(8, "MUNDO"),
     ), packaging_note_index=11, max_columns="N"),
-    SheetLayout("FRUTTA E VERDURA", "ortofrutta", 0, 1, (
+    SheetLayout("FRUTTA E VERDURA", "Food", 0, 1, (
         SupplierColumn(2, "MG FRUTTA", note_index=3),
         SupplierColumn(4, "DEMETRA", unit_index=5, note_index=6),
         SupplierColumn(7, "BONTA DELL'ORTO", unit_index=8, note_index=9),
-    ), max_columns="J"),
-    SheetLayout("GIOCATTOLI", "giocattoli", 2, 3, (
+    ), subcategory="Frutta", max_columns="J"),
+    SheetLayout("GIOCATTOLI", "Giocattoli", 2, 3, (
         SupplierColumn(11, "ANTONIO"), SupplierColumn(12, "GIOVANNI"),
     ), reference_only=True, packaging_note_index=6, max_columns="O"),
 )
@@ -271,7 +272,8 @@ def stage_snapshot(
                 supplier_note = _text(_cell(row, supplier.note_index))
                 packaging_note = _text(_cell(row, layout.packaging_note_index))
                 data = {
-                    "sector": layout.sector, "source_sheet": layout.title,
+                    "sector": layout.sector, "subcategory": layout.subcategory,
+                    "source_sheet": layout.title,
                     "source_row": rownum, "source_cell": cellref, "product": product,
                     "supplier": supplier.name, "price_role": "negotiated_agreement",
                     "requires_product_mapping": True, "reference_unit": base_uom,

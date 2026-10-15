@@ -36,6 +36,9 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertFalse(report["rules"]["auto_commit_enabled"])
         self.assertEqual(report["rules"]["price_semantics"], "negotiated_agreement")
         self.assertTrue(all(c["status"] != "auto_eligible" for c in report["candidates"]))
+        fruit = next(c for c in report["candidates"] if c["source_sheet"] == "FRUTTA E VERDURA")
+        self.assertEqual(fruit["sector"], "Food")
+        self.assertEqual(fruit["subcategory"], "Frutta")
 
     def test_sheet_exclusion_keeps_original_quote_and_note(self):
         report = self.preview()
@@ -82,7 +85,7 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertIn("derived_supplier_lookup", lookup["reasons"])
 
     def test_giocattoli_only_review(self):
-        candidates = [c for c in self.preview()["candidates"] if c["sector"] == "giocattoli"]
+        candidates = [c for c in self.preview()["candidates"] if c["sector"] == "Giocattoli"]
         self.assertEqual(len(candidates), 2)
         self.assertTrue(all(
             "supplier_identity_and_net_price_need_verification" in c["reasons"]

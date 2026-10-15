@@ -16,6 +16,7 @@ const SOURCE_RANGES = [
 
 type Candidate = {
   sector?: string
+  subcategory?: string | null
   source_sheet: string
   source_cell: string
   product: string
@@ -409,15 +410,16 @@ export default function SantoGraalSyncPreview() {
           canonical_name: item.product.trim(),
           comparison_unit: unit,
           category: item.sector || item.source_sheet,
+          subcategory: item.subcategory || undefined,
         })
       }
       return map
-    }, new Map<string, { source_sheet: string; canonical_name: string; comparison_unit: string; category: string }>()).values())
+    }, new Map<string, { source_sheet: string; canonical_name: string; comparison_unit: string; category: string; subcategory?: string }>()).values())
 
   async function initializeCatalogFromSheet() {
     if (!bootstrapProducts.length || catalogBootstrapBusy) return
     const confirmed = window.confirm(
-      'CREAZIONE CATALOGO INIZIALE\n\nVerranno creati nel Price Sentinel gli articoli identificati nelle righe importabili del Santo Graal, con SKU tecnici stabili e unità così come indicate nel foglio. Non verranno creati fornitori, alias o prezzi. Nessun dato del Google Sheet verrà modificato. Continuare?'
+      'ALLINEAMENTO CATALOGO SANTO GRAAL\n\nGli articoli già presenti saranno classificati secondo il foglio; FRUTTA E VERDURA verrà associato a Food → Frutta. Gli articoli mancanti saranno creati con SKU stabili e unità indicate nel foglio. Non verranno modificati prezzi, fornitori o dati nel Google Sheet. Continuare?'
     )
     if (!confirmed) return
     setCatalogBootstrapBusy(true)
@@ -426,7 +428,7 @@ export default function SantoGraalSyncPreview() {
       const result = await fetchWithAuth('/product-identity/santo-graal/bootstrap-catalog', {
         method: 'POST',
         body: JSON.stringify({ items: bootstrapProducts }),
-      }) as { created_count: number; already_present_count: number; total_count: number }
+      }) as { created_count: number; already_present_count: number; total_count: number; classification_updated_count?: number }
       const catalog = await fetchWithAuth('/products') as CatalogProduct[]
       const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
       setCatalogProducts(activeProducts)
@@ -436,9 +438,8 @@ export default function SantoGraalSyncPreview() {
         label: product.canonical_name + (product.sku_interno ? ' · ' + product.sku_interno : ''),
         group: 'Catalogo prodotti',
       })))
-      setStagedMappings({})
       setCatalogError(null)
-      setNotice('Catalogo inizializzato: ' + result.created_count + ' nuovi articoli, ' + result.already_present_count + ' già presenti. Prezzi e fornitori non sono stati modificati.')
+      setNotice('Catalogo allineato: ' + result.created_count + ' nuovi articoli, ' + result.already_present_count + ' già presenti, ' + (result.classification_updated_count || 0) + ' classificazioni aggiornate. Prezzi e fornitori non sono stati modificati.')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Inizializzazione catalogo non riuscita.'
       setCatalogError('Catalogo non creato. ' + message)
@@ -663,14 +664,14 @@ export default function SantoGraalSyncPreview() {
             Import completato · voci create {priceCommitResult.result.created ?? 0} · revisioni {priceCommitResult.result.updated ?? 0} · invariati {priceCommitResult.result.unchanged ?? 0} · alias creati {priceCommitResult.result.aliases_created ?? 0}
           </div>}
         </div>}
-        {catalogProducts.length === 0 && bootstrapProducts.length > 0 && <button
+        {bootstrapProducts.length > 0 && <button
           type="button"
           className="btn btn-primary"
           disabled={catalogBootstrapBusy}
           onClick={() => void initializeCatalogFromSheet()}
           style={{ alignSelf: 'flex-start' }}
         >
-          {catalogBootstrapBusy ? 'Creazione catalogo…' : 'Crea catalogo iniziale (' + bootstrapProducts.length + ' articoli rilevati)'}
+          {catalogBootstrapBusy ? 'Allineamento catalogo…' : 'Allinea Food → Frutta e categorie (' + bootstrapProducts.length + ' articoli)'}
         </button>}
         {viewMode === 'groups' ? <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>

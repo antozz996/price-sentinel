@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, and_, or_, text
+from sqlalchemy import select, delete, and_, or_, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -66,6 +66,7 @@ class SantoGraalCatalogSeedItem(BaseModel):
     canonical_name: str = Field(min_length=1, max_length=255)
     comparison_unit: str = Field(min_length=1, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
+    subcategory: Optional[str] = Field(default=None, max_length=100)
 
 
 class SantoGraalCatalogSeedRequest(BaseModel):
@@ -243,8 +244,18 @@ async def bootstrap_santo_graal_catalog(
         )
 
     created = []
+    classification_updated_ids: set[int] = set()
     for sku, item in requested.items():
-        if sku in existing_by_sku:
+        existing_product = existing_by_sku.get(sku)
+        if existing_product:
+            category = item.category.strip() if item.category and item.category.strip() else None
+            subcategory = item.subcategory.strip() if item.subcategory and item.subcategory.strip() else None
+            if category and existing_product.category != category:
+                existing_product.category = category
+                classification_updated_ids.add(existing_product.id)
+            if subcategory and existing_product.subcategory != subcategory:
+                existing_product.subcategory = subcategory
+                classification_updated_ids.add(existing_product.id)
             continue
         name = item.canonical_name.strip()
         unit = item.comparison_unit.strip()
@@ -253,6 +264,7 @@ async def bootstrap_santo_graal_catalog(
             canonical_name=name,
             normalized_name=normalize_text(name),
             category=item.category.strip() if item.category and item.category.strip() else None,
+            subcategory=item.subcategory.strip() if item.subcategory and item.subcategory.strip() else None,
             comparison_unit=unit,
             unit_count=1,
             is_commodity=False,
@@ -261,10 +273,23 @@ async def bootstrap_santo_graal_catalog(
         db.add(product)
         created.append(product)
 
+    # Legacy catalog records created from this source tab used a standalone
+    # "ortofrutta" category. Preserve the products and prices while moving only
+    # their taxonomy into the current Food → Frutta hierarchy.
+    legacy_fruit_products = list((await db.scalars(
+        select(Product).where(func.lower(func.btrim(Product.category)) == "ortofrutta")
+    )).all())
+    for product in legacy_fruit_products:
+        if product.category != "Food" or product.subcategory != "Frutta":
+            product.category = "Food"
+            product.subcategory = "Frutta"
+            classification_updated_ids.add(product.id)
+
     await db.flush()
     return {
         "created_count": len(created),
         "already_present_count": len(existing_by_sku),
+        "classification_updated_count": len(classification_updated_ids),
         "total_count": len(requested),
         "products": [
             {"sku_interno": row.sku_interno, "canonical_name": row.canonical_name}
