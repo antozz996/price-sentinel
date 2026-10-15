@@ -301,7 +301,7 @@ export default function SantoGraalSyncPreview() {
   async function initializeCatalogFromSheet() {
     if (!bootstrapProducts.length || catalogBootstrapBusy) return
     const confirmed = window.confirm(
-      'CREAZIONE CATALOGO INIZIALE\\n\\nVerranno creati nel Price Sentinel gli articoli presenti nelle righe prezzo valide del Santo Graal, con SKU tecnici stabili e unità così come indicate nel foglio. Non verranno creati fornitori, alias o prezzi. Nessun dato del Google Sheet verrà modificato. Continuare?'
+      'CREAZIONE CATALOGO INIZIALE\n\nVerranno creati nel Price Sentinel gli articoli identificati nelle righe importabili del Santo Graal, con SKU tecnici stabili e unità così come indicate nel foglio. Non verranno creati fornitori, alias o prezzi. Nessun dato del Google Sheet verrà modificato. Continuare?'
     )
     if (!confirmed) return
     setCatalogBootstrapBusy(true)
@@ -398,7 +398,7 @@ export default function SantoGraalSyncPreview() {
           onClick={() => void initializeCatalogFromSheet()}
           style={{ alignSelf: 'flex-start' }}
         >
-          {catalogBootstrapBusy ? 'Creazione catalogo…' : 'Crea catalogo iniziale (' + bootstrapProducts.length + ' articoli validi)'}
+          {catalogBootstrapBusy ? 'Creazione catalogo…' : 'Crea catalogo iniziale (' + bootstrapProducts.length + ' articoli rilevati)'}
         </button>}
         {viewMode === 'groups' ? <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
