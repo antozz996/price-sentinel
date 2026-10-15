@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, and_, or_
+from sqlalchemy import select, delete, and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -205,6 +205,8 @@ async def bootstrap_santo_graal_catalog(
     # catalog operation scoped to the primary tenant until tenant scoping exists.
     if getattr(admin, "tenant_id", None) != 1:
         raise HTTPException(403, "Inizializzazione catalogo disponibile solo per l'azienda principale")
+
+    await db.execute(text("SELECT pg_advisory_xact_lock(481991, 2014)"))
 
     requested: dict[str, SantoGraalCatalogSeedItem] = {}
     for item in payload.items:
