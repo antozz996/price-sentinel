@@ -571,6 +571,52 @@ export default function SantoGraalSyncPreview() {
           <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{viewMode === 'groups' ? groups.length + ' gruppi · ' + visibleCandidates.length + ' righe prezzo' : visibleCandidates.length + ' righe visualizzate'}</span>
         </div>
         {catalogError && <div role="status" style={{ color: '#fbbf24', fontSize: 12 }}>{catalogError}</div>}
+        {report && <div style={{ padding: 12, border: '1px solid var(--border-glass)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <strong>Fornitori del Santo Graal</strong>
+            <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 3 }}>
+              {importableSupplierNames.length} fornitori · {importableCandidates.length} quotazioni importabili · unità non confrontabili e righe escluse restano fuori
+            </div>
+          </div>
+          {supplierLoadError && <div role="alert" style={{ color: '#fca5a5', fontSize: 12 }}>{supplierLoadError}</div>}
+          {importableSupplierNames.length > 0 && <details>
+            <summary style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontSize: 12 }}>Controlla o completa gli abbinamenti fornitori</summary>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 8, marginTop: 10 }}>
+              {importableSupplierNames.map(name => <label key={normalizeName(name)} style={{ display: 'flex', flexDirection: 'column', gap: 4, color: 'var(--text-secondary)', fontSize: 12 }}>
+                {name}
+                <select value={supplierMappings[normalizeName(name)] || ''} onChange={event => {
+                  setSupplierMappings(previous => ({ ...previous, [normalizeName(name)]: event.target.value }))
+                  setPricePreview(null); setPriceImportError(null); setPriceCommitResult(null)
+                }} style={{ padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                  <option value="">Da associare</option>
+                  {supplierOptions.map(supplier => <option key={supplier.id} value={String(supplier.id)}>{supplier.nome_azienda}{supplier.partita_iva ? ' · ' + supplier.partita_iva : ''}</option>)}
+                </select>
+              </label>)}
+            </div>
+          </details>}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button type="button" className="btn btn-primary" disabled={priceImportBusy || importableCandidates.length === 0 || catalogProducts.length === 0} onClick={() => void preparePriceImport()}>
+              {priceImportBusy ? 'Controllo listino…' : 'Prepara import prezzi pattuiti'}
+            </button>
+            <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Prima genera un’anteprima completa. Le righe non scrivono nulla finché non confermi la registrazione.</span>
+          </div>
+          {priceImportError && <div role="alert" style={{ color: '#fca5a5', fontSize: 12 }}>{priceImportError}</div>}
+          {pricePreview && <div role="status" style={{ padding: 10, background: 'rgba(255,255,255,.035)', borderRadius: 8 }}>
+            <strong>{pricePreview.can_commit ? 'Anteprima pronta' : 'Anteprima bloccata'}</strong>
+            <span style={{ marginLeft: 8, color: 'var(--text-secondary)', fontSize: 12 }}>
+              Nuovi: {pricePreview.counts.create} · Revisioni: {pricePreview.counts.update} · Invariati: {pricePreview.counts.unchanged} · Controlli bloccanti: {pricePreview.counts.errors}
+            </span>
+            {pricePreview.errors?.length > 0 && <ul style={{ margin: '8px 0 0', color: '#fca5a5', fontSize: 12 }}>
+              {pricePreview.errors.slice(0, 8).map((item, index) => <li key={index}>{item.message}</li>)}
+            </ul>}
+            {pricePreview.can_commit && !priceCommitResult && <button type="button" className="btn btn-primary" disabled={priceCommitBusy} onClick={() => void commitPriceImport()} style={{ marginTop: 10 }}>
+              {priceCommitBusy ? 'Registrazione prezzi…' : 'Registra i prezzi già pattuiti'}
+            </button>}
+          </div>}
+          {priceCommitResult && <div style={{ color: '#6ee7b7', fontSize: 13 }}>
+            Import completato · voci create {priceCommitResult.result.created ?? 0} · revisioni {priceCommitResult.result.updated ?? 0} · invariati {priceCommitResult.result.unchanged ?? 0} · alias creati {priceCommitResult.result.aliases_created ?? 0}
+          </div>}
+        </div>}
         {catalogProducts.length === 0 && bootstrapProducts.length > 0 && <button
           type="button"
           className="btn btn-primary"
@@ -596,7 +642,10 @@ export default function SantoGraalSyncPreview() {
                   <td style={{ padding: 8, verticalAlign: 'top', minWidth: 260 }}>{group.rows.map(row => <div key={row.source_cell + row.supplier} style={{ marginBottom: 4 }}>{row.supplier} · {row.source_cell} · {String(row.quoted_value ?? '—')} <span style={{ color: row.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>({displayStatus(row.status)})</span></div>)}</td>
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{suggested ? <>{suggested.canonical_name}<div style={{ color: 'var(--text-secondary)' }}>corrispondenza esatta</div></> : exact.length > 1 ? <span style={{ color: '#fbbf24' }}>Più corrispondenze esatte: scegli manualmente</span> : <span style={{ color: 'var(--text-secondary)' }}>Nessuna corrispondenza esatta</span>}</td>
                   <td style={{ padding: 8, verticalAlign: 'top', minWidth: 220 }}>
-                    <select aria-label={'Associa ' + group.product} value={selected} onChange={event => setStagedMappings(previous => ({ ...previous, [group.key]: event.target.value }))} disabled={mappingOptions.length === 0} style={{ width: '100%', padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                    <select aria-label={'Associa ' + group.product} value={selected} onChange={event => {
+                      setStagedMappings(previous => ({ ...previous, [group.key]: event.target.value }))
+                      setPricePreview(null); setPriceImportError(null); setPriceCommitResult(null)
+                    }} disabled={mappingOptions.length === 0} style={{ width: '100%', padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
                       <option value="">Da valutare</option>
                       {suggested && !mappingOptions.some(option => option.value === suggestedValue) && <option value={suggestedValue}>{suggested.canonical_name}</option>}
                       {(['Catalogo prodotti', 'Listino attivo'] as const).map(groupName => {
