@@ -216,7 +216,8 @@ async def bootstrap_santo_graal_catalog(
         if not name or not unit or not sheet:
             raise HTTPException(422, "Prodotto, scheda e unità sono obbligatori")
         normalized = normalize_text(name)
-        stable_source_key = "|".join((sheet.casefold(), normalized, normalize_text(unit)))
+        # Same normalized item and unit reuse one canonical SKU across source tabs.
+        stable_source_key = "|".join((normalized, normalize_text(unit)))
         sku = "SG-" + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
         if sku in requested and normalize_text(requested[sku].canonical_name) != normalized:
             raise HTTPException(409, "Collisione SKU durante la preparazione del catalogo")

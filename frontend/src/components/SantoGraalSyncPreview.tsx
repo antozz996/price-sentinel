@@ -217,6 +217,7 @@ export default function SantoGraalSyncPreview() {
         const catalog = await fetchWithAuth('/products') as CatalogProduct[]
         const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
         setCatalogProducts(activeProducts)
+        setStagedMappings(exactStagedMappings(preview.candidates, activeProducts))
         const productOptions: MappingOption[] = activeProducts.map(product => ({
           value: product.sku_interno ? 'sku:' + product.sku_interno : 'product:' + product.id,
           label: product.canonical_name + (product.sku_interno ? ' · ' + product.sku_interno : ''),
@@ -278,10 +279,30 @@ export default function SantoGraalSyncPreview() {
     !groupSearch.trim() || normalizeName(group.product).includes(normalizeName(groupSearch))
       || group.rows.some(row => normalizeName(row.supplier).includes(normalizeName(groupSearch)))
   ).sort((a, b) => a.sheet.localeCompare(b.sheet) || a.product.localeCompare(b.product))
-  const exactProductsFor = (name: string) => catalogProducts.filter(product =>
-    normalizeName(product.canonical_name) === normalizeName(name)
-    || Boolean(product.order_name && normalizeName(product.order_name) === normalizeName(name))
+  const exactProductsFor = (name: string, unit: string) => catalogProducts.filter(product =>
+    normalizeName(product.comparison_unit) === normalizeName(unit)
+    && (normalizeName(product.canonical_name) === normalizeName(name)
+      || Boolean(product.order_name && normalizeName(product.order_name) === normalizeName(name)))
   )
+  const exactStagedMappings = (candidates: Candidate[], products: CatalogProduct[]) => {
+    const result: Record<string, string> = {}
+    const groups = new Map<string, { sheet: string; product: string; unit: string }>()
+    candidates.filter(item => item.status === 'needs_mapping' && item.reference_unit).forEach(item => {
+      const unit = item.reference_unit!.trim()
+      const key = [item.source_sheet, normalizeName(item.product), normalizeName(unit)].join('|')
+      if (!groups.has(key)) groups.set(key, { sheet: item.source_sheet, product: item.product, unit })
+    })
+    groups.forEach((group, key) => {
+      const matches = products.filter(product =>
+        normalizeName(product.comparison_unit) === normalizeName(group.unit)
+        && normalizeName(product.canonical_name) === normalizeName(group.product)
+      )
+      if (matches.length === 1) {
+        result[key] = matches[0].sku_interno ? 'sku:' + matches[0].sku_interno : 'product:' + matches[0].id
+      }
+    })
+    return result
+  }
   const bootstrapProducts = Array.from((report?.candidates || [])
     .filter(item => item.status === 'needs_mapping' && item.reference_unit?.trim())
     .reduce((map, item) => {
@@ -314,6 +335,7 @@ export default function SantoGraalSyncPreview() {
       const catalog = await fetchWithAuth('/products') as CatalogProduct[]
       const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
       setCatalogProducts(activeProducts)
+      setStagedMappings(exactStagedMappings(report?.candidates || [], activeProducts))
       setMappingOptions(activeProducts.map(product => ({
         value: product.sku_interno ? 'sku:' + product.sku_interno : 'product:' + product.id,
         label: product.canonical_name + (product.sku_interno ? ' · ' + product.sku_interno : ''),
@@ -405,7 +427,7 @@ export default function SantoGraalSyncPreview() {
             <thead><tr>{['Scheda', 'Prodotto nel foglio', 'Unità', 'Offerte (fornitore · cella · prezzo)', 'Suggerimento esatto', 'Associa in anteprima'].map(label => <th key={label} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid var(--border-glass)', verticalAlign: 'top' }}>{label}</th>)}</tr></thead>
             <tbody>
               {groups.map(group => {
-                const exact = exactProductsFor(group.product)
+                const exact = exactProductsFor(group.product, group.unit)
                 const suggested = exact.length === 1 ? exact[0] : null
                 const suggestedValue = suggested ? (suggested.sku_interno ? 'sku:' + suggested.sku_interno : 'product:' + suggested.id) : ''
                 const selected = stagedMappings[group.key] || ''
