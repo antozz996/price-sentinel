@@ -100,6 +100,26 @@ function spreadsheetIdFromUrl(value: string): string {
   return match[1]
 }
 
+function loadSavedProductMappings(spreadsheetId: string): Record<string, string> {
+  try {
+    const value = JSON.parse(localStorage.getItem('ps.santo-graal.product-mappings:' + spreadsheetId) || '{}')
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveProductMapping(spreadsheetId: string, key: string, value: string): void {
+  try {
+    const saved = loadSavedProductMappings(spreadsheetId)
+    if (value) saved[key] = value
+    else delete saved[key]
+    localStorage.setItem('ps.santo-graal.product-mappings:' + spreadsheetId, JSON.stringify(saved))
+  } catch {
+    // Import stays usable if browser storage is unavailable.
+  }
+}
+
 function loadGoogleIdentityServices(): Promise<void> {
   const google = (window as any).google
   if (google?.accounts?.oauth2) return Promise.resolve()
@@ -243,7 +263,21 @@ export default function SantoGraalSyncPreview() {
         const catalog = await fetchWithAuth('/products') as CatalogProduct[]
         const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
         setCatalogProducts(activeProducts)
-        setStagedMappings(exactStagedMappings(preview.candidates, activeProducts))
+        const automaticMappings = exactStagedMappings(preview.candidates, activeProducts)
+        const savedMappings = loadSavedProductMappings(spreadsheetId)
+        const validSavedMappings = Object.fromEntries(Object.entries(savedMappings).filter(([key, value]) => {
+          const candidate = preview.candidates.find(item =>
+            [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|') === key
+          )
+          const product = value.startsWith('sku:')
+            ? activeProducts.find(row => row.sku_interno === value.slice(4))
+            : value.startsWith('product:')
+              ? activeProducts.find(row => String(row.id) === value.slice(8))
+              : undefined
+          return Boolean(candidate?.reference_unit && product?.sku_interno
+            && normalizeName(product.comparison_unit) === normalizeName(candidate.reference_unit))
+        }))
+        setStagedMappings({ ...automaticMappings, ...validSavedMappings })
         const productOptions: MappingOption[] = activeProducts.map(product => ({
           value: product.sku_interno ? 'sku:' + product.sku_interno : 'product:' + product.id,
           label: product.canonical_name + (product.sku_interno ? ' · ' + product.sku_interno : ''),
@@ -433,6 +467,7 @@ export default function SantoGraalSyncPreview() {
       supplierHeaders.forEach(name => { supplierMapping[name] = Number(supplierMappings[normalizeName(name)]) })
 
       const conflicts: string[] = []
+      const unmappedProducts = new Set<string>()
       for (const item of importableCandidates) {
         const groupKey = [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
         const selectedValue = stagedMappings[groupKey]
@@ -441,8 +476,14 @@ export default function SantoGraalSyncPreview() {
           : selectedValue?.startsWith('product:')
             ? catalogProducts.find(row => String(row.id) === selectedValue.slice(8))
             : undefined
-        if (!product?.sku_interno) continue
-        if (normalizeName(product.comparison_unit) !== normalizeName(item.reference_unit || '')) continue
+        if (!product?.sku_interno) {
+          unmappedProducts.add(item.product + ' [' + item.source_sheet + ', ' + (item.reference_unit || 'unità mancante') + ']')
+          continue
+        }
+        if (normalizeName(product.comparison_unit) !== normalizeName(item.reference_unit || '')) {
+          unmappedProducts.add(item.product + ' [unità foglio: ' + (item.reference_unit || 'mancante') + ', catalogo: ' + product.comparison_unit + ']')
+          continue
+        }
         const row = rowsBySku.get(product.sku_interno) || { productId: product.id, unit: item.reference_unit!.trim(), prices: new Map<string, string>() }
         if (normalizeName(row.unit) !== normalizeName(item.reference_unit || '')) {
           conflicts.push(product.sku_interno + ': unità di misura diverse')
@@ -460,6 +501,9 @@ export default function SantoGraalSyncPreview() {
         productMapping[product.sku_interno] = product.id
       }
       if (conflicts.length) throw new Error('Conflitti nel foglio: ' + conflicts.slice(0, 8).join('; '))
+      if (unmappedProducts.size) {
+        throw new Error(unmappedProducts.size + ' prodotti importabili non sono associati o hanno unità diverse. Non preparo un import parziale. Completa le associazioni indicate e riprova. Esempi: ' + Array.from(unmappedProducts).slice(0, 8).join('; '))
+      }
       if (!rowsBySku.size) throw new Error('Nessuna riga pronta: prima inizializza il catalogo e completa le associazioni prodotto.')
 
       const header = ['Prodotto', 'Unita di misura', ...supplierHeaders].join('\t')
@@ -643,7 +687,14 @@ export default function SantoGraalSyncPreview() {
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{suggested ? <>{suggested.canonical_name}<div style={{ color: 'var(--text-secondary)' }}>corrispondenza esatta</div></> : exact.length > 1 ? <span style={{ color: '#fbbf24' }}>Più corrispondenze esatte: scegli manualmente</span> : <span style={{ color: 'var(--text-secondary)' }}>Nessuna corrispondenza esatta</span>}</td>
                   <td style={{ padding: 8, verticalAlign: 'top', minWidth: 220 }}>
                     <select aria-label={'Associa ' + group.product} value={selected} onChange={event => {
-                      setStagedMappings(previous => ({ ...previous, [group.key]: event.target.value }))
+                      const value = event.target.value
+                      setStagedMappings(previous => ({ ...previous, [group.key]: value }))
+                      try {
+                        const id = spreadsheetIdFromUrl(sourceUrl.trim())
+                        saveProductMapping(id, group.key, value)
+                      } catch {
+                        // The choice will be saved after a valid Santo Graal link is provided.
+                      }
                       setPricePreview(null); setPriceImportError(null); setPriceCommitResult(null)
                     }} disabled={mappingOptions.length === 0} style={{ width: '100%', padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
                       <option value="">Da valutare</option>
@@ -653,7 +704,7 @@ export default function SantoGraalSyncPreview() {
                         return options.length ? <optgroup key={groupName} label={groupName}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup> : null
                       })}
                     </select>
-                    {selected && <small style={{ display: 'block', color: '#fbbf24', marginTop: 4 }}>Scelta provvisoria, non salvata</small>}
+                    {selected && <small style={{ display: 'block', color: '#fbbf24', marginTop: 4 }}>Salvata in questo browser</small>}
                   </td>
                 </tr>
               })}
@@ -676,7 +727,7 @@ export default function SantoGraalSyncPreview() {
           {visibleCandidates.length === 0 && <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Nessuna riga corrisponde ai filtri selezionati.</p>}
         </div>}
         {viewMode === 'groups' && <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-          {Object.values(stagedMappings).filter(Boolean).length} associazioni selezionate in questa sessione. Le selezioni si azzerano aggiornando l’anteprima e non sono ancora salvate nel catalogo.
+          {Object.values(stagedMappings).filter(Boolean).length} associazioni disponibili. Le scelte manuali vengono ricordate in questo browser per questo Google Sheet.
         </div>}
         <strong style={{ color: '#6ee7b7' }}>Nessuna modifica al foglio o al listino Price Sentinel.</strong>
       </>}
