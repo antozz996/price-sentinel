@@ -560,7 +560,7 @@ export default function SantoGraalSyncPreview() {
       <div>
         <h3 style={{ margin: 0 }}>Collega il Santo Graal</h3>
         <p style={{ color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: 900 }}>
-          I prezzi del foglio sono già pattuiti: non c’è una nuova approvazione commerciale da dare. Questa schermata controlla l’associazione ai prodotti Price Sentinel e segnala righe con dati da verificare. È solo un’anteprima: non importa né attiva i prezzi. La conversione delle unità resta rinviata.
+          I prezzi del foglio sono già pattuiti: non serve una nuova approvazione commerciale. Associa i prodotti, controlla l’anteprima e registra le quotazioni importabili. Il foglio resta invariato; le righe non comparabili restano escluse finché le unità non vengono chiarite.
         </p>
       </div>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 900 }}>
@@ -731,7 +731,7 @@ export default function SantoGraalSyncPreview() {
         {viewMode === 'groups' && <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
           {Object.values(stagedMappings).filter(Boolean).length} associazioni disponibili. Le scelte manuali vengono ricordate in questo browser per questo Google Sheet.
         </div>}
-        <strong style={{ color: '#6ee7b7' }}>Nessuna modifica al foglio o al listino Price Sentinel.</strong>
+        <strong style={{ color: '#6ee7b7' }}>Il foglio non viene modificato. Il Listino Master cambia solo dopo la conferma di “Registra i prezzi già pattuiti”.</strong>
       </>}
     </section>
   )
