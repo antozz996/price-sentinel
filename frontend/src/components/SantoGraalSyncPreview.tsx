@@ -43,6 +43,29 @@ type DryRunReport = {
   candidates: Candidate[]
 }
 
+const REASON_LABELS: Record<string, string> = {
+  canonical_id_not_mapped: 'Prodotto da associare al catalogo Price Sentinel',
+  supplier_identity_and_net_price_need_verification: 'Identità fornitore e prezzo netto da verificare',
+  unit_mapping_needed: 'Unità di misura da chiarire',
+  unit_mismatch_needs_conversion: 'Unità diverse: conversione rinviata',
+  unit_not_specified: 'Unità di misura mancante',
+  zero_or_negative: 'Prezzo nullo o negativo',
+  textual_price: 'Valore prezzo non numerico',
+  sheet_exclusion: 'Quotazione esclusa nel foglio',
+  precision_review: 'Precisione del prezzo da verificare',
+  derived_supplier_lookup: 'Prezzo letto da una formula/lookup derivata',
+}
+
+function displayStatus(status: string): string {
+  if (status === 'needs_mapping') return 'Da associare'
+  if (status === 'blocked') return 'Bloccato'
+  return status
+}
+
+function displayReasons(reasons: string[]): string {
+  return reasons.map(reason => REASON_LABELS[reason] || reason.replaceAll('_', ' ')).join(', ')
+}
+
 function spreadsheetIdFromUrl(value: string): string {
   const match = value.match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/)
   if (!match) throw new Error('Incolla il link del Google Sheet “santo graal”.')
@@ -161,7 +184,7 @@ export default function SantoGraalSyncPreview() {
       setReport(preview)
       setNotice('Lettura completata. È un’anteprima: nessun prezzo è stato scritto o attivato.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Importazione non riuscita.')
+      setError(err instanceof Error ? err.message : 'Anteprima non riuscita.')
     } finally {
       if (token) {
         try { (window as any).google?.accounts?.oauth2?.revoke(token, () => undefined) } catch { /* token remains memory-only */ }
@@ -175,7 +198,7 @@ export default function SantoGraalSyncPreview() {
       <div>
         <h3 style={{ margin: 0 }}>Collega il Santo Graal</h3>
         <p style={{ color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: 900 }}>
-          Legge le schede sorgente in sola lettura e prepara un controllo. I prezzi inseriti sono considerati pattuiti; l’anteprima non li attiva nel listino. Le unità di misura non vengono convertite in questa fase.
+          I prezzi del foglio sono già pattuiti: non c’è una nuova approvazione commerciale da dare. Questa schermata controlla l’associazione ai prodotti Price Sentinel e segnala righe con dati da verificare. È solo un’anteprima: non importa né attiva i prezzi. La conversione delle unità resta rinviata.
         </p>
       </div>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 900 }}>
@@ -201,7 +224,7 @@ export default function SantoGraalSyncPreview() {
       {report && <>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 8 }}>
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.candidate_count}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>righe prezzo rilevate</div></div>
-          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.review, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>da approvare o verificare</div></div>
+          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.review, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>con associazione da completare</div></div>
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.blocked, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>bloccate dai controlli</div></div>
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.warnings.length}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>avvisi</div></div>
         </div>
@@ -217,8 +240,8 @@ export default function SantoGraalSyncPreview() {
                   <td style={{ padding: 8 }}>{item.product}</td>
                   <td style={{ padding: 8 }}>{item.supplier}</td>
                   <td style={{ padding: 8 }}>{String(item.quoted_value ?? '—')}</td>
-                  <td style={{ padding: 8, color: item.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>{item.status}</td>
-                  <td style={{ padding: 8, color: 'var(--text-secondary)' }}>{item.reasons.join(', ')}</td>
+                  <td style={{ padding: 8, color: item.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>{displayStatus(item.status)}</td>
+                  <td style={{ padding: 8, color: 'var(--text-secondary)' }}>{displayReasons(item.reasons)}</td>
                 </tr>
               ))}
             </tbody>
