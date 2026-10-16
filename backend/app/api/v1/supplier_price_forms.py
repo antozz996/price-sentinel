@@ -100,6 +100,7 @@ async def get_public_form(
     return {
         "supplier_name": request.supplier.nome_azienda,
         "expires_at": request.expires_at.isoformat(),
+        "note": request.note,
         "items": [
             {
                 "id": item.id,
@@ -220,7 +221,11 @@ async def create_form_request(
     )
     db.add(request)
     await db.commit()
-    await db.refresh(request)
+    request = (await db.execute(
+        select(SupplierPriceFormRequest)
+        .options(selectinload(SupplierPriceFormRequest.supplier), selectinload(SupplierPriceFormRequest.items))
+        .where(SupplierPriceFormRequest.id == request.id)
+    )).scalar_one()
     return {
         "request": _request_view(request),
         "token": token,
