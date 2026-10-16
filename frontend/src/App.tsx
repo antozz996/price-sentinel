@@ -435,6 +435,8 @@ export default function App() {
   };
 
   const renderContent = () => {
+    const supplierFormMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
+    if (supplierFormMatch) return <SupplierPricePublicForm token={decodeURIComponent(supplierFormMatch[1])} />;
     if (isGodMode || activeTab === 'god') {
       return (
         <GodModeControlRoom
@@ -594,7 +596,8 @@ export default function App() {
       case 'unlistedproducts': return <UnlistedProductsResolver onNavigate={setActiveTab} />;
       case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
-      case 'listini': return <PriceListManager />;\n      case 'supplierforms': return <SupplierPriceForms />;
+      case 'listini': return <PriceListManager />;
+      case 'supplierforms': return <SupplierPriceForms />;
       case 'topproducts': return <TopProductsPriceList />;
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
@@ -643,7 +646,8 @@ export default function App() {
       case 'unlistedproducts': return { title: 'Prodotti Fuori Listino', sub: 'Inserimento a listino e mappatura alias per voci non riconosciute' };
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
-      case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };\n      case 'supplierforms': return { title: 'Moduli fornitori', sub: 'Raccogli conferme e proposte senza modificare il listino ufficiale' };
+      case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
+      case 'supplierforms': return { title: 'Moduli fornitori', sub: 'Raccogli conferme e proposte senza modificare il listino ufficiale' };
       case 'topproducts': return { title: 'Top prodotti', sub: 'Analizza prezzi e volumi dei prodotti più acquistati' };
       case 'crosssupplier': return { title: 'Listino Smart', sub: 'Prezzi, qualità fornitori e regole di acquisto in un’unica matrice' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
