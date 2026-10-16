@@ -29,6 +29,8 @@ const GoodsReceipt = lazy(() => import('./components/GoodsReceipt'))
 const ProductReviewPage = lazy(() => import('./components/ProductReviewPage'))
 const GodModeControlRoom = lazy(() => import('./components/GodModeControlRoom'))
 const UnlistedProductsResolver = lazy(() => import('./components/UnlistedProductsResolver'))
+const SupplierPriceForms = lazy(() => import('./components/SupplierPriceForms'))
+const SupplierPricePublicForm = lazy(() => import('./components/SupplierPricePublicForm'))
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -78,6 +80,7 @@ const NAV_SECTIONS: NavSection[] = [
       { id: 'orderregistry', label: 'Registro ordini', icon: ClipboardList },
       { id: 'productreviews', label: 'Recensioni prodotti', icon: Star },
       { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
+      { id: 'supplierforms', label: 'Moduli fornitori', icon: ClipboardList, adminOnly: true },
       { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
     ],
   },
@@ -432,6 +435,8 @@ export default function App() {
   };
 
   const renderContent = () => {
+    const supplierFormMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
+    if (supplierFormMatch) return <SupplierPricePublicForm token={decodeURIComponent(supplierFormMatch[1])} />;
     if (isGodMode || activeTab === 'god') {
       return (
         <GodModeControlRoom
@@ -592,6 +597,7 @@ export default function App() {
       case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
+      case 'supplierforms': return <SupplierPriceForms />;
       case 'topproducts': return <TopProductsPriceList />;
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
@@ -641,6 +647,7 @@ export default function App() {
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
+      case 'supplierforms': return { title: 'Moduli fornitori', sub: 'Raccogli conferme e proposte senza modificare il listino ufficiale' };
       case 'topproducts': return { title: 'Top prodotti', sub: 'Analizza prezzi e volumi dei prodotti più acquistati' };
       case 'crosssupplier': return { title: 'Listino Smart', sub: 'Prezzi, qualità fornitori e regole di acquisto in un’unica matrice' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };

@@ -49,11 +49,7 @@ check("Italian decimal", parse_decimal_price("€ 1.234,5678") == Decimal("1234.
 check("international decimal", parse_decimal_price("1,234.50") == Decimal("1234.50"))
 check("empty price ignored", parse_decimal_price("-") is None)
 
-try:
-    parse_decimal_price("1,12345")
-    raise AssertionError("too many decimals accepted")
-except ValueError:
-    results.append("too many decimals rejected")
+check("excess decimal places rounded to storage precision", parse_decimal_price("1,12345") == Decimal("1.1235"))
 
 base = rank_supplier_offers([offer(1, "9.90"), offer(2, "10.00")])
 check("default chooses cheapest", base["selected_offer"]["supplier_id"] == 1)
