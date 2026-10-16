@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';\nimport type { CSSProperties } from 'react';
 import { API_BASE } from '../api';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente: string; unita_corrente: string; validita_corrente_da: string; validita_corrente_a?: string | null };
@@ -48,7 +48,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     finally { setSending(false); }
   };
 
-  const wrap: React.CSSProperties = { minHeight: '100vh', padding: '24px 14px', boxSizing: 'border-box', background: '#0b1220', color: 'white', fontFamily: 'system-ui,sans-serif' };
+  const wrap: CSSProperties = { minHeight: '100vh', padding: '24px 14px', boxSizing: 'border-box', background: '#0b1220', color: 'white', fontFamily: 'system-ui,sans-serif' };
   const box: React.CSSProperties = { maxWidth: 900, margin: '0 auto', padding: 20, border: '1px solid rgba(255,255,255,.14)', borderRadius: 14, background: 'rgba(255,255,255,.04)' };
   const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,.2)', background: '#111827', color: 'white' };
   if (loading) return <main style={wrap}><div style={box}>Caricamento modulo…</div></main>;
