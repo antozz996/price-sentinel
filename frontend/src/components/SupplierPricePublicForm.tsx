@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, FormEvent } from 'react';
 import { API_BASE } from '../api';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente: string; unita_corrente: string; validita_corrente_da: string; validita_corrente_a?: string | null };
@@ -34,7 +34,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     return { ...prev, [id]: next };
   });
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!data) return;
     setSending(true); setError('');
     try {
