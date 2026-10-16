@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';\nimport type { CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { fetchWithAuth } from '../api';
 
 type Supplier = { id: number; nome_azienda: string };
