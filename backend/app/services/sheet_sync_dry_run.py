@@ -5,7 +5,7 @@ workbook; candidates still need product/supplier identity mapping and data check
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -42,17 +42,17 @@ SOURCES = (
         SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
         SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
         SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
-    ), subcategory="Carne", source_row_index=10, max_columns="K"),
+    ), subcategory="Carne", source_row_index=10, max_columns="L"),
     SheetLayout("Pesce", "Food", 0, 1, (
         SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
         SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
         SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
-    ), subcategory="Pesce", source_row_index=10, max_columns="K"),
+    ), subcategory="Pesce", source_row_index=10, max_columns="L"),
     SheetLayout("Varie", "Food", 0, 1, (
         SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
         SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
         SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
-    ), source_row_index=10, max_columns="K"),
+    ), source_row_index=10, max_columns="L"),
     SheetLayout("BEVERAGE", "Beverage", 0, 1, (
         SupplierColumn(2, "NAVAS"), SupplierColumn(3, "ORIZZONTI"),
         SupplierColumn(4, "3F"), SupplierColumn(5, "PASCARELLA"),
@@ -111,6 +111,27 @@ def _column(index: int) -> str:
     return result
 
 
+def _header_index(header: list[Any], name: str) -> int | None:
+    wanted = _label(name)
+    return next((i for i, value in enumerate(header) if _label(value) == wanted), None)
+
+
+def _resolve_food_layout(layout: SheetLayout, header: list[Any]) -> SheetLayout:
+    """Resolve category-tab columns by header, tolerating inserted description columns."""
+    if layout.title not in FOOD_CATEGORY_TABS:
+        return layout
+    columns = tuple(
+        replace(col, index=found) if (found := _header_index(header, col.name)) is not None else col
+        for col in layout.columns
+    )
+    origin_index = _header_index(header, "RIGA FOOD ORIGINALE")
+    return replace(
+        layout,
+        columns=columns,
+        source_row_index=origin_index if origin_index is not None else layout.source_row_index,
+    )
+
+
 def _price(value: Any) -> tuple[str | None, str]:
     """Keep exact entered/returned value; never infer comma-formatted strings."""
     if value is None or isinstance(value, bool):
@@ -154,7 +175,8 @@ def _food_origin_index(value_ranges: Mapping[str, list[list[Any]]]) -> tuple[dic
         rows = value_ranges.get(title)
         if not rows:
             continue
-        if _label(_cell(rows[0], 10)) != _label("RIGA FOOD ORIGINALE"):
+        origin_index = _header_index(rows[0], "RIGA FOOD ORIGINALE")
+        if origin_index is None:
             warnings.append({"tab": title, "code": "invalid_food_origin_header"})
             continue
         for rownum, row in enumerate(rows[1:], start=2):
@@ -162,7 +184,7 @@ def _food_origin_index(value_ranges: Mapping[str, list[list[Any]]]) -> tuple[dic
             if not product:
                 continue
             try:
-                original_row = int(_cell(row, 10))
+                original_row = int(_cell(row, origin_index))
             except (ValueError, TypeError):
                 warnings.append({"tab": title, "row": rownum,
                                  "code": "invalid_food_origin_row"})
@@ -233,7 +255,9 @@ def stage_snapshot(
     candidates: list[dict] = []
     sector_summary: list[dict] = []
     missing_sources: list[str] = []
-    for layout in SOURCES:
+    for base_layout in SOURCES:
+        rows = value_ranges.get(base_layout.title)
+        layout = _resolve_food_layout(base_layout, rows[0]) if rows else base_layout
         if layout.title in FOOD_CATEGORY_TABS and not exclusion_valid:
             missing_sources.append(EXCLUSION_TAB)
             continue

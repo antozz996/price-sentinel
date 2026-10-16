@@ -116,6 +116,22 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertIn("Carne", report["missing_sources"])
         self.assertFalse(any(c["source_sheet"] == "Carne" for c in report["candidates"]))
 
+    def test_food_tabs_accept_di_palo_description_column_and_import_price(self):
+        data = copy.deepcopy(self.snapshot)
+        for tab in ("Carne", "Pesce", "Varie"):
+            for row in data["values"][tab]:
+                row.insert(8, "DESCRIZIONE DI PALO" if row is data["values"][tab][0] else None)
+        # The description column is informational; the negotiated amount remains in H.
+        data["values"]["Carne"][1][7] = 8.19
+        data["values"]["Carne"][1][8] = "POLLO FRESCO DI PALO"
+        report = self.preview(data)
+        self.assertNotIn("Carne", report["missing_sources"])
+        quote = next(c for c in report["candidates"] if
+                     c["source_sheet"] == "Carne" and c["source_cell"] == "H2")
+        self.assertEqual(quote["supplier"], "DI PALO")
+        self.assertEqual(quote["numeric_price"], "8.19")
+        self.assertEqual(quote["source_original_row"], 20)
+
     def test_missing_exclusion_control_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
         del data["values"]["CONTROLLO_ESCLUSIONI"]
