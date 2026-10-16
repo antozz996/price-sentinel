@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from hashlib import sha256
 import secrets
@@ -177,7 +178,7 @@ async def create_form_request(
     if not supplier or supplier.archived_at is not None:
         raise HTTPException(status_code=404, detail="Fornitore non trovato o archiviato")
 
-    today = date.today()
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
     rows = (await db.execute(
         select(ListinoMaster)
         .where(
@@ -279,7 +280,7 @@ async def close_form_request(
     db: AsyncSession = Depends(get_db),
 ):
     _require_primary_tenant(admin)
-    request = await db.get(SupplierPriceFormRequest, request_id, with_for_update=True)
+    request = (await db.execute(select(SupplierPriceFormRequest).where(SupplierPriceFormRequest.id == request_id).with_for_update())).scalar_one_or_none()
     if not request:
         raise HTTPException(status_code=404, detail="Modulo non trovato")
     if request.status not in {"open", "submitted", "expired"}:
