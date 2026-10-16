@@ -28,7 +28,10 @@ export default function SupplierPriceForms() {
     try { setForms(await fetchWithAuth('/supplier-price-forms/?status_filter=all')); }
     catch (e) { setError(e instanceof Error ? e.message : 'Impossibile caricare i moduli'); }
   };
-  useEffect(() => {\n    loadForms();\n    fetchWithAuth('/fornitori/').then((data: any) => setSuppliers(Array.isArray(data) ? data : data.items || data.records || [])).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Impossibile caricare i fornitori'));\n  }, []);
+  useEffect(() => {
+    loadForms();
+    fetchWithAuth('/fornitori/').then((data: any) => setSuppliers(Array.isArray(data) ? data : data.items || data.records || [])).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Impossibile caricare i fornitori'));
+  }, []);
   useEffect(() => {
     let live = true;
     setRows([]); setSelected([]); setCreated(null);
