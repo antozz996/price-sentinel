@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { API_BASE } from '../api';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente: string; unita_corrente: string; validita_corrente_da: string; validita_corrente_a?: string | null };
-type FormData = { supplier_name: string; expires_at: string; items: PublicItem[] };
+type FormData = { supplier_name: string; expires_at: string; note?: string | null; items: PublicItem[] };
 type Answer = { prezzo: string; unita_misura: string; conferma_prezzo: boolean; nota: string };
 
 export default function SupplierPricePublicForm({ token }: { token: string }) {
@@ -58,7 +58,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
 
   return <main style={wrap}><form style={box} onSubmit={submit}>
     <h1 style={{ marginTop: 0 }}>Conferma listino · {data.supplier_name}</h1>
-    <p>Verifica ogni prezzo. Puoi confermare il valore pattuito oppure indicare una proposta diversa. La proposta sarà sottoposta a verifica dall’azienda.</p>
+    <p>Verifica ogni prezzo. Puoi confermare il valore pattuito oppure indicare una proposta diversa. La proposta sarà sottoposta a verifica dall’azienda.</p>{data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: '#cbd5e1' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
     {data.items.map(item => {
       const answer = answers[item.id]; if (!answer) return null;
