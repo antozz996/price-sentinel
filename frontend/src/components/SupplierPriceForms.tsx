@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';\nimport type { CSSProperties } from 'react';
 import { fetchWithAuth } from '../api';
 
 type Supplier = { id: number; nome_azienda: string };
@@ -7,7 +7,7 @@ type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_c
 type FormRequest = { id: number; supplier_id: number; supplier_name: string; status: string; created_at: string; expires_at: string; submitted_at?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
 
-const card: React.CSSProperties = { border: '1px solid var(--border-glass)', borderRadius: 12, padding: 16, background: 'rgba(255,255,255,.025)' };
+const card: CSSProperties = { border: '1px solid var(--border-glass)', borderRadius: 12, padding: 16, background: 'rgba(255,255,255,.025)' };
 const field: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, color: 'white', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 8 };
 
 export default function SupplierPriceForms() {
