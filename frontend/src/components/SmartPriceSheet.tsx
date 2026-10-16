@@ -819,7 +819,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 <span>·</span>
                 <span style={{
                   color: row.category === 'Food' ? '#f59e0b' : row.category === 'Materiali' ? '#10b981' : '#60a5fa',
-                  background: row.category === 'Food' ? 'rgba(245,158,11,0.1)' : row.category === 'Materiali di consumo' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                  background: row.category === 'Food' ? 'rgba(245,158,11,0.1)' : row.category === 'Materiali' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
                   padding: '1px 6px',
                   borderRadius: 4,
                   fontSize: 10,
@@ -1111,7 +1111,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <div>
             <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Foglio Prezzi</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? '#f59e0b' : activeCategorySheet === 'Materiali' ? '#10b981' : '#60a5fa', background: activeCategorySheet === 'Food' ? 'rgba(245,158,11,0.12)' : activeCategorySheet === 'Materiali di consumo' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--border-glass)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? '#f59e0b' : activeCategorySheet === 'Materiali' ? '#10b981' : '#60a5fa', background: activeCategorySheet === 'Food' ? 'rgba(245,158,11,0.12)' : activeCategorySheet === 'Materiali' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--border-glass)' }}>
                 Settore: {MACRO_CATEGORIES.find(category => category.id === activeCategorySheet)?.label || activeCategorySheet}
               </span>
               {activeSubcategorySheet !== 'all' && (
