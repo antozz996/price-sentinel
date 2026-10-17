@@ -38,6 +38,8 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
         "expires_at": request.expires_at.isoformat(),
         "submitted_at": request.submitted_at.isoformat() if request.submitted_at else None,
         "note": request.note,
+        "validita_inviata_da": request.validita_inviata_da.isoformat() if request.validita_inviata_da else None,
+        "validita_inviata_a": request.validita_inviata_a.isoformat() if request.validita_inviata_a else None,
         "items": [
             {
                 "id": item.id,
@@ -80,6 +82,8 @@ class SupplierAnswer(BaseModel):
 
 class PublicSubmission(BaseModel):
     answers: list[SupplierAnswer] = Field(min_length=1, max_length=2000)
+    validita_inviata_da: date
+    validita_inviata_a: date
 
 
 @router.get("/public/{token}", summary="Visualizza il modulo listino del fornitore")
@@ -135,6 +139,8 @@ async def submit_public_form(
     now = datetime.now(timezone.utc)
     if not request or request.status != "open" or request.expires_at <= now:
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
+    if payload.validita_inviata_a < payload.validita_inviata_da:
+        raise HTTPException(status_code=422, detail="La data di fine validità deve essere successiva o uguale alla data di inizio")
 
     answers_by_id = {answer.item_id: answer for answer in payload.answers}
     if len(answers_by_id) != len(payload.answers):
@@ -162,8 +168,10 @@ async def submit_public_form(
 
     request.status = "submitted"
     request.submitted_at = now
+    request.validita_inviata_da = payload.validita_inviata_da
+    request.validita_inviata_a = payload.validita_inviata_a
     await db.commit()
-    return {"status": "submitted", "message": "Risposta inviata. Nessun prezzo nel listino master è stato modificato."}
+    return {"status": "submitted", "message": "Risposta inviata con il periodo di validità indicato. Nessun prezzo nel listino master è stato modificato."}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Crea un modulo per un fornitore")
@@ -343,3 +351,4 @@ async def close_form_request(
     request.status = "closed"
     await db.commit()
     return {"id": request.id, "status": request.status}
+
