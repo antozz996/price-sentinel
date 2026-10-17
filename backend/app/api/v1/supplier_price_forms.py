@@ -15,6 +15,7 @@ from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
+from app.models.products import Product
 from app.models.supplier_price_form import SupplierPriceFormItem, SupplierPriceFormRequest
 from app.models.utenti import Utente
 
@@ -231,6 +232,55 @@ async def create_form_request(
         "token": token,
         "public_path": f"/fornitore/listino/{token}",
     }
+
+
+@router.get("/catalog/{supplier_id}", summary="Elenca il listino del fornitore raggruppato per categoria")
+async def get_supplier_catalog(
+    supplier_id: int,
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    supplier = await db.get(Fornitore, supplier_id)
+    if not supplier or supplier.archived_at is not None:
+        raise HTTPException(status_code=404, detail="Fornitore non trovato o archiviato")
+
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    rows = (await db.execute(
+        select(ListinoMaster)
+        .where(
+            ListinoMaster.fornitore_id == supplier_id,
+            ListinoMaster.data_inizio_validita <= today,
+            (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= today),
+        )
+        .order_by(ListinoMaster.sku_interno)
+    )).scalars().all()
+
+    categories_by_sku: dict[str, tuple[str | None, str | None]] = {}
+    sku_values = {row.sku_interno for row in rows if row.sku_interno}
+    if sku_values:
+        products = (await db.execute(
+            select(Product.sku_interno, Product.category, Product.subcategory)
+            .where(Product.sku_interno.in_(sku_values), Product.is_active.is_(True))
+            .order_by(Product.id.desc())
+        )).all()
+        for sku, category, subcategory in products:
+            categories_by_sku.setdefault(sku, (category, subcategory))
+
+    return [
+        {
+            "id": row.id,
+            "sku_interno": row.sku_interno,
+            "descrizione": row.descrizione,
+            "prezzo_pattuito": str(row.prezzo_pattuito),
+            "unita_misura": row.unita_misura,
+            "data_inizio_validita": row.data_inizio_validita.isoformat(),
+            "data_scadenza": row.data_scadenza.isoformat() if row.data_scadenza else None,
+            "category": categories_by_sku.get(row.sku_interno, (None, None))[0],
+            "subcategory": categories_by_sku.get(row.sku_interno, (None, None))[1],
+        }
+        for row in rows
+    ]
 
 
 @router.get("/", summary="Elenca i moduli listino")
