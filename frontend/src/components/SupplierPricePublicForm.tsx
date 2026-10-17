@@ -4,7 +4,7 @@ import { API_BASE } from '../api';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null };
 type FormData = { supplier_name: string; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
-type Answer = { prezzo: string; unita_misura: string; conferma_prezzo: boolean; nota: string };
+type Answer = { prezzo: string; unita_misura: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string };
 
 export default function SupplierPricePublicForm({ token }: { token: string }) {
   const [data, setData] = useState<FormData | null>(null);
@@ -23,7 +23,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       .then(form => {
         if (!active) return;
         setData(form);
-        setAnswers(Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: i.unita_corrente || '', conferma_prezzo: false, nota: '' }])));
+        setAnswers(Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: i.unita_corrente || '', conferma_prezzo: false, non_trattato: false, nota: '' }])));
       })
       .catch(e => { if (active) setError(e.message || 'Impossibile caricare il modulo'); })
       .finally(() => { if (active) setLoading(false); });
@@ -32,7 +32,8 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
 
   const setAnswer = (id: number, change: Partial<Answer>) => setAnswers(prev => {
     const old = prev[id]; const next = { ...old, ...change };
-    if (change.prezzo !== undefined || change.unita_misura !== undefined) next.conferma_prezzo = false;
+    if (change.prezzo !== undefined || change.unita_misura !== undefined || change.non_trattato) next.conferma_prezzo = false;
+    if (change.non_trattato) { next.prezzo = ''; next.unita_misura = ''; }
     return { ...prev, [id]: next };
   });
 
@@ -45,7 +46,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         body: JSON.stringify({
           validita_inviata_da: validitaDa,
           validita_inviata_a: validitaA,
-          answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, conferma_prezzo: data.request_type === 'confirmation' && answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null }))
+          answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].non_trattato ? null : answers[i.id].prezzo, unita_misura: answers[i.id].non_trattato ? null : answers[i.id].unita_misura, conferma_prezzo: data.request_type === 'confirmation' && !answers[i.id].non_trattato && answers[i.id].conferma_prezzo, non_trattato: answers[i.id].non_trattato, nota: answers[i.id].nota || null }))
         })
       });
       const body = await response.json().catch(() => ({}));
@@ -81,11 +82,12 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>{item.descrizione}</h2>
         <p style={{ color: '#cbd5e1' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente} / ${item.unita_corrente}`}</p>
         {data.request_type === 'confirmation' && item.validita_corrente_da && <p style={{ color: '#cbd5e1' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
+        <label style={{ display: 'block', margin: '12px 0' }}><input type="checkbox" checked={answer.non_trattato} onChange={e => setAnswer(item.id, { non_trattato: e.target.checked })} /> Non trattiamo questo prodotto</label>
+        {answer.non_trattato ? <p style={{ color: '#cbd5e1' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
           <label>{data.request_type === 'new_listino' ? 'Prezzo offerto (€)' : 'Prezzo proposto (€)'}<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /></label>
           <label>Unità di misura<input style={input} required maxLength={50} value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })} /></label>
-        </div>
-        {data.request_type === 'confirmation' && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
+        </div>}
+        {data.request_type === 'confirmation' && !answer.non_trattato && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
       </section>;
     })}
