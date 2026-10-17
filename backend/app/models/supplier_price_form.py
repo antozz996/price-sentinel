@@ -58,6 +58,7 @@ class SupplierPriceFormItem(Base):
     unita_inviata: Mapped[str | None] = mapped_column(String(50), nullable=True)
     conferma_prezzo: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     nota_fornitore: Mapped[str | None] = mapped_column(Text, nullable=True)
+    non_trattato: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     request = relationship("SupplierPriceFormRequest", back_populates="items")
 
