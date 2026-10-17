@@ -55,8 +55,10 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "unita_inviata": item.unita_inviata,
                 "conferma_prezzo": item.conferma_prezzo,
                 "nota_fornitore": item.nota_fornitore,
+                "non_trattato": item.non_trattato,
                 "esito": (
-                    "da_compilare" if item.prezzo_inviato is None
+                    "non_trattato" if item.non_trattato
+                    else "da_compilare" if item.prezzo_inviato is None
                     else "nuova_offerta" if request.request_type == "new_listino"
                     else "confermato" if item.conferma_prezzo
                     else "proposta_variazione"
@@ -79,9 +81,10 @@ class CreateFormRequest(BaseModel):
 
 class SupplierAnswer(BaseModel):
     item_id: int
-    prezzo: Decimal = Field(gt=0, lt=Decimal("100000000"), decimal_places=4)
-    unita_misura: str = Field(min_length=1, max_length=50)
-    conferma_prezzo: bool
+    prezzo: Decimal | None = Field(default=None, gt=0, lt=Decimal("100000000"), decimal_places=4)
+    unita_misura: str | None = Field(default=None, min_length=1, max_length=50)
+    conferma_prezzo: bool = False
+    non_trattato: bool = False
     nota: Optional[str] = Field(default=None, max_length=1000)
 
 
@@ -166,7 +169,18 @@ async def submit_public_form(
 
     for item in request.items:
         answer = answers_by_id[item.id]
-        unit = answer.unita_misura.strip()
+        item.nota_fornitore = answer.nota.strip() if answer.nota else None
+        if answer.non_trattato:
+            if answer.conferma_prezzo:
+                raise HTTPException(status_code=422, detail="Un prodotto non trattato non può essere confermato")
+            item.non_trattato = True
+            item.prezzo_inviato = None
+            item.unita_inviata = None
+            item.conferma_prezzo = False
+            continue
+        if answer.prezzo is None:
+            raise HTTPException(status_code=422, detail=f"Inserisci un prezzo oppure indica che non tratti {item.sku_interno}")
+        unit = (answer.unita_misura or "").strip()
         if not unit:
             raise HTTPException(status_code=422, detail=f"Unità di misura mancante per {item.sku_interno}")
         same_price = item.prezzo_corrente is not None and answer.prezzo == item.prezzo_corrente
@@ -178,10 +192,10 @@ async def submit_public_form(
                 status_code=422,
                 detail=f"La riga {item.sku_interno} è indicata come confermata ma prezzo o unità sono diversi dal pattuito",
             )
+        item.non_trattato = False
         item.prezzo_inviato = answer.prezzo
         item.unita_inviata = unit
         item.conferma_prezzo = answer.conferma_prezzo
-        item.nota_fornitore = answer.nota.strip() if answer.nota else None
 
     request.status = "submitted"
     request.submitted_at = now
