@@ -42,7 +42,7 @@ export default function SupplierPriceForms() {
   const [note, setNote] = useState('');
   const [publicBaseUrl, setPublicBaseUrl] = useState(() => {
     if (configuredPublicOrigin) return configuredPublicOrigin;
-    if (localBrowserOrigin) return localStorage.getItem('supplierFormsPublicBaseUrl') || '';
+    if (localBrowserOrigin) return localStorage.getItem('supplierFormsPublicBaseUrl') || window.location.origin;
     return window.location.origin;
   });
   const [forms, setForms] = useState<FormRequest[]>([]);
@@ -79,7 +79,7 @@ export default function SupplierPriceForms() {
   const selectedSupplierIds = recipientMode === 'category' ? eligibleSupplierIds : supplierIds;
   const selectedSuppliers = selectedSupplierIds.map(id => suppliers.find(s => s.id === id)).filter((s): s is Supplier => Boolean(s));
   const publicOrigin = publicBaseUrl.trim().replace(/\/$/, '');
-  const publicUrlReady = /^https?:\/\//i.test(publicOrigin) && !isLocalAddress(publicOrigin);
+  const publicUrlReady = /^https?:\/\//i.test(publicOrigin) && (!isLocalAddress(publicOrigin) || localBrowserOrigin);
 
   useEffect(() => {
     let live = true;
@@ -242,7 +242,7 @@ export default function SupplierPriceForms() {
   };
   const whatsappUrl = (item: CreatedLink) => {
     const phone = phoneForWhatsApp(item.supplier.telefono_contatto);
-    if (!phone || !publicUrlReady) return '';
+    if (!phone || !publicUrlReady || isLocalAddress(publicOrigin)) return '';
     const message = `Buongiorno ${item.supplier.nome_azienda}, ti inviamo il modulo per la verifica del listino: ${item.url}\n\nIl link scade tra ${days} giorni.`;
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   };
@@ -260,14 +260,14 @@ export default function SupplierPriceForms() {
         <button type="button" className={recipientMode === 'category' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('category'); setSupplierIds([]); setRecipientCategory(''); setCreatedLinks([]); }}>Seleziona per categoria</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
-        {localBrowserOrigin && <label style={{ gridColumn: '1 / -1' }}>Indirizzo pubblico da inserire nei link
+        {localBrowserOrigin && <label style={{ gridColumn: '1 / -1' }}>Indirizzo base da inserire nei link
           <input style={field} type="url" value={publicBaseUrl} onChange={e => {
             const value = e.target.value.trim();
             setPublicBaseUrl(value);
             if (value) localStorage.setItem('supplierFormsPublicBaseUrl', value);
             else localStorage.removeItem('supplierFormsPublicBaseUrl');
-          }} placeholder="https://tuo-dominio.it oppure https://tuo-tunnel.lhr.life" />
-          <small style={{ display: 'block', color: 'var(--text-secondary)', marginTop: 5 }}>Incolla il dominio pubblico che il fornitore può aprire. Un indirizzo localhost non funziona sul suo telefono. Se usi un tunnel temporaneo, resterà valido solo finché il tunnel è attivo.</small>
+          }} placeholder="http://localhost:28084 oppure https://tuo-tunnel.lhr.life" />
+          <small style={{ display: 'block', color: 'var(--text-secondary)', marginTop: 5 }}>Per provare il modulo sul tuo computer puoi usare localhost. Il fornitore non potrà aprire un link localhost: prima di inviarlo, inserisci il dominio pubblico o il tunnel attivo.</small>
         </label>}
         {recipientMode === 'category' ? <label>Categoria fornitori
           <select style={field} value={recipientCategory} onChange={e => setRecipientCategory(e.target.value)}>
@@ -331,7 +331,7 @@ export default function SupplierPriceForms() {
         </div>}
       </div>}
       <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy || loadingCatalog || !selectedSupplierIds.length || !selectedCount || !publicUrlReady || (requestType === 'new_listino' && recipientMode === 'suppliers' && !productCategory)} onClick={createForms}>{busy ? 'Creazione moduli…' : requestType === 'new_listino' ? `Richiedi ${selectedSupplierIds.length > 1 ? 'nuovi listini' : 'nuovo listino'}` : `Crea ${selectedSupplierIds.length > 1 ? 'moduli' : 'link personale'}`}</button>
-      {!publicUrlReady && <p style={{ color: '#fbbf24' }}>Inserisci un URL pubblico valido per creare link apribili dai fornitori.</p>}
+      {!publicUrlReady && <p style={{ color: '#fbbf24' }}>Inserisci un indirizzo valido: localhost per test locali oppure un dominio/tunnel pubblico per i fornitori.</p>}
       {createdLinks.map(item => {
         const wa = whatsappUrl(item);
         return <div key={item.supplier.id} style={{ ...card, marginTop: 14, borderColor: 'rgba(34,197,94,.45)' }}>
@@ -342,7 +342,7 @@ export default function SupplierPriceForms() {
             {wa && <a className="btn btn-primary" href={wa} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', background: '#25D366', borderColor: '#25D366' }}>WhatsApp · {item.supplier.nome_azienda}</a>}
           </div>
           {!phoneForWhatsApp(item.supplier.telefono_contatto) && <p style={{ color: '#fbbf24', marginBottom: 0 }}>Numero WhatsApp mancante in anagrafica: copia il link e invialo manualmente.</p>}
-          {!publicUrlReady && <p style={{ color: '#fbbf24', marginBottom: 0 }}>Il link pubblico non è configurato correttamente.</p>}
+          {isLocalAddress(publicOrigin) && <p style={{ color: '#fbbf24', marginBottom: 0 }}>Link di test locale: si apre solo su questo computer. Imposta un tunnel o dominio pubblico prima di inviarlo al fornitore.</p>}
         </div>;
       })}
       {notice && <div role="status" style={{ color: '#86efac', marginTop: 10 }}>{notice}</div>}
