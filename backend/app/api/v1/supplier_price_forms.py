@@ -82,8 +82,9 @@ class SupplierAnswer(BaseModel):
 
 class PublicSubmission(BaseModel):
     answers: list[SupplierAnswer] = Field(min_length=1, max_length=2000)
-    validita_inviata_da: date
-    validita_inviata_a: date
+    # Optional for compatibility with supplier pages opened before this release.
+    validita_inviata_da: date | None = None
+    validita_inviata_a: date | None = None
 
 
 @router.get("/public/{token}", summary="Visualizza il modulo listino del fornitore")
@@ -139,7 +140,13 @@ async def submit_public_form(
     now = datetime.now(timezone.utc)
     if not request or request.status != "open" or request.expires_at <= now:
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
-    if payload.validita_inviata_a < payload.validita_inviata_da:
+    if (payload.validita_inviata_da is None) != (payload.validita_inviata_a is None):
+        raise HTTPException(status_code=422, detail="Indica entrambe le date di validità del listino")
+    if (
+        payload.validita_inviata_da
+        and payload.validita_inviata_a
+        and payload.validita_inviata_a < payload.validita_inviata_da
+    ):
         raise HTTPException(status_code=422, detail="La data di fine validità deve essere successiva o uguale alla data di inizio")
 
     answers_by_id = {answer.item_id: answer for answer in payload.answers}
