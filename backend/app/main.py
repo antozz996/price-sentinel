@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.api.v1.router import api_router
 from app.config import settings
@@ -42,6 +43,16 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # create_all creates the supplier-form table when absent; these
+            # idempotent ALTERs also upgrade it safely on existing databases.
+            await conn.execute(text(
+                "ALTER TABLE supplier_price_form_requests "
+                "ADD COLUMN IF NOT EXISTS validita_inviata_da DATE"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE supplier_price_form_requests "
+                "ADD COLUMN IF NOT EXISTS validita_inviata_a DATE"
+            ))
     except Exception as e:
         logger.warning("Schema create_all notice: %s", e)
 
@@ -134,3 +145,4 @@ def create_app() -> FastAPI:
 
 # ── App instance per Uvicorn ─────────────────
 app = create_app()
+

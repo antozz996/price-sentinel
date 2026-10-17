@@ -9,6 +9,8 @@ type Answer = { prezzo: string; unita_misura: string; conferma_prezzo: boolean; 
 export default function SupplierPricePublicForm({ token }: { token: string }) {
   const [data, setData] = useState<FormData | null>(null);
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
+  const [validitaDa, setValiditaDa] = useState('');
+  const [validitaA, setValiditaA] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -40,7 +42,11 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     try {
       const response = await fetch(`${API_BASE}/supplier-price-forms/public/${encodeURIComponent(token)}/submit`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, conferma_prezzo: answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null })) })
+        body: JSON.stringify({
+          validita_inviata_da: validitaDa,
+          validita_inviata_a: validitaA,
+          answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, conferma_prezzo: answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null }))
+        })
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail || 'Invio non riuscito');
@@ -54,13 +60,21 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,.2)', background: '#111827', color: 'white' };
   if (loading) return <main style={wrap}><div style={box}>Caricamento modulo…</div></main>;
   if (error && !data) return <main style={wrap}><div style={box}><h1>Modulo non disponibile</h1><p>{error}</p></div></main>;
-  if (done) return <main style={wrap}><div style={box}><h1>Risposta inviata</h1><p>Grazie. La risposta è stata registrata e sarà verificata dall’azienda. Non ha modificato automaticamente il listino ufficiale.</p></div></main>;
+  if (done) return <main style={wrap}><div style={box}><h1>Risposta inviata</h1><p>Grazie. La risposta e il periodo di validità indicato sono stati registrati e saranno verificati dall’azienda. Non hanno modificato automaticamente il listino ufficiale.</p></div></main>;
   if (!data) return null;
 
   return <main style={wrap}><form style={box} onSubmit={submit}>
     <h1 style={{ marginTop: 0 }}>Conferma listino · {data.supplier_name}</h1>
     <p>Verifica ogni prezzo. Puoi confermare il valore pattuito oppure indicare una proposta diversa. La proposta sarà sottoposta a verifica dall’azienda.</p>{data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: '#cbd5e1' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
+    <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
+      <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Periodo di validità del listino</h2>
+      <p style={{ color: '#cbd5e1' }}>Indica da quando a quando sono validi i prezzi che confermi o proponi in questo modulo. Il periodo sarà registrato insieme alla risposta e verificato dall’azienda.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
+        <label>Valido dal<input style={input} type="date" required value={validitaDa} onChange={e => setValiditaDa(e.target.value)} /></label>
+        <label>Valido fino al<input style={input} type="date" required min={validitaDa || undefined} value={validitaA} onChange={e => setValiditaA(e.target.value)} /></label>
+      </div>
+    </section>
     {data.items.map(item => {
       const answer = answers[item.id]; if (!answer) return null;
       return <section key={item.id} style={{ ...box, padding: 16, margin: '14px 0', maxWidth: 'none' }}>
@@ -79,3 +93,4 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     <button className="btn btn-primary" disabled={sending} type="submit">{sending ? 'Invio…' : 'Invia risposte'}</button>
   </form></main>;
 }
+

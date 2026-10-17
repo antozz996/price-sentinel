@@ -25,6 +25,8 @@ class SupplierPriceFormRequest(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    validita_inviata_da: Mapped[date | None] = mapped_column(Date, nullable=True)
+    validita_inviata_a: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     supplier = relationship("Fornitore", lazy="selectin")
     items: Mapped[list["SupplierPriceFormItem"]] = relationship(
@@ -57,3 +59,4 @@ class SupplierPriceFormItem(Base):
     nota_fornitore: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     request = relationship("SupplierPriceFormRequest", back_populates="items")
+
