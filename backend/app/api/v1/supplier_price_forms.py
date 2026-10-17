@@ -118,9 +118,9 @@ async def get_public_form(
                 "id": item.id,
                 "sku_interno": item.sku_interno,
                 "descrizione": item.descrizione,
-                "prezzo_corrente": str(item.prezzo_corrente),
+                "prezzo_corrente": str(item.prezzo_corrente) if item.prezzo_corrente is not None else None,
                 "unita_corrente": item.unita_corrente,
-                "validita_corrente_da": item.validita_corrente_da.isoformat(),
+                "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
             }
             for item in request.items
