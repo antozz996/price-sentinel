@@ -194,6 +194,22 @@ export default function SupplierPriceForms() {
     catch (e) { setError(e instanceof Error ? e.message : 'Chiusura non riuscita'); }
     finally { setBusy(false); }
   };
+  const deleteForm = async (form: FormRequest) => {
+    const confirmed = window.confirm(
+      `Eliminare definitivamente il modulo per ${form.supplier_name}? Il link verrà revocato e le risposte del fornitore cancellate. Il listino ufficiale non verrà modificato.`
+    );
+    if (!confirmed) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await fetchWithAuth('/supplier-price-forms/' + form.id, { method: 'DELETE' });
+      if (detail?.id === form.id) setDetail(null);
+      setNotice(`Modulo per ${form.supplier_name} eliminato. Il listino ufficiale non è stato modificato.`);
+      await loadForms();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Eliminazione non riuscita');
+    } finally { setBusy(false); }
+  };
+
   const copyLink = async (url: string) => {
     try { await navigator.clipboard.writeText(url); setNotice('Link copiato negli appunti.'); }
     catch { setNotice('Copia non disponibile: seleziona e copia il link mostrato.'); }
@@ -295,7 +311,7 @@ export default function SupplierPriceForms() {
         <h2 style={{ margin: 0 }}>Moduli creati</h2><button className="btn" type="button" onClick={loadForms}>Aggiorna</button>
       </div>
       {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
-        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{f.status}</td><td><button className="btn" onClick={() => openDetail(f.id)}>Dettaglio</button></td></tr>)}
+        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{f.status}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> <button className="btn" type="button" disabled={busy} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
       </tbody></table></div> : <p style={{ color: 'var(--text-secondary)' }}>Nessun modulo ancora creato.</p>}
     </section>
 
