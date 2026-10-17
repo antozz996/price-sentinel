@@ -5,9 +5,9 @@ import { fetchWithAuth } from '../api';
 type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string | null };
 type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean> };
 type Category = { nome: string; is_active: boolean };
-type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito: number | string; unita_misura: string; data_inizio_validita: string; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
-type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente: string; unita_corrente: string; prezzo_inviato?: string | null; unita_inviata?: string | null; conferma_prezzo?: boolean | null; nota_fornitore?: string | null; esito: string };
-type FormRequest = { id: number; supplier_id: number; supplier_name: string; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
+type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
+type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; conferma_prezzo?: boolean | null; nota_fornitore?: string | null; esito: string };
+type FormRequest = { id: number; supplier_id: number; supplier_name: string; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
 type CreatedLink = { supplier: Supplier; url: string; publicPath: string };
 type MatrixResponse = { categories?: Category[]; suppliers?: CapabilitySupplier[] };
@@ -31,6 +31,8 @@ export default function SupplierPriceForms() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [capabilitySuppliers, setCapabilitySuppliers] = useState<CapabilitySupplier[]>([]);
   const [recipientMode, setRecipientMode] = useState<'suppliers' | 'category'>('suppliers');
+  const [requestType, setRequestType] = useState<'confirmation' | 'new_listino'>('confirmation');
+  const [productCategory, setProductCategory] = useState('');
   const [supplierIds, setSupplierIds] = useState<number[]>([]);
   const [recipientCategory, setRecipientCategory] = useState('');
   const [rowsBySupplier, setRowsBySupplier] = useState<Record<number, PriceRow[]>>({});
@@ -86,6 +88,25 @@ export default function SupplierPriceForms() {
     setCreatedLinks([]);
     setListinoSection(recipientMode === 'category' && recipientCategory ? 'category:' + recipientCategory : 'all');
     if (!selectedSupplierIds.length) { setLoadingCatalog(false); return; }
+    if (requestType === 'new_listino') {
+      const category = recipientMode === 'category' ? recipientCategory : productCategory;
+      if (!category) { setLoadingCatalog(false); return; }
+      setLoadingCatalog(true);
+      fetchWithAuth('/supplier-price-forms/catalog-products?category=' + encodeURIComponent(category))
+        .then((result: any) => {
+          if (!live) return;
+          const products = (Array.isArray(result) ? result : result.items || result.records || []).filter((p: any) => p && p.id);
+          const rows: PriceRow[] = products.map((p: any) => ({
+            id: p.id, sku_interno: p.sku_interno, descrizione: p.descrizione,
+            unita_misura: p.unita_misura, category: p.category, subcategory: p.subcategory,
+          }));
+          setRowsBySupplier(Object.fromEntries(selectedSupplierIds.map(id => [id, rows])));
+          setSelectedBySupplier(Object.fromEntries(selectedSupplierIds.map(id => [id, rows.map(row => row.id)])));
+        })
+        .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'Impossibile caricare il catalogo prodotti'); })
+        .finally(() => { if (live) setLoadingCatalog(false); });
+      return () => { live = false; };
+    }
     setLoadingCatalog(true);
     Promise.all(selectedSupplierIds.map(async id => {
       const result = await fetchWithAuth('/supplier-price-forms/catalog/' + encodeURIComponent(String(id)));
@@ -105,7 +126,7 @@ export default function SupplierPriceForms() {
       if (live) setError(e instanceof Error ? e.message : 'Impossibile caricare uno o più listini');
     }).finally(() => { if (live) setLoadingCatalog(false); });
     return () => { live = false; };
-  }, [selectedSupplierIds.join(','), recipientMode, recipientCategory]);
+  }, [selectedSupplierIds.join(','), recipientMode, recipientCategory, requestType, productCategory]);
 
   const allRows = selectedSupplierIds.flatMap(id => rowsBySupplier[id] || []);
   const groupOptions = useMemo(() => {
@@ -170,7 +191,12 @@ export default function SupplierPriceForms() {
         const listinoIds = selectedBySupplier[supplier.id] || [];
         if (!listinoIds.length) continue;
         const result = await fetchWithAuth('/supplier-price-forms/', { method: 'POST', body: JSON.stringify({
-          supplier_id: supplier.id, listino_ids: listinoIds, expires_in_days: days, note: note.trim() || null
+          supplier_id: supplier.id,
+          request_type: requestType,
+          ...(requestType === 'new_listino'
+            ? { category: recipientMode === 'category' ? recipientCategory : productCategory, product_ids: listinoIds }
+            : { listino_ids: listinoIds }),
+          expires_in_days: days, note: note.trim() || null
         }) }) as CreateResult;
         results.push({ supplier, url: publicOrigin + result.public_path, publicPath: result.public_path });
         setCreatedLinks([...results]);
@@ -224,7 +250,11 @@ export default function SupplierPriceForms() {
   return <div style={{ display: 'grid', gap: 20, maxWidth: 1200 }}>
     <section style={card}>
       <h2 style={{ marginTop: 0 }}>Crea modulo per i fornitori</h2>
-      <p style={{ color: 'var(--text-secondary)' }}>Scegli uno o più fornitori oppure una categoria per includere automaticamente tutti i fornitori associati. Puoi selezionare il listino e le righe da inviare. Le risposte non modificano il listino master: ogni invio genera un link personale.</p>
+      <p style={{ color: 'var(--text-secondary)' }}>Scegli i destinatari e il catalogo prodotti. Le risposte dei fornitori restano proposte da revisionare e non modificano automaticamente il listino ufficiale.</p>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <button type="button" className={requestType === 'confirmation' ? 'btn btn-primary' : 'btn'} onClick={() => { setRequestType('confirmation'); setCreatedLinks([]); }}>Conferma prezzi esistenti</button>
+        <button type="button" className={requestType === 'new_listino' ? 'btn btn-primary' : 'btn'} onClick={() => { setRequestType('new_listino'); setCreatedLinks([]); }}>Richiedi nuovo listino</button>
+      </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         <button type="button" className={recipientMode === 'suppliers' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('suppliers'); setSupplierIds([]); setCreatedLinks([]); }}>Seleziona fornitori</button>
         <button type="button" className={recipientMode === 'category' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('category'); setSupplierIds([]); setRecipientCategory(''); setCreatedLinks([]); }}>Seleziona per categoria</button>
@@ -258,12 +288,24 @@ export default function SupplierPriceForms() {
       </div>
       {recipientMode === 'category' && recipientCategory && <p style={{ color: 'var(--text-secondary)' }}>Fornitori associati a {recipientCategory}: <strong>{selectedSuppliers.length}</strong></p>}
       {selectedSupplierIds.length > 0 && <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
-        <label>Listino / sezione da inviare
-          <select style={field} value={listinoSection} onChange={e => setListinoSection(e.target.value)} disabled={recipientMode === 'category'}>
-            {groupOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </label>
-        {recipientMode === 'category' && <small style={{ color: 'var(--text-secondary)' }}>Selezione automatica di tutte le righe {recipientCategory} disponibili nei listini dei fornitori associati.</small>}
+        {requestType === 'new_listino' ? <>
+          {recipientMode === 'category'
+            ? <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Catalogo prodotti della categoria {recipientCategory}, da quotare da zero.</p>
+            : <label>Categoria prodotti da richiedere
+                <select style={field} value={productCategory} onChange={e => setProductCategory(e.target.value)}>
+                  <option value="">Seleziona categoria…</option>
+                  {categories.map(category => <option key={category.nome} value={category.nome}>{category.nome}</option>)}
+                </select>
+              </label>}
+          <small style={{ color: 'var(--text-secondary)' }}>Vengono inclusi i prodotti attivi del catalogo generale per la categoria scelta. Il fornitore inserirà prezzi e unità; nessun prezzo di altri fornitori viene copiato.</small>
+        </> : <>
+          <label>Listino / sezione da inviare
+            <select style={field} value={listinoSection} onChange={e => setListinoSection(e.target.value)} disabled={recipientMode === 'category'}>
+              {groupOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
+          {recipientMode === 'category' && <small style={{ color: 'var(--text-secondary)' }}>Selezione automatica di tutte le righe {recipientCategory} disponibili nei listini dei fornitori associati.</small>}
+        </>}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <strong>Fornitori {selectedSuppliers.length} · righe visibili {visibleRows.length} · selezionate {selectedCount}</strong>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -280,7 +322,7 @@ export default function SupplierPriceForms() {
               {supplierRows.map(r => <label key={r.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, padding: 10, borderBottom: '1px solid var(--border-glass)', alignItems: 'center' }}>
                 <input type="checkbox" disabled={recipientMode === 'category'} checked={recipientMode === 'category' || (selectedBySupplier[id] || []).includes(r.id)} onChange={() => toggleRow(id, r.id)} />
                 <span>{r.descrizione}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{r.sku_interno}{r.category ? ` · ${r.category}${r.subcategory ? ' / ' + r.subcategory : ''}` : ' · Senza categoria'}</small></span>
-                <span>€ {r.prezzo_pattuito} / {r.unita_misura}</span>
+                <span>{requestType === 'new_listino' ? `Da quotare / ${r.unita_misura}` : `€ ${r.prezzo_pattuito} / ${r.unita_misura}`}</span>
               </label>)}
               {!supplierRows.length && <p style={{ padding: 10, color: 'var(--text-secondary)' }}>Nessuna riga disponibile per questa sezione.</p>}
             </div>;
@@ -288,7 +330,7 @@ export default function SupplierPriceForms() {
           {!selectedSuppliers.length && <p style={{ padding: 12, color: 'var(--text-secondary)' }}>Nessun fornitore associato a questa categoria.</p>}
         </div>}
       </div>}
-      <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy || loadingCatalog || !selectedSupplierIds.length || !selectedCount || !publicUrlReady} onClick={createForms}>{busy ? 'Creazione moduli…' : `Crea ${selectedSupplierIds.length > 1 ? 'moduli' : 'link personale'}`}</button>
+      <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy || loadingCatalog || !selectedSupplierIds.length || !selectedCount || !publicUrlReady || (requestType === 'new_listino' && recipientMode === 'suppliers' && !productCategory)} onClick={createForms}>{busy ? 'Creazione moduli…' : requestType === 'new_listino' ? `Richiedi ${selectedSupplierIds.length > 1 ? 'nuovi listini' : 'nuovo listino'}` : `Crea ${selectedSupplierIds.length > 1 ? 'moduli' : 'link personale'}`}</button>
       {!publicUrlReady && <p style={{ color: '#fbbf24' }}>Inserisci un URL pubblico valido per creare link apribili dai fornitori.</p>}
       {createdLinks.map(item => {
         const wa = whatsappUrl(item);
@@ -310,19 +352,19 @@ export default function SupplierPriceForms() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>Moduli creati</h2><button className="btn" type="button" onClick={loadForms}>Aggiorna</button>
       </div>
-      {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
-        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{f.status}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> <button className="btn" type="button" disabled={busy} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
+      {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Tipo</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
+        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{f.request_type === 'new_listino' ? 'Nuova offerta' : 'Conferma prezzi'}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{f.status}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> <button className="btn" type="button" disabled={busy} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
       </tbody></table></div> : <p style={{ color: 'var(--text-secondary)' }}>Nessun modulo ancora creato.</p>}
     </section>
 
     {detail && <section style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>Risposte · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{detail.status}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da && detail.validita_inviata_a ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')} al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : 'non ancora indicata'}</strong></p>
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
-        <div>Pattuito: € {i.prezzo_corrente} / {i.unita_corrente} · Risposta: {i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + i.unita_inviata : 'in attesa'}</div>
-        <div>Esito: {i.esito === 'confermato' ? 'Confermato' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
+        <div>{detail.request_type === 'new_listino' ? 'Nessun prezzo precedente · Offerta: ' : 'Pattuito: € ' + i.prezzo_corrente + ' / ' + i.unita_corrente + ' · Risposta: '}{i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + i.unita_inviata : 'in attesa'}</div>
+        <div>Esito: {i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
       </div>)}</div>
       {['open','submitted','expired'].includes(detail.status) && <button className="btn" disabled={busy} onClick={() => closeForm(detail.id)}>Chiudi link</button>}
       <p style={{ color: 'var(--text-secondary)' }}>Per applicare un’eventuale variazione, revisiona la proposta e usa il normale flusso di approvazione/importazione.</p>

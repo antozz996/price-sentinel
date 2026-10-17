@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { API_BASE } from '../api';
 
-type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente: string; unita_corrente: string; validita_corrente_da: string; validita_corrente_a?: string | null };
-type FormData = { supplier_name: string; expires_at: string; note?: string | null; items: PublicItem[] };
+type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null };
+type FormData = { supplier_name: string; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
 type Answer = { prezzo: string; unita_misura: string; conferma_prezzo: boolean; nota: string };
 
 export default function SupplierPricePublicForm({ token }: { token: string }) {
@@ -23,7 +23,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       .then(form => {
         if (!active) return;
         setData(form);
-        setAnswers(Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente, unita_misura: i.unita_corrente, conferma_prezzo: false, nota: '' }])));
+        setAnswers(Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: i.unita_corrente || '', conferma_prezzo: false, nota: '' }])));
       })
       .catch(e => { if (active) setError(e.message || 'Impossibile caricare il modulo'); })
       .finally(() => { if (active) setLoading(false); });
@@ -45,7 +45,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         body: JSON.stringify({
           validita_inviata_da: validitaDa,
           validita_inviata_a: validitaA,
-          answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, conferma_prezzo: answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null }))
+          answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, conferma_prezzo: data.request_type === 'confirmation' && answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null }))
         })
       });
       const body = await response.json().catch(() => ({}));
@@ -64,12 +64,12 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   if (!data) return null;
 
   return <main style={wrap}><form style={box} onSubmit={submit}>
-    <h1 style={{ marginTop: 0 }}>Conferma listino · {data.supplier_name}</h1>
-    <p>Verifica ogni prezzo. Puoi confermare il valore pattuito oppure indicare una proposta diversa. La proposta sarà sottoposta a verifica dall’azienda.</p>{data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
+    <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'} · {data.supplier_name}</h1>
+    <p>{data.request_type === 'new_listino' ? 'Inserisci il prezzo e l’unità di misura offerti per ciascun prodotto. La tua offerta sarà revisionata dall’azienda e non aggiorna automaticamente il listino ufficiale.' : 'Verifica ogni prezzo. Puoi confermare il valore pattuito oppure indicare una proposta diversa. La proposta sarà sottoposta a verifica dall’azienda.'}</p>{data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: '#cbd5e1' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
     <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
       <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Periodo di validità del listino</h2>
-      <p style={{ color: '#cbd5e1' }}>Indica da quando a quando sono validi i prezzi che confermi o proponi in questo modulo. Il periodo sarà registrato insieme alla risposta e verificato dall’azienda.</p>
+      <p style={{ color: '#cbd5e1' }}>{data.request_type === 'new_listino' ? 'Indica il periodo di validità dell’offerta che stai inviando.' : 'Indica da quando a quando sono validi i prezzi che confermi o proponi in questo modulo. Il periodo sarà registrato insieme alla risposta e verificato dall’azienda.'}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
         <label>Valido dal<input style={input} type="date" required value={validitaDa} onChange={e => setValiditaDa(e.target.value)} /></label>
         <label>Valido fino al<input style={input} type="date" required min={validitaDa || undefined} value={validitaA} onChange={e => setValiditaA(e.target.value)} /></label>
@@ -79,13 +79,13 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       const answer = answers[item.id]; if (!answer) return null;
       return <section key={item.id} style={{ ...box, padding: 16, margin: '14px 0', maxWidth: 'none' }}>
         <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>{item.descrizione}</h2>
-        <p style={{ color: '#cbd5e1' }}>SKU {item.sku_interno} · Prezzo attuale: <strong>€ {item.prezzo_corrente} / {item.unita_corrente}</strong></p>
-        <p style={{ color: '#cbd5e1' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>
+        <p style={{ color: '#cbd5e1' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente} / ${item.unita_corrente}`}</p>
+        {data.request_type === 'confirmation' && item.validita_corrente_da && <p style={{ color: '#cbd5e1' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-          <label>Prezzo proposto (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /></label>
+          <label>{data.request_type === 'new_listino' ? 'Prezzo offerto (€)' : 'Prezzo proposto (€)'}<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /></label>
           <label>Unità di misura<input style={input} required maxLength={50} value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })} /></label>
         </div>
-        <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>
+        {data.request_type === 'confirmation' && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
       </section>;
     })}

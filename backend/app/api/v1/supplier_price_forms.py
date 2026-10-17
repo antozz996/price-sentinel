@@ -3,11 +3,11 @@ from zoneinfo import ZoneInfo
 from decimal import Decimal
 from hashlib import sha256
 import secrets
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -34,6 +34,7 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
         "supplier_id": request.supplier_id,
         "supplier_name": request.supplier.nome_azienda if request.supplier else None,
         "status": request.status,
+        "request_type": request.request_type,
         "created_at": request.created_at.isoformat(),
         "expires_at": request.expires_at.isoformat(),
         "submitted_at": request.submitted_at.isoformat() if request.submitted_at else None,
@@ -46,9 +47,9 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "listino_id": item.listino_id,
                 "sku_interno": item.sku_interno,
                 "descrizione": item.descrizione,
-                "prezzo_corrente": str(item.prezzo_corrente),
+                "prezzo_corrente": str(item.prezzo_corrente) if item.prezzo_corrente is not None else None,
                 "unita_corrente": item.unita_corrente,
-                "validita_corrente_da": item.validita_corrente_da.isoformat(),
+                "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
                 "prezzo_inviato": str(item.prezzo_inviato) if item.prezzo_inviato is not None else None,
                 "unita_inviata": item.unita_inviata,
@@ -56,6 +57,7 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "nota_fornitore": item.nota_fornitore,
                 "esito": (
                     "da_compilare" if item.prezzo_inviato is None
+                    else "nuova_offerta" if request.request_type == "new_listino"
                     else "confermato" if item.conferma_prezzo
                     else "proposta_variazione"
                 ),
@@ -67,7 +69,10 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
 
 class CreateFormRequest(BaseModel):
     supplier_id: int
-    listino_ids: list[int] = Field(min_length=1, max_length=2000)
+    request_type: Literal["confirmation", "new_listino"] = "confirmation"
+    listino_ids: list[int] = Field(default_factory=list, max_length=2000)
+    product_ids: list[int] = Field(default_factory=list, max_length=2000)
+    category: Optional[str] = Field(default=None, max_length=100)
     expires_in_days: int = Field(default=14, ge=1, le=30)
     note: Optional[str] = Field(default=None, max_length=1000)
 
@@ -105,6 +110,7 @@ async def get_public_form(
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
     return {
         "supplier_name": request.supplier.nome_azienda,
+        "request_type": request.request_type,
         "expires_at": request.expires_at.isoformat(),
         "note": request.note,
         "items": [
@@ -140,6 +146,8 @@ async def submit_public_form(
     now = datetime.now(timezone.utc)
     if not request or request.status != "open" or request.expires_at <= now:
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
+    if request.request_type == "new_listino" and (payload.validita_inviata_da is None or payload.validita_inviata_a is None):
+        raise HTTPException(status_code=422, detail="Per una nuova offerta indica entrambe le date di validità del listino")
     if (payload.validita_inviata_da is None) != (payload.validita_inviata_a is None):
         raise HTTPException(status_code=422, detail="Indica entrambe le date di validità del listino")
     if (
@@ -161,8 +169,10 @@ async def submit_public_form(
         unit = answer.unita_misura.strip()
         if not unit:
             raise HTTPException(status_code=422, detail=f"Unità di misura mancante per {item.sku_interno}")
-        same_price = answer.prezzo == item.prezzo_corrente
-        same_unit = unit.casefold() == item.unita_corrente.strip().casefold()
+        same_price = item.prezzo_corrente is not None and answer.prezzo == item.prezzo_corrente
+        same_unit = item.unita_corrente is not None and unit.casefold() == item.unita_corrente.strip().casefold()
+        if request.request_type == "new_listino" and answer.conferma_prezzo:
+            raise HTTPException(status_code=422, detail="Una nuova offerta non può essere marcata come conferma")
         if answer.conferma_prezzo and not (same_price and same_unit):
             raise HTTPException(
                 status_code=422,
@@ -178,7 +188,12 @@ async def submit_public_form(
     request.validita_inviata_da = payload.validita_inviata_da
     request.validita_inviata_a = payload.validita_inviata_a
     await db.commit()
-    return {"status": "submitted", "message": "Risposta inviata con il periodo di validità indicato. Nessun prezzo nel listino master è stato modificato."}
+    message = (
+        "Nuova offerta inviata con validità indicata. È in attesa di revisione; nessun prezzo ufficiale è stato modificato."
+        if request.request_type == "new_listino"
+        else "Risposta inviata con il periodo di validità indicato. Nessun prezzo nel listino master è stato modificato."
+    )
+    return {"status": "submitted", "message": message}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Crea un modulo per un fornitore")
@@ -188,41 +203,60 @@ async def create_form_request(
     db: AsyncSession = Depends(get_db),
 ):
     _require_primary_tenant(admin)
-    if len(set(payload.listino_ids)) != len(payload.listino_ids):
-        raise HTTPException(status_code=422, detail="La selezione contiene righe duplicate")
-
     supplier = await db.get(Fornitore, payload.supplier_id)
     if not supplier or supplier.archived_at is not None:
         raise HTTPException(status_code=404, detail="Fornitore non trovato o archiviato")
 
-    today = datetime.now(ZoneInfo("Europe/Rome")).date()
-    rows = (await db.execute(
-        select(ListinoMaster)
-        .where(
-            ListinoMaster.id.in_(payload.listino_ids),
-            ListinoMaster.fornitore_id == payload.supplier_id,
-            ListinoMaster.data_inizio_validita <= today,
-            (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= today),
-        )
-        .order_by(ListinoMaster.sku_interno)
-    )).scalars().all()
-    if len(rows) != len(payload.listino_ids):
-        raise HTTPException(
-            status_code=422,
-            detail="Una o più righe non appartengono al fornitore o non sono attive oggi",
-        )
-
-    token = secrets.token_urlsafe(36)
-    now = datetime.now(timezone.utc)
-    request = SupplierPriceFormRequest(
-        supplier_id=supplier.id,
-        created_by_id=admin.id,
-        token_hash=sha256(token.encode("utf-8")).hexdigest(),
-        status="open",
-        created_at=now,
-        expires_at=now + timedelta(days=payload.expires_in_days),
-        note=payload.note.strip() if payload.note else None,
-        items=[
+    if payload.request_type == "new_listino":
+        if not payload.category or not payload.product_ids or payload.listino_ids:
+            raise HTTPException(status_code=422, detail="Per una nuova richiesta indica categoria e prodotti, senza righe listino esistenti")
+        if len(set(payload.product_ids)) != len(payload.product_ids):
+            raise HTTPException(status_code=422, detail="La selezione contiene prodotti duplicati")
+        products = (await db.execute(
+            select(Product)
+            .where(
+                Product.id.in_(payload.product_ids),
+                func.lower(Product.category) == payload.category.strip().lower(),
+                Product.is_active.is_(True),
+            )
+            .order_by(Product.canonical_name)
+        )).scalars().all()
+        if len(products) != len(payload.product_ids):
+            raise HTTPException(status_code=422, detail="Uno o più prodotti non appartengono alla categoria selezionata o non sono attivi")
+        form_items = [
+            SupplierPriceFormItem(
+                listino_id=None,
+                sku_interno=product.sku_interno or f"PROD-{product.id}",
+                descrizione=product.canonical_name,
+                prezzo_corrente=None,
+                unita_corrente=product.comparison_unit,
+                validita_corrente_da=None,
+                validita_corrente_a=None,
+            )
+            for product in products
+        ]
+    else:
+        if not payload.listino_ids or payload.product_ids or payload.category:
+            raise HTTPException(status_code=422, detail="Per confermare un listino seleziona solo le sue righe attive")
+        if len(set(payload.listino_ids)) != len(payload.listino_ids):
+            raise HTTPException(status_code=422, detail="La selezione contiene righe duplicate")
+        today = datetime.now(ZoneInfo("Europe/Rome")).date()
+        rows = (await db.execute(
+            select(ListinoMaster)
+            .where(
+                ListinoMaster.id.in_(payload.listino_ids),
+                ListinoMaster.fornitore_id == payload.supplier_id,
+                ListinoMaster.data_inizio_validita <= today,
+                (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= today),
+            )
+            .order_by(ListinoMaster.sku_interno)
+        )).scalars().all()
+        if len(rows) != len(payload.listino_ids):
+            raise HTTPException(
+                status_code=422,
+                detail="Una o più righe non appartengono al fornitore o non sono attive oggi",
+            )
+        form_items = [
             SupplierPriceFormItem(
                 listino_id=row.id,
                 sku_interno=row.sku_interno,
@@ -233,7 +267,20 @@ async def create_form_request(
                 validita_corrente_a=row.data_scadenza,
             )
             for row in rows
-        ],
+        ]
+
+    token = secrets.token_urlsafe(36)
+    now = datetime.now(timezone.utc)
+    request = SupplierPriceFormRequest(
+        supplier_id=supplier.id,
+        created_by_id=admin.id,
+        request_type=payload.request_type,
+        token_hash=sha256(token.encode("utf-8")).hexdigest(),
+        status="open",
+        created_at=now,
+        expires_at=now + timedelta(days=payload.expires_in_days),
+        note=payload.note.strip() if payload.note else None,
+        items=form_items,
     )
     db.add(request)
     await db.commit()
@@ -247,6 +294,31 @@ async def create_form_request(
         "token": token,
         "public_path": f"/fornitore/listino/{token}",
     }
+
+
+@router.get("/catalog-products", summary="Elenca i prodotti attivi del catalogo per una nuova richiesta listino")
+async def get_catalog_products(
+    category: str = Query(min_length=1, max_length=100),
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    products = (await db.execute(
+        select(Product)
+        .where(func.lower(Product.category) == category.strip().lower(), Product.is_active.is_(True))
+        .order_by(Product.canonical_name)
+    )).scalars().all()
+    return [
+        {
+            "id": product.id,
+            "sku_interno": product.sku_interno or f"PROD-{product.id}",
+            "descrizione": product.canonical_name,
+            "unita_misura": product.comparison_unit,
+            "category": product.category,
+            "subcategory": product.subcategory,
+        }
+        for product in products
+    ]
 
 
 @router.get("/catalog/{supplier_id}", summary="Elenca il listino del fornitore raggruppato per categoria")
