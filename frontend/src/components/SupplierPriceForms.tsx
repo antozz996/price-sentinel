@@ -14,8 +14,9 @@ type MatrixResponse = { categories?: Category[]; suppliers?: CapabilitySupplier[
 
 const card: CSSProperties = { border: '1px solid var(--border-glass)', borderRadius: 12, padding: 16, background: 'rgba(255,255,255,.025)' };
 const field: CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, color: 'white', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 8 };
-const publicOrigin = ((import.meta as any).env?.VITE_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, '');
-const isLocalOrigin = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(publicOrigin);
+const configuredPublicOrigin = ((import.meta as any).env?.VITE_PUBLIC_APP_URL || '').trim().replace(/\/$/, '');
+const localBrowserOrigin = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.origin);
+const isLocalAddress = (value: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value.trim());
 
 function phoneForWhatsApp(value?: string | null) {
   let digits = (value || '').replace(/\D/g, '');
@@ -37,6 +38,11 @@ export default function SupplierPriceForms() {
   const [listinoSection, setListinoSection] = useState('all');
   const [days, setDays] = useState(14);
   const [note, setNote] = useState('');
+  const [publicBaseUrl, setPublicBaseUrl] = useState(() => {
+    if (configuredPublicOrigin) return configuredPublicOrigin;
+    if (localBrowserOrigin) return localStorage.getItem('supplierFormsPublicBaseUrl') || '';
+    return window.location.origin;
+  });
   const [forms, setForms] = useState<FormRequest[]>([]);
   const [createdLinks, setCreatedLinks] = useState<CreatedLink[]>([]);
   const [detail, setDetail] = useState<FormRequest | null>(null);
@@ -70,6 +76,8 @@ export default function SupplierPriceForms() {
   }, [recipientMode, recipientCategory, capabilitySuppliers, suppliers]);
   const selectedSupplierIds = recipientMode === 'category' ? eligibleSupplierIds : supplierIds;
   const selectedSuppliers = selectedSupplierIds.map(id => suppliers.find(s => s.id === id)).filter((s): s is Supplier => Boolean(s));
+  const publicOrigin = publicBaseUrl.trim().replace(/\/$/, '');
+  const publicUrlReady = /^https?:\/\//i.test(publicOrigin) && !isLocalAddress(publicOrigin);
 
   useEffect(() => {
     let live = true;
@@ -192,7 +200,7 @@ export default function SupplierPriceForms() {
   };
   const whatsappUrl = (item: CreatedLink) => {
     const phone = phoneForWhatsApp(item.supplier.telefono_contatto);
-    if (!phone || isLocalOrigin) return '';
+    if (!phone || !publicUrlReady) return '';
     const message = `Buongiorno ${item.supplier.nome_azienda}, ti inviamo il modulo per la verifica del listino: ${item.url}\n\nIl link scade tra ${days} giorni.`;
     return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
   };
@@ -206,6 +214,15 @@ export default function SupplierPriceForms() {
         <button type="button" className={recipientMode === 'category' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('category'); setSupplierIds([]); setRecipientCategory(''); setCreatedLinks([]); }}>Seleziona per categoria</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
+        {localBrowserOrigin && <label style={{ gridColumn: '1 / -1' }}>Indirizzo pubblico da inserire nei link
+          <input style={field} type="url" value={publicBaseUrl} onChange={e => {
+            const value = e.target.value.trim();
+            setPublicBaseUrl(value);
+            if (value) localStorage.setItem('supplierFormsPublicBaseUrl', value);
+            else localStorage.removeItem('supplierFormsPublicBaseUrl');
+          }} placeholder="https://tuo-dominio.it oppure https://tuo-tunnel.lhr.life" />
+          <small style={{ display: 'block', color: 'var(--text-secondary)', marginTop: 5 }}>Incolla il dominio pubblico che il fornitore può aprire. Un indirizzo localhost non funziona sul suo telefono. Se usi un tunnel temporaneo, resterà valido solo finché il tunnel è attivo.</small>
+        </label>}
         {recipientMode === 'category' ? <label>Categoria fornitori
           <select style={field} value={recipientCategory} onChange={e => setRecipientCategory(e.target.value)}>
             <option value="">Seleziona categoria…</option>
@@ -255,7 +272,8 @@ export default function SupplierPriceForms() {
           {!selectedSuppliers.length && <p style={{ padding: 12, color: 'var(--text-secondary)' }}>Nessun fornitore associato a questa categoria.</p>}
         </div>}
       </div>}
-      <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy || loadingCatalog || !selectedSupplierIds.length || !selectedCount} onClick={createForms}>{busy ? 'Creazione moduli…' : `Crea ${selectedSupplierIds.length > 1 ? 'moduli' : 'link personale'}`}</button>
+      <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy || loadingCatalog || !selectedSupplierIds.length || !selectedCount || !publicUrlReady} onClick={createForms}>{busy ? 'Creazione moduli…' : `Crea ${selectedSupplierIds.length > 1 ? 'moduli' : 'link personale'}`}</button>
+      {!publicUrlReady && <p style={{ color: '#fbbf24' }}>Inserisci un URL pubblico valido per creare link apribili dai fornitori.</p>}
       {createdLinks.map(item => {
         const wa = whatsappUrl(item);
         return <div key={item.supplier.id} style={{ ...card, marginTop: 14, borderColor: 'rgba(34,197,94,.45)' }}>
@@ -266,7 +284,7 @@ export default function SupplierPriceForms() {
             {wa && <a className="btn btn-primary" href={wa} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', background: '#25D366', borderColor: '#25D366' }}>WhatsApp · {item.supplier.nome_azienda}</a>}
           </div>
           {!phoneForWhatsApp(item.supplier.telefono_contatto) && <p style={{ color: '#fbbf24', marginBottom: 0 }}>Numero WhatsApp mancante in anagrafica: copia il link e invialo manualmente.</p>}
-          {isLocalOrigin && <p style={{ color: '#fbbf24', marginBottom: 0 }}>L’app sta generando un link locale non raggiungibile dal fornitore. Configura VITE_PUBLIC_APP_URL con l’indirizzo pubblico HTTPS dell’app prima di inviare via WhatsApp.</p>}
+          {!publicUrlReady && <p style={{ color: '#fbbf24', marginBottom: 0 }}>Il link pubblico non è configurato correttamente.</p>}
         </div>;
       })}
       {notice && <div role="status" style={{ color: '#86efac', marginTop: 10 }}>{notice}</div>}
@@ -295,4 +313,5 @@ export default function SupplierPriceForms() {
     {error && <div role="alert" style={{ color: '#fca5a5' }}>{error}</div>}
   </div>;
 }
+
 
