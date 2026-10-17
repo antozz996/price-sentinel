@@ -302,7 +302,7 @@ export default function SupplierPriceForms() {
     if (!detail || detail.request_type !== 'new_listino' || detail.status !== 'submitted') return;
     setSheetBusy(true); setSheetError(''); setSheetNotice(''); setSheetTargets(null);
     try {
-      const match = sheetUrl.trim().match(/docs\\.google\\.com\\/spreadsheets\\/d\\/([A-Za-z0-9_-]+)/);
+      const match = sheetUrl.trim().match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
       if (!match) throw new Error('Inserisci il link del Google Sheet “santo graal”.');
       const spreadsheetId = match[1];
       const token = await requestGoogleSheetsWriteToken();
@@ -372,11 +372,11 @@ export default function SupplierPriceForms() {
   const writeSheetOffer = async () => {
     if (!detail || !sheetTargets?.some(target => target.status === 'ready') || sheetBusy) return;
     const ready = sheetTargets.filter(target => target.status === 'ready');
-    const summary = ready.map(target => target.cell + ': ' + (target.current || '(vuoto)') + ' → ' + target.offered + ' ' + target.unit).join('\\n');
-    if (!window.confirm('Confermi la scrittura nello Sheet? Saranno aggiornate solo le celle mostrate qui sotto.\\n\\n' + summary)) return;
+    const summary = ready.map(target => target.cell + ': ' + (target.current || '(vuoto)') + ' → ' + target.offered + ' ' + target.unit).join('\n');
+    if (!window.confirm('Confermi la scrittura nello Sheet? Saranno aggiornate solo le celle mostrate qui sotto.\n\n' + summary)) return;
     setSheetBusy(true); setSheetError(''); setSheetNotice('');
     try {
-      const match = sheetUrl.trim().match(/docs\\.google\\.com\\/spreadsheets\\/d\\/([A-Za-z0-9_-]+)/);
+      const match = sheetUrl.trim().match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
       if (!match) throw new Error('Link Google Sheet non valido.');
       const spreadsheetId = match[1];
       const token = sheetAccessToken || await requestGoogleSheetsWriteToken();
