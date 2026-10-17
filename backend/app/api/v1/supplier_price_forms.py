@@ -7,7 +7,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -216,7 +216,7 @@ async def create_form_request(
             select(Product)
             .where(
                 Product.id.in_(payload.product_ids),
-                Product.category == payload.category,
+                func.lower(Product.category) == payload.category.strip().lower(),
                 Product.is_active.is_(True),
             )
             .order_by(Product.canonical_name)
@@ -305,7 +305,7 @@ async def get_catalog_products(
     _require_primary_tenant(admin)
     products = (await db.execute(
         select(Product)
-        .where(Product.category == category, Product.is_active.is_(True))
+        .where(func.lower(Product.category) == category.strip().lower(), Product.is_active.is_(True))
         .order_by(Product.canonical_name)
     )).scalars().all()
     return [
