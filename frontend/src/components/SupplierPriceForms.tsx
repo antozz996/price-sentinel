@@ -6,7 +6,7 @@ type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string |
 type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean> };
 type Category = { nome: string; is_active: boolean };
 type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
-type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; conferma_prezzo?: boolean | null; nota_fornitore?: string | null; esito: string };
+type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
 type FormRequest = { id: number; supplier_id: number; supplier_name: string; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
 type CreatedLink = { supplier: Supplier; url: string; publicPath: string };
@@ -363,8 +363,8 @@ export default function SupplierPriceForms() {
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da && detail.validita_inviata_a ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')} al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : 'non ancora indicata'}</strong></p>
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
-        <div>{detail.request_type === 'new_listino' ? 'Nessun prezzo precedente · Offerta: ' : 'Pattuito: € ' + i.prezzo_corrente + ' / ' + i.unita_corrente + ' · Risposta: '}{i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + i.unita_inviata : 'in attesa'}</div>
-        <div>Esito: {i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
+        <div>{detail.request_type === 'new_listino' ? 'Nessun prezzo precedente · Offerta: ' : 'Pattuito: € ' + i.prezzo_corrente + ' / ' + i.unita_corrente + ' · Risposta: '}{i.non_trattato ? 'Non trattato dal fornitore' : i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + i.unita_inviata : 'in attesa'}</div>
+        <div>Esito: {i.esito === 'non_trattato' ? 'Non trattato' : i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
       </div>)}</div>
       {['open','submitted','expired'].includes(detail.status) && <button className="btn" disabled={busy} onClick={() => closeForm(detail.id)}>Chiudi link</button>}
       <p style={{ color: 'var(--text-secondary)' }}>Per applicare un’eventuale variazione, revisiona la proposta e usa il normale flusso di approvazione/importazione.</p>
