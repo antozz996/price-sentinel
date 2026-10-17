@@ -18,6 +18,93 @@ const configuredPublicOrigin = ((import.meta as any).env?.VITE_PUBLIC_APP_URL ||
 const localBrowserOrigin = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.origin);
 const isLocalAddress = (value: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value.trim());
 
+
+const GOOGLE_SHEETS_CLIENT_ID = '52128477187-k0hkvu9vj0v3sbk7tf07rehhvosg0ors.apps.googleusercontent.com';
+const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+const GOOGLE_SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
+const OFFER_SHEET_LAYOUTS = [
+  { title: 'Carne', range: "'Carne'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MARR' }, { col: 3, name: 'MELIUS' }, { col: 4, name: 'DAC' }, { col: 5, name: 'ORIZZONTI' }, { col: 7, name: 'DI PALO' }, { col: 8, name: 'FONTANELLA CARNI' }] },
+  { title: 'Pesce', range: "'Pesce'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MARR' }, { col: 3, name: 'MELIUS' }, { col: 4, name: 'DAC' }, { col: 5, name: 'ORIZZONTI' }, { col: 7, name: 'DI PALO' }, { col: 8, name: 'FONTANELLA CARNI' }] },
+  { title: 'Varie', range: "'Varie'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MARR' }, { col: 3, name: 'MELIUS' }, { col: 4, name: 'DAC' }, { col: 5, name: 'ORIZZONTI' }, { col: 7, name: 'DI PALO' }, { col: 8, name: 'FONTANELLA CARNI' }] },
+  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'NAVAS' }, { col: 3, name: 'ORIZZONTI' }, { col: 4, name: '3F' }, { col: 5, name: 'PASCARELLA' }, { col: 6, name: "CASA D'AMBRA" }] },
+  { title: 'COMPARAZIONE MATERIALI', range: "'COMPARAZIONE MATERIALI'!A1:N1000", productCol: 1, unitCol: 2, suppliers: [{ col: 3, name: 'VEMO' }, { col: 4, name: 'KITO' }, { col: 5, name: 'EUROCARTA' }, { col: 6, name: 'ALPHA' }, { col: 7, name: 'PROMOCART' }, { col: 8, name: 'MUNDO' }] },
+  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:J1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MG FRUTTA' }, { col: 4, name: 'DEMETRA', unitCol: 5 }, { col: 7, name: "BONTA DELL'ORTO", unitCol: 8 }] },
+] as const;
+
+type SheetOfferTarget = {
+  item_id: number; product: string; sku: string; status: 'ready' | 'already' | 'blocked' | 'not_trattato' | 'written';
+  reason: string; tab?: string; cell?: string; unitCell?: string; current: string; offered: string; unit: string;
+};
+
+function normalizeSheetText(value: unknown): string {
+  return String(value ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+}
+
+function sheetColumn(index: number): string {
+  let result = '';
+  for (let value = index + 1; value; value = Math.floor((value - 1) / 26)) result = String.fromCharCode(65 + ((value - 1) % 26)) + result;
+  return result;
+}
+
+function supplierSheetAliases(name: string): string[] {
+  const normalized = normalizeSheetText(name);
+  const aliases: Record<string, string[]> = {
+    'casa d ambra': ['casa d ambra'],
+    'demetra': ['demetra'],
+    'la bonta dell orto': ['bonta dell orto'],
+    'bonta dell orto': ['bonta dell orto'],
+    'mg frutta': ['mg frutta'],
+    'navas distribuzione': ['navas'],
+    'fontanella carni': ['fontanella carni'],
+    'orizzonti': ['orizzonti'],
+    'pascarella': ['pascarella'],
+    'fornitore test': [],
+  };
+  for (const [key, values] of Object.entries(aliases)) if (normalized.includes(key)) return values;
+  return normalized ? [normalized] : [];
+}
+
+function loadGoogleIdentityScript(): Promise<void> {
+  const google = (window as any).google;
+  if (google?.accounts?.oauth2) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity-services]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Impossibile caricare il login Google.')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true; script.defer = true; script.dataset.googleIdentityServices = 'true';
+    script.onload = () => resolve(); script.onerror = () => reject(new Error('Impossibile caricare il login Google.'));
+    document.head.appendChild(script);
+  });
+}
+
+async function requestGoogleSheetsWriteToken(): Promise<string> {
+  await loadGoogleIdentityScript();
+  return new Promise((resolve, reject) => {
+    const google = (window as any).google;
+    const client = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_SHEETS_CLIENT_ID, scope: GOOGLE_SHEETS_SCOPE,
+      callback: (response: any) => {
+        if (response?.error || !response?.access_token) reject(new Error(response?.error_description || response?.error || 'Consenso Google non completato.'));
+        else resolve(response.access_token as string);
+      },
+      error_callback: (error: any) => reject(new Error(error?.message || 'Popup Google non disponibile.')),
+    });
+    client.requestAccessToken();
+  });
+}
+
+async function googleSheetRequest(url: string, token: string, init?: RequestInit): Promise<any> {
+  const response = await fetch(url, { ...init, headers: { Authorization: 'Bearer ' + token, ...(init?.headers || {}) } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body?.error?.message || 'Google Sheets ha restituito HTTP ' + response.status);
+  return body;
+}
+
 function phoneForWhatsApp(value?: string | null) {
   let digits = (value || '').replace(/\D/g, '');
   if (digits.startsWith('00')) digits = digits.slice(2);
@@ -52,6 +139,11 @@ export default function SupplierPriceForms() {
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('ps.santo-graal.url') || '');
+  const [sheetTargets, setSheetTargets] = useState<SheetOfferTarget[] | null>(null);
+  const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetError, setSheetError] = useState('');
+  const [sheetNotice, setSheetNotice] = useState('');
 
   const loadForms = async () => {
     try { setForms(await fetchWithAuth('/supplier-price-forms/?status_filter=all')); }
@@ -210,10 +302,119 @@ export default function SupplierPriceForms() {
     } finally { setBusy(false); }
   };
   const openDetail = async (id: number) => {
-    setError('');
+    setError(''); setSheetTargets(null); setSheetError(''); setSheetNotice('');
     try { setDetail(await fetchWithAuth('/supplier-price-forms/' + id)); }
     catch (e) { setError(e instanceof Error ? e.message : 'Impossibile caricare il dettaglio'); }
   };
+
+  const prepareSheetOffer = async () => {
+    if (!detail || detail.request_type !== 'new_listino' || detail.status !== 'submitted') return;
+    setSheetBusy(true); setSheetError(''); setSheetNotice(''); setSheetTargets(null);
+    try {
+      const match = sheetUrl.trim().match(/docs\\.google\\.com\\/spreadsheets\\/d\\/([A-Za-z0-9_-]+)/);
+      if (!match) throw new Error('Inserisci il link del Google Sheet “santo graal”.');
+      const spreadsheetId = match[1];
+      const token = await requestGoogleSheetsWriteToken();
+      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(spreadsheetId);
+      const metadata = await googleSheetRequest(root + '?fields=' + encodeURIComponent('spreadsheetId,properties(title),sheets.properties(title)'), token);
+      if (String(metadata?.properties?.title || '').trim().toLocaleLowerCase() !== 'santo graal') {
+        throw new Error('Il file selezionato non è il Google Sheet “santo graal”.');
+      }
+      const params = new URLSearchParams();
+      OFFER_SHEET_LAYOUTS.forEach(layout => params.append('ranges', layout.range));
+      params.set('valueRenderOption', 'FORMULA');
+      const snapshot = await googleSheetRequest(root + '/values:batchGet?' + params.toString(), token);
+      if ((snapshot?.valueRanges || []).length !== OFFER_SHEET_LAYOUTS.length) throw new Error('Lettura incompleta dello Sheet: non preparo modifiche.');
+      const tabs: Record<string, unknown[][]> = {};
+      OFFER_SHEET_LAYOUTS.forEach((layout, index) => { tabs[layout.title] = snapshot.valueRanges[index]?.values || []; });
+      const supplierAliases = supplierSheetAliases(detail.supplier_name);
+      if (!supplierAliases.length) throw new Error('Non conosco la colonna di questo fornitore nei listini Santo Graal.');
+      const targets: SheetOfferTarget[] = detail.items.map(item => {
+        if (item.non_trattato || item.esito === 'non_trattato') return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'not_trattato', reason: 'Il fornitore ha indicato che non tratta il prodotto.', current: '', offered: '', unit: '' };
+        if (!item.prezzo_inviato || !item.unita_inviata) return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'Manca prezzo o unità nella risposta.', current: '', offered: item.prezzo_inviato || '', unit: item.unita_inviata || '' };
+        const productKey = normalizeSheetText(item.descrizione);
+        const matches: Array<{ tab: string; row: number; col: number; unitCol?: number; current: unknown; currentUnit: unknown; baseUnit: unknown }> = [];
+        for (const layout of OFFER_SHEET_LAYOUTS) {
+          const values = tabs[layout.title] || [];
+          const header = values[0] || [];
+          const supplierCol = layout.suppliers.find(candidate => {
+            const headerName = normalizeSheetText(header[candidate.col]);
+            return supplierAliases.some(alias => headerName === normalizeSheetText(candidate.name) && normalizeSheetText(candidate.name) === alias);
+          });
+          if (!supplierCol) continue;
+          values.slice(1).forEach((row, offset) => {
+            if (normalizeSheetText(row[layout.productCol]) === productKey) {
+              matches.push({ tab: layout.title, row: offset + 2, col: supplierCol.col, unitCol: 'unitCol' in supplierCol ? supplierCol.unitCol : undefined, current: row[supplierCol.col], currentUnit: 'unitCol' in supplierCol ? row[supplierCol.unitCol] : undefined, baseUnit: row[layout.unitCol] });
+            }
+          });
+        }
+        if (matches.length !== 1) return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: matches.length ? 'Prodotto presente in più righe/schede: associazione ambigua, nessuna scrittura.' : 'Prodotto o colonna fornitore non trovato con corrispondenza esatta nello Sheet.', current: '', offered: item.prezzo_inviato!, unit: item.unita_inviata! };
+        const target = matches[0];
+        const priceCell = sheetColumn(target.col) + target.row;
+        const cell = "'" + target.tab.replace(/'/g, "''") + "'!" + priceCell;
+        const rawCurrent = target.current == null ? '' : String(target.current).trim();
+        if (rawCurrent.startsWith('=')) return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'La cella contiene una formula: non la sovrascrivo.', tab: target.tab, cell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
+        const currentNumber = Number(rawCurrent.replace(',', '.'));
+        const offeredNumber = Number(item.prezzo_inviato);
+        const already = rawCurrent !== '' && Number.isFinite(currentNumber) && currentNumber === offeredNumber;
+        const unitCell = target.unitCol == null ? undefined : "'" + target.tab.replace(/'/g, "''") + "'!" + sheetColumn(target.unitCol) + target.row;
+        const baseUnit = String(target.baseUnit ?? '').trim();
+        if (!unitCell && baseUnit && normalizeSheetText(baseUnit) !== normalizeSheetText(item.unita_inviata)) {
+          return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'L’unità offerta differisce dall’unità della riga e lo Sheet non ha una colonna unità specifica per questo fornitore.', tab: target.tab, cell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
+        }
+        if (target.unitCol != null && target.currentUnit != null && String(target.currentUnit).trim().startsWith('=')) {
+          return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'La cella unità contiene una formula: non la sovrascrivo.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
+        }
+        return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: already ? 'already' : 'ready', reason: already ? 'Il prezzo è già presente nello Sheet.' : 'Cella abbinata esattamente; controlla il valore attuale prima di confermare.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
+      });
+      setSheetTargets(targets);
+      setSheetNotice('Anteprima pronta. Nessuna cella è stata modificata.');
+    } catch (e) {
+      setSheetError(e instanceof Error ? e.message : 'Non sono riuscita a preparare l’anteprima Sheet.');
+    } finally { setSheetBusy(false); }
+  };
+
+  const writeSheetOffer = async () => {
+    if (!detail || !sheetTargets?.some(target => target.status === 'ready') || sheetBusy) return;
+    const ready = sheetTargets.filter(target => target.status === 'ready');
+    const summary = ready.map(target => target.cell + ': ' + (target.current || '(vuoto)') + ' → ' + target.offered + ' ' + target.unit).join('\\n');
+    if (!window.confirm('Confermi la scrittura nello Sheet? Saranno aggiornate solo le celle mostrate qui sotto.\\n\\n' + summary)) return;
+    setSheetBusy(true); setSheetError(''); setSheetNotice('');
+    try {
+      const match = sheetUrl.trim().match(/docs\\.google\\.com\\/spreadsheets\\/d\\/([A-Za-z0-9_-]+)/);
+      if (!match) throw new Error('Link Google Sheet non valido.');
+      const spreadsheetId = match[1];
+      const token = await requestGoogleSheetsWriteToken();
+      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(spreadsheetId);
+      const params = new URLSearchParams();
+      ready.forEach(target => { if (target.cell) params.append('ranges', target.cell); if (target.unitCell) params.append('ranges', target.unitCell); });
+      params.set('valueRenderOption', 'FORMULA');
+      const current = await googleSheetRequest(root + '/values:batchGet?' + params.toString(), token);
+      const currentValues = current?.valueRanges || [];
+      const expected = ready.flatMap(target => [target.current, ...(target.unitCell ? [target.unit ? '' : ''] : [])]);
+      let valueIndex = 0;
+      for (const target of ready) {
+        const live = String(currentValues[valueIndex++]?.values?.[0]?.[0] ?? '').trim();
+        if (live !== target.current) throw new Error('La cella ' + target.cell + ' è cambiata dopo l’anteprima. Ricarica e controlla di nuovo.');
+        if (target.unitCell) {
+          const liveUnit = String(currentValues[valueIndex++]?.values?.[0]?.[0] ?? '').trim();
+          if (liveUnit && normalizeSheetText(liveUnit) !== normalizeSheetText(target.unit)) throw new Error('L’unità in ' + target.unitCell + ' è cambiata dopo l’anteprima. Ricarica e controlla di nuovo.');
+        }
+      }
+      const data = ready.flatMap(target => [
+        { range: target.cell!, values: [[Number(target.offered)]] },
+        ...(target.unitCell ? [{ range: target.unitCell, values: [[target.unit]] }] : []),
+      ]);
+      await googleSheetRequest(root + '/values:batchUpdate?valueInputOption=USER_ENTERED', token, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+      });
+      setSheetTargets(sheetTargets.map(target => target.status === 'ready' ? { ...target, status: 'written', reason: 'Prezzo scritto nello Sheet.' } : target));
+      setSheetNotice('Aggiornate ' + ready.length + ' celle prezzo nello Sheet. Per aggiornare anche il Listino Master di Price Sentinel, apri Santo Graal e aggiorna l’anteprima/import.');
+    } catch (e) {
+      setSheetError(e instanceof Error ? e.message : 'Scrittura nello Sheet non riuscita.');
+    } finally { setSheetBusy(false); }
+  };
+
   const closeForm = async (id: number) => {
     setBusy(true); setError('');
     try { await fetchWithAuth('/supplier-price-forms/' + id + '/close', { method: 'POST' }); setDetail(null); await loadForms(); }
@@ -361,6 +562,20 @@ export default function SupplierPriceForms() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{detail.status}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da && detail.validita_inviata_a ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')} al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : 'non ancora indicata'}</strong></p>
+      {detail.request_type === 'new_listino' && detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Collega l’offerta al Google Sheet</h3>
+        <p style={{ color: 'var(--text-secondary)' }}>Il fornitore ha inviato una proposta. Prima leggo il foglio, individuo solo corrispondenze esatte e mostro le celle da aggiornare. La scrittura richiede un consenso Google con accesso in modifica.</p>
+        <label>Link del Google Sheet “santo graal”<input style={field} type="url" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('ps.santo-graal.url', e.target.value); setSheetTargets(null); setSheetNotice(''); }} placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <button type="button" className="btn" disabled={sheetBusy || !sheetUrl.trim()} onClick={() => void prepareSheetOffer()}>{sheetBusy ? 'Lettura e controllo…' : 'Prepara anteprima Sheet'}</button>
+          {sheetTargets?.some(target => target.status === 'ready') && <button type="button" className="btn btn-primary" disabled={sheetBusy} onClick={() => void writeSheetOffer()}>{sheetBusy ? 'Scrittura…' : 'Conferma e scrivi nello Sheet'}</button>}
+        </div>
+        {sheetError && <p role="alert" style={{ color: '#fca5a5' }}>{sheetError}</p>}
+        {sheetNotice && <p role="status" style={{ color: '#86efac' }}>{sheetNotice}</p>}
+        {sheetTargets && <div style={{ overflowX: 'auto', marginTop: 10 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Prodotto</th><th align="left">Cella</th><th align="left">Prezzo attuale</th><th align="left">Prezzo offerto</th><th align="left">Esito</th></tr></thead><tbody>
+          {sheetTargets.map(target => <tr key={target.item_id}><td>{target.product}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{target.sku}</small></td><td>{target.cell || '—'}</td><td>{target.current || 'vuoto'}</td><td>{target.offered ? '€ ' + target.offered + ' / ' + target.unit : '—'}</td><td>{target.status === 'ready' ? 'Pronto alla conferma' : target.status === 'already' ? 'Già presente' : target.status === 'written' ? 'Scritto' : target.status === 'not_trattato' ? 'Non trattato · escluso' : 'Bloccato · ' + target.reason}</td></tr>)}
+        </tbody></table></div>}
+      </div>}
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
         <div>{detail.request_type === 'new_listino' ? 'Nessun prezzo precedente · Offerta: ' : 'Pattuito: € ' + i.prezzo_corrente + ' / ' + i.unita_corrente + ' · Risposta: '}{i.non_trattato ? 'Non trattato dal fornitore' : i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + i.unita_inviata : 'in attesa'}</div>
