@@ -37,7 +37,7 @@ type SheetOfferTarget = {
 };
 
 function normalizeSheetText(value: unknown): string {
-  return String(value ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
 }
 
 function sheetColumn(index: number): string {
@@ -50,7 +50,7 @@ function supplierSheetAliases(name: string): string[] {
   const normalized = normalizeSheetText(name);
   const knownHeaders = ['MARR', 'MELIUS', 'DAC', 'ORIZZONTI', 'DI PALO', 'FONTANELLA CARNI', 'NAVAS', '3F', 'PASCARELLA', "CASA D'AMBRA", 'VEMO', 'KITO', 'EUROCARTA', 'ALPHA', 'PROMOCART', 'MUNDO', 'MG FRUTTA', 'DEMETRA', "BONTA DELL'ORTO"];
   return knownHeaders.map(normalizeSheetText).filter(alias =>
-    alias.length >= 3 && (normalized === alias || normalized.includes(alias))
+    (alias.length >= 3 || alias === '3f') && (normalized === alias || normalized.includes(alias))
   );
 }
 
