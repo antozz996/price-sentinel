@@ -57,6 +57,7 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "nota_fornitore": item.nota_fornitore,
                 "esito": (
                     "da_compilare" if item.prezzo_inviato is None
+                    else "nuova_offerta" if request.request_type == "new_listino"
                     else "confermato" if item.conferma_prezzo
                     else "proposta_variazione"
                 ),
