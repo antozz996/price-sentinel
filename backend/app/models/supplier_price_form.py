@@ -44,7 +44,7 @@ class SupplierPriceFormItem(Base):
     request_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("supplier_price_form_requests.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    listino_id: Mapped[int] = mapped_column(
+    listino_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("listino_master.id", ondelete="RESTRICT"), nullable=True
     )
     sku_interno: Mapped[str] = mapped_column(String(100), nullable=False)
