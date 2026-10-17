@@ -48,20 +48,10 @@ function sheetColumn(index: number): string {
 
 function supplierSheetAliases(name: string): string[] {
   const normalized = normalizeSheetText(name);
-  const aliases: Record<string, string[]> = {
-    'casa d ambra': ['casa d ambra'],
-    'demetra': ['demetra'],
-    'la bonta dell orto': ['bonta dell orto'],
-    'bonta dell orto': ['bonta dell orto'],
-    'mg frutta': ['mg frutta'],
-    'navas distribuzione': ['navas'],
-    'fontanella carni': ['fontanella carni'],
-    'orizzonti': ['orizzonti'],
-    'pascarella': ['pascarella'],
-    'fornitore test': [],
-  };
-  for (const [key, values] of Object.entries(aliases)) if (normalized.includes(key)) return values;
-  return normalized ? [normalized] : [];
+  const knownHeaders = ['MARR', 'MELIUS', 'DAC', 'ORIZZONTI', 'DI PALO', 'FONTANELLA CARNI', 'NAVAS', '3F', 'PASCARELLA', "CASA D'AMBRA", 'VEMO', 'KITO', 'EUROCARTA', 'ALPHA', 'PROMOCART', 'MUNDO', 'MG FRUTTA', 'DEMETRA', "BONTA DELL'ORTO"];
+  return knownHeaders.map(normalizeSheetText).filter(alias =>
+    alias.length >= 3 && (normalized === alias || normalized.includes(alias))
+  );
 }
 
 function loadGoogleIdentityScript(): Promise<void> {
@@ -142,6 +132,7 @@ export default function SupplierPriceForms() {
   const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('ps.santo-graal.url') || '');
   const [sheetTargets, setSheetTargets] = useState<SheetOfferTarget[] | null>(null);
   const [sheetBusy, setSheetBusy] = useState(false);
+  const [sheetAccessToken, setSheetAccessToken] = useState('');
   const [sheetError, setSheetError] = useState('');
   const [sheetNotice, setSheetNotice] = useState('');
 
@@ -302,7 +293,7 @@ export default function SupplierPriceForms() {
     } finally { setBusy(false); }
   };
   const openDetail = async (id: number) => {
-    setError(''); setSheetTargets(null); setSheetError(''); setSheetNotice('');
+    setError(''); setSheetTargets(null); setSheetError(''); setSheetNotice(''); setSheetAccessToken('');
     try { setDetail(await fetchWithAuth('/supplier-price-forms/' + id)); }
     catch (e) { setError(e instanceof Error ? e.message : 'Impossibile caricare il dettaglio'); }
   };
@@ -315,6 +306,7 @@ export default function SupplierPriceForms() {
       if (!match) throw new Error('Inserisci il link del Google Sheet “santo graal”.');
       const spreadsheetId = match[1];
       const token = await requestGoogleSheetsWriteToken();
+      setSheetAccessToken(token);
       const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(spreadsheetId);
       const metadata = await googleSheetRequest(root + '?fields=' + encodeURIComponent('spreadsheetId,properties(title),sheets.properties(title)'), token);
       if (String(metadata?.properties?.title || '').trim().toLocaleLowerCase() !== 'santo graal') {
@@ -365,6 +357,9 @@ export default function SupplierPriceForms() {
         if (target.unitCol != null && target.currentUnit != null && String(target.currentUnit).trim().startsWith('=')) {
           return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'La cella unità contiene una formula: non la sovrascrivo.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
         }
+        if (target.unitCol != null && String(target.currentUnit ?? '').trim() && normalizeSheetText(target.currentUnit) !== normalizeSheetText(item.unita_inviata)) {
+          return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'L’unità già presente nello Sheet è diversa: serve una verifica manuale.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
+        }
         return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: already ? 'already' : 'ready', reason: already ? 'Il prezzo è già presente nello Sheet.' : 'Cella abbinata esattamente; controlla il valore attuale prima di confermare.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
       });
       setSheetTargets(targets);
@@ -384,14 +379,13 @@ export default function SupplierPriceForms() {
       const match = sheetUrl.trim().match(/docs\\.google\\.com\\/spreadsheets\\/d\\/([A-Za-z0-9_-]+)/);
       if (!match) throw new Error('Link Google Sheet non valido.');
       const spreadsheetId = match[1];
-      const token = await requestGoogleSheetsWriteToken();
+      const token = sheetAccessToken || await requestGoogleSheetsWriteToken();
       const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(spreadsheetId);
       const params = new URLSearchParams();
       ready.forEach(target => { if (target.cell) params.append('ranges', target.cell); if (target.unitCell) params.append('ranges', target.unitCell); });
       params.set('valueRenderOption', 'FORMULA');
       const current = await googleSheetRequest(root + '/values:batchGet?' + params.toString(), token);
       const currentValues = current?.valueRanges || [];
-      const expected = ready.flatMap(target => [target.current, ...(target.unitCell ? [target.unit ? '' : ''] : [])]);
       let valueIndex = 0;
       for (const target of ready) {
         const live = String(currentValues[valueIndex++]?.values?.[0]?.[0] ?? '').trim();
@@ -565,7 +559,7 @@ export default function SupplierPriceForms() {
       {detail.request_type === 'new_listino' && detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Collega l’offerta al Google Sheet</h3>
         <p style={{ color: 'var(--text-secondary)' }}>Il fornitore ha inviato una proposta. Prima leggo il foglio, individuo solo corrispondenze esatte e mostro le celle da aggiornare. La scrittura richiede un consenso Google con accesso in modifica.</p>
-        <label>Link del Google Sheet “santo graal”<input style={field} type="url" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('ps.santo-graal.url', e.target.value); setSheetTargets(null); setSheetNotice(''); }} placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
+        <label>Link del Google Sheet “santo graal”<input style={field} type="url" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('ps.santo-graal.url', e.target.value); setSheetTargets(null); setSheetNotice(''); setSheetAccessToken(''); }} placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
           <button type="button" className="btn" disabled={sheetBusy || !sheetUrl.trim()} onClick={() => void prepareSheetOffer()}>{sheetBusy ? 'Lettura e controllo…' : 'Prepara anteprima Sheet'}</button>
           {sheetTargets?.some(target => target.status === 'ready') && <button type="button" className="btn btn-primary" disabled={sheetBusy} onClick={() => void writeSheetOffer()}>{sheetBusy ? 'Scrittura…' : 'Conferma e scrivi nello Sheet'}</button>}
