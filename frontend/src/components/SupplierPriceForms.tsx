@@ -352,19 +352,19 @@ export default function SupplierPriceForms() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>Moduli creati</h2><button className="btn" type="button" onClick={loadForms}>Aggiorna</button>
       </div>
-      {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
-        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{f.status}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> <button className="btn" type="button" disabled={busy} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
+      {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Tipo</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
+        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{f.request_type === 'new_listino' ? 'Nuova offerta' : 'Conferma prezzi'}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{f.status}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> <button className="btn" type="button" disabled={busy} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
       </tbody></table></div> : <p style={{ color: 'var(--text-secondary)' }}>Nessun modulo ancora creato.</p>}
     </section>
 
     {detail && <section style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>Risposte · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{detail.status}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da && detail.validita_inviata_a ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')} al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : 'non ancora indicata'}</strong></p>
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
-        <div>Pattuito: € {i.prezzo_corrente} / {i.unita_corrente} · Risposta: {i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + i.unita_inviata : 'in attesa'}</div>
-        <div>Esito: {i.esito === 'confermato' ? 'Confermato' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
+        <div>{detail.request_type === 'new_listino' ? 'Nessun prezzo precedente · Offerta: ' : 'Pattuito: € ' + i.prezzo_corrente + ' / ' + i.unita_corrente + ' · Risposta: '}{i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + i.unita_inviata : 'in attesa'}</div>
+        <div>Esito: {i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
       </div>)}</div>
       {['open','submitted','expired'].includes(detail.status) && <button className="btn" disabled={busy} onClick={() => closeForm(detail.id)}>Chiudi link</button>}
       <p style={{ color: 'var(--text-secondary)' }}>Per applicare un’eventuale variazione, revisiona la proposta e usa il normale flusso di approvazione/importazione.</p>
