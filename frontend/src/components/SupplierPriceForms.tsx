@@ -14,7 +14,7 @@ type MatrixResponse = { categories?: Category[]; suppliers?: CapabilitySupplier[
 
 const card: CSSProperties = { border: '1px solid var(--border-glass)', borderRadius: 12, padding: 16, background: 'rgba(255,255,255,.025)' };
 const field: CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, color: 'white', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 8 };
-const publicOrigin = (import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, '');
+const publicOrigin = ((import.meta as any).env?.VITE_PUBLIC_APP_URL || window.location.origin).replace(/\/$/, '');
 const isLocalOrigin = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(publicOrigin);
 
 function phoneForWhatsApp(value?: string | null) {
