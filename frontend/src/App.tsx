@@ -674,6 +674,15 @@ export default function App() {
   const info = getHeaderInfo();
 
   const isSectorResp = profile?.ruolo_dettagliato && profile.ruolo_dettagliato.startsWith('responsabile_');
+  const supplierPublicMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
+
+  if (supplierPublicMatch) {
+    return (
+      <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: '#0b1220', color: 'white' }}>Caricamento modulo…</main>}>
+        <SupplierPricePublicForm token={decodeURIComponent(supplierPublicMatch[1])} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="app-container">
