@@ -77,7 +77,7 @@ export default function SupplierPriceForms() {
     setSelectedBySupplier({});
     setCreatedLinks([]);
     setListinoSection(recipientMode === 'category' && recipientCategory ? 'category:' + recipientCategory : 'all');
-    if (!selectedSupplierIds.length) return;
+    if (!selectedSupplierIds.length) { setLoadingCatalog(false); return; }
     setLoadingCatalog(true);
     Promise.all(selectedSupplierIds.map(async id => {
       const result = await fetchWithAuth('/supplier-price-forms/catalog/' + encodeURIComponent(String(id)));
@@ -126,12 +126,13 @@ export default function SupplierPriceForms() {
   const visibleRowsBySupplier = useMemo(() => Object.fromEntries(selectedSupplierIds.map(id => {
     const rows = rowsBySupplier[id] || [];
     return [id, rows.filter(row => {
+      if (recipientMode === 'category') return row.category?.trim().toLocaleLowerCase() === recipientCategory.toLocaleLowerCase();
       if (!activeGroup || activeGroup.value === 'all') return true;
       if (activeGroup.uncategorized) return !row.category?.trim();
       if (activeGroup.subcategory) return row.category?.trim() === activeGroup.category && row.subcategory?.trim() === activeGroup.subcategory;
       return row.category?.trim() === activeGroup.category;
     })];
-  })), [selectedSupplierIds.join(','), rowsBySupplier, activeGroup]);
+  })), [selectedSupplierIds.join(','), rowsBySupplier, activeGroup, recipientMode, recipientCategory]);
   const visibleRows = selectedSupplierIds.flatMap(id => visibleRowsBySupplier[id] || []);
   const selectedCount = selectedSupplierIds.reduce((sum, id) => sum + (selectedBySupplier[id]?.length || 0), 0);
   const allVisibleSelected = visibleRows.length > 0 && selectedSupplierIds.every(id =>
