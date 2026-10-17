@@ -359,3 +359,26 @@ async def close_form_request(
     await db.commit()
     return {"id": request.id, "status": request.status}
 
+
+@router.delete("/{request_id}", status_code=status.HTTP_200_OK, summary="Elimina un modulo listino e revoca il link")
+async def delete_form_request(
+    request_id: int,
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    request = (await db.execute(
+        select(SupplierPriceFormRequest)
+        .options(selectinload(SupplierPriceFormRequest.items))
+        .where(SupplierPriceFormRequest.id == request_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if not request:
+        raise HTTPException(status_code=404, detail="Modulo non trovato")
+
+    # Removing the request cascades to its response snapshot items and revokes
+    # the public token. It never alters the referenced official listino rows.
+    await db.delete(request)
+    await db.commit()
+    return {"id": request_id, "deleted": True}
+
