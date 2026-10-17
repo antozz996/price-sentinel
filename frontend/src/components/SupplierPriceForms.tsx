@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { fetchWithAuth } from '../api';
 
 type Supplier = { id: number; nome_azienda: string };
-type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito: number | string; unita_misura: string; data_inizio_validita: string; data_scadenza?: string | null };
+type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito: number | string; unita_misura: string; data_inizio_validita: string; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
 type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente: string; unita_corrente: string; prezzo_inviato?: string | null; unita_inviata?: string | null; conferma_prezzo?: boolean | null; nota_fornitore?: string | null; esito: string };
 type FormRequest = { id: number; supplier_id: number; supplier_name: string; status: string; created_at: string; expires_at: string; submitted_at?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
@@ -16,6 +16,7 @@ export default function SupplierPriceForms() {
   const [rows, setRows] = useState<PriceRow[]>([]);
   const [supplierId, setSupplierId] = useState('');
   const [selected, setSelected] = useState<number[]>([]);
+  const [listinoSection, setListinoSection] = useState('all');
   const [days, setDays] = useState(14);
   const [note, setNote] = useState('');
   const [forms, setForms] = useState<FormRequest[]>([]);
@@ -35,11 +36,11 @@ export default function SupplierPriceForms() {
   }, []);
   useEffect(() => {
     let live = true;
-    setRows([]); setSelected([]); setCreated(null);
+    setRows([]); setSelected([]); setCreated(null); setListinoSection('all');
     if (!supplierId) return;
     (async () => {
       try {
-        const result = await fetchWithAuth('/listino/?fornitore_id=' + encodeURIComponent(supplierId) + '&limit=10000');
+        const result = await fetchWithAuth('/supplier-price-forms/catalog/' + encodeURIComponent(supplierId));
         const data = Array.isArray(result) ? result : (result.items || result.records || result.data || []);
         if (live) setRows(data.filter((r: PriceRow) => r && r.id));
       } catch (e) { if (live) setError(e instanceof Error ? e.message : 'Impossibile caricare il listino'); }
@@ -47,9 +48,46 @@ export default function SupplierPriceForms() {
     return () => { live = false; };
   }, [supplierId]);
 
-  const allSelected = rows.length > 0 && selected.length === rows.length;
+  const groupOptions = useMemo(() => {
+    const categoryCounts = new Map<string, number>();
+    const subcategoryCounts = new Map<string, { category: string; subcategory: string; count: number }>();
+    let uncategorizedCount = 0;
+    rows.forEach(row => {
+      const category = row.category?.trim();
+      const subcategory = row.subcategory?.trim();
+      if (!category) { uncategorizedCount += 1; return; }
+      categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+      if (subcategory) {
+        const key = category + '::' + subcategory;
+        const current = subcategoryCounts.get(key);
+        subcategoryCounts.set(key, { category, subcategory, count: (current?.count || 0) + 1 });
+      }
+    });
+    return [
+      { value: 'all', label: `Tutto il listino (${rows.length})`, category: null as string | null, subcategory: null as string | null, uncategorized: false },
+      ...Array.from(categoryCounts.entries()).sort(([a], [b]) => a.localeCompare(b, 'it')).map(([category, count]) => ({
+        value: 'category:' + category, label: `${category} (${count})`, category, subcategory: null, uncategorized: false
+      })),
+      ...Array.from(subcategoryCounts.entries()).sort(([, a], [, b]) => (a.category + a.subcategory).localeCompare(b.category + b.subcategory, 'it')).map(([key, item]) => ({
+        value: 'subcategory:' + key, label: `${item.category} · ${item.subcategory} (${item.count})`, category: item.category, subcategory: item.subcategory, uncategorized: false
+      })),
+      ...(uncategorizedCount ? [{ value: 'uncategorized', label: `Senza categoria (${uncategorizedCount})`, category: null, subcategory: null, uncategorized: true }] : [])
+    ];
+  }, [rows]);
+  const activeGroup = groupOptions.find(option => option.value === listinoSection) || groupOptions[0];
+  const visibleRows = useMemo(() => rows.filter(row => {
+    if (!activeGroup || activeGroup.value === 'all') return true;
+    if (activeGroup.uncategorized) return !row.category?.trim();
+    if (activeGroup.subcategory) return row.category?.trim() === activeGroup.category && row.subcategory?.trim() === activeGroup.subcategory;
+    return row.category?.trim() === activeGroup.category;
+  }), [rows, activeGroup]);
+  const allVisibleSelected = visibleRows.length > 0 && visibleRows.every(row => selected.includes(row.id));
   const publicUrl = useMemo(() => created ? window.location.origin + created.public_path : '', [created]);
-  const toggleAll = () => setSelected(allSelected ? [] : rows.map(r => r.id));
+  const toggleVisibleRows = () => setSelected(current => {
+    const visibleIds = visibleRows.map(row => row.id);
+    if (allVisibleSelected) return current.filter(id => !visibleIds.includes(id));
+    return Array.from(new Set([...current, ...visibleIds]));
+  });
   const toggleRow = (id: number) => setSelected(current => current.includes(id) ? current.filter(x => x !== id) : [...current, id]);
 
   const createForm = async () => {
@@ -82,24 +120,33 @@ export default function SupplierPriceForms() {
   return <div style={{ display: 'grid', gap: 20, maxWidth: 1200 }}>
     <section style={card}>
       <h2 style={{ marginTop: 0 }}>Crea modulo per un fornitore</h2>
-      <p style={{ color: 'var(--text-secondary)' }}>Seleziona le righe attive del suo listino. Il fornitore può confermare i prezzi oppure proporre una variazione. Le risposte non cambiano il listino master.</p>
+      <p style={{ color: 'var(--text-secondary)' }}>Scegli il fornitore e poi la categoria/scheda del listino da inviare. Puoi selezionare tutte le righe visibili o scegliere solo alcuni prodotti. Le risposte del fornitore non cambiano il listino master.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
         <label>Fornitore<select style={field} value={supplierId} onChange={e => setSupplierId(e.target.value)}><option value="">Seleziona…</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.nome_azienda}</option>)}</select></label>
         <label>Scadenza link<select style={field} value={days} onChange={e => setDays(Number(e.target.value))}>{[7,14,21,30].map(d => <option key={d} value={d}>{d} giorni</option>)}</select></label>
         <label style={{ gridColumn: '1 / -1' }}>Nota per il fornitore<textarea style={field} rows={2} maxLength={1000} value={note} onChange={e => setNote(e.target.value)} placeholder="Facoltativa" /></label>
       </div>
-      {supplierId && <div style={{ marginTop: 16 }}>
+      {supplierId && <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
+        <label>Listino / sezione da inviare
+          <select style={field} value={listinoSection} onChange={e => setListinoSection(e.target.value)}>
+            {groupOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <strong>Righe listino attive ({rows.length}) · selezionate {selected.length}</strong>
-          <button className="btn" type="button" onClick={toggleAll} disabled={!rows.length}>{allSelected ? 'Deseleziona tutte' : 'Seleziona tutte'}</button>
+          <strong>Righe visibili {visibleRows.length} · selezionate {selected.length}</strong>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {selected.length > 0 && <button className="btn" type="button" onClick={() => setSelected([])}>Azzera selezione</button>}
+            <button className="btn" type="button" onClick={toggleVisibleRows} disabled={!visibleRows.length}>{allVisibleSelected ? 'Deseleziona righe visibili' : 'Seleziona tutte le righe visibili'}</button>
+          </div>
         </div>
-        <div style={{ maxHeight: 360, overflow: 'auto', marginTop: 10, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
-          {rows.map(r => <label key={r.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, padding: 10, borderBottom: '1px solid var(--border-glass)', alignItems: 'center' }}>
+        <div style={{ maxHeight: 360, overflow: 'auto', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+          {visibleRows.map(r => <label key={r.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, padding: 10, borderBottom: '1px solid var(--border-glass)', alignItems: 'center' }}>
             <input type="checkbox" checked={selected.includes(r.id)} onChange={() => toggleRow(r.id)} />
-            <span>{r.descrizione}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{r.sku_interno}</small></span>
+            <span>{r.descrizione}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{r.sku_interno}{r.category ? ` · ${r.category}${r.subcategory ? ' / ' + r.subcategory : ''}` : ' · Senza categoria'}</small></span>
             <span>€ {r.prezzo_pattuito} / {r.unita_misura}</span>
           </label>)}
-          {!rows.length && <p style={{ padding: 12, color: 'var(--text-secondary)' }}>Nessuna riga attiva trovata per questo fornitore.</p>}
+          {rows.length === 0 && <p style={{ padding: 12, color: 'var(--text-secondary)' }}>Nessuna riga attiva trovata per questo fornitore.</p>}
+          {rows.length > 0 && visibleRows.length === 0 && <p style={{ padding: 12, color: 'var(--text-secondary)' }}>Nessuna riga in questa sezione.</p>}
         </div>
       </div>}
       <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy || !supplierId || !selected.length} onClick={createForm}>{busy ? 'Creazione…' : 'Crea link personale'}</button>
