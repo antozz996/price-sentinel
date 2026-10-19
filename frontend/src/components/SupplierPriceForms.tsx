@@ -319,8 +319,10 @@ export default function SupplierPriceForms() {
       if ((snapshot?.valueRanges || []).length !== OFFER_SHEET_LAYOUTS.length) throw new Error('Lettura incompleta dello Sheet: non preparo modifiche.');
       const tabs: Record<string, unknown[][]> = {};
       OFFER_SHEET_LAYOUTS.forEach((layout, index) => { tabs[layout.title] = snapshot.valueRanges[index]?.values || []; });
-      const supplierAliases = supplierSheetAliases(detail.supplier_name);
-      if (!supplierAliases.length) throw new Error('Non conosco la colonna di questo fornitore nei listini Santo Graal.');
+      const supplierAliases = new Set(supplierSheetAliases(detail.supplier_name));
+      const normalizedSupplierName = normalizeSheetText(detail.supplier_name);
+      if (normalizedSupplierName) supplierAliases.add(normalizedSupplierName);
+      const computedHeaderNames = new Set(['miglior fornitore', 'best supplier', 'fornitore migliore', 'prezzo migliore']);
       const targets: SheetOfferTarget[] = detail.items.map(item => {
         if (item.non_trattato || item.esito === 'non_trattato') return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'not_trattato', reason: 'Il fornitore ha indicato che non tratta il prodotto.', current: '', offered: '', unit: '' };
         if (!item.prezzo_inviato || !item.unita_inviata) return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'Manca prezzo o unità nella risposta.', current: '', offered: item.prezzo_inviato || '', unit: item.unita_inviata || '' };
@@ -329,14 +331,38 @@ export default function SupplierPriceForms() {
         for (const layout of OFFER_SHEET_LAYOUTS) {
           const values = tabs[layout.title] || [];
           const header = values[0] || [];
-          const supplierCol = layout.suppliers.find(candidate => {
+          const supplierColumns: Array<{ col: number; name: string; unitCol?: number }> = layout.suppliers.filter(candidate => {
             const headerName = normalizeSheetText(header[candidate.col]);
-            return supplierAliases.some(alias => headerName === normalizeSheetText(candidate.name) && normalizeSheetText(candidate.name) === alias);
+            const configuredName = normalizeSheetText(candidate.name);
+            return headerName === configuredName && supplierAliases.has(configuredName);
           });
-          if (!supplierCol) continue;
+          header.forEach((headerValue, col) => {
+            const headerName = normalizeSheetText(headerValue);
+            if (
+              col > layout.unitCol &&
+              headerName &&
+              headerName === normalizedSupplierName &&
+              !computedHeaderNames.has(headerName) &&
+              !supplierColumns.some(candidate => candidate.col === col)
+            ) {
+              supplierColumns.push({ col, name: String(headerValue) });
+            }
+          });
+          if (!supplierColumns.length) continue;
           values.slice(1).forEach((row, offset) => {
             if (normalizeSheetText(row[layout.productCol]) === productKey) {
-              matches.push({ tab: layout.title, row: offset + 2, col: supplierCol.col, unitCol: 'unitCol' in supplierCol ? supplierCol.unitCol : undefined, current: row[supplierCol.col], currentUnit: 'unitCol' in supplierCol ? row[supplierCol.unitCol] : undefined, baseUnit: row[layout.unitCol] });
+              supplierColumns.forEach(supplierCol => {
+                const hasUnitColumn = 'unitCol' in supplierCol;
+                matches.push({
+                  tab: layout.title,
+                  row: offset + 2,
+                  col: supplierCol.col,
+                  unitCol: hasUnitColumn ? supplierCol.unitCol : undefined,
+                  current: row[supplierCol.col],
+                  currentUnit: hasUnitColumn ? row[supplierCol.unitCol] : undefined,
+                  baseUnit: row[layout.unitCol],
+                });
+              });
             }
           });
         }

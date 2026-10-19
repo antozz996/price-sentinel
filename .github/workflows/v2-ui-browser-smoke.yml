@@ -7,6 +7,12 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/v2-ui-browser-smoke.yml"
+  pull_request:
+    branches:
+      - staging/price-sentinel-v2
+    paths:
+      - "frontend/**"
+      - ".github/workflows/v2-ui-browser-smoke.yml"
   workflow_dispatch:
 
 permissions:
