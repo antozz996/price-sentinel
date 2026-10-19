@@ -331,7 +331,7 @@ export default function SupplierPriceForms() {
         for (const layout of OFFER_SHEET_LAYOUTS) {
           const values = tabs[layout.title] || [];
           const header = values[0] || [];
-          const supplierColumns = layout.suppliers.filter(candidate => {
+          const supplierColumns: Array<{ col: number; name: string; unitCol?: number }> = layout.suppliers.filter(candidate => {
             const headerName = normalizeSheetText(header[candidate.col]);
             const configuredName = normalizeSheetText(candidate.name);
             return headerName === configuredName && supplierAliases.has(configuredName);
