@@ -126,3 +126,104 @@ test('responsive main navigation can be opened at the mobile viewport', async ({
   await expect(page.locator('.sidebar-nav')).toBeVisible()
   await expect(page.locator('.sidebar-nav')).toContainText('Panoramica')
 })
+
+
+test('supplier offer preview finds an exact custom Sheet header without selecting calculated columns', async ({ page }, testInfo) => {
+  const supplierName = 'FORNITORE TEST'
+  const request = {
+    id: 7,
+    supplier_id: 1,
+    supplier_name: supplierName,
+    request_type: 'new_listino',
+    status: 'submitted',
+    created_at: '2026-10-19T12:00:00Z',
+    expires_at: '2026-11-02T12:00:00Z',
+    submitted_at: '2026-10-19T12:30:00Z',
+    validita_inviata_da: '2026-10-19',
+    validita_inviata_a: '2026-10-26',
+    items: [{
+      id: 71,
+      sku_interno: 'CI-SKU-71',
+      descrizione: 'PRODOTTO DI PROVA',
+      prezzo_corrente: null,
+      unita_corrente: null,
+      prezzo_inviato: '4.2500',
+      unita_inviata: 'BT',
+      non_trattato: false,
+      nota_fornitore: null,
+      esito: 'nuova_offerta',
+    }],
+  }
+
+  await page.addInitScript(() => {
+    localStorage.setItem('ps.santo-graal.url', 'https://docs.google.com/spreadsheets/d/ci-synthetic-sheet/edit')
+  })
+  await page.route('**/api/v1/**', async route => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/fornitori/') {
+      await route.fulfill({ json: [{ id: 1, nome_azienda: supplierName }] })
+    } else if (path === '/api/v1/categories/matrix') {
+      await route.fulfill({ json: { categories: [{ nome: 'Beverage', is_active: true }], suppliers: [] } })
+    } else if (path === '/api/v1/supplier-price-forms/' || path === '/api/v1/supplier-price-forms/1') {
+      await route.fulfill({ json: path.endsWith('/1') ? request : [request] })
+    } else {
+      await route.fallback()
+    }
+  })
+  await page.route('https://accounts.google.com/gsi/client', route => route.fulfill({
+    status: 200,
+    contentType: 'application/javascript',
+    body: `window.google={accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>callback({access_token:'ci-synthetic-token'})})}}};`,
+  }))
+  const writeMethods: string[] = []
+  await page.route('https://sheets.googleapis.com/**', async route => {
+    const url = new URL(route.request().url())
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({
+        status: 204,
+        headers: {
+          'access-control-allow-origin': '*',
+          'access-control-allow-methods': 'GET, POST, OPTIONS',
+          'access-control-allow-headers': 'Authorization, Content-Type',
+        },
+        body: '',
+      })
+      return
+    }
+    if (url.pathname.endsWith('/values:batchUpdate')) writeMethods.push(route.request().method())
+    if (url.pathname.endsWith('/values:batchGet')) {
+      const beverageHeader = ['Prodotto', 'Unità', 'NAVAS', 'ORIZZONTI', '3F', 'PASCARELLA', "CASA D'AMBRA", supplierName, 'MIGLIOR FORNITORE']
+      const beverageRow = ['PRODOTTO DI PROVA', 'BT', '5.98', '', '', '', '', '', '3F']
+      const ranges = ["'Carne'!A1:L1000", "'Pesce'!A1:L1000", "'Varie'!A1:L1000", "'BEVERAGE'!A1:L1000", "'COMPARAZIONE MATERIALI'!A1:N1000", "'FRUTTA E VERDURA'!A1:J1000"]
+      await route.fulfill({
+        status: 200,
+        headers: { 'access-control-allow-origin': '*' },
+        json: {
+          valueRanges: ranges.map((range, index) => ({
+            range,
+            values: index === 3 ? [beverageHeader, beverageRow] : [],
+          })),
+        },
+      })
+      return
+    }
+    await route.fulfill({
+      status: 200,
+      headers: { 'access-control-allow-origin': '*' },
+      json: { properties: { title: 'santo graal' }, sheets: [{ properties: { title: 'BEVERAGE' } }] },
+    })
+  })
+
+  await login(page, 'admin@synthetic.test')
+  if (page.viewportSize()?.width && page.viewportSize()!.width <= 768) {
+    await page.locator('.hamburger-btn').click()
+  }
+  await page.locator('.sidebar-nav').getByText('Moduli fornitori', { exact: true }).click()
+  await page.getByRole('button', { name: 'Dettaglio' }).click()
+  await page.getByRole('button', { name: 'Prepara anteprima Sheet' }).click()
+
+  await expect(page.getByText("'BEVERAGE'!H2")).toBeVisible()
+  await expect(page.getByText('Pronto alla conferma')).toBeVisible()
+  await expect(page.getByText("'BEVERAGE'!I2")).toHaveCount(0)
+  expect(writeMethods).toEqual([])
+})
