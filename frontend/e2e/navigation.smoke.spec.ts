@@ -208,7 +208,7 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
         return
       }
       const beverageHeader = ['Prodotto', 'Unità', 'NAVAS', 'ORIZZONTI', '3F', 'PASCARELLA', "CASA D'AMBRA", supplierName, 'MIGLIOR FORNITORE']
-      const beverageRow = ['PRODOTTO DI PROVA', 'BT', '5.98', '', '', '', concurrentPrice, '', '3F']
+      const beverageRow = ['PRODOTTO DI PROVA', 'BT', '5.98', '', '', '', '', concurrentPrice, '3F']
       const ranges = ["'Carne'!A1:L1000", "'Pesce'!A1:L1000", "'Varie'!A1:L1000", "'BEVERAGE'!A1:L1000", "'COMPARAZIONE MATERIALI'!A1:N1000", "'FRUTTA E VERDURA'!A1:J1000"]
       await route.fulfill({
         status: 200,
