@@ -352,14 +352,14 @@ export default function SupplierPriceForms() {
           values.slice(1).forEach((row, offset) => {
             if (normalizeSheetText(row[layout.productCol]) === productKey) {
               supplierColumns.forEach(supplierCol => {
-                const hasUnitColumn = 'unitCol' in supplierCol;
+                const unitColIndex = supplierCol.unitCol;
                 matches.push({
                   tab: layout.title,
                   row: offset + 2,
                   col: supplierCol.col,
-                  unitCol: hasUnitColumn ? supplierCol.unitCol : undefined,
+                  unitCol: unitColIndex,
                   current: row[supplierCol.col],
-                  currentUnit: hasUnitColumn ? row[supplierCol.unitCol] : undefined,
+                  currentUnit: unitColIndex == null ? undefined : row[unitColIndex],
                   baseUnit: row[layout.unitCol],
                 });
               });
