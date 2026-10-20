@@ -27,6 +27,7 @@ class GoogleSheetDryRunRequest(BaseModel):
     @model_validator(mode="after")
     def bound_google_snapshot(self):
         widths = {
+            "FOOD": (1000, 11),
             "Carne": (1000, 11),
             "Pesce": (1000, 11),
             "Varie": (1000, 11),
