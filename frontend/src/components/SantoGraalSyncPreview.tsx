@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchWithAuth } from '../api'
 
 const GOOGLE_CLIENT_ID = '52128477187-k0hkvu9vj0v3sbk7tf07rehhvosg0ors.apps.googleusercontent.com'
@@ -136,17 +136,50 @@ function loadGoogleIdentityServices(): Promise<void> {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity-services]')
     if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true })
-      existing.addEventListener('error', () => reject(new Error('Impossibile caricare il login Google.')), { once: true })
-      return
+      if (existing.dataset.loadState === 'loaded' && (window as any).google?.accounts?.oauth2) {
+        resolve()
+        return
+      }
+      if (existing.dataset.loadState === 'failed') existing.remove()
+      else {
+        const timeout = window.setTimeout(() => reject(new Error('Il login Google non risponde. Ricarica la pagina e riprova.')), 15000)
+        existing.addEventListener('load', () => {
+          window.clearTimeout(timeout)
+          if ((window as any).google?.accounts?.oauth2) resolve()
+          else reject(new Error('Google Identity Services non è disponibile dopo il caricamento.'))
+        }, { once: true })
+        existing.addEventListener('error', () => {
+          window.clearTimeout(timeout)
+          existing.dataset.loadState = 'failed'
+          reject(new Error('Impossibile caricare il login Google.'))
+        }, { once: true })
+        return
+      }
     }
     const script = document.createElement('script')
     script.src = 'https://accounts.google.com/gsi/client'
     script.async = true
     script.defer = true
     script.dataset.googleIdentityServices = 'true'
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Impossibile caricare il login Google.'))
+    const timeout = window.setTimeout(() => {
+      script.dataset.loadState = 'failed'
+      reject(new Error('Il login Google non risponde. Ricarica la pagina e riprova.'))
+    }, 15000)
+    script.onload = () => {
+      window.clearTimeout(timeout)
+      if ((window as any).google?.accounts?.oauth2) {
+        script.dataset.loadState = 'loaded'
+        resolve()
+      } else {
+        script.dataset.loadState = 'failed'
+        reject(new Error('Google Identity Services non è disponibile dopo il caricamento.'))
+      }
+    }
+    script.onerror = () => {
+      window.clearTimeout(timeout)
+      script.dataset.loadState = 'failed'
+      reject(new Error('Impossibile caricare il login Google.'))
+    }
     document.head.appendChild(script)
   })
 }
@@ -158,34 +191,68 @@ function requestReadToken(): Promise<string> {
       reject(new Error('Servizio di autorizzazione Google non disponibile.'))
       return
     }
+    let settled = false
+    const timeout = window.setTimeout(() => {
+      if (settled) return
+      settled = true
+      reject(new Error('Autorizzazione Google non completata. Consenti i popup per localhost e riprova.'))
+    }, 60000)
+    const finish = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      callback()
+    }
     const client = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
       scope: GOOGLE_SCOPE,
       callback: (response: any) => {
         if (response?.error || !response?.access_token) {
-          reject(new Error(response?.error_description || response?.error || 'Accesso Google non completato.'))
+          const message = response?.error === 'origin_mismatch'
+            ? 'Origine OAuth non autorizzata. Apri PRICE SENTINEL V2 da http://localhost:18084.'
+            : response?.error_description || response?.error || 'Accesso Google non completato.'
+          finish(() => reject(new Error(message)))
           return
         }
-        resolve(response.access_token as string)
+        finish(() => resolve(response.access_token as string))
       },
-      error_callback: (error: any) => reject(new Error(error?.message || 'Popup Google non disponibile.')),
+      error_callback: (error: any) => finish(() => reject(new Error(error?.message || 'Popup Google non disponibile. Consenti i popup per localhost.'))),
     })
     // Google ricorda il consenso già concesso; non forziamo una nuova schermata di consenso a ogni lettura.
-    client.requestAccessToken()
+    try {
+      client.requestAccessToken()
+    } catch (error) {
+      finish(() => reject(error instanceof Error ? error : new Error('Popup Google non disponibile.')))
+    }
   })
 }
 
 async function googleGet(url: string, token: string): Promise<any> {
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: { Authorization: 'Bearer ' + token },
-  })
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 30000)
+  let response: Response
+  try {
+    response = await fetch(url, { method: 'GET', headers: { Authorization: 'Bearer ' + token }, signal: controller.signal })
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('La lettura di Google Sheets ha superato 30 secondi. Riprova.')
+    throw error
+  } finally { window.clearTimeout(timeout) }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
     const message = body?.error?.message || 'Google Sheets ha restituito HTTP ' + response.status
     throw new Error(message)
   }
   return response.json()
+}
+
+async function fetchPreviewApi(url: string, options: RequestInit = {}): Promise<any> {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), 30000)
+  try { return await fetchWithAuth(url, { ...options, signal: controller.signal }) }
+  catch (error) {
+    if (controller.signal.aborted) throw new Error('La richiesta a Price Sentinel ha superato 30 secondi. Riprova.')
+    throw error
+  } finally { window.clearTimeout(timeout) }
 }
 
 export default function SantoGraalSyncPreview() {
@@ -212,6 +279,15 @@ export default function SantoGraalSyncPreview() {
   const [priceImportError, setPriceImportError] = useState<string | null>(null)
   const [pricePreview, setPricePreview] = useState<ContractPreview | null>(null)
   const [priceCommitResult, setPriceCommitResult] = useState<ContractCommitResult | null>(null)
+  const [googleReady, setGoogleReady] = useState(Boolean((window as any).google?.accounts?.oauth2))
+
+  useEffect(() => {
+    let active = true
+    void loadGoogleIdentityServices().then(() => { if (active) setGoogleReady(true) }).catch(error => {
+      if (active) setError(error instanceof Error ? error.message : 'Impossibile caricare il login Google.')
+    })
+    return () => { active = false }
+  }, [])
 
   async function runReadOnlyPreview() {
     setBusy(true)
@@ -222,8 +298,10 @@ export default function SantoGraalSyncPreview() {
       localStorage.setItem('ps.santo-graal.url', sourceUrl.trim())
       const spreadsheetId = spreadsheetIdFromUrl(sourceUrl.trim())
       if (!token) {
-        await loadGoogleIdentityServices()
-        token = await requestReadToken()
+        if (!(window as any).google?.accounts?.oauth2) throw new Error('Il login Google si sta ancora caricando. Attendi qualche secondo e riprova.')
+        // Start the popup synchronously in the click handler, while browser user activation is available.
+        const tokenRequest = requestReadToken()
+        token = await tokenRequest
         setGoogleToken(token)
       }
 
@@ -256,7 +334,7 @@ export default function SantoGraalSyncPreview() {
         values[item.title] = ranges[index]?.values || []
       })
 
-      const preview = await fetchWithAuth('/smart-price-sheet/google-dry-run', {
+      const preview = await fetchPreviewApi('/smart-price-sheet/google-dry-run', {
         method: 'POST',
         body: JSON.stringify({ spreadsheet_id: spreadsheetId, title, values }),
       }) as DryRunReport
@@ -270,7 +348,7 @@ export default function SantoGraalSyncPreview() {
       setCatalogProducts([])
       setMappingOptions([])
       try {
-        const catalog = await fetchWithAuth('/products') as CatalogProduct[]
+        const catalog = await fetchPreviewApi('/products') as CatalogProduct[]
         const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
         setCatalogProducts(activeProducts)
         const automaticMappings = exactStagedMappings(preview.candidates, activeProducts)
@@ -303,7 +381,7 @@ export default function SantoGraalSyncPreview() {
         }))
         let listinoOptions: MappingOption[] = []
         try {
-          const currentListino = await fetchWithAuth('/listini/?limit=10000') as ListinoMappingRow[]
+          const currentListino = await fetchPreviewApi('/listini/?limit=10000') as ListinoMappingRow[]
           const unique = new Map<string, ListinoMappingRow>()
           if (Array.isArray(currentListino)) {
             currentListino.forEach(row => {
@@ -331,7 +409,7 @@ export default function SantoGraalSyncPreview() {
         setCatalogError('Non riesco a leggere il catalogo prodotti. Riprova aggiornando l’anteprima; nessun dato è stato modificato.')
       }
       try {
-        const supplierData = await fetchWithAuth('/fornitori') as SupplierRecord[]
+        const supplierData = await fetchPreviewApi('/fornitori') as SupplierRecord[]
         const activeSuppliers = Array.isArray(supplierData) ? supplierData : []
         setSupplierOptions(activeSuppliers)
         setSupplierLoadError(null)
@@ -446,7 +524,7 @@ export default function SantoGraalSyncPreview() {
         method: 'POST',
         body: JSON.stringify({ items: bootstrapProducts }),
       }) as { created_count: number; already_present_count: number; total_count: number; classification_updated_count?: number }
-      const catalog = await fetchWithAuth('/products') as CatalogProduct[]
+      const catalog = await fetchPreviewApi('/products') as CatalogProduct[]
       const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
       setCatalogProducts(activeProducts)
       setStagedMappings(exactStagedMappings(report?.candidates || [], activeProducts))
@@ -592,8 +670,8 @@ export default function SantoGraalSyncPreview() {
         />
       </label>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className="btn btn-primary" disabled={busy || !sourceUrl.trim()} onClick={() => void runReadOnlyPreview()}>
-          {busy ? 'Lettura e controllo…' : report ? 'Aggiorna dal foglio' : 'Accedi a Google e prepara anteprima'}
+        <button type="button" className="btn btn-primary" disabled={busy || !sourceUrl.trim() || !googleReady} onClick={() => void runReadOnlyPreview()}>
+          {busy ? 'Lettura e controllo…' : !googleReady ? 'Caricamento accesso Google…' : report ? 'Aggiorna dal foglio' : 'Accedi a Google e prepara anteprima'}
         </button>
         <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
           Accesso in sola lettura · dopo il primo consenso, il pulsante aggiorna i dati senza rifare il login
