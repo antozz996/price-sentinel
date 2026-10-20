@@ -231,22 +231,18 @@ async def run() -> None:
               and versions[0][2] == today
               and float(versions[1][0]) == 3.1
               and versions[1][1] == tomorrow
-              and versions[1][2] == tomorrow + timedelta(days=29))
+              and versions[1][2] is None)
         billed_today = await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", today.isoformat())
         billed_tomorrow = await _get_listino_attivo(db, marr_id, "POMODORI-PELATI", tomorrow.isoformat())
-        check("today's invoice uses old price; tomorrow uses new price for its 30-day term",
+        check("today's invoice uses old price; tomorrow uses the open-ended approved price",
               billed_today is not None and float(billed_today.prezzo_pattuito) == 2.5
               and billed_tomorrow is not None and float(billed_tomorrow.prezzo_pattuito) == 3.1)
-        expires_on = tomorrow + timedelta(days=29)
-        billed_on_expiry = await _get_listino_attivo(
-            db, marr_id, "POMODORI-PELATI", expires_on.isoformat()
+        far_future = tomorrow + timedelta(days=365)
+        billed_far_future = await _get_listino_attivo(
+            db, marr_id, "POMODORI-PELATI", far_future.isoformat()
         )
-        billed_after_expiry = await _get_listino_attivo(
-            db, marr_id, "POMODORI-PELATI", (expires_on + timedelta(days=1)).isoformat()
-        )
-        check("30-day contract covers its last day and expires the following day",
-              billed_on_expiry is not None and float(billed_on_expiry.prezzo_pattuito) == 3.1
-              and billed_after_expiry is None)
+        check("approved price remains valid beyond 30 days until another approval",
+              billed_far_future is not None and float(billed_far_future.prezzo_pattuito) == 3.1)
         currently_visible = await list_listino(
             response=Response(), fornitore_id=marr_id, include_scaduti=False,
             limit=50, offset=0, _user=ADMIN, db=db,
@@ -310,12 +306,12 @@ async def run() -> None:
         offer for offer in reviewed["records_preview"][0]["confronti"]
         if offer["fornitore"] == "MARR"
     )
-    check("preview shows current contract, proposed price, delta and 30-day dates",
+    check("preview shows current contract, proposed price, delta and open-ended validity",
           Decimal(marr_offer["prezzo_corrente"]) == Decimal("3.1")
           and Decimal(marr_offer["prezzo_proposto"]) == Decimal("4.0")
           and Decimal(marr_offer["delta_unitario"]) == Decimal("0.9")
           and marr_offer["decorrenza_proposta"] == (today + timedelta(days=1)).isoformat()
-          and marr_offer["scadenza_proposta"] == (today + timedelta(days=30)).isoformat())
+          and marr_offer["scadenza_proposta"] is None)
 
     async with async_session_factory() as db:
         async with db.begin():

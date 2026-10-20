@@ -710,7 +710,7 @@ export default function PriceListManager() {
                                       ? 'non comparabile (unità diverse)'
                                       : `€ ${offer.delta_unitario} / unità${offer.delta_percentuale ? ` (${offer.delta_percentuale}%)` : ''}`}
                                     {' · Decorrenza: '}{new Date(offer.decorrenza_proposta).toLocaleDateString('it-IT')}
-                                    {' · Scadenza: '}{offer.scadenza_proposta ? new Date(offer.scadenza_proposta).toLocaleDateString('it-IT') : 'da definire'}
+                                    {' · Scadenza: '}{offer.scadenza_proposta ? new Date(offer.scadenza_proposta).toLocaleDateString('it-IT') : 'fino a nuova approvazione'}
                                   </small>
                                 </div>
                               ))}
@@ -723,7 +723,7 @@ export default function PriceListManager() {
                   {multiPreview.records_preview_truncated && <small>Mostrate le prime 50 righe valide; il file contiene {multiPreview.valid_records} righe valide.</small>}
                   <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
                     <input type="checkbox" checked={confirmMultiImport} onChange={e => setConfirmMultiImport(e.target.checked)} />
-                    <span>Ho verificato prezzo pattuito, proposta, delta, unità di misura, decorrenza e scadenza per ogni fornitore; confermo questa approvazione.</span>
+                    <span>Ho verificato prezzo pattuito, proposta, delta, unità di misura, decorrenza e validità di ogni accordo; confermo questa approvazione.</span>
                   </label>
                 </div>
               )}

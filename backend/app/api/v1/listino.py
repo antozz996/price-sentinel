@@ -245,7 +245,7 @@ async def _build_comparative_contract_context(
                 and current.unita_misura == record["unita_misura"]
             )
             effective = current.data_inizio_validita if unchanged else (today + timedelta(days=1) if current else today)
-            expires = current.data_scadenza if unchanged else effective + timedelta(days=29)
+            expires = current.data_scadenza if unchanged else None
             delta = None
             delta_percent = None
             if current and current.unita_misura == record["unita_misura"]:
@@ -405,9 +405,9 @@ async def import_multi_supplier(
             "warning": (
                 "I nuovi fornitori vengono creati provvisori e disabilitati, "
                 "con Partita IVA tecnica da verificare prima dell'attivazione commerciale. "
-                "Ogni accordo approvato vale 30 giorni di calendario, inclusa la decorrenza. "
-                "I nuovi prezzi partono oggi; le variazioni di accordi esistenti decorrono "
-                "da domani e valgono 30 giorni, così le fatture di oggi restano sul prezzo precedente."
+                "I prezzi approvati restano validi fino alla successiva approvazione di un nuovo accordo. "
+                "I nuovi prezzi partono oggi; le variazioni di accordi esistenti decorrono da domani, "
+                "così le fatture di oggi restano sul prezzo precedente."
             ),
         }
 
@@ -560,10 +560,9 @@ async def import_multi_supplier(
                 prezzo_pattuito=price,
                 unita_misura=record["unita_misura"],
                 data_inizio_validita=effective_date,
-                # Commercial policy: every approved agreement is guaranteed for
-                # 30 calendar days, inclusive of its effective date. Expiry never
-                # triggers a silent renewal; it requires a new signed approval.
-                data_scadenza=effective_date + timedelta(days=29),
+                # Approved prices remain valid until a later approved agreement closes them.
+                # This workbook has no agreed-expiry field; never invent an expiration date.
+                data_scadenza=None,
                 pfa_tipo=None,
                 pfa_valore=None,
             ))
