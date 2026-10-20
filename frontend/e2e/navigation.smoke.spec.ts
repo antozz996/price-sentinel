@@ -175,7 +175,7 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
     contentType: 'application/javascript',
     body: `window.google={accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>callback({access_token:'ci-synthetic-token'})})}}};`,
   }))
-  const writeMethods: string[] = []
+  const sheetWrites: Array<{ method: string; body: unknown }> = []
   await page.route('https://sheets.googleapis.com/**', async route => {
     const url = new URL(route.request().url())
     if (route.request().method() === 'OPTIONS') {
@@ -190,7 +190,11 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
       })
       return
     }
-    if (url.pathname.endsWith('/values:batchUpdate')) writeMethods.push(route.request().method())
+    if (url.pathname.endsWith('/values:batchUpdate')) {
+      sheetWrites.push({ method: route.request().method(), body: route.request().postDataJSON() })
+      await route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, json: { totalUpdatedCells: 1 } })
+      return
+    }
     if (url.pathname.endsWith('/values:batchGet')) {
       const beverageHeader = ['Prodotto', 'Unità', 'NAVAS', 'ORIZZONTI', '3F', 'PASCARELLA', "CASA D'AMBRA", supplierName, 'MIGLIOR FORNITORE']
       const beverageRow = ['PRODOTTO DI PROVA', 'BT', '5.98', '', '', '', '', '', '3F']
@@ -225,5 +229,16 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
   await expect(page.getByText("'BEVERAGE'!H2")).toBeVisible()
   await expect(page.getByText('Pronto alla conferma')).toBeVisible()
   await expect(page.getByText("'BEVERAGE'!I2")).toHaveCount(0)
-  expect(writeMethods).toEqual([])
+  expect(sheetWrites).toEqual([])
+
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Conferma e scrivi nello Sheet' }).click()
+  await expect(page.getByText('Scritto', { exact: true })).toBeVisible()
+  expect(sheetWrites).toEqual([{
+    method: 'POST',
+    body: {
+      valueInputOption: 'USER_ENTERED',
+      data: [{ range: "'BEVERAGE'!H2", values: [[4.25]] }],
+    },
+  }])
 })
