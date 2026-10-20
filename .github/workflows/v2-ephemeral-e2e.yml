@@ -6,12 +6,16 @@ on:
       - staging/price-sentinel-v2
     paths:
       - 'backend/**'
+      - 'frontend/src/components/SupplierPriceForms.tsx'
+      - 'frontend/e2e/navigation.smoke.spec.ts'
       - '.github/workflows/v2-ephemeral-e2e.yml'
   pull_request:
     branches:
       - staging/price-sentinel-v2
     paths:
       - 'backend/**'
+      - 'frontend/src/components/SupplierPriceForms.tsx'
+      - 'frontend/e2e/navigation.smoke.spec.ts'
       - '.github/workflows/v2-ephemeral-e2e.yml'
   workflow_dispatch:
 
