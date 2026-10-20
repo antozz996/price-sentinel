@@ -23,15 +23,16 @@ class SheetSyncDryRunTests(unittest.TestCase):
             notes=snapshot.get("notes", {}),
         )
 
-    def test_seven_sheet_sources(self):
+    def test_food_is_the_price_source_and_children_only_categorize(self):
         report = self.preview()
-        self.assertEqual(len(SOURCES), 7)
-        self.assertNotIn("FOOD", {source.title for source in SOURCES})
-        self.assertEqual(len(report["sector_summary"]), 7)
+        self.assertEqual(len(SOURCES), 5)
+        self.assertIn("FOOD", {source.title for source in SOURCES})
+        self.assertEqual(len(report["sector_summary"]), 5)
         self.assertEqual(report["candidate_count"], 32)
         self.assertEqual(report["food_audit"]["products"], 5)
-        self.assertEqual(report["food_audit"]["unmapped_quoted_rows"], 0)
-        self.assertEqual(report["food_audit"]["name_drift_rows"], 0)
+        self.assertEqual(report["food_audit"]["categorized_products"], 5)
+        self.assertEqual(report["food_audit"]["products_without_subcategory"], 0)
+        self.assertEqual(report["food_audit"]["orphan_category_rows"], 0)
         self.assertEqual(report["missing_sources"], [])
         self.assertEqual(
             sum(section["products"] for section in report["sector_summary"]), 11
@@ -43,43 +44,46 @@ class SheetSyncDryRunTests(unittest.TestCase):
         fruit = next(c for c in report["candidates"] if c["source_sheet"] == "FRUTTA E VERDURA")
         self.assertEqual(fruit["sector"], "Food")
         self.assertEqual(fruit["subcategory"], "Frutta")
-        carne = next(c for c in report["candidates"] if c["source_sheet"] == "Carne")
+        carne = next(c for c in report["candidates"] if c["source_sheet"] == "FOOD" and c["subcategory"] == "Carne")
         self.assertEqual(carne["subcategory"], "Carne")
         self.assertEqual(carne["source_original_row"], 20)
-        pesce = next(c for c in report["candidates"] if c["source_sheet"] == "Pesce")
+        pesce = next(c for c in report["candidates"] if c["source_sheet"] == "FOOD" and c["subcategory"] == "Pesce")
         self.assertEqual(pesce["subcategory"], "Pesce")
-        varie = next(c for c in report["candidates"] if c["source_sheet"] == "Varie")
-        self.assertIsNone(varie["subcategory"])
+        varie = next(c for c in report["candidates"] if c["source_sheet"] == "FOOD" and c["subcategory"] == "Varie")
+        self.assertEqual(varie["subcategory"], "Varie")
 
-    def test_food_reference_is_required_for_category_tabs(self):
+    def test_food_master_is_required_for_food_price_candidates(self):
         data = copy.deepcopy(self.snapshot)
         del data["values"]["FOOD"]
         report = self.preview(data)
         self.assertIn("FOOD", report["missing_sources"])
-        self.assertFalse(any(c["source_sheet"] in {"Carne", "Pesce", "Varie"}
-                             for c in report["candidates"]))
+        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
 
-    def test_food_unmapped_quoted_row_is_reported_without_duplicate_candidate(self):
+    def test_food_product_without_child_is_reported_and_blocked(self):
         data = copy.deepcopy(self.snapshot)
         data["values"]["FOOD"].append(["NON MAPPATO", "KG", 4.2])
         report = self.preview(data)
-        self.assertEqual(report["food_audit"]["unmapped_quoted_rows"], 1)
-        self.assertTrue(any(w["code"] == "food_unmapped_quoted_row"
+        self.assertEqual(report["food_audit"]["products_without_subcategory"], 1)
+        self.assertTrue(any(w["code"] == "food_product_without_subcategory"
                             for w in report["warnings"]))
-        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
+        candidate = next(c for c in report["candidates"] if c["product"] == "NON MAPPATO")
+        self.assertEqual(candidate["source_sheet"], "FOOD")
+        self.assertEqual(candidate["status"], "blocked")
 
-    def test_food_name_drift_blocks_category_quote(self):
+    def test_child_row_reference_number_is_ignored_for_category_assignment(self):
         data = copy.deepcopy(self.snapshot)
-        data["values"]["FOOD"][19][0] = "NOME AGGIORNATO"
+        data["values"]["Carne"][1][10] = 999
         report = self.preview(data)
-        quote = next(c for c in report["candidates"] if c["source_sheet"] == "Carne")
-        self.assertEqual(quote["status"], "blocked")
-        self.assertIn("food_product_name_drift", quote["reasons"])
+        quote = next(c for c in report["candidates"]
+                     if c["source_sheet"] == "FOOD" and c["product"] == "POLLO TEST")
+        self.assertEqual(quote["subcategory"], "Carne")
+        self.assertEqual(quote["source_original_row"], 20)
+        self.assertEqual(quote["status"], "needs_mapping")
 
     def test_sheet_exclusion_keeps_original_quote_and_note(self):
         report = self.preview()
         q = next(c for c in report["candidates"] if
-                 c["source_sheet"] == "Varie" and c["source_cell"] == "F3")
+                 c["source_sheet"] == "FOOD" and c["source_cell"] == "F3")
         self.assertEqual(q["supplier"], "ORIZZONTI")
         self.assertEqual(q["source_original_row"], 3)
         self.assertEqual(q["numeric_price"], "5.9")
@@ -88,7 +92,7 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertIn("5,90", q["cell_note"])
         # A valid competitor on the same row must remain available for review.
         other = next(c for c in report["candidates"] if
-                     c["source_sheet"] == "Varie" and c["source_cell"] == "E3")
+                     c["source_sheet"] == "FOOD" and c["source_cell"] == "E3")
         self.assertEqual(other["status"], "needs_mapping")
         self.assertEqual(other["price_role"], "negotiated_agreement")
         self.assertTrue(other["requires_product_mapping"])
@@ -132,65 +136,71 @@ class SheetSyncDryRunTests(unittest.TestCase):
 
     def test_mismatched_supplier_header_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
-        data["values"]["Carne"][0][2] = "UNKNOWN"
+        data["values"]["Carne"][0][0] = "UNKNOWN"
         report = self.preview(data)
         self.assertIn("Carne", report["missing_sources"])
-        self.assertFalse(any(c["source_sheet"] == "Carne" for c in report["candidates"]))
+        self.assertTrue(any(c["source_sheet"] == "FOOD" and c["product"] == "POLLO TEST"
+                            and c["status"] == "blocked" for c in report["candidates"]))
 
-    def test_missing_food_origin_header_fails_closed_for_that_tab(self):
+    def test_exclusion_uses_master_product_when_legacy_row_number_drifted(self):
         data = copy.deepcopy(self.snapshot)
-        data["values"]["Carne"][0][10] = "RIFERIMENTO ERRATO"
+        data["values"]["CONTROLLO_ESCLUSIONI"][1][0] = 999
         report = self.preview(data)
-        self.assertIn("Carne", report["missing_sources"])
-        self.assertFalse(any(c["source_sheet"] == "Carne" for c in report["candidates"]))
+        quote = next(c for c in report["candidates"]
+                     if c["source_sheet"] == "FOOD"
+                     and c["product"] == "PATATA CHIPS"
+                     and c["supplier"] == "ORIZZONTI")
+        self.assertEqual(quote["status"], "blocked")
+        self.assertIn("sheet_exclusion", quote["reasons"])
 
-    def test_food_tabs_accept_di_palo_description_column_and_import_price(self):
+    def test_category_tabs_do_not_supply_prices(self):
+        report = self.preview()
+        self.assertFalse(any(c["source_sheet"] in {"Carne", "Pesce", "Varie"}
+                             for c in report["candidates"]))
+
+    def test_food_description_column_is_ignored_and_di_palo_price_comes_from_master(self):
         data = copy.deepcopy(self.snapshot)
-        for tab in ("Carne", "Pesce", "Varie"):
-            for row in data["values"][tab]:
-                row.insert(8, "DESCRIZIONE DI PALO" if row is data["values"][tab][0] else None)
-        # The description column is informational; the negotiated amount remains in H.
-        data["values"]["Carne"][1][7] = 8.19
-        data["values"]["Carne"][1][8] = "POLLO FRESCO DI PALO"
+        data["values"]["FOOD"][19][7] = 8.19
+        data["values"]["FOOD"][19][8] = "POLLO FRESCO DI PALO"
         report = self.preview(data)
-        self.assertNotIn("Carne", report["missing_sources"])
         quote = next(c for c in report["candidates"] if
-                     c["source_sheet"] == "Carne" and c["source_cell"] == "H2")
+                     c["source_sheet"] == "FOOD" and c["source_cell"] == "H20")
         self.assertEqual(quote["supplier"], "DI PALO")
         self.assertEqual(quote["numeric_price"], "8.19")
-        self.assertEqual(quote["source_original_row"], 20)
+        self.assertEqual(quote["subcategory"], "Carne")
 
     def test_missing_exclusion_control_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
         del data["values"]["CONTROLLO_ESCLUSIONI"]
         report = self.preview(data)
         self.assertIn("CONTROLLO_ESCLUSIONI", report["missing_sources"])
-        food_tabs = {"Carne", "Pesce", "Varie"}
-        self.assertFalse(any(c["source_sheet"] in food_tabs for c in report["candidates"]))
+        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
 
     def test_corrupt_exclusion_register_fails_closed(self):
         data = copy.deepcopy(self.snapshot)
         data["values"]["CONTROLLO_ESCLUSIONI"][0][5] = "OTHER"
         report = self.preview(data)
         self.assertIn("CONTROLLO_ESCLUSIONI", report["missing_sources"])
-        food_tabs = {"Carne", "Pesce", "Varie"}
-        self.assertFalse(any(c["source_sheet"] in food_tabs for c in report["candidates"]))
+        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
 
     def test_name_duplicates_alert_without_merging(self):
         data = copy.deepcopy(self.snapshot)
         data["values"]["Varie"].append(list(data["values"]["Varie"][1]))
         report = self.preview(data)
-        self.assertTrue(any(w["code"] == "duplicate_product_name" for w in report["warnings"]))
+        self.assertTrue(any(w["code"] == "duplicate_category_product" for w in report["warnings"]))
+        candidate = next(c for c in report["candidates"]
+                         if c["source_sheet"] == "FOOD" and c["product"] == "SALE FINO")
+        self.assertEqual(candidate["status"], "blocked")
 
     def test_observation_hash_ignores_row_position(self):
         a = self.preview()
         data = copy.deepcopy(self.snapshot)
-        data["values"]["Varie"].insert(1, ["", "", "", "", "", "", "", "", "", "", ""])
-        data["notes"]["Varie"]["F4"] = data["notes"]["Varie"].pop("F3")
+        data["values"]["FOOD"].insert(1, ["", "", "", "", "", "", "", "", "", "", ""])
+        data["notes"]["FOOD"]["F4"] = data["notes"]["FOOD"].pop("F3")
         b = self.preview(data)
-        h1 = next(c for c in a["candidates"] if c["source_sheet"] == "Varie"
+        h1 = next(c for c in a["candidates"] if c["source_sheet"] == "FOOD"
                   and c["source_cell"] == "F3")["observation_hash"]
-        h2 = next(c for c in b["candidates"] if c["source_sheet"] == "Varie"
+        h2 = next(c for c in b["candidates"] if c["source_sheet"] == "FOOD"
                   and c["source_cell"] == "F4")["observation_hash"]
         self.assertEqual(h1, h2)
 

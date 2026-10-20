@@ -38,21 +38,11 @@ class SheetLayout:
 
 
 SOURCES = (
-    SheetLayout("Carne", "Food", 0, 1, (
+    SheetLayout("FOOD", "Food", 0, 1, (
         SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
         SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
-        SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
-    ), subcategory="Carne", source_row_index=10, max_columns="L"),
-    SheetLayout("Pesce", "Food", 0, 1, (
-        SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
-        SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
-        SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
-    ), subcategory="Pesce", source_row_index=10, max_columns="L"),
-    SheetLayout("Varie", "Food", 0, 1, (
-        SupplierColumn(2, "MARR"), SupplierColumn(3, "MELIUS"),
-        SupplierColumn(4, "DAC"), SupplierColumn(5, "ORIZZONTI", note_index=6),
-        SupplierColumn(7, "DI PALO"), SupplierColumn(8, "FONTANELLA CARNI"),
-    ), source_row_index=10, max_columns="L"),
+        SupplierColumn(7, "DI PALO"), SupplierColumn(9, "FONTANELLA CARNI"),
+    ), max_columns="K"),
     SheetLayout("BEVERAGE", "Beverage", 0, 1, (
         SupplierColumn(2, "NAVAS"), SupplierColumn(3, "ORIZZONTI"),
         SupplierColumn(4, "3F"), SupplierColumn(5, "PASCARELLA"),
@@ -61,8 +51,7 @@ SOURCES = (
     SheetLayout("COMPARAZIONE MATERIALI", "Materiali", 1, 2, (
         SupplierColumn(3, "VEMO"), SupplierColumn(4, "KITO"),
         SupplierColumn(5, "EUROCARTA"), SupplierColumn(6, "ALPHA"),
-        SupplierColumn(7, "PROMOCART", note_index=9),
-        SupplierColumn(8, "MUNDO"),
+        SupplierColumn(7, "PROMOCART", note_index=9), SupplierColumn(8, "MUNDO"),
     ), packaging_note_index=11, max_columns="N"),
     SheetLayout("FRUTTA E VERDURA", "Food", 0, 1, (
         SupplierColumn(2, "MG FRUTTA", note_index=3),
@@ -73,7 +62,8 @@ SOURCES = (
         SupplierColumn(11, "ANTONIO"), SupplierColumn(12, "GIOVANNI"),
     ), reference_only=True, packaging_note_index=6, max_columns="O"),
 )
-FOOD_CATEGORY_TABS = frozenset({"Carne", "Pesce", "Varie"})
+# Child tabs classify FOOD master products; they never provide prices.
+FOOD_CATEGORY_TABS = {"Carne": "Carne", "Pesce": "Pesce", "Varie": "Varie"}
 
 # Supporting and derived tabs must never be imported twice.
 SUPPORT_TABS = (
@@ -167,108 +157,77 @@ def _base_unit(text: str) -> str | None:
     return None  # CT, CS, FS and custom pack sizes require explicit mapping.
 
 
-def _food_origin_index(value_ranges: Mapping[str, list[list[Any]]]) -> tuple[dict[int, str], list[dict]]:
-    """Map original FOOD row numbers to products using the trace column in split tabs."""
-    origins: dict[int, str] = {}
+def _food_products(rows: list[list[Any]]) -> tuple[dict[int, str], bool]:
+    if not rows:
+        return {}, False
+    product_index = _header_index(rows[0], "PRODOTTO")
+    if product_index is None:
+        return {}, False
+    return ({
+        rownum: _text(_cell(row, product_index))
+        for rownum, row in enumerate(rows[1:], start=2)
+        if _text(_cell(row, product_index))
+    }, True)
+
+
+def _food_category_index(
+    value_ranges: Mapping[str, list[list[Any]]],
+    food_products: Mapping[int, str],
+) -> tuple[dict[str, str | None], list[dict], list[str], set[str], int]:
+    """Use child tabs only to classify products already present in FOOD."""
+    categories: dict[str, str | None] = {}
     warnings: list[dict] = []
-    for title in FOOD_CATEGORY_TABS:
+    missing_tabs: list[str] = []
+    food_names = {_label(product) for product in food_products.values()}
+    ambiguous: set[str] = set()
+    orphan_rows = 0
+    for title, subcategory in FOOD_CATEGORY_TABS.items():
         rows = value_ranges.get(title)
         if not rows:
+            missing_tabs.append(title)
             continue
-        origin_index = _header_index(rows[0], "RIGA FOOD ORIGINALE")
-        if origin_index is None:
-            warnings.append({"tab": title, "code": "invalid_food_origin_header"})
+        product_index = _header_index(rows[0], "PRODOTTO")
+        if product_index is None:
+            missing_tabs.append(title)
+            warnings.append({"tab": title, "code": "invalid_category_product_header"})
             continue
+        seen: set[str] = set()
         for rownum, row in enumerate(rows[1:], start=2):
-            product = _text(_cell(row, 0))
+            product = _text(_cell(row, product_index))
             if not product:
                 continue
-            try:
-                original_row = int(_cell(row, origin_index))
-            except (ValueError, TypeError):
+            key = _label(product)
+            if key in seen:
                 warnings.append({"tab": title, "row": rownum,
-                                 "code": "invalid_food_origin_row"})
-                continue
-            if original_row < 2:
+                                 "code": "duplicate_category_product"})
+            seen.add(key)
+            if key not in food_names:
+                orphan_rows += 1
                 warnings.append({"tab": title, "row": rownum,
-                                 "code": "invalid_food_origin_row"})
+                                 "code": "category_product_not_in_food_master",
+                                 "product": product})
                 continue
-            if original_row in origins:
+            if key in categories:
+                categories[key] = None
+                ambiguous.add(key)
                 warnings.append({"tab": title, "row": rownum,
-                                 "code": "duplicate_food_origin_row"})
-                continue
-            origins[original_row] = product
-    return origins, warnings
+                                 "code": "ambiguous_product_subcategory",
+                                 "product": product})
+            else:
+                categories[key] = subcategory
+    return categories, warnings, missing_tabs, ambiguous, orphan_rows
 
-
-
-def _audit_food_reference(
-    rows: list[list[Any]], food_origins: Mapping[int, str]
-) -> tuple[dict[str, Any], list[dict], dict[int, str], bool]:
-    """Audit FOOD as the parent catalogue; never emit duplicate price candidates from it."""
-    warnings: list[dict] = []
-    if not rows:
-        return ({"present": False, "valid": False, "products": 0,
-                 "unmapped_quoted_rows": 0, "name_drift_rows": 0},
-                [{"tab": "FOOD", "code": "missing_food_reference"}], {}, False)
-    header = rows[0]
-    required = {
-        "product": _header_index(header, "PRODOTTO"),
-        "unit": _header_index(header, "PESO"),
-        "MARR": _header_index(header, "MARR"),
-        "MELIUS": _header_index(header, "MELIUS"),
-        "DAC": _header_index(header, "DAC"),
-        "ORIZZONTI": _header_index(header, "ORIZZONTI"),
-        "DI PALO": _header_index(header, "DI PALO"),
-        "FONTANELLA CARNI": _header_index(header, "FONTANELLA CARNI"),
-    }
-    if any(index is None for index in required.values()):
-        return ({"present": True, "valid": False, "products": 0,
-                 "unmapped_quoted_rows": 0, "name_drift_rows": 0},
-                [{"tab": "FOOD", "code": "invalid_food_reference_headers"}], {}, False)
-    food_products: dict[int, str] = {}
-    quoted_rows: set[int] = set()
-    price_indices = [required[name] for name in (
-        "MARR", "MELIUS", "DAC", "ORIZZONTI", "DI PALO", "FONTANELLA CARNI"
-    )]
-    for rownum, row in enumerate(rows[1:], start=2):
-        product = _text(_cell(row, required["product"]))
-        if not product:
-            continue
-        food_products[rownum] = product
-        if any(_price(_cell(row, index))[1] != "missing" for index in price_indices):
-            quoted_rows.add(rownum)
-    name_drifts = 0
-    missing_origins = 0
-    for source_row, product in food_origins.items():
-        food_product = food_products.get(source_row)
-        if food_product is None:
-            missing_origins += 1
-            warnings.append({"tab": "FOOD", "row": source_row,
-                             "code": "food_origin_not_found"})
-        elif _label(food_product) != _label(product):
-            name_drifts += 1
-            warnings.append({"tab": "FOOD", "row": source_row,
-                             "code": "food_product_name_drift"})
-    unmapped_quoted = sorted(quoted_rows.difference(food_origins))
-    for rownum in unmapped_quoted:
-        warnings.append({"tab": "FOOD", "row": rownum,
-                         "code": "food_unmapped_quoted_row"})
-    return ({"present": True, "valid": True, "products": len(food_products),
-             "unmapped_quoted_rows": len(unmapped_quoted),
-             "name_drift_rows": name_drifts,
-             "missing_origin_rows": missing_origins}, warnings, food_products, True)
 
 def _excluded_index(
-    rows: list[list[Any]], food_origins: Mapping[int, str]
-) -> tuple[set[tuple[int | None, str, str]], list[dict]]:
-    exclusions: set[tuple[int | None, str, str]] = set()
+    rows: list[list[Any]], food_products: Mapping[int, str]
+) -> tuple[set[tuple[str, str]], list[dict]]:
+    exclusions: set[tuple[str, str]] = set()
     anomalies: list[dict] = []
+    products = {_label(product) for product in food_products.values()}
     for rownum, r in enumerate(rows[1:], start=2):
         if _text(_cell(r, 5)).upper() != "ESCLUSO":
             continue
-        product = _text(_cell(r, 1))
-        supplier = _text(_cell(r, 2))
+        product, supplier = _text(_cell(r, 1)), _text(_cell(r, 2))
         source_row = _cell(r, 0)
         try:
             source_row = int(source_row)
@@ -276,18 +235,21 @@ def _excluded_index(
             anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
                               "code": "invalid_exclusion_row"})
             source_row = None
-        if source_row is not None and (
-            source_row < 2 or _label(food_origins.get(source_row)) != _label(product)
-        ):
-            anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
-                              "code": "exclusion_row_drift", "product": product})
         if not product or not supplier:
             anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
                               "code": "incomplete_exclusion"})
             continue
-        exclusions.add((source_row, _label(product), _label(supplier)))
+        if _label(product) not in products:
+            anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
+                              "code": "exclusion_product_not_in_food_master",
+                              "product": product})
+        elif source_row is not None and food_products.get(source_row) is not None and (
+            _label(food_products[source_row]) != _label(product)
+        ):
+            anomalies.append({"tab": EXCLUSION_TAB, "row": rownum,
+                              "code": "exclusion_row_drift", "product": product})
+        exclusions.add((_label(product), _label(supplier)))
     return exclusions, anomalies
-
 
 def stage_snapshot(
     value_ranges: Mapping[str, list[list[Any]]],
@@ -297,10 +259,24 @@ def stage_snapshot(
 ) -> dict[str, Any]:
     """Return an immutable-in-spirit preview; no persistent writes or network calls."""
     notes = notes or {}
-    food_origins, origin_warnings = _food_origin_index(value_ranges)
-    food_audit, food_warnings, food_products, food_valid = _audit_food_reference(
-        value_ranges.get("FOOD", []), food_origins
+    food_products, food_valid = _food_products(value_ranges.get("FOOD", []))
+    food_categories, category_warnings, missing_category_tabs, ambiguous_categories, orphan_category_rows = (
+        _food_category_index(value_ranges, food_products)
     )
+    food_names = {_label(product) for product in food_products.values()}
+    uncategorized_products = {
+        _label(product) for product in food_products.values()
+        if _label(product) not in food_categories or food_categories[_label(product)] is None
+    }
+    food_audit = {
+        "present": bool(value_ranges.get("FOOD")),
+        "valid": food_valid,
+        "products": len(food_products),
+        "categorized_products": sum(1 for key in food_names if food_categories.get(key) is not None),
+        "products_without_subcategory": len(uncategorized_products),
+        "orphan_category_rows": orphan_category_rows,
+        "ambiguous_category_products": len(ambiguous_categories),
+    }
     exclusion_rows = value_ranges.get(EXCLUSION_TAB, [])
     expected_control_headers = {0: "RIGA", 1: "PRODOTTO", 2: "FORNITORE", 5: "STATO"}
     exclusion_valid = bool(exclusion_rows) and all(
@@ -308,23 +284,27 @@ def stage_snapshot(
         for index, expected in expected_control_headers.items()
     )
     exclusions, warnings = _excluded_index(
-        exclusion_rows if exclusion_valid else [], food_origins
+        exclusion_rows if exclusion_valid else [], food_products
     )
-    warnings.extend(origin_warnings)
-    warnings.extend(food_warnings)
+    warnings.extend(category_warnings)
+    for product_row, product in food_products.items():
+        if _label(product) in uncategorized_products:
+            warnings.append({"tab": "FOOD", "row": product_row,
+                             "code": "food_product_without_subcategory",
+                             "product": product})
     if not exclusion_valid:
         warnings.append({"tab": EXCLUSION_TAB, "code": "invalid_exclusion_register_fail_closed"})
     candidates: list[dict] = []
     sector_summary: list[dict] = []
-    missing_sources: list[str] = []
+    missing_sources: list[str] = list(missing_category_tabs)
     for base_layout in SOURCES:
         rows = value_ranges.get(base_layout.title)
         layout = _resolve_food_layout(base_layout, rows[0]) if rows else base_layout
-        if layout.title in FOOD_CATEGORY_TABS and (not exclusion_valid or not food_valid):
-            if not exclusion_valid:
-                missing_sources.append(EXCLUSION_TAB)
-            if not food_valid:
-                missing_sources.append("FOOD")
+        if layout.title == "FOOD" and not exclusion_valid:
+            missing_sources.append(EXCLUSION_TAB)
+            continue
+        if layout.title == "FOOD" and not food_valid:
+            missing_sources.append("FOOD")
             continue
         rows = value_ranges.get(layout.title)
         if rows is None:
@@ -334,12 +314,6 @@ def stage_snapshot(
             warnings.append({"tab": layout.title, "code": "empty_source"})
             continue
         hdr = rows[0]
-        if layout.source_row_index is not None and _label(
-            _cell(hdr, layout.source_row_index)
-        ) != _label("RIGA FOOD ORIGINALE"):
-            warnings.append({"tab": layout.title, "code": "invalid_food_origin_header"})
-            missing_sources.append(layout.title)
-            continue
         # Fail closed if the supplier order in Sheets diverges from our mapping.
         for col in layout.columns:
             actual = _text(_cell(hdr, col.index))
@@ -370,14 +344,10 @@ def stage_snapshot(
             seen_products.add(_label(product))
             tally["products"] += 1
             base_uom = _text(_cell(row, layout.unit_index))
-            source_original_row = None
-            if layout.source_row_index is not None:
-                try:
-                    source_original_row = int(_cell(row, layout.source_row_index))
-                    if source_original_row < 2:
-                        source_original_row = None
-                except (ValueError, TypeError):
-                    source_original_row = None
+            source_original_row = rownum if layout.title == "FOOD" else None
+            subcategory = layout.subcategory
+            if layout.title == "FOOD":
+                subcategory = food_categories.get(_label(product))
             for supplier in layout.columns:
                 raw = _cell(row, supplier.index)
                 value, value_state = _price(raw)
@@ -391,20 +361,14 @@ def stage_snapshot(
                 if value_state != "valid":
                     status = "blocked"
                     issues.append(value_state)
-                if layout.source_row_index is not None:
-                    food_product = food_products.get(source_original_row)
-                    if source_original_row is not None and food_product is not None and (
-                        _label(food_product) != _label(product)
-                    ):
+                if layout.title == "FOOD":
+                    if _label(product) in ambiguous_categories:
                         status = "blocked"
-                        issues.append("food_product_name_drift")
-                    if source_original_row is None:
+                        issues.append("ambiguous_food_subcategory")
+                    elif subcategory is None:
                         status = "blocked"
-                        issues.append("source_row_reference_missing")
-                    elif (
-                        (source_original_row, _label(product), _label(supplier.name)) in exclusions
-                        or (None, _label(product), _label(supplier.name)) in exclusions
-                    ):
+                        issues.append("food_subcategory_missing")
+                    if (_label(product), _label(supplier.name)) in exclusions:
                         status = "blocked"
                         issues.append("sheet_exclusion")
                 if layout.reference_only:
@@ -436,7 +400,7 @@ def stage_snapshot(
                 supplier_note = _text(_cell(row, supplier.note_index))
                 packaging_note = _text(_cell(row, layout.packaging_note_index))
                 data = {
-                    "sector": layout.sector, "subcategory": layout.subcategory,
+                    "sector": layout.sector, "subcategory": subcategory,
                     "source_sheet": layout.title,
                     "source_row": rownum, "source_original_row": source_original_row,
                     "source_cell": cellref, "product": product,
