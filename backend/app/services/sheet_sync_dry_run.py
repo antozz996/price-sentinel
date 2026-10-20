@@ -201,6 +201,64 @@ def _food_origin_index(value_ranges: Mapping[str, list[list[Any]]]) -> tuple[dic
     return origins, warnings
 
 
+
+def _audit_food_reference(
+    rows: list[list[Any]], food_origins: Mapping[int, str]
+) -> tuple[dict[str, Any], list[dict], dict[int, str], bool]:
+    """Audit FOOD as the parent catalogue; never emit duplicate price candidates from it."""
+    warnings: list[dict] = []
+    if not rows:
+        return ({"present": False, "valid": False, "products": 0,
+                 "unmapped_quoted_rows": 0, "name_drift_rows": 0},
+                [{"tab": "FOOD", "code": "missing_food_reference"}], {}, False)
+    header = rows[0]
+    required = {
+        "product": _header_index(header, "PRODOTTO"),
+        "unit": _header_index(header, "PESO"),
+        "MARR": _header_index(header, "MARR"),
+        "MELIUS": _header_index(header, "MELIUS"),
+        "DAC": _header_index(header, "DAC"),
+        "ORIZZONTI": _header_index(header, "ORIZZONTI"),
+        "DI PALO": _header_index(header, "DI PALO"),
+        "FONTANELLA CARNI": _header_index(header, "FONTANELLA CARNI"),
+    }
+    if any(index is None for index in required.values()):
+        return ({"present": True, "valid": False, "products": 0,
+                 "unmapped_quoted_rows": 0, "name_drift_rows": 0},
+                [{"tab": "FOOD", "code": "invalid_food_reference_headers"}], {}, False)
+    food_products: dict[int, str] = {}
+    quoted_rows: set[int] = set()
+    price_indices = [required[name] for name in (
+        "MARR", "MELIUS", "DAC", "ORIZZONTI", "DI PALO", "FONTANELLA CARNI"
+    )]
+    for rownum, row in enumerate(rows[1:], start=2):
+        product = _text(_cell(row, required["product"]))
+        if not product:
+            continue
+        food_products[rownum] = product
+        if any(_price(_cell(row, index))[1] != "missing" for index in price_indices):
+            quoted_rows.add(rownum)
+    name_drifts = 0
+    missing_origins = 0
+    for source_row, product in food_origins.items():
+        food_product = food_products.get(source_row)
+        if food_product is None:
+            missing_origins += 1
+            warnings.append({"tab": "FOOD", "row": source_row,
+                             "code": "food_origin_not_found"})
+        elif _label(food_product) != _label(product):
+            name_drifts += 1
+            warnings.append({"tab": "FOOD", "row": source_row,
+                             "code": "food_product_name_drift"})
+    unmapped_quoted = sorted(quoted_rows.difference(food_origins))
+    for rownum in unmapped_quoted:
+        warnings.append({"tab": "FOOD", "row": rownum,
+                         "code": "food_unmapped_quoted_row"})
+    return ({"present": True, "valid": True, "products": len(food_products),
+             "unmapped_quoted_rows": len(unmapped_quoted),
+             "name_drift_rows": name_drifts,
+             "missing_origin_rows": missing_origins}, warnings, food_products, True)
+
 def _excluded_index(
     rows: list[list[Any]], food_origins: Mapping[int, str]
 ) -> tuple[set[tuple[int | None, str, str]], list[dict]]:
@@ -240,6 +298,9 @@ def stage_snapshot(
     """Return an immutable-in-spirit preview; no persistent writes or network calls."""
     notes = notes or {}
     food_origins, origin_warnings = _food_origin_index(value_ranges)
+    food_audit, food_warnings, food_products, food_valid = _audit_food_reference(
+        value_ranges.get("FOOD", []), food_origins
+    )
     exclusion_rows = value_ranges.get(EXCLUSION_TAB, [])
     expected_control_headers = {0: "RIGA", 1: "PRODOTTO", 2: "FORNITORE", 5: "STATO"}
     exclusion_valid = bool(exclusion_rows) and all(
@@ -250,6 +311,7 @@ def stage_snapshot(
         exclusion_rows if exclusion_valid else [], food_origins
     )
     warnings.extend(origin_warnings)
+    warnings.extend(food_warnings)
     if not exclusion_valid:
         warnings.append({"tab": EXCLUSION_TAB, "code": "invalid_exclusion_register_fail_closed"})
     candidates: list[dict] = []
@@ -258,8 +320,11 @@ def stage_snapshot(
     for base_layout in SOURCES:
         rows = value_ranges.get(base_layout.title)
         layout = _resolve_food_layout(base_layout, rows[0]) if rows else base_layout
-        if layout.title in FOOD_CATEGORY_TABS and not exclusion_valid:
-            missing_sources.append(EXCLUSION_TAB)
+        if layout.title in FOOD_CATEGORY_TABS and (not exclusion_valid or not food_valid):
+            if not exclusion_valid:
+                missing_sources.append(EXCLUSION_TAB)
+            if not food_valid:
+                missing_sources.append("FOOD")
             continue
         rows = value_ranges.get(layout.title)
         if rows is None:
@@ -327,6 +392,12 @@ def stage_snapshot(
                     status = "blocked"
                     issues.append(value_state)
                 if layout.source_row_index is not None:
+                    food_product = food_products.get(source_original_row)
+                    if source_original_row is not None and food_product is not None and (
+                        _label(food_product) != _label(product)
+                    ):
+                        status = "blocked"
+                        issues.append("food_product_name_drift")
                     if source_original_row is None:
                         status = "blocked"
                         issues.append("source_row_reference_missing")
@@ -393,6 +464,7 @@ def stage_snapshot(
         "no_contract_writes": True,
         "candidate_count": len(candidates),
         "sector_summary": sector_summary,
+        "food_audit": food_audit,
         "missing_sources": sorted(set(missing_sources)),
         "warnings": warnings,
         "candidates": candidates,

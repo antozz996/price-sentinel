@@ -29,6 +29,9 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertNotIn("FOOD", {source.title for source in SOURCES})
         self.assertEqual(len(report["sector_summary"]), 7)
         self.assertEqual(report["candidate_count"], 32)
+        self.assertEqual(report["food_audit"]["products"], 5)
+        self.assertEqual(report["food_audit"]["unmapped_quoted_rows"], 0)
+        self.assertEqual(report["food_audit"]["name_drift_rows"], 0)
         self.assertEqual(report["missing_sources"], [])
         self.assertEqual(
             sum(section["products"] for section in report["sector_summary"]), 11
@@ -47,6 +50,31 @@ class SheetSyncDryRunTests(unittest.TestCase):
         self.assertEqual(pesce["subcategory"], "Pesce")
         varie = next(c for c in report["candidates"] if c["source_sheet"] == "Varie")
         self.assertIsNone(varie["subcategory"])
+
+    def test_food_reference_is_required_for_category_tabs(self):
+        data = copy.deepcopy(self.snapshot)
+        del data["values"]["FOOD"]
+        report = self.preview(data)
+        self.assertIn("FOOD", report["missing_sources"])
+        self.assertFalse(any(c["source_sheet"] in {"Carne", "Pesce", "Varie"}
+                             for c in report["candidates"]))
+
+    def test_food_unmapped_quoted_row_is_reported_without_duplicate_candidate(self):
+        data = copy.deepcopy(self.snapshot)
+        data["values"]["FOOD"].append(["NON MAPPATO", "KG", 4.2])
+        report = self.preview(data)
+        self.assertEqual(report["food_audit"]["unmapped_quoted_rows"], 1)
+        self.assertTrue(any(w["code"] == "food_unmapped_quoted_row"
+                            for w in report["warnings"]))
+        self.assertFalse(any(c["source_sheet"] == "FOOD" for c in report["candidates"]))
+
+    def test_food_name_drift_blocks_category_quote(self):
+        data = copy.deepcopy(self.snapshot)
+        data["values"]["FOOD"][19][0] = "NOME AGGIORNATO"
+        report = self.preview(data)
+        quote = next(c for c in report["candidates"] if c["source_sheet"] == "Carne")
+        self.assertEqual(quote["status"], "blocked")
+        self.assertIn("food_product_name_drift", quote["reasons"])
 
     def test_sheet_exclusion_keeps_original_quote_and_note(self):
         report = self.preview()

@@ -6,6 +6,7 @@ const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 const GOOGLE_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 const SOURCE_RANGES = [
+  { title: 'FOOD', range: "'FOOD'!A1:K1000" },
   { title: 'Carne', range: "'Carne'!A1:K1000" },
   { title: 'Pesce', range: "'Pesce'!A1:K1000" },
   { title: 'Varie', range: "'Varie'!A1:K1000" },
@@ -66,12 +67,14 @@ type DryRunReport = {
   no_contract_writes: boolean
   rules: { price_semantics: string; auto_commit_enabled: boolean }
   sector_summary: SectorSummary[]
+  food_audit?: { present: boolean; valid: boolean; products: number; unmapped_quoted_rows: number; name_drift_rows: number; missing_origin_rows?: number }
   candidates: Candidate[]
 }
 
 const REASON_LABELS: Record<string, string> = {
   canonical_id_not_mapped: 'Prodotto da associare al catalogo Price Sentinel',
   source_row_reference_missing: 'Riga originale FOOD assente o non valida',
+  food_product_name_drift: 'Nome diverso dalla riga corrispondente in FOOD: revisione necessaria',
   supplier_identity_and_net_price_need_verification: 'Identità fornitore e prezzo netto da verificare',
   unit_mapping_needed: 'Unità di misura da chiarire',
   unit_mismatch_needs_conversion: 'Unità diverse: conversione rinviata',
@@ -604,6 +607,7 @@ export default function SantoGraalSyncPreview() {
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.blocked, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>bloccate dai controlli</div></div>
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.warnings.length}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>avvisi</div></div>
         </div>
+        {report.food_audit && <div role={report.food_audit.unmapped_quoted_rows || report.food_audit.name_drift_rows || report.food_audit.missing_origin_rows ? 'alert' : 'status'} style={{ color: report.food_audit.unmapped_quoted_rows || report.food_audit.name_drift_rows || report.food_audit.missing_origin_rows ? '#fbbf24' : '#6ee7b7', padding: 10, border: '1px solid rgba(251,191,36,.35)', borderRadius: 8 }}>Controllo FOOD: {report.food_audit.products} prodotti; {report.food_audit.unmapped_quoted_rows} righe con prezzi non collegate alle schede settore; {report.food_audit.name_drift_rows} nomi diversi dalla riga originale; {report.food_audit.missing_origin_rows || 0} riferimenti originali mancanti. I casi discordanti restano bloccati per revisione.</div>}
         {report.missing_sources.length > 0 && <div role="alert" style={{ color: '#fca5a5' }}>Schede mancanti: {report.missing_sources.join(', ')}</div>}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, color: 'var(--text-secondary)', fontSize: 12 }}>
