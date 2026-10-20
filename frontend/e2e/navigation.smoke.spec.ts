@@ -165,7 +165,7 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
     } else if (path === '/api/v1/categories/matrix') {
       await route.fulfill({ json: { categories: [{ nome: 'Beverage', is_active: true }], suppliers: [] } })
     } else if (path === '/api/v1/supplier-price-forms/' || path === '/api/v1/supplier-price-forms/7') {
-      await route.fulfill({ json: path.endsWith('/1') ? request : [request] })
+      await route.fulfill({ json: path.endsWith('/7') ? request : [request] })
     } else {
       await route.fallback()
     }
