@@ -352,8 +352,15 @@ async def create_product(
     )
     db.add(product)
     await db.flush()
-    await db.refresh(product)
-    return product
+    # ProductResponse exposes supplier_pack_sizes, which reads Product.aliases.
+    # Load that relationship explicitly so async response serialization never
+    # triggers an implicit lazy load (MissingGreenlet).
+    response_stmt = (
+        select(Product)
+        .where(Product.id == product.id)
+        .options(selectinload(Product.aliases))
+    )
+    return (await db.execute(response_stmt)).scalar_one()
 
 @router.patch(
     "/products/bulk-classification",
@@ -438,8 +445,14 @@ async def update_product(
         setattr(product, k, v)
 
     await db.flush()
-    await db.refresh(product)
-    return product
+    # The response schema also reads supplier_pack_sizes from aliases.
+    # Re-query with selectinload to keep response serialization async-safe.
+    response_stmt = (
+        select(Product)
+        .where(Product.id == product.id)
+        .options(selectinload(Product.aliases))
+    )
+    return (await db.execute(response_stmt)).scalar_one()
 
 # ──────────────────────────────────────────────────────────────────────
 # Endpoints: Aliases
