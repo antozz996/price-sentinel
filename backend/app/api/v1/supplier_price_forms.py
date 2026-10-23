@@ -244,9 +244,7 @@ async def create_form_request(
         )).scalars().all()
         if len(products) != len(payload.product_ids):
             raise HTTPException(status_code=422, detail="Uno o più prodotti non appartengono alla categoria selezionata o non sono attivi")
-        brand_by_sku = dict((await db.execute(
-            select(Product.sku_interno, Product.brand).where(Product.sku_interno.in_([row.sku_interno for row in rows]))
-        )).all()) if rows else {}
+        brand_by_sku = {product.sku_interno: product.brand for product in products}
         form_items = [
             SupplierPriceFormItem(
                 listino_id=None,
