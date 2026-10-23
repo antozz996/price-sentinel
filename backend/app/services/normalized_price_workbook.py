@@ -38,6 +38,7 @@ REQUIRED_HEADERS = {
     "cadenza aggiornamento": "Cadenza aggiornamento",
 }
 APPROVED_STATUS = "prezzo attuale approvato"
+SUPPLIER_CONFIRMED_UNIT_PRICE_STATUS = "prezzo attuale approvato - prezzo unitario confermato dal fornitore"
 EXCLUDED_STATUS = "duplicata - non importare"
 
 
@@ -79,6 +80,21 @@ def _parse_price(value: Any) -> tuple[str | None, str]:
     if not amount.is_finite() or amount <= 0:
         return None, "zero_or_negative"
     return format(amount, "f"), "valid"
+
+
+def _parse_quantity(value: Any) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    raw = _text(value).replace(" ", "")
+    if not raw:
+        return None
+    if re.fullmatch(r"\d+(?:,\d+)?", raw):
+        raw = raw.replace(",", ".")
+    try:
+        amount = Decimal(raw)
+    except InvalidOperation:
+        return None
+    return amount if amount.is_finite() and amount > 0 else None
 
 
 def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
@@ -127,29 +143,40 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
                 supplier = _text(row[indices["fornitore"]] if indices["fornitore"] < len(row) else None)
                 if not product and not supplier:
                     continue
-                if not product or not supplier:
-                    warnings.append({"tab": tab, "row": row_number, "code": "incomplete_offer_row"})
-                    continue
-
                 state = _normalize(row[indices["stato"]] if indices["stato"] < len(row) else None)
                 if state == EXCLUDED_STATUS:
                     excluded_count += 1
                     tally["excluded"] += 1
                     continue
+                package_price = row[indices["prezzo confezione"]] if indices["prezzo confezione"] < len(row) else None
+                explicit_unit_price = row[indices["prezzo unitario"]] if indices["prezzo unitario"] < len(row) else None
+                unit_price_confirmed = state == SUPPLIER_CONFIRMED_UNIT_PRICE_STATUS and bool(_text(explicit_unit_price))
+                if not _text(package_price) and not unit_price_confirmed:
+                    # Empty future products are intentionally left for later entry.
+                    tally["skipped_empty"] += 1
+                    continue
+                if not product or not supplier:
+                    warnings.append({"tab": tab, "row": row_number, "code": "incomplete_offer_row"})
+                    continue
 
                 tally["products"] += int(_normalize(product) not in seen_product_names)
                 seen_product_names.add(_normalize(product))
                 base_unit = _text(row[indices["unita confronto"]] if indices["unita confronto"] < len(row) else None)
-                raw_price = row[indices["prezzo unitario"]] if indices["prezzo unitario"] < len(row) else None
+                raw_quantity = row[indices["quantita confronto"]] if indices["quantita confronto"] < len(row) else None
+                quantity = _parse_quantity(raw_quantity)
+                raw_price = explicit_unit_price if unit_price_confirmed else package_price
                 price, price_state = _parse_price(raw_price)
                 reasons: list[str] = ["canonical_id_not_mapped"]
                 status = "needs_mapping"
-                if state != APPROVED_STATUS:
+                if state not in {APPROVED_STATUS, SUPPLIER_CONFIRMED_UNIT_PRICE_STATUS}:
                     status = "blocked"
                     reasons.append("not_current_approved")
                 if price_state != "valid":
                     status = "blocked"
                     reasons.append(price_state)
+                if not unit_price_confirmed and quantity != Decimal("1"):
+                    status = "blocked"
+                    reasons.append("package_price_not_single_unit")
                 if not base_unit:
                     status = "blocked"
                     reasons.append("unit_not_specified")
@@ -168,15 +195,15 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
                     "source_sheet": tab,
                     "source_row": row_number,
                     "source_original_row": row_number,
-                    "source_cell": f"{get_column_letter(indices['prezzo unitario'] + 1)}{row_number}",
+                    "source_cell": f"{get_column_letter((indices['prezzo unitario'] if unit_price_confirmed else indices['prezzo confezione']) + 1)}{row_number}",
                     "product": product,
                     "supplier": supplier,
                     "price_role": "negotiated_agreement",
                     "requires_product_mapping": True,
                     "reference_unit": base_unit or None,
-                    "supplier_price_unit": base_unit or None,
+                    "supplier_price_unit": base_unit if unit_price_confirmed or quantity == Decimal("1") else None,
                     "quoted_value": raw_price,
-                    "numeric_price": price,
+                    "numeric_price": price if (unit_price_confirmed or quantity == Decimal("1")) and base_unit else None,
                     "status": status,
                     "reasons": reasons,
                     "row_note": _text(row[indices["dicitura del fornitore"]] if indices["dicitura del fornitore"] < len(row) else None) or None,
@@ -184,15 +211,16 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
                         f"{label}: {value}" for key, label in (
                             ("codice fornitore", "Codice fornitore"), ("marca", "Marca"),
                             ("formato / confezione", "Formato / confezione"),
-                            ("prezzo confezione", "Prezzo confezione"),
-                            ("quantita confronto", "Quantità confronto"),
-                            ("unita confronto", "Unità confronto"),
+                            ("prezzo confezione", "Prezzo confezione (dato fornitore)"),
+                            ("prezzo unitario", "Prezzo unitario confermato"),
+                            ("quantita confronto", "Quantità confronto dichiarata"),
+                            ("unita confronto", "Unità confronto dichiarata"),
                         )
                         if (value := _text(row[indices[key]] if indices[key] < len(row) else None))
                     ) or None,
                     "cell_note": _text(row[indices["origine"]] if indices["origine"] < len(row) else None) or None,
                 }
-                if state != APPROVED_STATUS:
+                if state not in {APPROVED_STATUS, SUPPLIER_CONFIRMED_UNIT_PRICE_STATUS}:
                     reasons.append("not_current_approved")
                 duplicate_key = (tab, _normalize(product), _normalize(supplier))
                 duplicate_keys[duplicate_key] += 1
@@ -227,6 +255,7 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
             "workbook_title": "PRICE SENTINEL — SANTO GRAAL migrato",
             "no_contract_writes": True,
             "candidate_count": len(candidates),
+            "skipped_empty_count": sum(item["skipped_empty"] for item in sector_summary),
             "sector_summary": sector_summary,
             "food_audit": None,
             "missing_sources": [],
@@ -237,7 +266,7 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
                 "auto_commit_enabled": False,
                 "canonical_product_mapping": "required_before_import",
                 "source": "Prezzi correnti approvati del workbook migrato.",
-                "price_semantics": "negotiated_agreement",
+                "price_semantics": "supplier_confirmed_unit_price_status_or_package_price_at_declared_quantity_one",
             },
             "excluded_count": excluded_count,
         }

@@ -66,6 +66,7 @@ type SectorSummary = {
 type DryRunReport = {
   spreadsheet_id?: string
   candidate_count: number
+  skipped_empty_count?: number
   missing_sources: string[]
   warnings: unknown[]
   no_contract_writes: boolean
@@ -95,6 +96,7 @@ const REASON_LABELS: Record<string, string> = {
   not_current_approved: 'La riga non risulta marcata come prezzo attuale approvato',
   duplicate_supplier_product_offer: 'Più offerte dello stesso fornitore sul prodotto: chiarire quale referenza usare',
   missing: 'Prezzo unitario mancante',
+  package_price_not_single_unit: 'Prezzo riferito a una confezione: quantità diversa da 1, da verificare prima di confrontarlo',
 }
 
 function normalizeName(value: string): string {
@@ -657,14 +659,9 @@ export default function SantoGraalSyncPreview() {
     try {
       const rowsBySku = new Map<string, { productId: number; unit: string; prices: Map<string, string> }>()
       const productMapping: Record<string, number> = {}
-      const supplierHeaders = importableSupplierNames
-      const supplierMapping: Record<string, number> = {}
-      const missingSuppliers = supplierHeaders.filter(name => !supplierMappings[normalizeName(name)])
-      if (missingSuppliers.length) throw new Error('Associa prima questi fornitori agli omonimi presenti in Price Sentinel: ' + missingSuppliers.join(', '))
-      supplierHeaders.forEach(name => { supplierMapping[name] = Number(supplierMappings[normalizeName(name)]) })
-
       const conflicts: string[] = []
       const unmappedProducts = new Set<string>()
+      const includedSupplierKeys = new Set<string>()
       for (const item of importableCandidates) {
         const groupKey = [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
         const selectedValue = stagedMappings[groupKey]
@@ -694,14 +691,18 @@ export default function SantoGraalSyncPreview() {
           continue
         }
         row.prices.set(supplierKey, price)
+        includedSupplierKeys.add(supplierKey)
         rowsBySku.set(product.sku_interno, row)
         productMapping[product.sku_interno] = product.id
       }
       if (conflicts.length) throw new Error('Conflitti nel foglio: ' + conflicts.slice(0, 8).join('; '))
-      if (unmappedProducts.size) {
-        throw new Error(unmappedProducts.size + ' prodotti importabili non sono associati o hanno unità diverse. Non preparo un import parziale. Completa le associazioni indicate e riprova. Esempi: ' + Array.from(unmappedProducts).slice(0, 8).join('; '))
-      }
       if (!rowsBySku.size) throw new Error('Nessuna riga pronta: prima inizializza il catalogo e completa le associazioni prodotto.')
+
+      const supplierHeaders = importableSupplierNames.filter(name => includedSupplierKeys.has(normalizeName(name)))
+      const supplierMapping: Record<string, number> = {}
+      const missingSuppliers = supplierHeaders.filter(name => !supplierMappings[normalizeName(name)])
+      if (missingSuppliers.length) throw new Error('Associa prima questi fornitori agli omonimi presenti in Price Sentinel: ' + missingSuppliers.join(', '))
+      supplierHeaders.forEach(name => { supplierMapping[name] = Number(supplierMappings[normalizeName(name)]) })
 
       const header = ['Prodotto', 'Unita di misura', ...supplierHeaders].join('\t')
       const bodyRows = Array.from(rowsBySku.entries()).map(([sku, row]) => [
@@ -719,6 +720,9 @@ export default function SantoGraalSyncPreview() {
       if (!result.can_commit) {
         const firstErrors = (result.errors || []).slice(0, 5).map(item => item.message).filter(Boolean)
         throw new Error('L’anteprima ha ' + (result.counts?.errors || result.errors?.length || 0) + ' controlli bloccanti. ' + firstErrors.join(' · '))
+      }
+      if (unmappedProducts.size) {
+        setNotice('Anteprima pronta per il sottoinsieme associato. ' + unmappedProducts.size + ' prodotti senza associazione o con unità diversa restano fuori e potrai completarli in seguito.')
       }
     } catch (err) {
       setPriceImportError(err instanceof Error ? err.message : 'Anteprima import prezzi non riuscita.')
@@ -831,7 +835,7 @@ export default function SantoGraalSyncPreview() {
           <div>
             <strong>Fornitori del Santo Graal</strong>
             <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 3 }}>
-              {importableSupplierNames.length} fornitori · {importableCandidates.length} quotazioni importabili · unità non confrontabili e righe escluse restano fuori
+              {importableSupplierNames.length} fornitori · {importableCandidates.length} quotazioni importabili · {report.skipped_empty_count || 0} righe senza prezzo lasciate vuote · unità non confrontabili e righe escluse restano fuori
               {precisionReviewCount > 0 && <div style={{ color: '#fbbf24', marginTop: 3 }}>{precisionReviewCount} prezzi con oltre 4 decimali saranno arrotondati a 4 (es. 3,733821 → 3,7338) e riportati nell’anteprima.</div>}
             </div>
           </div>
