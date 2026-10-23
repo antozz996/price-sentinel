@@ -32,6 +32,9 @@ type Candidate = {
   reference_unit?: string | null
   supplier_price_unit?: string | null
   numeric_price?: string | number | null
+  packaging_note?: string | null
+  row_note?: string | null
+  cell_note?: string | null
 }
 type CatalogProduct = { id: number; sku_interno: string | null; canonical_name: string; order_name: string | null; comparison_unit: string; is_active: boolean }
 type MappingOption = { value: string; label: string; group: 'Catalogo prodotti' | 'Listino attivo' }
@@ -61,6 +64,7 @@ type SectorSummary = {
   skipped_empty: number
 }
 type DryRunReport = {
+  spreadsheet_id?: string
   candidate_count: number
   missing_sources: string[]
   warnings: unknown[]
@@ -80,14 +84,17 @@ const REASON_LABELS: Record<string, string> = {
   unit_mapping_needed: 'Unità di misura da chiarire',
   unit_mismatch_needs_conversion: 'Unità diverse: conversione rinviata',
   unit_not_specified: 'Unità di misura mancante',
-  zero_or_negative: 'Prezzo nullo o negativo',
+  zero_or_negative: 'Il prezzo deve essere positivo',
   formula_error: 'La formula della cella restituisce un errore',
-  invalid_price: 'Prezzo non valido',
+  invalid_price: 'Prezzo unitario non valido',
   unsupported_price: 'Formato del prezzo non supportato',
   textual_price: 'Valore prezzo non numerico',
   sheet_exclusion: 'Quotazione esclusa nel foglio',
   precision_review: 'Oltre 4 decimali: normalizzato a 4 decimali in importazione',
   derived_supplier_lookup: 'Prezzo letto da una formula/lookup derivata',
+  not_current_approved: 'La riga non risulta marcata come prezzo attuale approvato',
+  duplicate_supplier_product_offer: 'Più offerte dello stesso fornitore sul prodotto: chiarire quale referenza usare',
+  missing: 'Prezzo unitario mancante',
 }
 
 function normalizeName(value: string): string {
@@ -257,6 +264,8 @@ async function fetchPreviewApi(url: string, options: RequestInit = {}): Promise<
 
 export default function SantoGraalSyncPreview() {
   const [sourceUrl, setSourceUrl] = useState(() => localStorage.getItem('ps.santo-graal.url') || '')
+  const [excelFile, setExcelFile] = useState<File | null>(null)
+  const [mappingSourceId, setMappingSourceId] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -288,6 +297,96 @@ export default function SantoGraalSyncPreview() {
     })
     return () => { active = false }
   }, [])
+
+  async function loadExcelReferenceData(preview: DryRunReport, sourceId: string) {
+    setCatalogError(null)
+    setCatalogProducts([])
+    setMappingOptions([])
+    try {
+      const catalog = await fetchPreviewApi('/products') as CatalogProduct[]
+      const activeProducts = Array.isArray(catalog) ? catalog.filter(product => product.is_active !== false) : []
+      setCatalogProducts(activeProducts)
+      const automaticMappings = exactStagedMappings(preview.candidates, activeProducts)
+      const savedMappings = loadSavedProductMappings(sourceId)
+      const validSavedMappings: Record<string, string> = {}
+      Object.entries(savedMappings).forEach(([savedKey, value]) => {
+        const candidate = preview.candidates.find(item =>
+          [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|') === savedKey
+        )
+        const product = value.startsWith('sku:')
+          ? activeProducts.find(row => row.sku_interno === value.slice(4))
+          : value.startsWith('product:')
+            ? activeProducts.find(row => String(row.id) === value.slice(8))
+            : undefined
+        if (candidate?.reference_unit && product?.sku_interno
+          && normalizeName(product.comparison_unit) === normalizeName(candidate.reference_unit)) {
+          validSavedMappings[savedKey] = value
+        }
+      })
+      setStagedMappings({ ...automaticMappings, ...validSavedMappings })
+      const options: MappingOption[] = activeProducts.map(product => ({
+        value: product.sku_interno ? 'sku:' + product.sku_interno : 'product:' + product.id,
+        label: product.canonical_name + (product.sku_interno ? ' · ' + product.sku_interno : ''),
+        group: 'Catalogo prodotti',
+      }))
+      setMappingOptions(options)
+      if (!options.length) {
+        setCatalogError('Il catalogo prodotti è vuoto: prima di associare le offerte occorre allineare gli articoli in Price Sentinel.')
+      }
+    } catch {
+      setCatalogError('Non riesco a leggere il catalogo prodotti. Aggiorna l’anteprima; nessun dato è stato modificato.')
+    }
+    try {
+      const supplierData = await fetchPreviewApi('/fornitori') as SupplierRecord[]
+      const activeSuppliers = Array.isArray(supplierData) ? supplierData : []
+      setSupplierOptions(activeSuppliers)
+      setSupplierLoadError(null)
+      const sourceNames = Array.from(new Map(preview.candidates
+        .filter(item => item.status === 'needs_mapping' && item.reference_unit && item.numeric_price != null)
+        .map(item => [normalizeName(item.supplier), item.supplier] as const)).values())
+      const automatic: Record<string, string> = {}
+      sourceNames.forEach(name => {
+        const normalized = normalizeName(name)
+        let matches = activeSuppliers.filter(item => normalizeName(item.nome_azienda) === normalized)
+        if (matches.length !== 1) {
+          const compact = normalized.replace(/\s+/g, '')
+          matches = activeSuppliers.filter(item => normalizeName(item.nome_azienda).replace(/\s+/g, '').includes(compact))
+        }
+        if (matches.length === 1) automatic[normalized] = String(matches[0].id)
+      })
+      setSupplierMappings(previous => ({ ...automatic, ...previous }))
+    } catch {
+      setSupplierOptions([])
+      setSupplierLoadError('Non riesco a leggere i fornitori di Price Sentinel. Senza una corrispondenza fornitore non importo i prezzi.')
+    }
+  }
+
+  async function runExcelPreview() {
+    if (!excelFile || busy) return
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const form = new FormData()
+      form.append('file', excelFile)
+      const preview = await fetchPreviewApi('/smart-price-sheet/excel-dry-run', {
+        method: 'POST',
+        body: form,
+      }) as DryRunReport
+      const sourceId = preview.spreadsheet_id || 'normalized-workbook'
+      setMappingSourceId(sourceId)
+      setReport(preview)
+      setPricePreview(null)
+      setPriceCommitResult(null)
+      setPriceImportError(null)
+      setNotice('File letto in sola anteprima. Nessun prezzo, prodotto o foglio è stato modificato.')
+      await loadExcelReferenceData(preview, sourceId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Anteprima del file Excel non riuscita.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function runReadOnlyPreview() {
     setBusy(true)
@@ -338,6 +437,7 @@ export default function SantoGraalSyncPreview() {
         method: 'POST',
         body: JSON.stringify({ spreadsheet_id: spreadsheetId, title, values }),
       }) as DryRunReport
+      setMappingSourceId(spreadsheetId)
       setReport(preview)
       setStagedMappings({})
       setPricePreview(null)
@@ -656,9 +756,22 @@ export default function SantoGraalSyncPreview() {
       <div>
         <h3 style={{ margin: 0 }}>Collega il Santo Graal</h3>
         <p style={{ color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: 900 }}>
-          I prezzi del foglio sono già pattuiti: non serve una nuova approvazione commerciale. Associa i prodotti, controlla l’anteprima e registra le quotazioni importabili. Il foglio resta invariato; le righe non comparabili restano escluse finché le unità non vengono chiarite.
+          Carica il file migrato oppure leggi il Google Sheet. L’anteprima è in sola lettura; registra i prezzi solo dopo aver controllato associazioni, unità e righe escluse.
         </p>
       </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', padding: 12, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 280, color: 'var(--text-secondary)', fontSize: 12 }}>
+          File Excel migrato (.xlsx)
+          <input type="file" accept=".xlsx" onChange={event => setExcelFile(event.target.files?.[0] || null)} />
+        </label>
+        <button type="button" className="btn btn-primary" disabled={busy || !excelFile} onClick={() => void runExcelPreview()}>
+          {busy && excelFile ? 'Lettura e controllo…' : 'Prepara anteprima dal file'}
+        </button>
+        <span style={{ alignSelf: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
+          Il file viene letto dal server staging per la preview, senza salvare o registrare prezzi.
+        </span>
+      </div>
+      <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Oppure usa il collegamento Google in sola lettura:</div>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 900 }}>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Link Google Sheet</span>
         <input
@@ -684,6 +797,7 @@ export default function SantoGraalSyncPreview() {
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.candidate_count}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>righe prezzo rilevate</div></div>
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.review, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>con associazione da completare</div></div>
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.blocked, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>bloccate dai controlli</div></div>
+          <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.sector_summary.reduce((n, item) => n + item.excluded, 0)}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>escluse nel file</div></div>
           <div style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.035)' }}><b>{report.warnings.length}</b><div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>avvisi</div></div>
         </div>
         {report.food_audit && <div role={report.food_audit.products_without_subcategory || report.food_audit.orphan_category_rows || report.food_audit.ambiguous_category_products ? 'alert' : 'status'} style={{ color: report.food_audit.products_without_subcategory || report.food_audit.orphan_category_rows || report.food_audit.ambiguous_category_products ? '#fbbf24' : '#6ee7b7', padding: 10, border: '1px solid rgba(251,191,36,.35)', borderRadius: 8 }}>FOOD è il master dei prezzi: {report.food_audit.products} prodotti, {report.food_audit.categorized_products} classificati dalle schede figlie, {report.food_audit.products_without_subcategory} senza sottocategoria e {report.food_audit.orphan_category_rows} righe figlie non presenti nel master. I casi senza classificazione restano bloccati.</div>}
@@ -782,18 +896,16 @@ export default function SantoGraalSyncPreview() {
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{group.sheet}</td>
                   <td style={{ padding: 8, verticalAlign: 'top' }}><strong>{group.product}</strong><div style={{ color: 'var(--text-secondary)', marginTop: 4 }}>{group.rows.length} offerte</div></td>
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{group.unit || '—'}</td>
-                  <td style={{ padding: 8, verticalAlign: 'top', minWidth: 260 }}>{group.rows.map(row => <div key={row.source_cell + row.supplier} style={{ marginBottom: 4 }}>{row.supplier} · {row.source_cell} · {String(row.quoted_value ?? '—')} <span style={{ color: row.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>({displayStatus(row.status)})</span></div>)}</td>
+                  <td style={{ padding: 8, verticalAlign: 'top', minWidth: 260 }}>{group.rows.map(row => <div key={row.source_cell + row.supplier} style={{ marginBottom: 4 }}>{row.supplier} · {row.source_cell} · {String(row.quoted_value ?? '—')} <span style={{ color: row.status === 'blocked' ? '#fca5a5' : '#fbbf24' }}>({displayStatus(row.status)})</span>{row.row_note && <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{row.row_note}</div>}{row.packaging_note && <div style={{ color: 'var(--text-secondary)', marginTop: 2 }}>{row.packaging_note}</div>}</div>)}</td>
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{suggested ? <>{suggested.canonical_name}<div style={{ color: 'var(--text-secondary)' }}>corrispondenza esatta</div></> : exact.length > 1 ? <span style={{ color: '#fbbf24' }}>Più corrispondenze esatte: scegli manualmente</span> : <span style={{ color: 'var(--text-secondary)' }}>Nessuna corrispondenza esatta</span>}</td>
                   <td style={{ padding: 8, verticalAlign: 'top', minWidth: 220 }}>
                     <select aria-label={'Associa ' + group.product} value={selected} onChange={event => {
                       const value = event.target.value
                       setStagedMappings(previous => ({ ...previous, [group.key]: value }))
-                      try {
-                        const id = spreadsheetIdFromUrl(sourceUrl.trim())
-                        saveProductMapping(id, group.key, value)
-                      } catch {
-                        // The choice will be saved after a valid Santo Graal link is provided.
-                      }
+                      const id = mappingSourceId || (() => {
+                        try { return spreadsheetIdFromUrl(sourceUrl.trim()) } catch { return '' }
+                      })()
+                      if (id) saveProductMapping(id, group.key, value)
                       setPricePreview(null); setPriceImportError(null); setPriceCommitResult(null)
                     }} disabled={mappingOptions.length === 0} style={{ width: '100%', padding: '8px 10px', background: '#171821', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
                       <option value="">Da valutare</option>

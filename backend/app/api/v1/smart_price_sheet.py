@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
@@ -43,6 +43,7 @@ from app.services.purchase_recommendation import (
 )
 from app.services.smart_price_sheet import build_price_preview, commit_price_preview
 from app.services.sheet_sync_dry_run import stage_snapshot
+from app.services.normalized_price_workbook import parse_normalized_price_workbook
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
@@ -620,6 +621,24 @@ async def google_sheet_dry_run(
         spreadsheet_id=payload.spreadsheet_id,
     )
     report["workbook_title"] = payload.title.strip()
+    return report
+
+
+@router.post("/excel-dry-run")
+async def normalized_excel_dry_run(
+    file: UploadFile = File(..., description="Workbook migrato PRICE SENTINEL .xlsx"),
+    user: Utente = Depends(require_admin),
+):
+    """Read-only preview for the normalized category workbook; never writes to Sheets or contracts."""
+    if not file.filename or not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(400, "Formato non supportato. Seleziona il file Excel .xlsx migrato.")
+    raw = await file.read()
+    if not raw or len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Il file Excel è vuoto o supera il limite di 10 MB.")
+    try:
+        report = parse_normalized_price_workbook(raw)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
     return report
 
 

@@ -114,6 +114,11 @@ def _resolve_food_layout(layout: SheetLayout, header: list[Any]) -> SheetLayout:
         replace(col, index=found) if (found := _header_index(header, col.name)) is not None else col
         for col in layout.columns
     )
+
+
+def _supplier_header_matches(actual: str, expected: str) -> bool:
+    pair = {_label(actual), _label(expected)}
+    return pair == {"orizzonti", "sunrise"} or _label(actual) == _label(expected)
     origin_index = _header_index(header, "RIGA FOOD ORIGINALE")
     return replace(
         layout,
@@ -315,17 +320,24 @@ def stage_snapshot(
             continue
         hdr = rows[0]
         # Fail closed if the supplier order in Sheets diverges from our mapping.
+        resolved_columns = list(layout.columns)
+        aliases_resolved = False
         for col in layout.columns:
             actual = _text(_cell(hdr, col.index))
             expected = col.name
             if layout.title == "GIOCATTOLI":
                 continue  # L/M are pricing columns but not supplier names.
-            if _label(actual) != _label(expected):
+            if not _supplier_header_matches(actual, expected):
                 warnings.append({"tab": layout.title, "code": "supplier_header_mismatch",
                                  "column": _column(col.index), "actual": actual,
                                  "expected": expected})
                 missing_sources.append(layout.title)
                 break
+            if _label(actual) != _label(expected):
+                resolved_columns[layout.columns.index(col)] = replace(col, name=actual)
+                aliases_resolved = True
+        if aliases_resolved and layout.title not in missing_sources:
+            layout = replace(layout, columns=tuple(resolved_columns))
         if layout.title in missing_sources:
             continue
         seen_products: set[str] = set()
@@ -384,7 +396,7 @@ def stage_snapshot(
                     issues.append("unit_not_specified")
                 if value is not None and Decimal(value).as_tuple().exponent < -4:
                     issues.append("precision_review")
-                if layout.title == "BEVERAGE" and supplier.name == "ORIZZONTI":
+                if layout.title == "BEVERAGE" and _label(supplier.name) in {"orizzonti", "sunrise"}:
                     issues.append("derived_supplier_lookup")
                 # The price is already commercially agreed; only target identity mapping remains.
                 issues.append("canonical_id_not_mapped")

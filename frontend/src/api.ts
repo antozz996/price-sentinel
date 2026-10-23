@@ -71,6 +71,9 @@ function formatApiErrorDetail(value: unknown): string {
 // Funzione base per gestire le chiamate per bypassare Axios temporaneamente
 export async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const headers = getHeaders(options.headers as Record<string, string>);
+  if (typeof FormData !== 'undefined' && options.body instanceof FormData) {
+    delete headers['Content-Type'];
+  }
 
   const response = await fetch(`${API_BASE}${url}`, {
     ...options,

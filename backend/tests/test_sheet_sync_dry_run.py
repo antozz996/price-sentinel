@@ -125,6 +125,20 @@ class SheetSyncDryRunTests(unittest.TestCase):
                       c["source_sheet"] == "BEVERAGE" and c["source_cell"] == "D2")
         self.assertIn("derived_supplier_lookup", lookup["reasons"])
 
+    def test_sunrise_is_accepted_as_the_orizzonti_supplier_header(self):
+        data = copy.deepcopy(self.snapshot)
+        data["values"]["BEVERAGE"][0][3] = "SUNRISE"
+        data["values"]["FOOD"][0][5] = "SUNRISE"
+        report = self.preview(data)
+        self.assertNotIn("BEVERAGE", report["missing_sources"])
+        beverage = next(c for c in report["candidates"]
+                        if c["source_sheet"] == "BEVERAGE" and c["source_cell"] == "D2")
+        self.assertEqual(beverage["supplier"], "SUNRISE")
+        self.assertIn("derived_supplier_lookup", beverage["reasons"])
+        food = next(c for c in report["candidates"]
+                    if c["source_sheet"] == "FOOD" and c["source_cell"] == "F3")
+        self.assertEqual(food["supplier"], "SUNRISE")
+
     def test_giocattoli_only_review(self):
         candidates = [c for c in self.preview()["candidates"] if c["sector"] == "Giocattoli"]
         self.assertEqual(len(candidates), 2)
