@@ -91,6 +91,7 @@ async def run() -> None:
                 "answers": [{
                     "item_id": item_id,
                     "prezzo": "4.2500",
+                    "marca": "Marca sintetica CI",
                     "unita_misura": "BT",
                     "conferma_prezzo": False,
                     "non_trattato": False,
@@ -115,6 +116,7 @@ async def run() -> None:
         check(
             "submitted price and validity are retained",
             reviewed["items"][0]["prezzo_inviato"] == "4.2500"
+            and reviewed["items"][0]["brand_inviata"] == "Marca sintetica CI"
             and reviewed["validita_inviata_da"] == start.isoformat()
             and reviewed["validita_inviata_a"] == end.isoformat(),
         )
