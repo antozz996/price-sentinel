@@ -38,7 +38,7 @@ class ProductBase(BaseModel):
     weight_g: Optional[int] = None
     unit_count: Optional[int] = 1
     container_type: Optional[str] = None
-    comparison_unit: str
+    comparison_unit: Optional[str] = None
     is_commodity: Optional[bool] = False
     is_active: Optional[bool] = True
 
@@ -64,7 +64,7 @@ class ProductUpdate(BaseModel):
 class SantoGraalCatalogSeedItem(BaseModel):
     source_sheet: str = Field(min_length=1, max_length=100)
     canonical_name: str = Field(min_length=1, max_length=255)
-    comparison_unit: str = Field(min_length=1, max_length=50)
+    comparison_unit: Optional[str] = Field(default=None, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
     subcategory: Optional[str] = Field(default=None, max_length=100)
 
@@ -83,6 +83,7 @@ class ProductResponse(ProductBase):
     normalized_name: Optional[str] = None
     normalized_order_name: Optional[str] = None
     supplier_pack_sizes: List[int] = Field(default_factory=list)
+    missing_supplier_details: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -212,17 +213,30 @@ async def bootstrap_santo_graal_catalog(
     requested: dict[str, SantoGraalCatalogSeedItem] = {}
     for item in payload.items:
         name = item.canonical_name.strip()
-        unit = item.comparison_unit.strip()
+        unit = item.comparison_unit.strip() if item.comparison_unit else ""
         sheet = item.source_sheet.strip()
-        if not name or not unit or not sheet:
-            raise HTTPException(422, "Prodotto, scheda e unità sono obbligatori")
+        if not name or not sheet:
+            raise HTTPException(422, "Prodotto e scheda sono obbligatori")
         normalized = normalize_text(name)
         # Same normalized item and unit reuse one canonical SKU across source tabs.
-        stable_source_key = "|".join((normalized, normalize_text(unit)))
+        stable_source_key = "|".join((normalized, normalize_text(item.category or "")))
         sku = "SG-" + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
-        if sku in requested and normalize_text(requested[sku].canonical_name) != normalized:
+        previous = requested.get(sku)
+        if previous and normalize_text(previous.canonical_name) != normalized:
             raise HTTPException(409, "Collisione SKU durante la preparazione del catalogo")
-        requested[sku] = item
+        if previous:
+            old_unit = (previous.comparison_unit or "").strip()
+            if old_unit and unit and normalize_text(old_unit) != normalize_text(unit):
+                raise HTTPException(409, f"Unità diverse per il prodotto {name}: chiarire prima dell'importazione")
+            requested[sku] = SantoGraalCatalogSeedItem(
+                source_sheet=previous.source_sheet,
+                canonical_name=previous.canonical_name,
+                comparison_unit=old_unit or unit or None,
+                category=previous.category or item.category,
+                subcategory=previous.subcategory or item.subcategory,
+            )
+        else:
+            requested[sku] = item
 
     skus = list(requested)
     existing_rows = list((await db.scalars(
@@ -232,7 +246,10 @@ async def bootstrap_santo_graal_catalog(
     conflicts = [
         sku for sku, row in existing_by_sku.items()
         if normalize_text(row.canonical_name) != normalize_text(requested[sku].canonical_name)
-        or normalize_text(row.comparison_unit) != normalize_text(requested[sku].comparison_unit)
+        or (
+            row.comparison_unit and requested[sku].comparison_unit
+            and normalize_text(row.comparison_unit) != normalize_text(requested[sku].comparison_unit)
+        )
     ]
     if conflicts:
         raise HTTPException(
@@ -248,6 +265,8 @@ async def bootstrap_santo_graal_catalog(
     for sku, item in requested.items():
         existing_product = existing_by_sku.get(sku)
         if existing_product:
+            if not existing_product.comparison_unit and item.comparison_unit:
+                existing_product.comparison_unit = item.comparison_unit.strip()
             category = item.category.strip() if item.category and item.category.strip() else None
             subcategory = item.subcategory.strip() if item.subcategory and item.subcategory.strip() else None
             if category and existing_product.category != category:
@@ -258,7 +277,7 @@ async def bootstrap_santo_graal_catalog(
                 classification_updated_ids.add(existing_product.id)
             continue
         name = item.canonical_name.strip()
-        unit = item.comparison_unit.strip()
+        unit = item.comparison_unit.strip() if item.comparison_unit else None
         product = Product(
             sku_interno=sku,
             canonical_name=name,

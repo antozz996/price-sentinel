@@ -16,7 +16,7 @@ interface Product {
   unit_count: number
   supplier_pack_sizes: number[]
   container_type: string | null
-  comparison_unit: string
+  comparison_unit: string | null
   is_commodity: boolean
   is_active: boolean
 }
@@ -481,7 +481,7 @@ export default function ProductIdentityManager() {
       weight_g: product.weight_g?.toString() || '',
       unit_count: product.unit_count.toString(),
       container_type: product.container_type || '',
-      comparison_unit: product.comparison_unit,
+      comparison_unit: product.comparison_unit || '',
       is_commodity: product.is_commodity,
       is_active: product.is_active
     })
@@ -1836,6 +1836,7 @@ export default function ProductIdentityManager() {
                             }}
                           >
                             {product.canonical_name}
+                            {(!product.brand || !product.comparison_unit) && <span style={{ color: '#fbbf24', marginLeft: 6, fontSize: '0.72rem' }}>· da completare: {[!product.brand ? 'marca' : '', !product.comparison_unit ? 'unità' : ''].filter(Boolean).join(', ')}</span>}
                             {product.sku_interno
                               ? <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontWeight: 400 }}>· {product.sku_interno}</span>
                               : null}

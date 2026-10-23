@@ -142,7 +142,8 @@ async def build_price_preview(
     supplier_mapping: dict[str, int],
     product_mapping: dict[str, int],
     effective_date: date,
-    default_uom: str,
+    default_uom: str | None,
+    allow_missing_uom: bool = False,
     create_missing_products: bool = True,
     category: str | None = None,
     subcategory: str | None = None,
@@ -292,7 +293,7 @@ async def build_price_preview(
             if create_missing_products and ref.strip():
                 norm_ref = normalize_text(ref)
                 virtual_sku = f"IMP-{hashlib.sha256(norm_ref.encode('utf-8')).hexdigest()[:10].upper()}"
-                row_uom = source_row.get("uom", "").strip() or default_uom or "Pz"
+                row_uom = source_row.get("uom", "").strip() or default_uom or (None if allow_missing_uom else "Pz")
                 product = Product(
                     sku_interno=virtual_sku,
                     canonical_name=ref.strip(),
@@ -538,7 +539,7 @@ async def build_price_preview(
                 source_row.get("uom", "").strip()
                 or product.comparison_unit
                 or default_uom
-                or "Pz"
+                or (None if allow_missing_uom else "Pz")
             )
 
             same = bool(

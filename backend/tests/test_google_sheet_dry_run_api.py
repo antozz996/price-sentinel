@@ -50,3 +50,28 @@ async def test_google_sheet_dry_run_rejects_wrong_workbook_title():
         )
 
     assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_google_sheet_dry_run_keeps_priced_product_with_missing_unit_importable():
+    snapshot = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    # FOOD row 2 has valid prices; leave its source unit genuinely blank.
+    snapshot["values"]["FOOD"][1][1] = ""
+    payload = GoogleSheetDryRunRequest(
+        spreadsheet_id=snapshot["spreadsheet_id"],
+        title="santo graal",
+        values=snapshot["values"],
+    )
+
+    result = await google_sheet_dry_run(
+        payload,
+        user=SimpleNamespace(id=1, ruolo="admin"),
+    )
+
+    quote = next(
+        item for item in result["candidates"]
+        if item["source_sheet"] == "FOOD" and item["product"] == "SALE FINO" and item["supplier"] == "MARR"
+    )
+    assert quote["numeric_price"] == "0.5"
+    assert quote["status"] == "needs_mapping"
+    assert "unit_not_specified" in quote["reasons"]

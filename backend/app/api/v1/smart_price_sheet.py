@@ -657,6 +657,7 @@ async def preview_clipboard(
             product_mapping=payload.product_mapping,
             effective_date=payload.effective_date,
             default_uom=payload.default_uom,
+            allow_missing_uom=payload.allow_missing_uom,
             create_missing_products=payload.create_missing_products,
             category=payload.category,
             subcategory=payload.subcategory,

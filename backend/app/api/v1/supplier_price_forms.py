@@ -49,10 +49,12 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "descrizione": item.descrizione,
                 "prezzo_corrente": str(item.prezzo_corrente) if item.prezzo_corrente is not None else None,
                 "unita_corrente": item.unita_corrente,
+                "brand_corrente": item.brand_corrente,
                 "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
                 "prezzo_inviato": str(item.prezzo_inviato) if item.prezzo_inviato is not None else None,
                 "unita_inviata": item.unita_inviata,
+                "brand_inviata": item.brand_inviata,
                 "conferma_prezzo": item.conferma_prezzo,
                 "nota_fornitore": item.nota_fornitore,
                 "non_trattato": item.non_trattato,
@@ -83,6 +85,7 @@ class SupplierAnswer(BaseModel):
     item_id: int
     prezzo: Decimal | None = Field(default=None, gt=0, lt=Decimal("100000000"), decimal_places=4)
     unita_misura: str | None = Field(default=None, min_length=1, max_length=50)
+    marca: str | None = Field(default=None, max_length=100)
     conferma_prezzo: bool = False
     non_trattato: bool = False
     nota: Optional[str] = Field(default=None, max_length=1000)
@@ -123,6 +126,7 @@ async def get_public_form(
                 "descrizione": item.descrizione,
                 "prezzo_corrente": str(item.prezzo_corrente) if item.prezzo_corrente is not None else None,
                 "unita_corrente": item.unita_corrente,
+                "brand_corrente": item.brand_corrente,
                 "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
             }
@@ -170,6 +174,7 @@ async def submit_public_form(
     for item in request.items:
         answer = answers_by_id[item.id]
         item.nota_fornitore = answer.nota.strip() if answer.nota else None
+        item.brand_inviata = answer.marca.strip() if answer.marca else None
         if answer.non_trattato:
             if answer.conferma_prezzo:
                 raise HTTPException(status_code=422, detail="Un prodotto non trattato non può essere confermato")
@@ -183,6 +188,8 @@ async def submit_public_form(
         unit = (answer.unita_misura or "").strip()
         if not unit:
             raise HTTPException(status_code=422, detail=f"Unità di misura mancante per {item.sku_interno}")
+        if not item.brand_inviata:
+            raise HTTPException(status_code=422, detail=f"Marca mancante per {item.sku_interno}; indica la marca oppure 'senza marca'")
         same_price = item.prezzo_corrente is not None and answer.prezzo == item.prezzo_corrente
         same_unit = item.unita_corrente is not None and unit.casefold() == item.unita_corrente.strip().casefold()
         if request.request_type == "new_listino" and answer.conferma_prezzo:
@@ -237,6 +244,9 @@ async def create_form_request(
         )).scalars().all()
         if len(products) != len(payload.product_ids):
             raise HTTPException(status_code=422, detail="Uno o più prodotti non appartengono alla categoria selezionata o non sono attivi")
+        brand_by_sku = dict((await db.execute(
+            select(Product.sku_interno, Product.brand).where(Product.sku_interno.in_([row.sku_interno for row in rows]))
+        )).all()) if rows else {}
         form_items = [
             SupplierPriceFormItem(
                 listino_id=None,
@@ -244,6 +254,7 @@ async def create_form_request(
                 descrizione=product.canonical_name,
                 prezzo_corrente=None,
                 unita_corrente=product.comparison_unit,
+                brand_corrente=product.brand,
                 validita_corrente_da=None,
                 validita_corrente_a=None,
             )
@@ -277,6 +288,7 @@ async def create_form_request(
                 descrizione=row.descrizione,
                 prezzo_corrente=row.prezzo_pattuito,
                 unita_corrente=row.unita_misura,
+                brand_corrente=brand_by_sku.get(row.sku_interno),
                 validita_corrente_da=row.data_inizio_validita,
                 validita_corrente_a=row.data_scadenza,
             )

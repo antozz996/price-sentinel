@@ -36,7 +36,7 @@ type Candidate = {
   row_note?: string | null
   cell_note?: string | null
 }
-type CatalogProduct = { id: number; sku_interno: string | null; canonical_name: string; order_name: string | null; comparison_unit: string; is_active: boolean }
+type CatalogProduct = { id: number; sku_interno: string | null; canonical_name: string; order_name: string | null; comparison_unit: string | null; brand?: string | null; is_active: boolean }
 type MappingOption = { value: string; label: string; group: 'Catalogo prodotti' | 'Listino attivo' }
 type ListinoMappingRow = { sku_interno: string; descrizione: string; unita_misura: string }
 type CandidateGroup = { key: string; sheet: string; product: string; unit: string; rows: Candidate[] }
@@ -101,6 +101,10 @@ const REASON_LABELS: Record<string, string> = {
 
 function normalizeName(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
+}
+
+function knownUnit(item: Candidate): string {
+  return (item.reference_unit || item.supplier_price_unit || '').trim()
 }
 
 function displayStatus(status: string): string {
@@ -313,15 +317,15 @@ export default function SantoGraalSyncPreview() {
       const validSavedMappings: Record<string, string> = {}
       Object.entries(savedMappings).forEach(([savedKey, value]) => {
         const candidate = preview.candidates.find(item =>
-          [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|') === savedKey
+          [item.source_sheet, normalizeName(item.product), normalizeName(knownUnit(item))].join('|') === savedKey
         )
         const product = value.startsWith('sku:')
           ? activeProducts.find(row => row.sku_interno === value.slice(4))
           : value.startsWith('product:')
             ? activeProducts.find(row => String(row.id) === value.slice(8))
             : undefined
-        if (candidate?.reference_unit && product?.sku_interno
-          && normalizeName(product.comparison_unit) === normalizeName(candidate.reference_unit)) {
+        if (candidate && product?.sku_interno
+          && (!knownUnit(candidate) || !product.comparison_unit || normalizeName(product.comparison_unit) === normalizeName(knownUnit(candidate)))) {
           validSavedMappings[savedKey] = value
         }
       })
@@ -344,7 +348,7 @@ export default function SantoGraalSyncPreview() {
       setSupplierOptions(activeSuppliers)
       setSupplierLoadError(null)
       const sourceNames = Array.from(new Map(preview.candidates
-        .filter(item => item.status === 'needs_mapping' && item.reference_unit && item.numeric_price != null)
+        .filter(item => item.status === 'needs_mapping' && item.numeric_price != null)
         .map(item => [normalizeName(item.supplier), item.supplier] as const)).values())
       const automatic: Record<string, string> = {}
       sourceNames.forEach(name => {
@@ -458,9 +462,9 @@ export default function SantoGraalSyncPreview() {
         const validSavedMappings: Record<string, string> = {}
         Object.entries(savedMappings).forEach(([savedKey, value]) => {
           const candidate = preview.candidates.find(item => {
-            const currentKey = [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
+            const currentKey = [item.source_sheet, normalizeName(item.product), normalizeName(knownUnit(item))].join('|')
             const legacyFoodKey = ['Carne', 'Pesce', 'Varie'].includes(item.source_sheet)
-              ? ['FOOD', normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
+              ? ['FOOD', normalizeName(item.product), normalizeName(knownUnit(item))].join('|')
               : null
             return currentKey === savedKey || legacyFoodKey === savedKey
           })
@@ -469,9 +473,9 @@ export default function SantoGraalSyncPreview() {
             : value.startsWith('product:')
               ? activeProducts.find(row => String(row.id) === value.slice(8))
               : undefined
-          if (candidate?.reference_unit && product?.sku_interno
-            && normalizeName(product.comparison_unit) === normalizeName(candidate.reference_unit)) {
-            const currentKey = [candidate.source_sheet, normalizeName(candidate.product), normalizeName(candidate.reference_unit)].join('|')
+          if (candidate && product?.sku_interno
+            && (!knownUnit(candidate) || !product.comparison_unit || normalizeName(product.comparison_unit) === normalizeName(knownUnit(candidate)))) {
+            const currentKey = [candidate.source_sheet, normalizeName(candidate.product), normalizeName(knownUnit(candidate))].join('|')
             validSavedMappings[currentKey] = value
           }
         })
@@ -550,7 +554,7 @@ export default function SantoGraalSyncPreview() {
     && (sheetFilter === 'all' || item.source_sheet === sheetFilter)
   )
   const groups = Array.from(visibleCandidates.reduce((map, item) => {
-    const unit = item.reference_unit || ''
+    const unit = knownUnit(item)
     const key = [item.source_sheet, normalizeName(item.product), normalizeName(unit)].join('|')
     const group = map.get(key) || { key, sheet: item.source_sheet, product: item.product, unit, rows: [] as Candidate[] }
     group.rows.push(item)
@@ -561,21 +565,21 @@ export default function SantoGraalSyncPreview() {
       || group.rows.some(row => normalizeName(row.supplier).includes(normalizeName(groupSearch)))
   ).sort((a, b) => a.sheet.localeCompare(b.sheet) || a.product.localeCompare(b.product))
   const exactProductsFor = (name: string, unit: string) => catalogProducts.filter(product =>
-    normalizeName(product.comparison_unit) === normalizeName(unit)
+    (!unit || !product.comparison_unit || normalizeName(product.comparison_unit) === normalizeName(unit))
     && (normalizeName(product.canonical_name) === normalizeName(name)
       || Boolean(product.order_name && normalizeName(product.order_name) === normalizeName(name)))
   )
   const exactStagedMappings = (candidates: Candidate[], products: CatalogProduct[]) => {
     const result: Record<string, string> = {}
     const groups = new Map<string, { sheet: string; product: string; unit: string }>()
-    candidates.filter(item => item.status === 'needs_mapping' && item.reference_unit).forEach(item => {
-      const unit = item.reference_unit!.trim()
+    candidates.filter(item => item.status === 'needs_mapping').forEach(item => {
+      const unit = knownUnit(item)
       const key = [item.source_sheet, normalizeName(item.product), normalizeName(unit)].join('|')
       if (!groups.has(key)) groups.set(key, { sheet: item.source_sheet, product: item.product, unit })
     })
     groups.forEach((group, key) => {
       const matches = products.filter(product =>
-        normalizeName(product.comparison_unit) === normalizeName(group.unit)
+        (!group.unit || !product.comparison_unit || normalizeName(product.comparison_unit) === normalizeName(group.unit))
         && normalizeName(product.canonical_name) === normalizeName(group.product)
       )
       if (matches.length === 1) {
@@ -587,21 +591,22 @@ export default function SantoGraalSyncPreview() {
 
   const isImportableCandidate = (item: Candidate) => {
     const blockedReasons = new Set([
-      'unit_mapping_needed', 'unit_mismatch_needs_conversion', 'unit_not_specified',
+      'unit_mismatch_needs_conversion',
       'supplier_identity_and_net_price_need_verification',
     ])
     return item.status === 'needs_mapping'
-      && Boolean(item.reference_unit?.trim())
       && item.numeric_price !== null && item.numeric_price !== undefined
       && !item.reasons.some(reason => blockedReasons.has(reason))
-      && normalizeName(item.reference_unit || '') === normalizeName(item.supplier_price_unit || item.reference_unit || '')
+      && (!item.reference_unit?.trim() || !item.supplier_price_unit?.trim()
+        || normalizeName(item.reference_unit) === normalizeName(item.supplier_price_unit))
   }
   const bootstrapProducts = Array.from((report?.candidates || [])
-    .filter(item => item.status === 'needs_mapping' && item.reference_unit?.trim())
+    .filter(item => item.status === 'needs_mapping' && Boolean(item.product.trim()))
     .reduce((map, item) => {
-      const unit = item.reference_unit!.trim()
-      const key = [item.source_sheet, normalizeName(item.product), normalizeName(unit)].join('|')
-      if (!map.has(key)) {
+      const unit = knownUnit(item) || null
+      const key = [item.source_sheet, normalizeName(item.product)].join('|')
+      const previous = map.get(key)
+      if (!previous || (!previous.comparison_unit && unit)) {
         map.set(key, {
           source_sheet: item.source_sheet,
           canonical_name: item.product.trim(),
@@ -611,12 +616,12 @@ export default function SantoGraalSyncPreview() {
         })
       }
       return map
-    }, new Map<string, { source_sheet: string; canonical_name: string; comparison_unit: string; category: string; subcategory?: string }>()).values())
+    }, new Map<string, { source_sheet: string; canonical_name: string; comparison_unit: string | null; category: string; subcategory?: string }>()).values())
 
   async function initializeCatalogFromSheet() {
     if (!bootstrapProducts.length || catalogBootstrapBusy) return
     const confirmed = window.confirm(
-      'ALLINEAMENTO CATALOGO SANTO GRAAL\n\nGli articoli già presenti saranno classificati secondo il foglio; FRUTTA E VERDURA verrà associato a Food → Frutta. Gli articoli mancanti saranno creati con SKU stabili e unità indicate nel foglio. Non verranno modificati prezzi, fornitori o dati nel Google Sheet. Continuare?'
+      'ALLINEAMENTO CATALOGO SANTO GRAAL\n\nGli articoli già presenti saranno classificati secondo il foglio; FRUTTA E VERDURA verrà associato a Food → Frutta. Gli articoli mancanti saranno creati con SKU stabili. Le unità non presenti resteranno vuote e da completare: non verranno inventate. Non verranno modificati prezzi, fornitori o dati nel Google Sheet. Continuare?'
     )
     if (!confirmed) return
     setCatalogBootstrapBusy(true)
@@ -646,6 +651,7 @@ export default function SantoGraalSyncPreview() {
   }
 
   const importableCandidates = (report?.candidates || []).filter(isImportableCandidate)
+  const missingUnitQuoteCount = importableCandidates.filter(item => !knownUnit(item)).length
   const precisionReviewCount = importableCandidates.filter(item => item.reasons.includes('precision_review')).length
   const importableSupplierNames = Array.from(new Map(importableCandidates
     .map(item => [normalizeName(item.supplier), item.supplier] as const)).values())
@@ -657,13 +663,13 @@ export default function SantoGraalSyncPreview() {
     setPricePreview(null)
     setPriceCommitResult(null)
     try {
-      const rowsBySku = new Map<string, { productId: number; unit: string; prices: Map<string, string> }>()
+      const rowsBySku = new Map<string, { productId: number; unit: string | null; prices: Map<string, string> }>()
       const productMapping: Record<string, number> = {}
       const conflicts: string[] = []
       const unmappedProducts = new Set<string>()
       const includedSupplierKeys = new Set<string>()
       for (const item of importableCandidates) {
-        const groupKey = [item.source_sheet, normalizeName(item.product), normalizeName(item.reference_unit || '')].join('|')
+        const groupKey = [item.source_sheet, normalizeName(item.product), normalizeName(knownUnit(item))].join('|')
         const selectedValue = stagedMappings[groupKey]
         const product = selectedValue?.startsWith('sku:')
           ? catalogProducts.find(row => row.sku_interno === selectedValue.slice(4))
@@ -674,12 +680,13 @@ export default function SantoGraalSyncPreview() {
           unmappedProducts.add(item.product + ' [' + item.source_sheet + ', ' + (item.reference_unit || 'unità mancante') + ']')
           continue
         }
-        if (normalizeName(product.comparison_unit) !== normalizeName(item.reference_unit || '')) {
+        const unit = knownUnit(item) || product.comparison_unit || null
+        if (unit && product.comparison_unit && normalizeName(product.comparison_unit) !== normalizeName(unit)) {
           unmappedProducts.add(item.product + ' [unità foglio: ' + (item.reference_unit || 'mancante') + ', catalogo: ' + product.comparison_unit + ']')
           continue
         }
-        const row = rowsBySku.get(product.sku_interno) || { productId: product.id, unit: item.reference_unit!.trim(), prices: new Map<string, string>() }
-        if (normalizeName(row.unit) !== normalizeName(item.reference_unit || '')) {
+        const row = rowsBySku.get(product.sku_interno) || { productId: product.id, unit, prices: new Map<string, string>() }
+        if (normalizeName(row.unit || '') !== normalizeName(unit || '')) {
           conflicts.push(product.sku_interno + ': unità di misura diverse')
           continue
         }
@@ -706,14 +713,14 @@ export default function SantoGraalSyncPreview() {
 
       const header = ['Prodotto', 'Unita di misura', ...supplierHeaders].join('\t')
       const bodyRows = Array.from(rowsBySku.entries()).map(([sku, row]) => [
-        sku, row.unit, ...supplierHeaders.map(name => row.prices.get(normalizeName(name)) || ''),
+          sku, row.unit || '', ...supplierHeaders.map(name => row.prices.get(normalizeName(name)) || ''),
       ].join('\t'))
       const textValue = [header, ...bodyRows].join('\n')
       const result = await fetchWithAuth('/smart-price-sheet/preview', {
         method: 'POST',
         body: JSON.stringify({
           text: textValue, supplier_mapping: supplierMapping, product_mapping: productMapping,
-          default_uom: 'Pz', create_missing_products: false,
+          default_uom: null, allow_missing_uom: true, create_missing_products: false,
         }),
       }) as ContractPreview
       setPricePreview(result)
@@ -835,7 +842,7 @@ export default function SantoGraalSyncPreview() {
           <div>
             <strong>Fornitori del Santo Graal</strong>
             <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 3 }}>
-              {importableSupplierNames.length} fornitori · {importableCandidates.length} quotazioni importabili · {report.skipped_empty_count || 0} righe senza prezzo lasciate vuote · unità non confrontabili e righe escluse restano fuori
+              {importableSupplierNames.length} fornitori · {importableCandidates.length} quotazioni importabili · {missingUnitQuoteCount} senza unità dichiarata · {report.skipped_empty_count || 0} righe senza prezzo lasciate vuote · marca/unità mancanti restano da completare col fornitore; prezzi senza unità registrati ma non confrontati per unità
               {precisionReviewCount > 0 && <div style={{ color: '#fbbf24', marginTop: 3 }}>{precisionReviewCount} prezzi con oltre 4 decimali saranno arrotondati a 4 (es. 3,733821 → 3,7338) e riportati nell’anteprima.</div>}
             </div>
           </div>

@@ -105,7 +105,16 @@ def normalize_price_for_comparison(
             explanation="Prodotto canonico mancante",
         )
 
-    raw_comp_unit = normalize_text(str(target_comparison_unit or product_obj.comparison_unit or "piece"))
+    confirmed_unit = target_comparison_unit or product_obj.comparison_unit
+    if not confirmed_unit:
+        return NormalizedPriceResult(
+            normalized_unit_price=price,
+            comparison_unit="unknown",
+            pack_qty=None,
+            reliable=False,
+            explanation="Unità di misura da confermare: il prezzo è registrato ma non confrontabile per unità",
+        )
+    raw_comp_unit = normalize_text(str(confirmed_unit))
     if raw_comp_unit in {"bottiglia", "bottiglie", "bot", "bt", "btl", "bottle"}:
         comp_unit = "bottle"
     elif raw_comp_unit in {"cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione", "ct", "cs", "crt"}:
