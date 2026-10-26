@@ -158,6 +158,7 @@ function columnLabel(index: number): string {
 }
 
 const MACRO_CATEGORIES = [
+  // Keep this selector limited to the sectors used by the active purchasing workflow.
   { id: 'Beverage', label: 'Beverage', icon: '🍹', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', border: '#3b82f6' },
   { id: 'Food', label: 'Food', icon: '🍽️', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: '#f59e0b' },
   { id: 'Materiali', label: 'Materiali di consumo', icon: '📦', color: '#10b981', bg: 'rgba(16,185,129,0.15)', border: '#10b981' },

@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   isolated-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     # This PostgreSQL service exists ONLY within the disposable GitHub runner,
