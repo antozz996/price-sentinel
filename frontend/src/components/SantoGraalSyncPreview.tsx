@@ -672,7 +672,10 @@ export default function SantoGraalSyncPreview() {
       const includedSupplierKeys = new Set<string>()
       for (const item of importableCandidates) {
         const groupKey = [item.source_sheet, normalizeName(item.product), normalizeName(knownUnit(item))].join('|')
-        const selectedValue = stagedMappings[groupKey]
+        const exact = exactProductsFor(item.product, knownUnit(item))
+        const selectedValue = Object.prototype.hasOwnProperty.call(stagedMappings, groupKey)
+          ? stagedMappings[groupKey]
+          : exact.length === 1 && exact[0].sku_interno ? 'sku:' + exact[0].sku_interno : undefined
         const product = selectedValue?.startsWith('sku:')
           ? catalogProducts.find(row => row.sku_interno === selectedValue.slice(4))
           : selectedValue?.startsWith('product:')
@@ -904,7 +907,9 @@ export default function SantoGraalSyncPreview() {
                 const exact = exactProductsFor(group.product, group.unit)
                 const suggested = exact.length === 1 ? exact[0] : null
                 const suggestedValue = suggested ? (suggested.sku_interno ? 'sku:' + suggested.sku_interno : 'product:' + suggested.id) : ''
-                const selected = stagedMappings[group.key] || ''
+                const selected = Object.prototype.hasOwnProperty.call(stagedMappings, group.key)
+                  ? stagedMappings[group.key]
+                  : suggestedValue
                 return <tr key={group.key}>
                   <td style={{ padding: 8, verticalAlign: 'top' }}>{group.sheet}</td>
                   <td style={{ padding: 8, verticalAlign: 'top' }}><strong>{group.product}</strong><div style={{ color: 'var(--text-secondary)', marginTop: 4 }}>{group.rows.length} offerte</div></td>
@@ -928,7 +933,7 @@ export default function SantoGraalSyncPreview() {
                         return options.length ? <optgroup key={groupName} label={groupName}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup> : null
                       })}
                     </select>
-                    {selected && <small style={{ display: 'block', color: '#fbbf24', marginTop: 4 }}>Salvata in questo browser</small>}
+                    {selected && <small style={{ display: 'block', color: '#fbbf24', marginTop: 4 }}>{stagedMappings[group.key] ? 'Salvata in questo browser' : 'Corrispondenza esatta proposta'}</small>}
                   </td>
                 </tr>
               })}
@@ -951,7 +956,7 @@ export default function SantoGraalSyncPreview() {
           {visibleCandidates.length === 0 && <p style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Nessuna riga corrisponde ai filtri selezionati.</p>}
         </div>}
         {viewMode === 'groups' && <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
-          {Object.values(stagedMappings).filter(Boolean).length} associazioni disponibili. Le scelte manuali vengono ricordate in questo browser per questo Google Sheet.
+          Le corrispondenze esatte vengono proposte automaticamente. Le scelte manuali vengono ricordate in questo browser per questo Google Sheet.
         </div>}
         <strong style={{ color: '#6ee7b7' }}>Il foglio non viene modificato. Il Listino Master cambia solo dopo la conferma di “Registra i prezzi già pattuiti”.</strong>
       </>}
