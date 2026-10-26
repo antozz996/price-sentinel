@@ -161,8 +161,6 @@ const MACRO_CATEGORIES = [
   { id: 'Beverage', label: 'Beverage', icon: '🍹', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', border: '#3b82f6' },
   { id: 'Food', label: 'Food', icon: '🍽️', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: '#f59e0b' },
   { id: 'Materiali', label: 'Materiali di consumo', icon: '📦', color: '#10b981', bg: 'rgba(16,185,129,0.15)', border: '#10b981' },
-  { id: 'Giocattoli', label: 'Giocattoli', icon: '🧸', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', border: '#a78bfa' },
-  { id: 'Snack', label: 'Snack', icon: '🍿', color: '#fb923c', bg: 'rgba(251,146,60,0.15)', border: '#fb923c' },
 ] as const
 
 type MacroCategory = typeof MACRO_CATEGORIES[number]['id']
@@ -188,8 +186,6 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     'Beverage': blankSheet(),
     'Food': blankSheet(),
     'Materiali': blankSheet(),
-    'Giocattoli': blankSheet(),
-    'Snack': blankSheet(),
   })
 
   const currentSheetKey = activeSubcategorySheet !== 'all' ? `${activeCategorySheet}:${activeSubcategorySheet}` : activeCategorySheet
@@ -276,12 +272,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   async function loadFullPriceSheet() {
     setLoading(true); setError(null)
     try {
-      const [bevData, foodData, matData, toysData, snackData] = await Promise.all([
+      const [bevData, foodData, matData] = await Promise.all([
         fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Beverage') as Promise<MatrixResponse>,
         fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Food') as Promise<MatrixResponse>,
         fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Materiali') as Promise<MatrixResponse>,
-        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Giocattoli') as Promise<MatrixResponse>,
-        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Snack') as Promise<MatrixResponse>,
       ])
 
       setCategorySheets(prev => ({
@@ -289,11 +283,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         'Beverage': sheetFromMatrix(bevData),
         'Food': sheetFromMatrix(foodData),
         'Materiali': sheetFromMatrix(matData),
-        'Giocattoli': sheetFromMatrix(toysData),
-        'Snack': sheetFromMatrix(snackData),
       }))
       setSheetInitialized(true)
-      setNotice(`Fogli precaricati: Beverage (${bevData.rows.length}), Food (${foodData.rows.length}), Materiali di consumo (${matData.rows.length}), Giocattoli (${toysData.rows.length}), Snack (${snackData.rows.length}).`)
+      setNotice(`Fogli precaricati: Beverage (${bevData.rows.length}), Food (${foodData.rows.length}), Materiali di consumo (${matData.rows.length}).`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
