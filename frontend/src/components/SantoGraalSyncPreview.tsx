@@ -66,6 +66,7 @@ type SectorSummary = {
 }
 type DryRunReport = {
   source_suppliers?: string[]
+  source_supplier_sectors?: Record<string, string[]>
   spreadsheet_id?: string
   candidate_count: number
   skipped_empty_count?: number
@@ -301,7 +302,7 @@ export default function SantoGraalSyncPreview() {
     setSupplierRegistrationBusy(true)
     try {
       const supplier = await fetchWithAuth('/fornitori/sheet-registration', {
-        method: 'POST', body: JSON.stringify({ nome_azienda: name, partita_iva: supplierFiscalId.trim() || null }),
+        method: 'POST', body: JSON.stringify({ nome_azienda: name, partita_iva: supplierFiscalId.trim() || null, categories: report?.source_supplier_sectors?.[name] || [] }),
       }) as SupplierRecord
       setSupplierOptions(previous => [...previous.filter(row => row.id !== supplier.id), supplier])
       setSupplierMappings(previous => ({ ...previous, [normalizeName(name)]: String(supplier.id) }))

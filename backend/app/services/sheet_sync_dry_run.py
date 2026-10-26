@@ -304,6 +304,7 @@ def stage_snapshot(
         warnings.append({"tab": EXCLUSION_TAB, "code": "invalid_exclusion_register_fail_closed"})
     candidates: list[dict] = []
     source_suppliers: set[str] = set()
+    source_supplier_sectors: dict[str, list[str]] = {}
     sector_summary: list[dict] = []
     missing_sources: list[str] = list(missing_category_tabs)
     for base_layout in SOURCES:
@@ -327,6 +328,10 @@ def stage_snapshot(
                     note_index=index + 1 if following.startswith(('note', 'descrizione')) else None))
             layout = replace(layout, columns=tuple(columns))
             source_suppliers.update(column.name for column in columns)
+            for column in columns:
+                sectors = source_supplier_sectors.setdefault(column.name, [])
+                if layout.sector not in sectors:
+                    sectors.append(layout.sector)
         if layout.title == "FOOD" and not exclusion_valid:
             missing_sources.append(EXCLUSION_TAB)
             continue
@@ -459,6 +464,7 @@ def stage_snapshot(
         sector_summary.append(tally)
     report = {
         'source_suppliers': sorted(source_suppliers),
+        'source_supplier_sectors': source_supplier_sectors,
         "mode": "dry_run_only",
         "spreadsheet_id": spreadsheet_id,
         "source_title_expected": "santo graal",

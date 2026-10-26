@@ -16,6 +16,7 @@ from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.fornitori import Fornitore
 from app.models.utenti import Utente
+from app.models.purchase_policy import SupplierCategoryCapability
 from app.schemas.fornitori import FornitoreCreate, FornitoreResponse, FornitoreUpdate
 
 router = APIRouter()
@@ -24,6 +25,7 @@ router = APIRouter()
 class SheetSupplierRegistration(BaseModel):
     nome_azienda: str = Field(min_length=1, max_length=255)
     partita_iva: str | None = Field(default=None, max_length=50)
+    categories: list[str] = Field(default_factory=list, max_length=3)
 
 
 @router.post('/sheet-registration', response_model=FornitoreResponse)
@@ -47,8 +49,17 @@ async def register_sheet_supplier(
     fiscal_id = (data.partita_iva or '').strip()
     # TEMP is an internal provisional identifier, never a claimed fiscal number.
     internal_id = 'TEMP' + hashlib.sha256(name.casefold().encode()).hexdigest()[:16].upper()
-    return await create_fornitore(FornitoreCreate(nome_azienda=name,
+    if any(category not in {'Food', 'Beverage', 'Materiali'} for category in data.categories):
+        raise HTTPException(422, 'Settore Sheet non valido')
+    supplier = await create_fornitore(FornitoreCreate(nome_azienda=name,
         partita_iva=fiscal_id or internal_id, attivo_whitelist=True), admin, db)
+    for category in set(data.categories):
+        db.add(SupplierCategoryCapability(supplier_id=supplier.id, category=category,
+            enabled=True, reason='Registrazione esplicita da intestazione Sheet',
+            created_by=admin.id, updated_by=admin.id,
+            created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)))
+    await db.flush()
+    return supplier
 
 
 @router.get(
