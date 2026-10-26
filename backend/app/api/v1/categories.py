@@ -40,8 +40,6 @@ DEFAULT_HORECA_CATEGORIES = [
     {"nome": "Food", "descrizione": "Alimenti e prodotti per la cucina", "colore": "#16a34a"},
     {"nome": "Beverage", "descrizione": "Bevande, acqua, alcolici e caffetteria", "colore": "#0ea5e9"},
     {"nome": "Materiali", "descrizione": "Materiali, attrezzature, monouso, detergenza e packaging", "colore": "#64748b"},
-    {"nome": "Giocattoli", "descrizione": "Giocattoli", "colore": "#8b5cf6"},
-    {"nome": "Snack", "descrizione": "Snack e prodotti da spuntino", "colore": "#f59e0b"},
 ]
 
 
