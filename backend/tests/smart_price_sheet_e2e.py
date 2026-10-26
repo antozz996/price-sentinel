@@ -63,6 +63,7 @@ def seed() -> None:
                   (2,2,'WATER-75','Water B',10,'piece','2026-01-01',2)
                 on conflict do nothing;
                 select setval(pg_get_serial_sequence('supplier_product_aliases','id'), 2, true);
+                select setval(pg_get_serial_sequence('fornitori','id'), 3, true);
                 select setval(pg_get_serial_sequence('listino_master','id'), 2, true);
                 """
             )
