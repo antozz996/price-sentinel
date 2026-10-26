@@ -12,6 +12,21 @@ FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sheets_sync_synthetic.json"
 
 
 class SheetSyncDryRunTests(unittest.TestCase):
+    def test_dynamic_supplier_headers_preserve_new_names_and_ignore_notes(self):
+        snapshot = json.loads(FIXTURE_PATH.read_text(encoding='utf-8'))['values']
+        snapshot['BEVERAGE'] = [
+            ['Prodotto', 'Unità di Misura', 'EUPHORIA SRL', 'NUOVO FORNITORE', 'NOTE', 'FORNITORE SENZA PREZZI'],
+            ['Prodotto test', 'BT', 12.5, 13, 'non è un fornitore'],
+        ]
+        report = stage_snapshot(snapshot, dynamic_supplier_headers=True)
+        rows = [r for r in report['candidates'] if r['source_sheet'] == 'BEVERAGE']
+        self.assertEqual({r['supplier'] for r in rows}, {'EUPHORIA SRL', 'NUOVO FORNITORE'})
+        self.assertIn('FORNITORE SENZA PREZZI', report['source_suppliers'])
+        self.assertNotIn('NOTE', report['source_suppliers'])
+        self.assertNotIn('BEVERAGE', report['missing_sources'])
+        self.assertFalse(any(r['source_sheet'] == 'GIOCATTOLI' for r in report['candidates']))
+        self.assertEqual(len({r['source_product_sku'] for r in rows}), 1)
+
     def setUp(self):
         self.snapshot = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 

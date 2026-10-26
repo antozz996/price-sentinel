@@ -20,6 +20,7 @@ class ClipboardPreviewRequest(BaseModel):
 
 
 class GoogleSheetDryRunRequest(BaseModel):
+    dynamic_supplier_headers: bool = False
     spreadsheet_id: str = Field(pattern=r"^[A-Za-z0-9_-]{15,200}$")
     title: str = Field(min_length=1, max_length=200)
     values: dict[str, list[list[Any]]]
@@ -41,6 +42,9 @@ class GoogleSheetDryRunRequest(BaseModel):
         if set(self.values) - set(widths):
             raise ValueError("La richiesta contiene schede non previste")
         cells = 0
+        if self.dynamic_supplier_headers:
+            for tab in ('FOOD', 'BEVERAGE', 'COMPARAZIONE MATERIALI', 'FRUTTA E VERDURA'):
+                widths[tab] = (1000, 28)
         for tab, rows in self.values.items():
             max_rows, max_columns = widths[tab]
             if len(rows) > max_rows or any(len(row) > max_columns for row in rows):

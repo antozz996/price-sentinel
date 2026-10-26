@@ -116,15 +116,17 @@ def _resolve_food_layout(layout: SheetLayout, header: list[Any]) -> SheetLayout:
     )
 
 
-def _supplier_header_matches(actual: str, expected: str) -> bool:
-    pair = {_label(actual), _label(expected)}
-    return pair == {"orizzonti", "sunrise"} or _label(actual) == _label(expected)
     origin_index = _header_index(header, "RIGA FOOD ORIGINALE")
     return replace(
         layout,
         columns=columns,
         source_row_index=origin_index if origin_index is not None else layout.source_row_index,
     )
+
+
+def _supplier_header_matches(actual: str, expected: str) -> bool:
+    pair = {_label(actual), _label(expected)}
+    return pair == {"orizzonti", "sunrise"} or _label(actual) == _label(expected)
 
 
 def _price(value: Any) -> tuple[str | None, str]:
@@ -261,6 +263,7 @@ def stage_snapshot(
     *,
     spreadsheet_id: str = "",
     notes: Mapping[str, Mapping[str, str]] | None = None,
+    dynamic_supplier_headers: bool = False,
 ) -> dict[str, Any]:
     """Return an immutable-in-spirit preview; no persistent writes or network calls."""
     notes = notes or {}
@@ -300,11 +303,30 @@ def stage_snapshot(
     if not exclusion_valid:
         warnings.append({"tab": EXCLUSION_TAB, "code": "invalid_exclusion_register_fail_closed"})
     candidates: list[dict] = []
+    source_suppliers: set[str] = set()
     sector_summary: list[dict] = []
     missing_sources: list[str] = list(missing_category_tabs)
     for base_layout in SOURCES:
+        if dynamic_supplier_headers and base_layout.title == 'GIOCATTOLI':
+            continue
         rows = value_ranges.get(base_layout.title)
         layout = _resolve_food_layout(base_layout, rows[0]) if rows else base_layout
+        if dynamic_supplier_headers and rows:
+            metadata_headers = {'peso', 'unita di misura', 'unità di misura', 'unita/collo osservato', 'unità/collo osservato', 'um prezzo', 'fornitore scelto', 'miglior fornitore', 'quanti pezzi a cartone', 'riga food originale'}
+            columns = []
+            for index, header in enumerate(rows[0][2:], start=2):
+                name = _text(header)
+                label = _label(name)
+                if not name or label in metadata_headers or label.startswith(('note', 'descrizione', 'um ', 'unità', 'unita')):
+                    continue
+                if index == layout.unit_index:
+                    continue
+                following = _label(_cell(rows[0], index + 1))
+                columns.append(SupplierColumn(index, name,
+                    unit_index=index + 1 if following == 'um prezzo' else None,
+                    note_index=index + 1 if following.startswith(('note', 'descrizione')) else None))
+            layout = replace(layout, columns=tuple(columns))
+            source_suppliers.update(column.name for column in columns)
         if layout.title == "FOOD" and not exclusion_valid:
             missing_sources.append(EXCLUSION_TAB)
             continue
@@ -412,6 +434,7 @@ def stage_snapshot(
                 supplier_note = _text(_cell(row, supplier.note_index))
                 packaging_note = _text(_cell(row, layout.packaging_note_index))
                 data = {
+                    'source_product_key': f"'{layout.title}'!{rownum}" if ' ' in layout.title else f'{layout.title}!{rownum}',
                     "sector": layout.sector, "subcategory": subcategory,
                     "source_sheet": layout.title,
                     "source_row": rownum, "source_original_row": source_original_row,
@@ -424,9 +447,10 @@ def stage_snapshot(
                     "packaging_note": packaging_note or None,
                     "cell_note": original_note or None,
                 }
+                data['source_product_sku'] = 'SG3-' + hashlib.sha256(data['source_product_key'].encode()).hexdigest()[:16].upper()
                 # Hash is an observation fingerprint, NOT the canonical product key.
                 stable = {k: v for k, v in data.items()
-                          if k not in {"source_row", "source_original_row", "source_cell"}}
+                          if k not in {"source_row", "source_original_row", "source_cell", "source_product_key", "source_product_sku"}}
                 data["observation_hash"] = hashlib.sha256(
                     json.dumps(stable, ensure_ascii=False, sort_keys=True, default=str)
                     .encode("utf-8")
@@ -434,6 +458,7 @@ def stage_snapshot(
                 candidates.append(data)
         sector_summary.append(tally)
     report = {
+        'source_suppliers': sorted(source_suppliers),
         "mode": "dry_run_only",
         "spreadsheet_id": spreadsheet_id,
         "source_title_expected": "santo graal",

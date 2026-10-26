@@ -6,14 +6,13 @@ const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 const GOOGLE_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 const SOURCE_RANGES = [
-  { title: 'FOOD', range: "'FOOD'!A1:K1000" },
+  { title: 'FOOD', range: "'FOOD'!A1:AB1000" },
   { title: 'Carne', range: "'Carne'!A1:K1000" },
   { title: 'Pesce', range: "'Pesce'!A1:K1000" },
   { title: 'Varie', range: "'Varie'!A1:K1000" },
-  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:L1000" },
-  { title: 'COMPARAZIONE MATERIALI', range: "'COMPARAZIONE MATERIALI'!A1:N1000" },
-  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:J1000" },
-  { title: 'GIOCATTOLI', range: "'GIOCATTOLI'!A1:O1000" },
+  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:AB1000" },
+  { title: 'COMPARAZIONE MATERIALI', range: "'COMPARAZIONE MATERIALI'!A1:AB1000" },
+  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:AB1000" },
   { title: 'CONTROLLO_ESCLUSIONI', range: "'CONTROLLO_ESCLUSIONI'!A1:F100" },
 ]
 
@@ -66,6 +65,7 @@ type SectorSummary = {
   skipped_empty: number
 }
 type DryRunReport = {
+  source_suppliers?: string[]
   spreadsheet_id?: string
   candidate_count: number
   skipped_empty_count?: number
@@ -291,6 +291,27 @@ export default function SantoGraalSyncPreview() {
   const [supplierOptions, setSupplierOptions] = useState<SupplierRecord[]>([])
   const [supplierMappings, setSupplierMappings] = useState<Record<string, string>>({})
   const [supplierLoadError, setSupplierLoadError] = useState<string | null>(null)
+  const [newSupplierNames, setNewSupplierNames] = useState<string[]>([])
+  const [supplierFiscalId, setSupplierFiscalId] = useState('')
+  const [supplierRegistrationBusy, setSupplierRegistrationBusy] = useState(false)
+
+  async function registerNewSheetSupplier() {
+    const name = newSupplierNames[0]
+    if (!name || supplierRegistrationBusy) return
+    setSupplierRegistrationBusy(true)
+    try {
+      const supplier = await fetchWithAuth('/fornitori/sheet-registration', {
+        method: 'POST', body: JSON.stringify({ nome_azienda: name, partita_iva: supplierFiscalId.trim() || null }),
+      }) as SupplierRecord
+      setSupplierOptions(previous => [...previous.filter(row => row.id !== supplier.id), supplier])
+      setSupplierMappings(previous => ({ ...previous, [normalizeName(name)]: String(supplier.id) }))
+      setNewSupplierNames(previous => previous.slice(1))
+      setSupplierFiscalId('')
+      setSupplierLoadError(null)
+    } catch (err) {
+      setSupplierLoadError(err instanceof Error ? err.message : 'Registrazione fornitore non riuscita')
+    } finally { setSupplierRegistrationBusy(false) }
+  }
   const [priceImportBusy, setPriceImportBusy] = useState(false)
   const [priceCommitBusy, setPriceCommitBusy] = useState(false)
   const [priceImportError, setPriceImportError] = useState<string | null>(null)
@@ -443,7 +464,7 @@ export default function SantoGraalSyncPreview() {
 
       const preview = await fetchPreviewApi('/smart-price-sheet/google-dry-run', {
         method: 'POST',
-        body: JSON.stringify({ spreadsheet_id: spreadsheetId, title, values }),
+        body: JSON.stringify({ spreadsheet_id: spreadsheetId, title, values, dynamic_supplier_headers: true }),
       }) as DryRunReport
       setMappingSourceId(spreadsheetId)
       setReport(preview)
@@ -521,20 +542,21 @@ export default function SantoGraalSyncPreview() {
         const activeSuppliers = Array.isArray(supplierData) ? supplierData : []
         setSupplierOptions(activeSuppliers)
         setSupplierLoadError(null)
-        const sourceNames = Array.from(new Map(preview.candidates
-          .filter(isImportableCandidate)
+        const sourceNames = preview.source_suppliers || Array.from(new Map(preview.candidates
           .map(item => [normalizeName(item.supplier), item.supplier] as const)).values())
         const automatic: Record<string, string> = {}
         sourceNames.forEach(name => {
           const normalized = normalizeName(name)
-          let matches = activeSuppliers.filter(item => normalizeName(item.nome_azienda) === normalized)
+          const supplierName = normalized === 'orizzonti' ? 'sunrise' : normalized
+          let matches = activeSuppliers.filter(item => normalizeName(item.nome_azienda) === supplierName)
           if (matches.length !== 1) {
-            const compact = normalized.replace(/\s+/g, '')
+            const compact = supplierName.replace(/\s+/g, '')
             matches = activeSuppliers.filter(item => normalizeName(item.nome_azienda).replace(/\s+/g, '').includes(compact))
           }
           if (matches.length === 1) automatic[normalized] = String(matches[0].id)
         })
         setSupplierMappings(previous => ({ ...automatic, ...previous }))
+        setNewSupplierNames(sourceNames.filter(name => !automatic[normalizeName(name)] && !supplierMappings[normalizeName(name)]))
       } catch {
         setSupplierOptions([])
         setSupplierLoadError('Non riesco a leggere i fornitori di Price Sentinel. Senza una corrispondenza fornitore non importo i prezzi.')
@@ -773,6 +795,19 @@ export default function SantoGraalSyncPreview() {
 
   return (
     <section className="glass-panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {newSupplierNames.length > 0 && <div role="dialog" aria-modal="true" aria-labelledby="new-sheet-supplier-title" style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.8)', display: 'grid', placeItems: 'center', padding: 20 }}>
+        <form onSubmit={event => { event.preventDefault(); void registerNewSheetSupplier() }} style={{ background: '#171923', padding: 24, borderRadius: 12, width: 'min(100%, 460px)' }}>
+          <h3 id="new-sheet-supplier-title">Nuovo fornitore nello Sheet</h3>
+          <p><strong>{newSupplierNames[0]}</strong></p>
+          <p>Puoi registrarlo ora e completare i dati fiscali in seguito.</p>
+          <label>Partita IVA (facoltativa)<input value={supplierFiscalId} onChange={event => setSupplierFiscalId(event.target.value)} maxLength={50} /></label>
+          {supplierLoadError && <p role="alert">{supplierLoadError}</p>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+            <button type="submit" className="btn btn-primary" disabled={supplierRegistrationBusy}>{supplierRegistrationBusy ? 'Registrazione…' : 'Registra fornitore'}</button>
+            <button type="button" className="btn" disabled={supplierRegistrationBusy} onClick={() => { setNewSupplierNames(previous => previous.slice(1)); setSupplierFiscalId('') }}>Associa più tardi</button>
+          </div>
+        </form>
+      </div>}
       <div>
         <h3 style={{ margin: 0 }}>Collega il Santo Graal</h3>
         <p style={{ color: 'var(--text-secondary)', margin: '6px 0 0', maxWidth: 900 }}>

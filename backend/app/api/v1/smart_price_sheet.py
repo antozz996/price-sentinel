@@ -619,6 +619,7 @@ async def google_sheet_dry_run(
     report = stage_snapshot(
         payload.values,
         spreadsheet_id=payload.spreadsheet_id,
+        dynamic_supplier_headers=payload.dynamic_supplier_headers,
     )
     report["workbook_title"] = payload.title.strip()
     return report

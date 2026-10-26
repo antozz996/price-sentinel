@@ -176,6 +176,15 @@ async def run() -> None:
         )
         check("supplier sector can be enabled", response.status_code == 200)
 
+        provisional = await client.post('/api/v1/fornitori/sheet-registration', headers=admin,
+            json={'nome_azienda': 'Synthetic Sheet Supplier Without Fiscal Data'})
+        check('sheet supplier can register without fiscal data', provisional.status_code == 200
+            and provisional.json()['partita_iva'].startswith('TEMP'))
+        repeated = await client.post('/api/v1/fornitori/sheet-registration', headers=admin,
+            json={'nome_azienda': 'Synthetic Sheet Supplier Without Fiscal Data'})
+        check('sheet supplier registration is idempotent', repeated.status_code == 200
+            and repeated.json()['id'] == provisional.json()['id'])
+
         response = await client.post(
             "/api/v1/smart-price-sheet/preview",
             headers=admin,
