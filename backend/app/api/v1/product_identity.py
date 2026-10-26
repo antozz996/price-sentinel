@@ -220,7 +220,10 @@ async def bootstrap_santo_graal_catalog(
         normalized = normalize_text(name)
         # Same normalized item and unit reuse one canonical SKU across source tabs.
         stable_source_key = "|".join((normalized, normalize_text(item.category or "")))
-        sku = "SG-" + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
+        # SG- belongs to the archived first catalog. A separate stable namespace
+        # lets a fresh import create active records without reviving old prices,
+        # aliases or purchase rules attached to those archived products.
+        sku = "SG2-" + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
         previous = requested.get(sku)
         if previous and normalize_text(previous.canonical_name) != normalized:
             raise HTTPException(409, "Collisione SKU durante la preparazione del catalogo")
@@ -296,7 +299,10 @@ async def bootstrap_santo_graal_catalog(
     # "ortofrutta" category. Preserve the products and prices while moving only
     # their taxonomy into the current Food → Frutta hierarchy.
     legacy_fruit_products = list((await db.scalars(
-        select(Product).where(func.lower(func.btrim(Product.category)) == "ortofrutta")
+        select(Product).where(
+            func.lower(func.btrim(Product.category)) == "ortofrutta",
+            Product.is_active.is_(True),
+        )
     )).all())
     for product in legacy_fruit_products:
         if product.category != "Food" or product.subcategory != "Frutta":
