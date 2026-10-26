@@ -20,6 +20,34 @@ EXPECTED_TABS = {
     "GIOCATTOLI": "Giocattoli",
     "ALTRO": "Altro",
 }
+NEW_FORMAT_TABS = {
+    "FOOD": "Food",
+    "BEVERAGE": "Beverage",
+    "FRUTTA E VERDURA": "Food",
+    "MATERIALI": "Materiali",
+}
+NEW_FORMAT_HEADERS = {
+    "id_prodotto": "ID_PRODOTTO",
+    "prodotto": "PRODOTTO",
+    "sottocategoria": "SOTTOCATEGORIA",
+    "id_fornitore": "ID_FORNITORE",
+    "fornitore": "FORNITORE",
+    "dicitura_fornitore": "DICITURA_FORNITORE",
+    "marca": "MARCA",
+    "quantita_confezione": "QUANTITA_CONFEZIONE",
+    "unita_misura": "UNITA_MISURA",
+    "prezzo_confezione_eur": "PREZZO_CONFEZIONE_EUR",
+    "data_prezzo": "DATA_PREZZO",
+    "note": "NOTE",
+}
+SUPPLIER_HEADERS = {
+    "fornitore": "FORNITORE",
+    "partita_iva": "PARTITA_IVA",
+    "food": "FOOD",
+    "beverage": "BEVERAGE",
+    "frutta_e_verdura": "FRUTTA_E_VERDURA",
+    "materiali": "MATERIALI",
+}
 REQUIRED_HEADERS = {
     "sottocategoria": "Sottocategoria",
     "prodotto di riferimento": "Prodotto di riferimento",
@@ -97,6 +125,210 @@ def _parse_quantity(value: Any) -> Decimal | None:
     return amount if amount.is_finite() and amount > 0 else None
 
 
+def _header_map(row: tuple[Any, ...], required: dict[str, str]) -> dict[str, int] | None:
+    indices = {_normalize(value).replace(" ", "_"): index for index, value in enumerate(row) if value is not None}
+    if not set(required).issubset(indices):
+        return None
+    return indices
+
+
+def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
+    missing = sorted((set(NEW_FORMAT_TABS) | {"FORNITORI"}) - set(workbook.sheetnames))
+    if missing:
+        raise ValueError("Nel nuovo file mancano le schede: " + ", ".join(missing))
+
+    supplier_sheet = workbook["FORNITORI"]
+    supplier_header = next((row for row in supplier_sheet.iter_rows(min_row=1, max_row=10, values_only=True)
+                            if _header_map(row, SUPPLIER_HEADERS)), None)
+    if supplier_header is None:
+        raise ValueError("La scheda FORNITORI non contiene le intestazioni previste.")
+    supplier_indices = _header_map(supplier_header, SUPPLIER_HEADERS) or {}
+    source_supplier_sectors: dict[str, list[str]] = {}
+    source_suppliers: list[str] = []
+    sector_columns = {
+        "food": "Food", "beverage": "Beverage",
+        "frutta_e_verdura": "Food", "materiali": "Materiali",
+    }
+    for row in supplier_sheet.iter_rows(values_only=True):
+        name = _text(row[supplier_indices["fornitore"]] if supplier_indices["fornitore"] < len(row) else None)
+        if not name or _normalize(name) == "fornitore":
+            continue
+        sectors = [sector for column, sector in sector_columns.items()
+                   if _normalize(row[supplier_indices[column]] if supplier_indices[column] < len(row) else None) in {"si", "sì", "yes", "true", "1"}]
+        source_suppliers.append(name)
+        source_supplier_sectors[name] = sorted(set(sectors))
+
+    candidates: list[dict[str, Any]] = []
+    catalog_items: dict[str, dict[str, Any]] = {}
+    warnings: list[dict[str, Any]] = []
+    sector_summary: list[dict[str, Any]] = []
+    excluded_count = 0
+    for tab, sector in NEW_FORMAT_TABS.items():
+        sheet = workbook[tab]
+        header_row = None
+        header_row_number = 0
+        indices = None
+        for row_number, row in enumerate(sheet.iter_rows(values_only=True), start=1):
+            indices = _header_map(row, NEW_FORMAT_HEADERS)
+            if indices is not None:
+                header_row, header_row_number = row, row_number
+                break
+            if row_number >= 10:
+                break
+        if header_row is None or indices is None:
+            raise ValueError(f"La scheda {tab} non contiene le intestazioni del nuovo formato.")
+        tally = {"sector": sector, "tab": tab, "products": 0, "quotes": 0,
+                 "excluded": 0, "blocked": 0, "review": 0, "skipped_empty": 0,
+                 "duplicate_products": 0}
+        product_ids: set[str] = set()
+        for row_number, row in enumerate(sheet.iter_rows(min_row=header_row_number + 1, values_only=True), start=header_row_number + 1):
+            if row_number - header_row_number > 5000:
+                raise ValueError(f"La scheda {tab} supera il limite di 5.000 righe dati.")
+            def cell(key: str) -> Any:
+                index = indices[key]
+                return row[index] if index < len(row) else None
+
+            product_id = _text(cell("id_prodotto"))
+            product = _text(cell("prodotto"))
+            supplier = _text(cell("fornitore"))
+            if not product_id and not product and not supplier:
+                continue
+            notes = _text(cell("note"))
+            origin_match = re.search(r"Origine\s+(.+?!)(?:[A-Z]+)?([0-9]+)", notes)
+            source_key = origin_match.group(1) + origin_match.group(2) if origin_match else f"{tab}!{row_number}"
+            generated_sku = "SG3-" + hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:16].upper()
+            if not product_id:
+                product_id = generated_sku
+            elif product_id != generated_sku:
+                warnings.append({"tab": tab, "row": row_number, "code": "product_id_provenance_mismatch", "id_prodotto": product_id})
+                source_key = f"workbook-product:{product_id}"
+                generated_sku = product_id
+
+            unit = _text(cell("unita_misura"))
+            quantity = _parse_quantity(cell("quantita_confezione"))
+            canonical_unit = unit if unit and quantity == Decimal("1") else None
+            catalog_item = {
+                "source_sheet": tab,
+                "source_product_key": source_key,
+                "source_product_sku": product_id,
+                "canonical_name": product,
+                "comparison_unit": canonical_unit,
+                "category": sector,
+                "subcategory": _text(cell("sottocategoria")) or ("Frutta" if tab == "FRUTTA E VERDURA" else None),
+            }
+            if product and product_id:
+                previous_item = catalog_items.get(product_id)
+                if previous_item and _normalize(previous_item["canonical_name"]) != _normalize(product):
+                    raise ValueError(f"L’ID prodotto {product_id} identifica nomi diversi nella scheda {tab}.")
+                if previous_item:
+                    if not previous_item["comparison_unit"] and canonical_unit:
+                        previous_item["comparison_unit"] = canonical_unit
+                    if not previous_item["subcategory"] and catalog_item["subcategory"]:
+                        previous_item["subcategory"] = catalog_item["subcategory"]
+                else:
+                    catalog_items[product_id] = catalog_item
+                if product_id not in product_ids:
+                    tally["products"] += 1
+                    product_ids.add(product_id)
+            if supplier:
+                source_supplier_sectors.setdefault(supplier, [])
+                if supplier not in source_suppliers:
+                    source_suppliers.append(supplier)
+                if sector not in source_supplier_sectors[supplier]:
+                    source_supplier_sectors[supplier].append(sector)
+
+            if "esclusa nel santo graal" in _normalize(notes):
+                excluded_count += 1
+                tally["excluded"] += 1
+                continue
+            raw_price = cell("prezzo_confezione_eur")
+            if not _text(raw_price):
+                tally["skipped_empty"] += 1
+                continue
+            if not product_id or not product or not supplier:
+                warnings.append({"tab": tab, "row": row_number, "code": "incomplete_offer_row"})
+                tally["blocked"] += 1
+                continue
+
+            price, price_state = _parse_price(raw_price)
+            reasons = ["canonical_id_not_mapped"]
+            status = "needs_mapping"
+            if price_state != "valid":
+                status = "blocked"
+                reasons.append(price_state)
+            # The workbook amount is explicitly a package amount. Do not turn
+            # it into a unit amount without a confirmed package quantity.
+            if not unit:
+                reasons.append("unit_not_specified")
+            elif quantity and quantity != Decimal("1"):
+                reasons.append("package_price_not_single_unit")
+            if price is not None and Decimal(price).as_tuple().exponent < -4:
+                reasons.append("precision_review")
+
+            display_price = price if price is not None else raw_price
+            source_cell = f"{get_column_letter(indices['prezzo_confezione_eur'] + 1)}{row_number}"
+            candidates.append({
+                "source_product_key": source_key,
+                "source_product_sku": product_id,
+                "sector": sector,
+                "subcategory": _text(cell("sottocategoria")) or ("Frutta" if tab == "FRUTTA E VERDURA" else None),
+                "source_sheet": tab,
+                "source_row": row_number,
+                "source_original_row": row_number,
+                "source_cell": source_cell,
+                "product": product,
+                "supplier": supplier,
+                "price_role": "negotiated_agreement",
+                "requires_product_mapping": True,
+                "reference_unit": unit if unit and quantity == Decimal("1") else None,
+                "supplier_price_unit": unit if unit and quantity == Decimal("1") else None,
+                "quoted_value": raw_price,
+                "numeric_price": display_price,
+                "status": status,
+                "reasons": reasons,
+                "row_note": _text(cell("dicitura_fornitore")) or None,
+                "packaging_note": "; ".join(
+                    f"{label}: {value}" for key, label in (
+                        ("marca", "Marca"), ("quantita_confezione", "Quantità confezione"),
+                        ("unita_misura", "Unità misura dichiarata"),
+                    ) if (value := _text(cell(key)) )
+                ) or "Prezzo importato come prezzo confezione; formato o unità da completare col fornitore.",
+                "cell_note": notes or None,
+            })
+            tally["quotes"] += 1
+            if status == "blocked":
+                tally["blocked"] += 1
+            else:
+                tally["review"] += 1
+        sector_summary.append(tally)
+
+    return {
+        "mode": "dry_run_only",
+        "spreadsheet_id": "workbook:" + hashlib.sha256(file_bytes).hexdigest(),
+        "source_title_expected": "PRICE SENTINEL — SANTO GRAAL",
+        "workbook_title": "PRICE SENTINEL — SANTO GRAAL",
+        "no_contract_writes": True,
+        "candidate_count": len(candidates),
+        "skipped_empty_count": sum(item["skipped_empty"] for item in sector_summary),
+        "sector_summary": sector_summary,
+        "catalog_items": list(catalog_items.values()),
+        "food_audit": None,
+        "missing_sources": [],
+        "warnings": warnings,
+        "source_suppliers": list(dict.fromkeys(source_suppliers)),
+        "source_supplier_sectors": source_supplier_sectors,
+        "candidates": candidates,
+        "rules": {
+            "agreement": "valid_until_next_approved_listino_unless_explicit_expiry",
+            "auto_commit_enabled": False,
+            "canonical_product_mapping": "required_before_import",
+            "source": "Nuovo workbook Santo Graal, importo della confezione come dichiarato.",
+            "price_semantics": "package_price; never converted to unit price without confirmed package quantity",
+        },
+        "excluded_count": excluded_count,
+    }
+
+
 def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
     """Return the same candidate shape as the Google Sheet dry-run, without DB writes."""
     try:
@@ -105,6 +337,8 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
         raise ValueError("File Excel non leggibile. Usa il workbook migrato in formato .xlsx.") from exc
 
     try:
+        if set(NEW_FORMAT_TABS).issubset(workbook.sheetnames) and "FORNITORI" in workbook.sheetnames:
+            return _new_format_preview(workbook, file_bytes)
         missing = sorted(set(EXPECTED_TABS) - set(workbook.sheetnames))
         if missing:
             raise ValueError("Nel file mancano le schede categoria: " + ", ".join(missing))

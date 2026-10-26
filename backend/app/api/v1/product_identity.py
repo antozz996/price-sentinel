@@ -1,5 +1,6 @@
 from datetime import datetime, date
 import hashlib
+import re
 from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
@@ -64,6 +65,7 @@ class ProductUpdate(BaseModel):
 class SantoGraalCatalogSeedItem(BaseModel):
     source_sheet: str = Field(min_length=1, max_length=100)
     source_product_key: Optional[str] = Field(default=None, max_length=255)
+    source_product_sku: Optional[str] = Field(default=None, max_length=30)
     canonical_name: str = Field(min_length=1, max_length=255)
     comparison_unit: Optional[str] = Field(default=None, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
@@ -224,7 +226,9 @@ async def bootstrap_santo_graal_catalog(
         # SG- belongs to the archived first catalog. A separate stable namespace
         # lets a fresh import create active records without reviving old prices,
         # aliases or purchase rules attached to those archived products.
-        sku = ("SG3-" if item.source_product_key else "SG2-") + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
+        sku = item.source_product_sku or (("SG3-" if item.source_product_key else "SG2-") + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper())
+        if item.source_product_sku and not re.fullmatch(r"SG3-[A-F0-9]{16}", item.source_product_sku):
+            raise HTTPException(422, "SKU sorgente non valido: sono ammessi solo ID SG3 del file Santo Graal")
         previous = requested.get(sku)
         if previous and normalize_text(previous.canonical_name) != normalized:
             raise HTTPException(409, "Collisione SKU durante la preparazione del catalogo")

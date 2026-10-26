@@ -126,6 +126,10 @@ jobs:
         working-directory: backend
         run: python -m unittest discover -s tests -p 'test_sheet_sync_google_auth.py' -v
 
+      - name: Unit — New Santo Graal workbook import
+        working-directory: backend
+        run: python tests/normalized_price_workbook_unit.py
+
       - name: E2E — Isolated PostgreSQL workflows (writes disposable DBs only)
         run: python backend/scripts/run_ci_disposable_e2e.py --github-ephemeral-only
 

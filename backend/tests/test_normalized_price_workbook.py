@@ -1,9 +1,12 @@
 from io import BytesIO
+import hashlib
 
 from openpyxl import Workbook
 
 from app.services.normalized_price_workbook import (
     EXPECTED_TABS,
+    NEW_FORMAT_TABS,
+    NEW_FORMAT_HEADERS,
     REQUIRED_HEADERS,
     parse_normalized_price_workbook,
 )
@@ -154,3 +157,76 @@ def test_normalized_workbook_rejects_missing_category_sheet() -> None:
         assert "mancano le schede categoria" in str(error).lower()
     else:
         raise AssertionError("Missing category sheets must fail closed")
+
+
+def test_new_workbook_imports_package_prices_without_units_and_ignores_old_supplier_ids() -> None:
+    workbook = Workbook()
+    workbook.active.title = "FOOD"
+    for tab in NEW_FORMAT_TABS:
+        sheet = workbook[tab] if tab == "FOOD" else workbook.create_sheet(tab)
+        sheet.append(list(NEW_FORMAT_HEADERS.values()))
+
+    def sku_for(source_key: str) -> str:
+        return "SG3-" + hashlib.sha256(source_key.encode()).hexdigest()[:16].upper()
+
+    workbook["FOOD"].append([
+        sku_for("FOOD!2"), "GELATO", "Varie", "999", "MELIUS", "GELATO 2,8 KG",
+        None, None, None, 14.20, None, "Origine FOOD!C2",
+    ])
+    workbook["FOOD"].append([
+        sku_for("FOOD!2"), "GELATO", "Varie", "123", "MARR", None,
+        None, None, None, 13.80, None, "Origine FOOD!D2",
+    ])
+    # Same description, different source product row: keep as a separate product.
+    workbook["FOOD"].append([
+        sku_for("FOOD!4"), "GELATO", "Varie", "999", "MELIUS", None,
+        None, None, None, 12.50, None, "Origine FOOD!C4",
+    ])
+    workbook["BEVERAGE"].append([
+        sku_for("BEVERAGE!2"), "ACQUA 50 CL", None, "999", "MELIUS", None,
+        None, 1, "PZ", 0.35, None, "Origine BEVERAGE!C2",
+    ])
+    registry = workbook.create_sheet("FORNITORI")
+    registry.append(["ID_FORNITORE", "FORNITORE", "PARTITA_IVA", "FOOD", "BEVERAGE", "FRUTTA_E_VERDURA", "MATERIALI", "NOTE"])
+    registry.append(["999", "MELIUS", None, "SI", "SI", "NO", "NO", "ID vecchio da ignorare"])
+    registry.append(["123", "MARR", None, "SI", "NO", "NO", "NO", ""])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    report = parse_normalized_price_workbook(buffer.getvalue())
+
+    assert report["mode"] == "dry_run_only"
+    assert report["candidate_count"] == 4
+    assert report["source_supplier_sectors"] == {"MELIUS": ["Beverage", "Food"], "MARR": ["Food"]}
+    gelato_offers = [item for item in report["candidates"] if item["product"] == "GELATO"]
+    assert len(gelato_offers) == 3
+    assert gelato_offers[0]["source_product_sku"] == sku_for("FOOD!2")
+    assert gelato_offers[0]["source_product_sku"] == gelato_offers[1]["source_product_sku"]
+    assert gelato_offers[0]["source_product_sku"] != gelato_offers[2]["source_product_sku"]
+    assert gelato_offers[0]["numeric_price"] == "14.2"
+    assert gelato_offers[0]["status"] == "needs_mapping"
+    assert gelato_offers[0]["reference_unit"] is None
+    assert "unit_not_specified" in gelato_offers[0]["reasons"]
+    assert "999" not in [item["supplier"] for item in report["candidates"]]
+
+
+def test_new_workbook_does_not_treat_multi_unit_package_amount_as_unit_price() -> None:
+    workbook = Workbook()
+    workbook.active.title = "FOOD"
+    for tab in NEW_FORMAT_TABS:
+        sheet = workbook[tab] if tab == "FOOD" else workbook.create_sheet(tab)
+        sheet.append(list(NEW_FORMAT_HEADERS.values()))
+    registry = workbook.create_sheet("FORNITORI")
+    registry.append(["ID_FORNITORE", "FORNITORE", "PARTITA_IVA", "FOOD", "BEVERAGE", "FRUTTA_E_VERDURA", "MATERIALI", "NOTE"])
+    key = "FOOD!2"
+    sku = "SG3-" + hashlib.sha256(key.encode()).hexdigest()[:16].upper()
+    workbook["FOOD"].append([sku, "GELATO 2,8 KG", "Varie", "old-id", "MELIUS", None, None, 2.8, "KG", 14.2, None, "Origine FOOD!C2"])
+    buffer = BytesIO()
+    workbook.save(buffer)
+
+    offer = parse_normalized_price_workbook(buffer.getvalue())["candidates"][0]
+
+    assert offer["numeric_price"] == "14.2"
+    assert offer["reference_unit"] is None
+    assert offer["supplier_price_unit"] is None
+    assert "package_price_not_single_unit" in offer["reasons"]
