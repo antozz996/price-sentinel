@@ -118,4 +118,23 @@ check(
     scope.eligible_supplier_ids(product_id=1, category="beverage", supplier_ids={20}) == {20},
 )
 
+food_scope = SupplierCatalogScope(
+    direct_pairs=set(),
+    categories_by_supplier={},
+    explicit_categories={(20, "food"): True, (30, "food"): True},
+    subcategories_by_supplier_category={(30, "food"): {"frutta"}},
+)
+check(
+    "another supplier's food subcategory does not override category permission",
+    food_scope.eligible_supplier_ids(
+        product_id=1, category="Food", subcategory="Carne", supplier_ids={20}
+    ) == {20},
+)
+check(
+    "own food subcategory restriction remains enforced",
+    food_scope.eligible_supplier_ids(
+        product_id=1, category="Food", subcategory="Carne", supplier_ids={30}
+    ) == set(),
+)
+
 print(json.dumps({"status": "PASS", "tests": len(results), "results": results}, indent=2))
