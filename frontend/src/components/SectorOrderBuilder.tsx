@@ -147,6 +147,12 @@ const MACRO_CATEGORIES = [
   { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: '#10b981' }
 ];
 
+function orderSector(category?: string | null): string {
+  return category?.trim().toLowerCase() === 'materiali'
+    ? 'Materiali di consumo'
+    : category?.trim() || '';
+}
+
 export const SECTOR_UOMS: Record<string, { id: string; label: string; short: string }[]> = {
   Beverage: [
     { id: 'BT', label: 'BT (Bottiglia)', short: 'BT' },
@@ -170,8 +176,9 @@ export const SECTOR_UOMS: Record<string, { id: string; label: string; short: str
 };
 
 export function getSectorUoms(category?: string | null): { id: string; label: string; short: string }[] {
-  if (category && SECTOR_UOMS[category]) {
-    return SECTOR_UOMS[category];
+  const sector = orderSector(category);
+  if (sector && SECTOR_UOMS[sector]) {
+    return SECTOR_UOMS[sector];
   }
   return [
     { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
@@ -184,6 +191,7 @@ export function getSectorUoms(category?: string | null): { id: string; label: st
 }
 
 export function normalizeDefaultUom(rawUom?: string | null, category?: string | null): string {
+  category = orderSector(category);
   if (category === 'Beverage') {
     if (!rawUom) return 'CT';
     const u = rawUom.trim().toUpperCase();
@@ -242,7 +250,7 @@ const WATER_BRANDS = [
 export function isWaterProduct(prod: ProductItem): boolean {
   const name = (prod.canonical_name || '').toLowerCase();
   const oname = (prod.order_name || '').toLowerCase();
-  const cat = (prod.category || '').toLowerCase();
+  const cat = orderSector(prod.category).toLowerCase();
   const subcat = (prod.subcategory || '').toLowerCase();
 
   for (const ex of WATER_EXCLUDE_TERMS) {
@@ -510,7 +518,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   // Filtered products
   const subcategories = useMemo(() => {
     const filteredBySector = products.filter(p => 
-      selectedSector === 'all' || p.category === selectedSector
+      selectedSector === 'all' || orderSector(p.category) === selectedSector
     );
     const set = new Set<string>();
     filteredBySector.forEach(p => {
@@ -521,7 +529,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      const matchSector = selectedSector === 'all' || p.category === selectedSector;
+      const matchSector = selectedSector === 'all' || orderSector(p.category) === selectedSector;
       const matchSubcat = selectedSubcategory === 'all' || p.subcategory === selectedSubcategory;
       const search = searchTerm.toLowerCase().trim();
       const effSup = getEffectiveSupplier(p);
@@ -1190,8 +1198,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           .map(cat => {
             const isSelected = selectedSector === cat.id;
             const count = cat.id === 'all' 
-              ? products.filter(p => allowedSectors.includes(p.category || '')).length 
-              : products.filter(p => p.category === cat.id).length;
+              ? products.filter(p => allowedSectors.includes(orderSector(p.category))).length 
+              : products.filter(p => orderSector(p.category) === cat.id).length;
 
             return (
               <button
