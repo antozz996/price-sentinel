@@ -63,6 +63,7 @@ class ProductUpdate(BaseModel):
 
 class SantoGraalCatalogSeedItem(BaseModel):
     source_sheet: str = Field(min_length=1, max_length=100)
+    source_product_key: Optional[str] = Field(default=None, max_length=255)
     canonical_name: str = Field(min_length=1, max_length=255)
     comparison_unit: Optional[str] = Field(default=None, max_length=50)
     category: Optional[str] = Field(default=None, max_length=100)
@@ -219,11 +220,11 @@ async def bootstrap_santo_graal_catalog(
             raise HTTPException(422, "Prodotto e scheda sono obbligatori")
         normalized = normalize_text(name)
         # Same normalized item and unit reuse one canonical SKU across source tabs.
-        stable_source_key = "|".join((normalized, normalize_text(item.category or "")))
+        stable_source_key = item.source_product_key or "|".join((normalized, normalize_text(item.category or "")))
         # SG- belongs to the archived first catalog. A separate stable namespace
         # lets a fresh import create active records without reviving old prices,
         # aliases or purchase rules attached to those archived products.
-        sku = "SG2-" + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
+        sku = ("SG3-" if item.source_product_key else "SG2-") + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper()
         previous = requested.get(sku)
         if previous and normalize_text(previous.canonical_name) != normalized:
             raise HTTPException(409, "Collisione SKU durante la preparazione del catalogo")
@@ -233,6 +234,7 @@ async def bootstrap_santo_graal_catalog(
                 raise HTTPException(409, f"Unità diverse per il prodotto {name}: chiarire prima dell'importazione")
             requested[sku] = SantoGraalCatalogSeedItem(
                 source_sheet=previous.source_sheet,
+                source_product_key=previous.source_product_key,
                 canonical_name=previous.canonical_name,
                 comparison_unit=old_unit or unit or None,
                 category=previous.category or item.category,

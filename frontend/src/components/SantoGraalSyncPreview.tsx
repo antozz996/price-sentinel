@@ -18,6 +18,8 @@ const SOURCE_RANGES = [
 ]
 
 type Candidate = {
+  source_product_key?: string
+  source_product_sku?: string
   sector?: string
   subcategory?: string | null
   source_sheet: string
@@ -606,11 +608,12 @@ export default function SantoGraalSyncPreview() {
     .filter(item => Boolean(item.product.trim()))
     .reduce((map, item) => {
       const unit = knownUnit(item) || null
-      const key = [item.source_sheet, normalizeName(item.product)].join('|')
+      const key = item.source_product_key || [item.source_sheet, normalizeName(item.product)].join('|')
       const previous = map.get(key)
       if (!previous || (!previous.comparison_unit && unit)) {
         map.set(key, {
           source_sheet: item.source_sheet,
+          source_product_key: item.source_product_key,
           canonical_name: item.product.trim(),
           comparison_unit: unit,
           category: item.sector || item.source_sheet,
@@ -618,7 +621,7 @@ export default function SantoGraalSyncPreview() {
         })
       }
       return map
-    }, new Map<string, { source_sheet: string; canonical_name: string; comparison_unit: string | null; category: string; subcategory?: string }>()).values())
+    }, new Map<string, { source_sheet: string; source_product_key?: string; canonical_name: string; comparison_unit: string | null; category: string; subcategory?: string }>()).values())
 
   async function initializeCatalogFromSheet() {
     if (!bootstrapProducts.length || catalogBootstrapBusy) return
@@ -673,7 +676,8 @@ export default function SantoGraalSyncPreview() {
       for (const item of importableCandidates) {
         const groupKey = [item.source_sheet, normalizeName(item.product), normalizeName(knownUnit(item))].join('|')
         const exact = exactProductsFor(item.product, knownUnit(item))
-        const selectedValue = Object.prototype.hasOwnProperty.call(stagedMappings, groupKey)
+        const sourceProduct = item.source_product_sku && catalogProducts.find(row => row.sku_interno === item.source_product_sku)
+        const selectedValue = sourceProduct ? 'sku:' + sourceProduct.sku_interno : Object.prototype.hasOwnProperty.call(stagedMappings, groupKey)
           ? stagedMappings[groupKey]
           : exact.length === 1 && exact[0].sku_interno ? 'sku:' + exact[0].sku_interno : undefined
         const product = selectedValue?.startsWith('sku:')

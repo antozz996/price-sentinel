@@ -141,6 +141,11 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
                     raise ValueError(f"La scheda {tab} supera il limite di 5.000 righe dati.")
                 product = _text(row[indices["prodotto di riferimento"]] if indices["prodotto di riferimento"] < len(row) else None)
                 supplier = _text(row[indices["fornitore"]] if indices["fornitore"] < len(row) else None)
+                original_description = _text(row[indices["dicitura del fornitore"]] if indices["dicitura del fornitore"] < len(row) else None)
+                # The migrated reference column may contain unapproved grouping
+                # (e.g. BASILICO). Preserve each original Sheet product wording.
+                if original_description:
+                    product = original_description
                 if not product and not supplier:
                     continue
                 state = _normalize(row[indices["stato"]] if indices["stato"] < len(row) else None)
@@ -190,6 +195,7 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
                 if tab == "FRUTTA E VERDURA" and not subcategory:
                     subcategory = "Frutta"
                 offer = {
+                    "source_product_key": re.sub(r"![A-Z]+([0-9]+)$", r"!\1", _text(row[indices["origine"]] if indices["origine"] < len(row) else None)) or f"{tab}!{row_number}",
                     "sector": sector,
                     "subcategory": subcategory,
                     "source_sheet": tab,
@@ -230,6 +236,7 @@ def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:
 
         duplicate_offer_count = 0
         for offer in staged_rows:
+            offer['source_product_sku'] = 'SG3-' + hashlib.sha256(offer['source_product_key'].encode()).hexdigest()[:16].upper()
             duplicate_key = (offer["source_sheet"], _normalize(offer["product"]), _normalize(offer["supplier"]))
             if duplicate_keys[duplicate_key] > 1:
                 offer["status"] = "blocked"
