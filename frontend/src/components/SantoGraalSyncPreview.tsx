@@ -601,7 +601,9 @@ export default function SantoGraalSyncPreview() {
         || normalizeName(item.reference_unit) === normalizeName(item.supplier_price_unit))
   }
   const bootstrapProducts = Array.from((report?.candidates || [])
-    .filter(item => item.status === 'needs_mapping' && Boolean(item.product.trim()))
+    // Catalog identity is independent of quote readiness. Keep products whose
+    // package price or unit still needs supplier clarification in the catalog.
+    .filter(item => Boolean(item.product.trim()))
     .reduce((map, item) => {
       const unit = knownUnit(item) || null
       const key = [item.source_sheet, normalizeName(item.product)].join('|')
