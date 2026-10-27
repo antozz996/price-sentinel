@@ -128,7 +128,7 @@ test('responsive main navigation can be opened at the mobile viewport', async ({
 })
 
 
-test('supplier offer preview finds an exact custom Sheet header without selecting calculated columns', async ({ page }, testInfo) => {
+test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edits', async ({ page }, testInfo) => {
   const supplierName = 'FORNITORE TEST'
   const request = {
     id: 7,
@@ -149,6 +149,9 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
       unita_corrente: null,
       prezzo_inviato: '4.2500',
       unita_inviata: 'BT',
+      brand_inviata: 'Marca di prova',
+      dicitura_inviata: 'Prodotto di prova bottiglia',
+      quantita_inviata: '1.000',
       non_trattato: false,
       nota_fornitore: null,
       esito: 'nuova_offerta',
@@ -156,7 +159,7 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
   }
 
   await page.addInitScript(() => {
-    localStorage.setItem('ps.santo-graal.url', 'https://docs.google.com/spreadsheets/d/ci-synthetic-sheet/edit')
+    localStorage.setItem('ps.normalized-sheet.url', 'https://docs.google.com/spreadsheets/d/ci-synthetic-sheet/edit')
   })
   await page.route('**/api/v1/**', async route => {
     const path = new URL(route.request().url()).pathname
@@ -176,7 +179,8 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
     body: `window.google={accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>callback({access_token:'ci-synthetic-token'})})}}};`,
   }))
   const sheetWrites: Array<{ method: string; body: unknown }> = []
-  let concurrentPrice = ''
+  let snapshotReads = 0
+  let currentPrice = '6.00'
   await page.route('https://sheets.googleapis.com/**', async route => {
     const url = new URL(route.request().url())
     if (route.request().method() === 'OPTIONS') {
@@ -191,32 +195,26 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
       })
       return
     }
-    if (url.pathname.endsWith('/values:batchUpdate')) {
+    if (url.pathname.endsWith(':batchUpdate')) {
       sheetWrites.push({ method: route.request().method(), body: route.request().postDataJSON() })
       await route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, json: { totalUpdatedCells: 1 } })
       return
     }
     if (url.pathname.endsWith('/values:batchGet')) {
-      const requestedRanges = url.searchParams.getAll('ranges')
-      if (requestedRanges.length === 1) {
-        concurrentPrice = '6.00'
-        await route.fulfill({
-          status: 200,
-          headers: { 'access-control-allow-origin': '*' },
-          json: { valueRanges: [{ range: requestedRanges[0], values: [[concurrentPrice]] }] },
-        })
-        return
-      }
-      const beverageHeader = ['Prodotto', 'Unità', 'NAVAS', 'ORIZZONTI', '3F', 'PASCARELLA', "CASA D'AMBRA", supplierName, 'MIGLIOR FORNITORE']
-      const beverageRow = ['PRODOTTO DI PROVA', 'BT', '5.98', '', '', '', '', concurrentPrice, '3F']
-      const ranges = ["'Carne'!A1:L1000", "'Pesce'!A1:L1000", "'Varie'!A1:L1000", "'BEVERAGE'!A1:L1000", "'COMPARAZIONE MATERIALI'!A1:N1000", "'FRUTTA E VERDURA'!A1:J1000"]
+      snapshotReads++
+      if (snapshotReads === 2) currentPrice = '6.50'
+      const headers = ['ID_PRODOTTO', 'PRODOTTO', 'SOTTOCATEGORIA', 'ID_FORNITORE', 'FORNITORE', 'DICITURA_FORNITORE', 'MARCA', 'QUANTITA_CONFEZIONE', 'UNITA_MISURA', 'PREZZO_CONFEZIONE_EUR', 'DATA_PREZZO', 'NOTE']
+      const supplierHeaders = ['ID_FORNITORE', 'FORNITORE', 'PARTITA_IVA', 'FOOD', 'BEVERAGE', 'FRUTTA_E_VERDURA', 'MATERIALI', 'NOTE']
+      const ranges = url.searchParams.getAll('ranges')
       await route.fulfill({
         status: 200,
         headers: { 'access-control-allow-origin': '*' },
         json: {
           valueRanges: ranges.map((range, index) => ({
             range,
-            values: index === 3 ? [beverageHeader, beverageRow] : [],
+            values: index === 1
+              ? [headers, ['CI-SKU-71', 'PRODOTTO DI PROVA', '', 'F-TEST', supplierName, 'Dicitura precedente', 'Marca precedente', '1', 'BT', currentPrice, '2026-10-01', '']]
+              : index === 4 ? [supplierHeaders, ['F-TEST', supplierName, '', '', 'SI', '', '', '']] : [headers],
           })),
         },
       })
@@ -225,7 +223,7 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
     await route.fulfill({
       status: 200,
       headers: { 'access-control-allow-origin': '*' },
-      json: { properties: { title: 'santo graal' }, sheets: [{ properties: { title: 'BEVERAGE' } }] },
+      json: { sheets: ['FOOD', 'BEVERAGE', 'FRUTTA E VERDURA', 'MATERIALI', 'FORNITORI'].map((title, sheetId) => ({ properties: { title, sheetId } })) },
     })
   })
 
@@ -237,26 +235,21 @@ test('supplier offer preview finds an exact custom Sheet header without selectin
   await page.getByRole('button', { name: 'Dettaglio' }).click()
   await page.getByRole('button', { name: 'Prepara anteprima Sheet' }).click()
 
-  await expect(page.getByText("'BEVERAGE'!H2")).toBeVisible()
+  await expect(page.getByText("'BEVERAGE'!F2:L2")).toBeVisible()
   await expect(page.getByText('Pronto alla conferma')).toBeVisible()
-  await expect(page.getByText("'BEVERAGE'!I2")).toHaveCount(0)
   expect(sheetWrites).toEqual([])
 
   page.once('dialog', dialog => dialog.accept())
-  await page.getByRole('button', { name: 'Conferma e scrivi nello Sheet' }).click()
-  await expect(page.getByRole('alert')).toContainText('è cambiata dopo l’anteprima')
+  await page.getByRole('button', { name: 'Conferma scrittura nello Sheet' }).click()
+  await expect(page.getByRole('alert')).toContainText('è cambiata')
   expect(sheetWrites).toEqual([])
 
   await page.getByRole('button', { name: 'Prepara anteprima Sheet' }).click()
   await expect(page.getByText('Pronto alla conferma')).toBeVisible()
   page.once('dialog', dialog => dialog.accept())
-  await page.getByRole('button', { name: 'Conferma e scrivi nello Sheet' }).click()
+  await page.getByRole('button', { name: 'Conferma scrittura nello Sheet' }).click()
   await expect(page.getByText('Scritto', { exact: true })).toBeVisible()
-  expect(sheetWrites).toEqual([{
-    method: 'POST',
-    body: {
-      valueInputOption: 'USER_ENTERED',
-      data: [{ range: "'BEVERAGE'!H2", values: [[4.25]] }],
-    },
-  }])
+  expect(sheetWrites).toHaveLength(1)
+  expect(sheetWrites[0].method).toBe('POST')
+  expect((sheetWrites[0].body as any).requests[0].updateCells.rows[0].values[4].userEnteredValue.numberValue).toBe(4.25)
 })
