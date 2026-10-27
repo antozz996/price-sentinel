@@ -19,6 +19,21 @@ class ClipboardPreviewRequest(BaseModel):
     location_id: int | None = Field(default=None, gt=0)
 
 
+class NormalizedSheetDryRunRequest(BaseModel):
+    spreadsheet_id: str = Field(pattern=r"^[A-Za-z0-9_-]{15,200}$")
+    values: dict[str, list[list[Any]]]
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def bound_snapshot(self):
+        if set(self.values) != {"FOOD", "BEVERAGE", "FRUTTA E VERDURA", "MATERIALI", "FORNITORI"}:
+            raise ValueError("Schede del nuovo Sheet incomplete")
+        for name, rows in self.values.items():
+            if len(rows) > 5001 or any(len(row) > (8 if name == "FORNITORI" else 12) for row in rows):
+                raise ValueError(f"La scheda {name} supera i limiti previsti")
+        return self
+
+
 class GoogleSheetDryRunRequest(BaseModel):
     dynamic_supplier_headers: bool = False
     spreadsheet_id: str = Field(pattern=r"^[A-Za-z0-9_-]{15,200}$")

@@ -69,7 +69,10 @@ jobs:
           assert "ps_backend ps_db" in deploy
           assert "config --format json" in deploy
           assert "127.0.0.1:18084" in deploy
-          assert "up -d --no-deps --build --force-recreate" in deploy
+          assert '"${COMPOSE[@]}" build backend' in deploy
+          assert "up -d --no-deps --force-recreate" in deploy
+          assert "alembic upgrade head" in deploy
+          assert "v2-db-before-migration.dump" in deploy
           assert "scripts.smoke_v2_staging" in deploy
           assert "git -C \"$ROOT\" rev-parse HEAD" in deploy
           assert "docker compose down" not in deploy
@@ -164,6 +167,9 @@ jobs:
         working-directory: frontend
       - name: Verify frontend production bundle
         run: npm run build
+        working-directory: frontend
+      - name: Verify normalized supplier Sheet preview and concurrency guard
+        run: node --experimental-strip-types tests/normalizedSupplierSheet.mjs
         working-directory: frontend
       - name: Check dangerous defaults and unverifiable dashboard claims
         run: |

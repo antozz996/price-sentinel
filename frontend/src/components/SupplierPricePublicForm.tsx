@@ -4,7 +4,7 @@ import { API_BASE } from '../api';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null };
 type FormData = { supplier_name: string; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
-type Answer = { prezzo: string; unita_misura: string; marca: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string };
+type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string };
 
 export default function SupplierPricePublicForm({ token }: { token: string }) {
   const [data, setData] = useState<FormData | null>(null);
@@ -15,6 +15,8 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  const [draftNotice, setDraftNotice] = useState('');
+  const draftKey = `ps.supplier-price-draft.${token}`;
 
   useEffect(() => {
     let active = true;
@@ -23,19 +25,29 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       .then(form => {
         if (!active) return;
         setData(form);
-        setAnswers(Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: i.unita_corrente || '', marca: i.brand_corrente || '', conferma_prezzo: false, non_trattato: false, nota: '' }])));
+        const initial = Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: i.unita_corrente || '', marca: i.brand_corrente || '', dicitura_fornitore: '', quantita_confezione: '', conferma_prezzo: false, non_trattato: false, nota: '' }]));
+        try {
+          const saved = JSON.parse(localStorage.getItem(draftKey) || 'null');
+          setAnswers(saved?.answers && form.items.every(i => saved.answers[i.id]) ? saved.answers : initial);
+          if (saved?.answers) { setValiditaDa(saved.validitaDa || ''); setValiditaA(saved.validitaA || ''); setDraftNotice('Bozza recuperata da questo browser.'); }
+        } catch { setAnswers(initial); }
       })
       .catch(e => { if (active) setError(e.message || 'Impossibile caricare il modulo'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [token]);
+  }, [token, draftKey]);
 
   const setAnswer = (id: number, change: Partial<Answer>) => setAnswers(prev => {
     const old = prev[id]; const next = { ...old, ...change };
-    if (change.prezzo !== undefined || change.unita_misura !== undefined || change.marca !== undefined || change.non_trattato) next.conferma_prezzo = false;
-    if (change.non_trattato) { next.prezzo = ''; next.unita_misura = ''; }
+    if (change.prezzo !== undefined || change.unita_misura !== undefined || change.marca !== undefined || change.quantita_confezione !== undefined || change.dicitura_fornitore !== undefined || change.non_trattato) next.conferma_prezzo = false;
+    if (change.non_trattato) { next.prezzo = ''; next.unita_misura = ''; next.marca = ''; next.dicitura_fornitore = ''; next.quantita_confezione = ''; }
     return { ...prev, [id]: next };
   });
+
+  const saveDraft = () => {
+    localStorage.setItem(draftKey, JSON.stringify({ answers, validitaDa, validitaA }));
+    setDraftNotice('Bozza salvata in questo browser. Puoi tornare usando lo stesso link.');
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!data) return;
@@ -45,12 +57,13 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           validita_inviata_da: validitaDa,
-          validita_inviata_a: validitaA,
-          answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].non_trattato ? null : answers[i.id].prezzo, unita_misura: answers[i.id].non_trattato ? null : answers[i.id].unita_misura, marca: answers[i.id].non_trattato ? null : answers[i.id].marca, conferma_prezzo: data.request_type === 'confirmation' && !answers[i.id].non_trattato && answers[i.id].conferma_prezzo, non_trattato: answers[i.id].non_trattato, nota: answers[i.id].nota || null }))
+          validita_inviata_a: validitaA || null,
+          answers: data.items.map(i => ({ item_id: i.id, prezzo: answers[i.id].non_trattato ? null : answers[i.id].prezzo, unita_misura: answers[i.id].non_trattato ? null : answers[i.id].unita_misura, marca: answers[i.id].non_trattato ? null : answers[i.id].marca, dicitura_fornitore: answers[i.id].non_trattato ? null : answers[i.id].dicitura_fornitore, quantita_confezione: answers[i.id].non_trattato ? null : answers[i.id].quantita_confezione, conferma_prezzo: data.request_type === 'confirmation' && !answers[i.id].non_trattato && answers[i.id].conferma_prezzo, non_trattato: answers[i.id].non_trattato, nota: answers[i.id].nota || null }))
         })
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail || 'Invio non riuscito');
+      localStorage.removeItem(draftKey);
       setDone(true);
     } catch (e) { setError(e instanceof Error ? e.message : 'Invio non riuscito'); }
     finally { setSending(false); }
@@ -66,14 +79,14 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
 
   return <main style={wrap}><form style={box} onSubmit={submit}>
     <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'} · {data.supplier_name}</h1>
-    <p>{data.request_type === 'new_listino' ? 'Inserisci prezzo, marca e unità di misura offerti per ciascun prodotto. La tua offerta sarà revisionata dall’azienda e non aggiorna automaticamente il listino ufficiale.' : 'Verifica ogni prezzo, marca e unità. Puoi confermare il valore pattuito oppure indicare una proposta diversa. La risposta sarà sottoposta a verifica dall’azienda.'}</p>{data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
+    <p>Per ogni prodotto trattato indica dicitura commerciale, marca, quantità della confezione, unità e prezzo della confezione. La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>{data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: '#cbd5e1' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
     <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
       <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Periodo di validità del listino</h2>
-      <p style={{ color: '#cbd5e1' }}>{data.request_type === 'new_listino' ? 'Indica il periodo di validità dell’offerta che stai inviando.' : 'Indica da quando a quando sono validi i prezzi che confermi o proponi in questo modulo. Il periodo sarà registrato insieme alla risposta e verificato dall’azienda.'}</p>
+      <p style={{ color: '#cbd5e1' }}>Indica da quando vale la tua offerta. La data di fine è facoltativa; un prezzo approvato resta operativo fino alla successiva approvazione.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
         <label>Valido dal<input style={input} type="date" required value={validitaDa} onChange={e => setValiditaDa(e.target.value)} /></label>
-        <label>Valido fino al<input style={input} type="date" required min={validitaDa || undefined} value={validitaA} onChange={e => setValiditaA(e.target.value)} /></label>
+        <label>Valido fino al (facoltativo)<input style={input} type="date" min={validitaDa || undefined} value={validitaA} onChange={e => setValiditaA(e.target.value)} /></label>
       </div>
     </section>
     {data.items.map(item => {
@@ -84,15 +97,19 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         {data.request_type === 'confirmation' && item.validita_corrente_da && <p style={{ color: '#cbd5e1' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
         <label style={{ display: 'block', margin: '12px 0' }}><input type="checkbox" checked={answer.non_trattato} onChange={e => setAnswer(item.id, { non_trattato: e.target.checked })} /> Non trattiamo questo prodotto</label>
         {answer.non_trattato ? <p style={{ color: '#cbd5e1' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
-          <label>{data.request_type === 'new_listino' ? 'Prezzo offerto (€)' : 'Prezzo proposto (€)'}<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /></label>
+          <label>Dicitura del fornitore<input style={input} required maxLength={500} value={answer.dicitura_fornitore} onChange={e => setAnswer(item.id, { dicitura_fornitore: e.target.value })} /></label>
           <label>Marca<input style={input} required maxLength={100} value={answer.marca} onChange={e => setAnswer(item.id, { marca: e.target.value })} /></label>
-          <label>Unità di misura<input style={input} required maxLength={50} value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })} /></label>
+          <label>Quantità della confezione<input style={input} type="number" min="0.001" step="0.001" required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /></label>
+          <label>Unità di misura<input style={input} required maxLength={50} placeholder="KG, G, L, ML, PZ…" value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })} /></label>
+          <label>Prezzo confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /></label>
         </div>}
         {data.request_type === 'confirmation' && !answer.non_trattato && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
       </section>;
     })}
     {error && <p role="alert" style={{ color: '#fca5a5' }}>{error}</p>}
+    {draftNotice && <p role="status" style={{ color: '#86efac' }}>{draftNotice}</p>}
+    <button className="btn" type="button" onClick={saveDraft} style={{ marginRight: 8 }}>Salva bozza in questo browser</button>
     <button className="btn btn-primary" disabled={sending} type="submit">{sending ? 'Invio…' : 'Invia risposte'}</button>
   </form></main>;
 }

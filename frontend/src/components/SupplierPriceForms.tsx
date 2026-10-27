@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { fetchWithAuth } from '../api';
+import { prepareNormalizedSheet, writeNormalizedSheet } from './normalizedSupplierSheet';
+import type { SheetOfferTarget } from './normalizedSupplierSheet';
 
 type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string | null };
 type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean> };
 type Category = { nome: string; is_active: boolean };
 type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
-type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
+type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
 type FormRequest = { id: number; supplier_id: number; supplier_name: string; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
 type CreatedLink = { supplier: Supplier; url: string; publicPath: string };
@@ -22,38 +24,6 @@ const isLocalAddress = (value: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.
 const GOOGLE_SHEETS_CLIENT_ID = '52128477187-k0hkvu9vj0v3sbk7tf07rehhvosg0ors.apps.googleusercontent.com';
 const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 const GOOGLE_SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
-const OFFER_SHEET_LAYOUTS = [
-  { title: 'Carne', range: "'Carne'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MARR' }, { col: 3, name: 'MELIUS' }, { col: 4, name: 'DAC' }, { col: 5, name: 'ORIZZONTI' }, { col: 7, name: 'DI PALO' }, { col: 8, name: 'FONTANELLA CARNI' }] },
-  { title: 'Pesce', range: "'Pesce'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MARR' }, { col: 3, name: 'MELIUS' }, { col: 4, name: 'DAC' }, { col: 5, name: 'ORIZZONTI' }, { col: 7, name: 'DI PALO' }, { col: 8, name: 'FONTANELLA CARNI' }] },
-  { title: 'Varie', range: "'Varie'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MARR' }, { col: 3, name: 'MELIUS' }, { col: 4, name: 'DAC' }, { col: 5, name: 'ORIZZONTI' }, { col: 7, name: 'DI PALO' }, { col: 8, name: 'FONTANELLA CARNI' }] },
-  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:L1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'NAVAS' }, { col: 3, name: 'ORIZZONTI' }, { col: 4, name: '3F' }, { col: 5, name: 'PASCARELLA' }, { col: 6, name: "CASA D'AMBRA" }] },
-  { title: 'COMPARAZIONE MATERIALI', range: "'COMPARAZIONE MATERIALI'!A1:N1000", productCol: 1, unitCol: 2, suppliers: [{ col: 3, name: 'VEMO' }, { col: 4, name: 'KITO' }, { col: 5, name: 'EUROCARTA' }, { col: 6, name: 'ALPHA' }, { col: 7, name: 'PROMOCART' }, { col: 8, name: 'MUNDO' }] },
-  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:J1000", productCol: 0, unitCol: 1, suppliers: [{ col: 2, name: 'MG FRUTTA' }, { col: 4, name: 'DEMETRA', unitCol: 5 }, { col: 7, name: "BONTA DELL'ORTO", unitCol: 8 }] },
-] as const;
-
-type SheetOfferTarget = {
-  item_id: number; product: string; sku: string; status: 'ready' | 'already' | 'blocked' | 'not_trattato' | 'written';
-  reason: string; tab?: string; cell?: string; unitCell?: string; current: string; offered: string; unit: string;
-};
-
-function normalizeSheetText(value: unknown): string {
-  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
-}
-
-function sheetColumn(index: number): string {
-  let result = '';
-  for (let value = index + 1; value; value = Math.floor((value - 1) / 26)) result = String.fromCharCode(65 + ((value - 1) % 26)) + result;
-  return result;
-}
-
-function supplierSheetAliases(name: string): string[] {
-  const normalized = normalizeSheetText(name);
-  const knownHeaders = ['MARR', 'MELIUS', 'DAC', 'ORIZZONTI', 'DI PALO', 'FONTANELLA CARNI', 'NAVAS', '3F', 'PASCARELLA', "CASA D'AMBRA", 'VEMO', 'KITO', 'EUROCARTA', 'ALPHA', 'PROMOCART', 'MUNDO', 'MG FRUTTA', 'DEMETRA', "BONTA DELL'ORTO"];
-  return knownHeaders.map(normalizeSheetText).filter(alias =>
-    (alias.length >= 3 || alias === '3f') && (normalized === alias || normalized.includes(alias))
-  );
-}
-
 function loadGoogleIdentityScript(): Promise<void> {
   const google = (window as any).google;
   if (google?.accounts?.oauth2) return Promise.resolve();
@@ -129,7 +99,7 @@ export default function SupplierPriceForms() {
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('ps.santo-graal.url') || '');
+  const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('ps.normalized-sheet.url') || '');
   const [sheetTargets, setSheetTargets] = useState<SheetOfferTarget[] | null>(null);
   const [sheetBusy, setSheetBusy] = useState(false);
   const [sheetAccessToken, setSheetAccessToken] = useState('');
@@ -299,141 +269,39 @@ export default function SupplierPriceForms() {
   };
 
   const prepareSheetOffer = async () => {
-    if (!detail || detail.request_type !== 'new_listino' || detail.status !== 'submitted') return;
+    if (!detail || detail.status !== 'submitted') return;
     setSheetBusy(true); setSheetError(''); setSheetNotice(''); setSheetTargets(null);
     try {
       const match = sheetUrl.trim().match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
-      if (!match) throw new Error('Inserisci il link del Google Sheet “santo graal”.');
-      const spreadsheetId = match[1];
+      if (!match) throw new Error('Inserisci il link del nuovo Google Sheet.');
       const token = await requestGoogleSheetsWriteToken();
       setSheetAccessToken(token);
-      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(spreadsheetId);
-      const metadata = await googleSheetRequest(root + '?fields=' + encodeURIComponent('spreadsheetId,properties(title),sheets.properties(title)'), token);
-      if (String(metadata?.properties?.title || '').trim().toLocaleLowerCase() !== 'santo graal') {
-        throw new Error('Il file selezionato non è il Google Sheet “santo graal”.');
-      }
-      const params = new URLSearchParams();
-      OFFER_SHEET_LAYOUTS.forEach(layout => params.append('ranges', layout.range));
-      params.set('valueRenderOption', 'FORMULA');
-      const snapshot = await googleSheetRequest(root + '/values:batchGet?' + params.toString(), token);
-      if ((snapshot?.valueRanges || []).length !== OFFER_SHEET_LAYOUTS.length) throw new Error('Lettura incompleta dello Sheet: non preparo modifiche.');
-      const tabs: Record<string, unknown[][]> = {};
-      OFFER_SHEET_LAYOUTS.forEach((layout, index) => { tabs[layout.title] = snapshot.valueRanges[index]?.values || []; });
-      const supplierAliases = new Set(supplierSheetAliases(detail.supplier_name));
-      const normalizedSupplierName = normalizeSheetText(detail.supplier_name);
-      if (normalizedSupplierName) supplierAliases.add(normalizedSupplierName);
-      const computedHeaderNames = new Set(['miglior fornitore', 'best supplier', 'fornitore migliore', 'prezzo migliore']);
-      const targets: SheetOfferTarget[] = detail.items.map(item => {
-        if (item.non_trattato || item.esito === 'non_trattato') return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'not_trattato', reason: 'Il fornitore ha indicato che non tratta il prodotto.', current: '', offered: '', unit: '' };
-        if (!item.prezzo_inviato || !item.unita_inviata) return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'Manca prezzo o unità nella risposta.', current: '', offered: item.prezzo_inviato || '', unit: item.unita_inviata || '' };
-        const productKey = normalizeSheetText(item.descrizione);
-        const matches: Array<{ tab: string; row: number; col: number; unitCol?: number; current: unknown; currentUnit: unknown; baseUnit: unknown }> = [];
-        for (const layout of OFFER_SHEET_LAYOUTS) {
-          const values = tabs[layout.title] || [];
-          const header = values[0] || [];
-          const supplierColumns: Array<{ col: number; name: string; unitCol?: number }> = layout.suppliers.filter(candidate => {
-            const headerName = normalizeSheetText(header[candidate.col]);
-            const configuredName = normalizeSheetText(candidate.name);
-            return headerName === configuredName && supplierAliases.has(configuredName);
-          });
-          header.forEach((headerValue, col) => {
-            const headerName = normalizeSheetText(headerValue);
-            if (
-              col > layout.unitCol &&
-              headerName &&
-              headerName === normalizedSupplierName &&
-              !computedHeaderNames.has(headerName) &&
-              !supplierColumns.some(candidate => candidate.col === col)
-            ) {
-              supplierColumns.push({ col, name: String(headerValue) });
-            }
-          });
-          if (!supplierColumns.length) continue;
-          values.slice(1).forEach((row, offset) => {
-            if (normalizeSheetText(row[layout.productCol]) === productKey) {
-              supplierColumns.forEach(supplierCol => {
-                const unitColIndex = supplierCol.unitCol;
-                matches.push({
-                  tab: layout.title,
-                  row: offset + 2,
-                  col: supplierCol.col,
-                  unitCol: unitColIndex,
-                  current: row[supplierCol.col],
-                  currentUnit: unitColIndex == null ? undefined : row[unitColIndex],
-                  baseUnit: row[layout.unitCol],
-                });
-              });
-            }
-          });
-        }
-        if (matches.length !== 1) return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: matches.length ? 'Prodotto presente in più righe/schede: associazione ambigua, nessuna scrittura.' : 'Prodotto o colonna fornitore non trovato con corrispondenza esatta nello Sheet.', current: '', offered: item.prezzo_inviato!, unit: item.unita_inviata! };
-        const target = matches[0];
-        const priceCell = sheetColumn(target.col) + target.row;
-        const cell = "'" + target.tab.replace(/'/g, "''") + "'!" + priceCell;
-        const rawCurrent = target.current == null ? '' : String(target.current).trim();
-        if (rawCurrent.startsWith('=')) return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'La cella contiene una formula: non la sovrascrivo.', tab: target.tab, cell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
-        const currentNumber = Number(rawCurrent.replace(',', '.'));
-        const offeredNumber = Number(item.prezzo_inviato);
-        const already = rawCurrent !== '' && Number.isFinite(currentNumber) && currentNumber === offeredNumber;
-        const unitCell = target.unitCol == null ? undefined : "'" + target.tab.replace(/'/g, "''") + "'!" + sheetColumn(target.unitCol) + target.row;
-        const baseUnit = String(target.baseUnit ?? '').trim();
-        if (!unitCell && baseUnit && normalizeSheetText(baseUnit) !== normalizeSheetText(item.unita_inviata)) {
-          return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'L’unità offerta differisce dall’unità della riga e lo Sheet non ha una colonna unità specifica per questo fornitore.', tab: target.tab, cell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
-        }
-        if (target.unitCol != null && target.currentUnit != null && String(target.currentUnit).trim().startsWith('=')) {
-          return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'La cella unità contiene una formula: non la sovrascrivo.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
-        }
-        if (target.unitCol != null && String(target.currentUnit ?? '').trim() && normalizeSheetText(target.currentUnit) !== normalizeSheetText(item.unita_inviata)) {
-          return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: 'blocked', reason: 'L’unità già presente nello Sheet è diversa: serve una verifica manuale.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
-        }
-        return { item_id: item.id, product: item.descrizione, sku: item.sku_interno, status: already ? 'already' : 'ready', reason: already ? 'Il prezzo è già presente nello Sheet.' : 'Cella abbinata esattamente; controlla il valore attuale prima di confermare.', tab: target.tab, cell, unitCell, current: rawCurrent, offered: item.prezzo_inviato!, unit: item.unita_inviata! };
-      });
+      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(match[1]);
+      const targets = await prepareNormalizedSheet(root, token, detail, googleSheetRequest);
       setSheetTargets(targets);
-      setSheetNotice('Anteprima pronta. Nessuna cella è stata modificata.');
-    } catch (e) {
-      setSheetError(e instanceof Error ? e.message : 'Non sono riuscita a preparare l’anteprima Sheet.');
-    } finally { setSheetBusy(false); }
+      setSheetNotice('Anteprima pronta per ID prodotto e fornitore. Nessuna riga è stata modificata.');
+    } catch (e) { setSheetError(e instanceof Error ? e.message : 'Anteprima Sheet non riuscita.'); }
+    finally { setSheetBusy(false); }
   };
 
   const writeSheetOffer = async () => {
-    if (!detail || !sheetTargets?.some(target => target.status === 'ready') || sheetBusy) return;
+    if (!detail || !sheetTargets?.some(target => target.status === 'ready') || sheetTargets.some(target => target.status === 'blocked') || sheetBusy) return;
     const ready = sheetTargets.filter(target => target.status === 'ready');
-    const summary = ready.map(target => target.cell + ': ' + (target.current || '(vuoto)') + ' → ' + target.offered + ' ' + target.unit).join('\n');
-    if (!window.confirm('Confermi la scrittura nello Sheet? Saranno aggiornate solo le celle mostrate qui sotto.\n\n' + summary)) return;
+    const summary = ready.map(target => (target.cell || target.tab) + ': ' + (target.current || '(vuoto)') + ' → ' + target.offered + ' ' + target.unit).join('\n');
+    if (!window.confirm('Confermi le offerte selezionate nel nuovo Sheet?\n\n' + summary)) return;
     setSheetBusy(true); setSheetError(''); setSheetNotice('');
     try {
       const match = sheetUrl.trim().match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
       if (!match) throw new Error('Link Google Sheet non valido.');
-      const spreadsheetId = match[1];
       const token = sheetAccessToken || await requestGoogleSheetsWriteToken();
-      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(spreadsheetId);
-      const params = new URLSearchParams();
-      ready.forEach(target => { if (target.cell) params.append('ranges', target.cell); if (target.unitCell) params.append('ranges', target.unitCell); });
-      params.set('valueRenderOption', 'FORMULA');
-      const current = await googleSheetRequest(root + '/values:batchGet?' + params.toString(), token);
-      const currentValues = current?.valueRanges || [];
-      let valueIndex = 0;
-      for (const target of ready) {
-        const live = String(currentValues[valueIndex++]?.values?.[0]?.[0] ?? '').trim();
-        if (live !== target.current) throw new Error('La cella ' + target.cell + ' è cambiata dopo l’anteprima. Ricarica e controlla di nuovo.');
-        if (target.unitCell) {
-          const liveUnit = String(currentValues[valueIndex++]?.values?.[0]?.[0] ?? '').trim();
-          if (liveUnit && normalizeSheetText(liveUnit) !== normalizeSheetText(target.unit)) throw new Error('L’unità in ' + target.unitCell + ' è cambiata dopo l’anteprima. Ricarica e controlla di nuovo.');
-        }
-      }
-      const data = ready.flatMap(target => [
-        { range: target.cell!, values: [[Number(target.offered)]] },
-        ...(target.unitCell ? [{ range: target.unitCell, values: [[target.unit]] }] : []),
-      ]);
-      await googleSheetRequest(root + '/values:batchUpdate?valueInputOption=USER_ENTERED', token, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
-      });
-      setSheetTargets(sheetTargets.map(target => target.status === 'ready' ? { ...target, status: 'written', reason: 'Prezzo scritto nello Sheet.' } : target));
-      setSheetNotice('Aggiornate ' + ready.length + ' celle prezzo nello Sheet. Per aggiornare anche il Listino Master di Price Sentinel, apri Santo Graal e aggiorna l’anteprima/import.');
-    } catch (e) {
-      setSheetError(e instanceof Error ? e.message : 'Scrittura nello Sheet non riuscita.');
-    } finally { setSheetBusy(false); }
+      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(match[1]);
+      await writeNormalizedSheet(root, token, detail, ready, googleSheetRequest);
+      setSheetTargets(sheetTargets.map(target => target.status === 'ready' ? { ...target, status: 'written', reason: 'Offerta scritta nello Sheet.' } : target));
+      setSheetNotice('Offerte registrate nel nuovo Sheet. Per aggiornare il listino operativo V2, apri Santo Graal e conferma la relativa anteprima di importazione.');
+    } catch (e) { setSheetError(e instanceof Error ? e.message : 'Scrittura nello Sheet non riuscita.'); }
+    finally { setSheetBusy(false); }
   };
+
 
   const closeForm = async (id: number) => {
     setBusy(true); setError('');
@@ -581,25 +449,26 @@ export default function SupplierPriceForms() {
     {detail && <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{detail.status}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
-      <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da && detail.validita_inviata_a ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')} al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : 'non ancora indicata'}</strong></p>
-      {detail.request_type === 'new_listino' && detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Collega l’offerta al Google Sheet</h3>
-        <p style={{ color: 'var(--text-secondary)' }}>Il fornitore ha inviato una proposta. Prima leggo il foglio, individuo solo corrispondenze esatte e mostro le celle da aggiornare. La scrittura richiede un consenso Google con accesso in modifica.</p>
-        <label>Link del Google Sheet “santo graal”<input style={field} type="url" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('ps.santo-graal.url', e.target.value); setSheetTargets(null); setSheetNotice(''); setSheetAccessToken(''); }} placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
+      <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')}${detail.validita_inviata_a ? ` al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : ' fino a nuova approvazione'}` : 'non ancora indicata'}</strong></p>
+      {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12 }}>
+        <h3 style={{ marginTop: 0 }}>Revisiona l’offerta nel nuovo Sheet</h3>
+        <p style={{ color: 'var(--text-secondary)' }}>Le righe vengono abbinate per ID prodotto e ID fornitore. Controlla l’anteprima prima di scrivere; poi importa i prezzi approvati nel listino operativo V2.</p>
+        <label>Link del nuovo Google Sheet<input style={field} type="url" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('ps.normalized-sheet.url', e.target.value); setSheetTargets(null); setSheetNotice(''); setSheetAccessToken(''); }} placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
           <button type="button" className="btn" disabled={sheetBusy || !sheetUrl.trim()} onClick={() => void prepareSheetOffer()}>{sheetBusy ? 'Lettura e controllo…' : 'Prepara anteprima Sheet'}</button>
-          {sheetTargets?.some(target => target.status === 'ready') && <button type="button" className="btn btn-primary" disabled={sheetBusy} onClick={() => void writeSheetOffer()}>{sheetBusy ? 'Scrittura…' : 'Conferma e scrivi nello Sheet'}</button>}
+          {sheetTargets?.some(target => target.status === 'ready') && <button type="button" className="btn btn-primary" disabled={sheetBusy || sheetTargets.some(target => target.status === 'blocked')} onClick={() => void writeSheetOffer()}>{sheetBusy ? 'Scrittura…' : 'Conferma scrittura nello Sheet'}</button>}
         </div>
         {sheetError && <p role="alert" style={{ color: '#fca5a5' }}>{sheetError}</p>}
+        {sheetTargets?.some(target => target.status === 'blocked') && <p role="alert" style={{ color: '#fbbf24' }}>Ci sono righe bloccate. Risolvi gli ID o le associazioni indicate e prepara di nuovo l’anteprima prima di scrivere.</p>}
         {sheetNotice && <p role="status" style={{ color: '#86efac' }}>{sheetNotice}</p>}
-        {sheetTargets && <div style={{ overflowX: 'auto', marginTop: 10 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Prodotto</th><th align="left">Cella</th><th align="left">Prezzo attuale</th><th align="left">Prezzo offerto</th><th align="left">Esito</th></tr></thead><tbody>
-          {sheetTargets.map(target => <tr key={target.item_id}><td>{target.product}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{target.sku}</small></td><td>{target.cell || '—'}</td><td>{target.current || 'vuoto'}</td><td>{target.offered ? '€ ' + target.offered + ' / ' + target.unit : '—'}</td><td>{target.status === 'ready' ? 'Pronto alla conferma' : target.status === 'already' ? 'Già presente' : target.status === 'written' ? 'Scritto' : target.status === 'not_trattato' ? 'Non trattato · escluso' : 'Bloccato · ' + target.reason}</td></tr>)}
+        {sheetTargets && <div style={{ overflowX: 'auto', marginTop: 10 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Prodotto</th><th align="left">Riga</th><th align="left">Dicitura / marca</th><th align="left">Confezione</th><th align="left">Prezzo confezione</th><th align="left">Data / note</th><th align="left">Esito</th></tr></thead><tbody>
+          {sheetTargets.map(target => <tr key={target.item_id}><td>{target.product}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{target.sku}</small></td><td>{target.cell || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[5] || 'vuoto'} / {target.snapshot?.[6] || 'vuoto'} → <strong>{target.nextRow[5]} / {target.nextRow[6]}</strong></> : '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[7] || 'vuoto'} {target.snapshot?.[8] || ''} → <strong>{target.nextRow[7]} {target.nextRow[8]}</strong></> : '—'}</td><td>{target.current || 'vuoto'} → {target.offered || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[10] || 'vuoto'} → <strong>{target.nextRow[10]}</strong><small style={{ display: 'block' }}>{target.nextRow[11]}</small></> : '—'}</td><td>{target.status === 'ready' ? 'Pronto alla conferma' : target.status === 'already' ? 'Già presente' : target.status === 'written' ? 'Scritto' : target.status === 'not_trattato' ? 'Non trattato · escluso' : 'Bloccato · ' + target.reason}</td></tr>)}
         </tbody></table></div>}
       </div>}
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
         <div>{detail.request_type === 'new_listino' ? 'Nessun prezzo precedente · Offerta: ' : 'Pattuito: € ' + i.prezzo_corrente + ' / ' + (i.unita_corrente || 'unità da completare') + ' · Risposta: '}{i.non_trattato ? 'Non trattato dal fornitore' : i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' / ' + (i.unita_inviata || 'unità da completare') : 'in attesa'}</div>
-        <div>Marca: {i.brand_corrente || 'da completare'}{i.brand_inviata ? ' · dichiarata: ' + i.brand_inviata : ''}</div>
+        <div>Dicitura del fornitore: {i.dicitura_inviata || 'da compilare'} · Marca: {i.brand_inviata || 'da compilare'} · Confezione: {i.quantita_inviata || 'da compilare'} {i.unita_inviata || ''}</div>
         <div>Esito: {i.esito === 'non_trattato' ? 'Non trattato' : i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
       </div>)}</div>
       {['open','submitted','expired'].includes(detail.status) && <button className="btn" disabled={busy} onClick={() => closeForm(detail.id)}>Chiudi link</button>}

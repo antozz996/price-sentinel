@@ -55,6 +55,8 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "prezzo_inviato": str(item.prezzo_inviato) if item.prezzo_inviato is not None else None,
                 "unita_inviata": item.unita_inviata,
                 "brand_inviata": item.brand_inviata,
+                "dicitura_inviata": item.dicitura_inviata,
+                "quantita_inviata": str(item.quantita_inviata) if item.quantita_inviata is not None else None,
                 "conferma_prezzo": item.conferma_prezzo,
                 "nota_fornitore": item.nota_fornitore,
                 "non_trattato": item.non_trattato,
@@ -86,6 +88,8 @@ class SupplierAnswer(BaseModel):
     prezzo: Decimal | None = Field(default=None, gt=0, lt=Decimal("100000000"), decimal_places=4)
     unita_misura: str | None = Field(default=None, min_length=1, max_length=50)
     marca: str | None = Field(default=None, max_length=100)
+    dicitura_fornitore: str | None = Field(default=None, max_length=500)
+    quantita_confezione: Decimal | None = Field(default=None, gt=0, lt=Decimal("100000000"), decimal_places=3)
     conferma_prezzo: bool = False
     non_trattato: bool = False
     nota: Optional[str] = Field(default=None, max_length=1000)
@@ -153,10 +157,8 @@ async def submit_public_form(
     now = datetime.now(timezone.utc)
     if not request or request.status != "open" or request.expires_at <= now:
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
-    if request.request_type == "new_listino" and (payload.validita_inviata_da is None or payload.validita_inviata_a is None):
-        raise HTTPException(status_code=422, detail="Per una nuova offerta indica entrambe le date di validità del listino")
-    if (payload.validita_inviata_da is None) != (payload.validita_inviata_a is None):
-        raise HTTPException(status_code=422, detail="Indica entrambe le date di validità del listino")
+    if payload.validita_inviata_da is None:
+        raise HTTPException(status_code=422, detail="Indica la data di inizio dell'offerta")
     if (
         payload.validita_inviata_da
         and payload.validita_inviata_a
@@ -175,12 +177,17 @@ async def submit_public_form(
         answer = answers_by_id[item.id]
         item.nota_fornitore = answer.nota.strip() if answer.nota else None
         item.brand_inviata = answer.marca.strip() if answer.marca else None
+        item.dicitura_inviata = answer.dicitura_fornitore.strip() if answer.dicitura_fornitore else None
+        item.quantita_inviata = answer.quantita_confezione
         if answer.non_trattato:
             if answer.conferma_prezzo:
                 raise HTTPException(status_code=422, detail="Un prodotto non trattato non può essere confermato")
             item.non_trattato = True
             item.prezzo_inviato = None
             item.unita_inviata = None
+            item.brand_inviata = None
+            item.dicitura_inviata = None
+            item.quantita_inviata = None
             item.conferma_prezzo = False
             continue
         if answer.prezzo is None:
@@ -190,6 +197,10 @@ async def submit_public_form(
             raise HTTPException(status_code=422, detail=f"Unità di misura mancante per {item.sku_interno}")
         if not item.brand_inviata:
             raise HTTPException(status_code=422, detail=f"Marca mancante per {item.sku_interno}; indica la marca oppure 'senza marca'")
+        if not item.dicitura_inviata:
+            raise HTTPException(status_code=422, detail=f"Dicitura fornitore mancante per {item.sku_interno}")
+        if item.quantita_inviata is None:
+            raise HTTPException(status_code=422, detail=f"Quantità confezione mancante per {item.sku_interno}")
         same_price = item.prezzo_corrente is not None and answer.prezzo == item.prezzo_corrente
         same_unit = item.unita_corrente is not None and unit.casefold() == item.unita_corrente.strip().casefold()
         if request.request_type == "new_listino" and answer.conferma_prezzo:
@@ -244,7 +255,6 @@ async def create_form_request(
         )).scalars().all()
         if len(products) != len(payload.product_ids):
             raise HTTPException(status_code=422, detail="Uno o più prodotti non appartengono alla categoria selezionata o non sono attivi")
-        brand_by_sku = {product.sku_interno: product.brand for product in products}
         form_items = [
             SupplierPriceFormItem(
                 listino_id=None,
@@ -279,6 +289,9 @@ async def create_form_request(
                 status_code=422,
                 detail="Una o più righe non appartengono al fornitore o non sono attive oggi",
             )
+        sku_values = {row.sku_interno for row in rows if row.sku_interno}
+        products = (await db.execute(select(Product).where(Product.sku_interno.in_(sku_values)))).scalars().all() if sku_values else []
+        brand_by_sku = {product.sku_interno: product.brand for product in products}
         form_items = [
             SupplierPriceFormItem(
                 listino_id=row.id,

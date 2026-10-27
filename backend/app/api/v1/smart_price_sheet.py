@@ -31,6 +31,7 @@ from app.schemas.smart_price_sheet import (
     CellPreviewRequest,
     ClipboardPreviewRequest,
     GoogleSheetDryRunRequest,
+    NormalizedSheetDryRunRequest,
     CommitPreviewRequest,
     DeviationCreateRequest,
     DeviationUpdateRequest,
@@ -43,7 +44,7 @@ from app.services.purchase_recommendation import (
 )
 from app.services.smart_price_sheet import build_price_preview, commit_price_preview
 from app.services.sheet_sync_dry_run import stage_snapshot
-from app.services.normalized_price_workbook import parse_normalized_price_workbook
+from app.services.normalized_price_workbook import parse_normalized_price_workbook, parse_normalized_sheet_values
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
@@ -623,6 +624,18 @@ async def google_sheet_dry_run(
     )
     report["workbook_title"] = payload.title.strip()
     return report
+
+
+@router.post("/normalized-google-dry-run")
+async def normalized_google_dry_run(
+    payload: NormalizedSheetDryRunRequest,
+    user: Utente = Depends(require_admin),
+):
+    """Read-only preview of the normalized Google Sheet."""
+    try:
+        return parse_normalized_sheet_values(payload.values, payload.spreadsheet_id)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 @router.post("/excel-dry-run")

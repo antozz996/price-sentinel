@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from collections import Counter
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 from io import BytesIO
 import re
 from typing import Any
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
 
@@ -251,6 +251,8 @@ def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
                 continue
 
             price, price_state = _parse_price(raw_price)
+            supplier_confirmed = "conferma fornitore price sentinel" in _normalize(notes)
+            complete_pack = supplier_confirmed and bool(unit and _text(cell("marca")) and _text(cell("dicitura_fornitore"))) and quantity is not None and quantity > 0
             reasons = ["canonical_id_not_mapped"]
             status = "needs_mapping"
             if price_state != "valid":
@@ -260,12 +262,12 @@ def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
             # it into a unit amount without a confirmed package quantity.
             if not unit:
                 reasons.append("unit_not_specified")
-            elif quantity and quantity != Decimal("1"):
+            elif quantity and quantity != Decimal("1") and not complete_pack:
                 reasons.append("package_price_not_single_unit")
             if price is not None and Decimal(price).as_tuple().exponent < -4:
                 reasons.append("precision_review")
 
-            display_price = price if price is not None else raw_price
+            display_price = format((Decimal(price) / quantity).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP), "f") if price is not None and complete_pack else price if price is not None else raw_price
             source_cell = f"{get_column_letter(indices['prezzo_confezione_eur'] + 1)}{row_number}"
             candidates.append({
                 "source_product_key": source_key,
@@ -280,8 +282,8 @@ def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
                 "supplier": supplier,
                 "price_role": "negotiated_agreement",
                 "requires_product_mapping": True,
-                "reference_unit": unit if unit and quantity == Decimal("1") else None,
-                "supplier_price_unit": unit if unit and quantity == Decimal("1") else None,
+                "reference_unit": unit if complete_pack or unit and quantity == Decimal("1") else None,
+                "supplier_price_unit": unit if complete_pack or unit and quantity == Decimal("1") else None,
                 "quoted_value": raw_price,
                 "numeric_price": display_price,
                 "status": status,
@@ -327,6 +329,31 @@ def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
         },
         "excluded_count": excluded_count,
     }
+
+
+def parse_normalized_sheet_values(values: dict[str, list[list[Any]]], spreadsheet_id: str) -> dict[str, Any]:
+    """Parse a Google Sheets snapshot with the same rules as the uploaded workbook."""
+    expected = set(NEW_FORMAT_TABS) | {"FORNITORI"}
+    if set(values) != expected:
+        raise ValueError("Le schede del nuovo Sheet non corrispondono al formato previsto.")
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    for name in (*NEW_FORMAT_TABS, "FORNITORI"):
+        rows = values[name]
+        if len(rows) > 5001:
+            raise ValueError(f"La scheda {name} supera il limite di 5.000 righe dati.")
+        sheet = workbook.create_sheet(name)
+        for row in rows:
+            if len(row) > (8 if name == "FORNITORI" else 12):
+                raise ValueError(f"La scheda {name} contiene colonne inattese.")
+            if any(isinstance(value, str) and value.startswith("=") for value in row):
+                raise ValueError(f"La scheda {name} contiene formule: usa valori calcolati per l’anteprima.")
+            sheet.append(list(row))
+    output = BytesIO()
+    workbook.save(output)
+    report = parse_normalized_price_workbook(output.getvalue())
+    report["spreadsheet_id"] = spreadsheet_id
+    return report
 
 
 def parse_normalized_price_workbook(file_bytes: bytes) -> dict[str, Any]:

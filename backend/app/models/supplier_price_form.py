@@ -58,6 +58,8 @@ class SupplierPriceFormItem(Base):
     prezzo_inviato: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     unita_inviata: Mapped[str | None] = mapped_column(String(50), nullable=True)
     brand_inviata: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    dicitura_inviata: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quantita_inviata: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     conferma_prezzo: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     nota_fornitore: Mapped[str | None] = mapped_column(Text, nullable=True)
     non_trattato: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")

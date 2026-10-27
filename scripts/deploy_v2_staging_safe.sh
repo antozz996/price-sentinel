@@ -89,6 +89,8 @@ cp -a "$ROOT/frontend/dist" "$ROLLBACK/frontend-dist"
 OLD_IMAGE=$(docker inspect -f '{{.Image}}' price_sentinel_v2-backend-1)
 ROLLBACK_TAG="price-sentinel-v2-backend:rollback-$STAMP"
 docker tag "$OLD_IMAGE" "$ROLLBACK_TAG"
+docker exec price_sentinel_v2-db-1 sh -ec 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > "$ROLLBACK/v2-db-before-migration.dump"
+[[ -s "$ROLLBACK/v2-db-before-migration.dump" ]] || fail "V2 database backup is empty"
 echo "PASS: V2 rollback assets captured at $ROLLBACK"
 
 echo "Building ONLY V2 frontend in a temporary limited Node container..."
@@ -97,8 +99,12 @@ docker run --rm --cpus=1.5 --memory=1536m \
   sh -lc 'npm ci --no-audit --no-fund && npm run build'
 [[ -s "$ROOT/frontend/dist/index.html" ]] || fail "V2 frontend build missing"
 
+echo "Building the isolated V2 backend and applying additive V2 migrations..."
+"${COMPOSE[@]}" build backend
+"${COMPOSE[@]}" run --rm --no-deps backend sh -ec 'python scripts/ensure_v2_staging.py && alembic upgrade head'
+
 echo "Rebuilding and recreating ONLY V2 backend..."
-"${COMPOSE[@]}" up -d --no-deps --build --force-recreate --wait --wait-timeout 180 backend
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 180 backend
 
 echo "Recreating ONLY V2 web container..."
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 120 web

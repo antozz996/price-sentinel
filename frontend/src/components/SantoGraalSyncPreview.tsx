@@ -15,6 +15,13 @@ const SOURCE_RANGES = [
   { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:AB1000" },
   { title: 'CONTROLLO_ESCLUSIONI', range: "'CONTROLLO_ESCLUSIONI'!A1:F100" },
 ]
+const NORMALIZED_RANGES = [
+  { title: 'FOOD', range: "'FOOD'!A1:L5001" },
+  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:L5001" },
+  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:L5001" },
+  { title: 'MATERIALI', range: "'MATERIALI'!A1:L5001" },
+  { title: 'FORNITORI', range: "'FORNITORI'!A1:H5001" },
+]
 
 type Candidate = {
   source_product_key?: string
@@ -449,34 +456,35 @@ export default function SantoGraalSyncPreview() {
         + '?fields=' + encodeURIComponent('spreadsheetId,properties(title),sheets.properties(title)')
       const metadata = await googleGet(metadataUrl, token)
       const title = String(metadata?.properties?.title || '')
-      if (title.trim().toLocaleLowerCase() !== 'santo graal') {
-        throw new Error('Il file selezionato non è il Google Sheet “santo graal”.')
-      }
-
       const sheetTitles = new Set((metadata.sheets || []).map((sheet: any) => sheet?.properties?.title))
-      const missing = SOURCE_RANGES.map(item => item.title).filter(title => !sheetTitles.has(title))
+      const isNormalized = NORMALIZED_RANGES.every(item => sheetTitles.has(item.title))
+      if (!isNormalized && title.trim().toLocaleLowerCase() !== 'santo graal') {
+        throw new Error('Il file selezionato non è il Santo Graal né uno Sheet nel nuovo formato.')
+      }
+      const selectedRanges = isNormalized ? NORMALIZED_RANGES : SOURCE_RANGES
+      const missing = selectedRanges.map(item => item.title).filter(title => !sheetTitles.has(title))
       if (missing.length) {
         throw new Error('Mancano schede richieste: ' + missing.join(', '))
       }
 
       const params = new URLSearchParams()
-      SOURCE_RANGES.forEach(item => params.append('ranges', item.range))
+      selectedRanges.forEach(item => params.append('ranges', item.range))
       params.set('valueRenderOption', 'UNFORMATTED_VALUE')
       const valuesUrl = GOOGLE_API + '/' + encodeURIComponent(spreadsheetId)
         + '/values:batchGet?' + params.toString()
       const valuesResponse = await googleGet(valuesUrl, token)
       const values: Record<string, unknown[][]> = {}
       const ranges = valuesResponse?.valueRanges || []
-      if (ranges.length !== SOURCE_RANGES.length) {
+      if (ranges.length !== selectedRanges.length) {
         throw new Error('Google ha restituito un insieme incompleto di schede. Nessun dato è stato importato.')
       }
-      SOURCE_RANGES.forEach((item, index) => {
+      selectedRanges.forEach((item, index) => {
         values[item.title] = ranges[index]?.values || []
       })
 
-      const preview = await fetchPreviewApi('/smart-price-sheet/google-dry-run', {
+      const preview = await fetchPreviewApi(isNormalized ? '/smart-price-sheet/normalized-google-dry-run' : '/smart-price-sheet/google-dry-run', {
         method: 'POST',
-        body: JSON.stringify({ spreadsheet_id: spreadsheetId, title, values, dynamic_supplier_headers: true }),
+        body: JSON.stringify(isNormalized ? { spreadsheet_id: spreadsheetId, values } : { spreadsheet_id: spreadsheetId, title, values, dynamic_supplier_headers: true }),
       }) as DryRunReport
       setMappingSourceId(spreadsheetId)
       setReport(preview)

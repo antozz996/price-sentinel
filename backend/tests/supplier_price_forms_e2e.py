@@ -83,6 +83,14 @@ async def run() -> None:
 
         start = date.today()
         end = start + timedelta(days=30)
+        incomplete = await client.post(
+            f"/api/v1/supplier-price-forms/public/{token}/submit",
+            json={"validita_inviata_da": start.isoformat(), "answers": [{
+                "item_id": item_id, "prezzo": "4.2500", "marca": "Marca sintetica CI",
+                "unita_misura": "BT", "non_trattato": False,
+            }]},
+        )
+        check("incomplete supplier packaging cannot be submitted", incomplete.status_code == 422)
         submitted = await client.post(
             f"/api/v1/supplier-price-forms/public/{token}/submit",
             json={
@@ -92,6 +100,8 @@ async def run() -> None:
                     "item_id": item_id,
                     "prezzo": "4.2500",
                     "marca": "Marca sintetica CI",
+                    "dicitura_fornitore": "Bottiglia sintetica CI",
+                    "quantita_confezione": "1.000",
                     "unita_misura": "BT",
                     "conferma_prezzo": False,
                     "non_trattato": False,
@@ -117,6 +127,8 @@ async def run() -> None:
             "submitted price and validity are retained",
             reviewed["items"][0]["prezzo_inviato"] == "4.2500"
             and reviewed["items"][0]["brand_inviata"] == "Marca sintetica CI"
+            and reviewed["items"][0]["dicitura_inviata"] == "Bottiglia sintetica CI"
+            and reviewed["items"][0]["quantita_inviata"] == "1.000"
             and reviewed["validita_inviata_da"] == start.isoformat()
             and reviewed["validita_inviata_a"] == end.isoformat(),
         )
