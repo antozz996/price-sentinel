@@ -54,10 +54,23 @@ async def register_sheet_supplier(
     supplier = await create_fornitore(FornitoreCreate(nome_azienda=name,
         partita_iva=fiscal_id or internal_id, attivo_whitelist=True), admin, db)
     for category in set(data.categories):
-        db.add(SupplierCategoryCapability(supplier_id=supplier.id, category=category,
-            enabled=True, reason='Registrazione esplicita da intestazione Sheet',
-            created_by=admin.id, updated_by=admin.id,
-            created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)))
+        capability = await db.scalar(select(SupplierCategoryCapability).where(
+            SupplierCategoryCapability.supplier_id == supplier.id,
+            func.lower(func.btrim(SupplierCategoryCapability.category)) == category.casefold(),
+        ))
+        now = datetime.now(timezone.utc)
+        if capability is None:
+            db.add(SupplierCategoryCapability(supplier_id=supplier.id, category=category,
+                enabled=True, reason='Registrazione esplicita da intestazione Sheet',
+                created_by=admin.id, updated_by=admin.id,
+                created_at=now, updated_at=now))
+        else:
+            # Re-registering a previously archived supplier must preserve its existing
+            # sector row and enable it, rather than violating the unique constraint.
+            capability.enabled = True
+            capability.reason = 'Registrazione esplicita da intestazione Sheet'
+            capability.updated_by = admin.id
+            capability.updated_at = now
     await db.flush()
     return supplier
 

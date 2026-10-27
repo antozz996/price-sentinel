@@ -1,6 +1,7 @@
 """Smart Price Sheet API test. Run only against a disposable migrated database."""
 
 import asyncio
+import hashlib
 import json
 import os
 
@@ -67,6 +68,28 @@ def seed() -> None:
                 select setval(pg_get_serial_sequence('listino_master','id'), 2, true);
                 """
             )
+            archived_name = "Synthetic Archived Sheet Supplier"
+            temporary_id = "TEMP" + hashlib.sha256(
+                archived_name.casefold().encode()
+            ).hexdigest()[:16].upper()
+            cursor.execute(
+                """
+                insert into fornitori(id,partita_iva,nome_azienda,attivo_whitelist,archived_at)
+                values (4,%s,'Old synthetic supplier name',false,now())
+                on conflict do nothing
+                """,
+                (temporary_id,),
+            )
+            cursor.execute(
+                """
+                insert into supplier_category_capabilities(
+                  id,supplier_id,category,enabled,reason,created_by,updated_by,created_at,updated_at
+                ) values (1,4,'Beverage',true,'Existing archived supplier sector',1,1,now(),now())
+                on conflict do nothing
+                """
+            )
+            cursor.execute("select setval(pg_get_serial_sequence('fornitori','id'), 4, true)")
+            cursor.execute("select setval(pg_get_serial_sequence('supplier_category_capabilities','id'), 1, true)")
 
 
 async def run() -> None:
@@ -188,6 +211,16 @@ async def run() -> None:
             json={'nome_azienda': 'Synthetic Sheet Supplier Without Fiscal Data'})
         check('sheet supplier registration is idempotent', repeated.status_code == 200
             and repeated.json()['id'] == provisional.json()['id'])
+
+        reactivated_name = "Synthetic Archived Sheet Supplier"
+        reactivated = await client.post('/api/v1/fornitori/sheet-registration', headers=admin,
+            json={'nome_azienda': reactivated_name, 'categories': ['Beverage']})
+        reactivated_id = reactivated.json().get('id') if reactivated.status_code == 200 else 0
+        check('archived sheet supplier reactivates without duplicate sector',
+            reactivated.status_code == 200
+            and reactivated_id == 4
+            and reactivated.json()['archived_at'] is None
+            and scalar("select count(*) from supplier_category_capabilities where supplier_id=4 and category='Beverage'") == 1)
 
         response = await client.post(
             "/api/v1/smart-price-sheet/preview",
