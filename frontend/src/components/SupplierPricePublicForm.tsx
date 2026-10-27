@@ -79,7 +79,9 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
 
   return <main style={wrap}><form style={box} onSubmit={submit}>
     <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'} · {data.supplier_name}</h1>
-    <p>Per ogni prodotto trattato indica dicitura commerciale, marca, quantità della confezione, unità e prezzo della confezione. La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>{data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
+    <p>Per ogni prodotto trattato indica dicitura commerciale, marca, quantità della confezione, unità e prezzo della confezione. La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>
+    <p style={{ padding: 12, border: '1px solid #fbbf24', borderRadius: 8, color: '#fef3c7' }}><strong>Come indicare il prezzo:</strong> inserisci il prezzo del prodotto o della confezione che vendi, riferito alla quantità indicata sotto. Per esempio, per una vaschetta da 2,8 KG che costa € 18,20, indica quantità 2,8, unità KG e prezzo € 18,20. Non inserire il prezzo al KG, a meno che tu venda il prodotto in confezioni da 1 KG.</p>
+    {data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: '#cbd5e1' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
     <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
       <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Periodo di validità del listino</h2>
@@ -101,7 +103,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
           <label>Marca<input style={input} required maxLength={100} value={answer.marca} onChange={e => setAnswer(item.id, { marca: e.target.value })} /></label>
           <label>Quantità della confezione<input style={input} type="number" min="0.001" step="0.001" required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /></label>
           <label>Unità di misura<input style={input} required maxLength={50} placeholder="KG, G, L, ML, PZ…" value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })} /></label>
-          <label>Prezzo confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /></label>
+          <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /><small style={{ display: 'block', color: '#cbd5e1' }}>Prezzo totale della quantità indicata, non prezzo per KG.</small></label>
         </div>}
         {data.request_type === 'confirmation' && !answer.non_trattato && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
