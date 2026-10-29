@@ -26,6 +26,17 @@ assert.equal(appendPreview[0].mode, 'append');
 await writeNormalizedSheet(root, 'synthetic-token', newQuote, appendPreview, fetcher);
 assert.equal(written.requests[0].appendCells.rows[0].values[3].userEnteredValue.stringValue, 'F-01');
 assert.equal(written.requests[0].appendCells.rows[0].values[11].userEnteredValue.stringValue, 'Origine FOOD!3 | Conferma fornitore Price Sentinel');
+const variantRequest = { ...request, items: [{ ...request.items[0], offerte_inviate: [
+  { id_offerta: 'OFF-CI-ONE', prezzo: '15', unita_misura: 'KG', marca: 'Marca CI', dicitura_fornitore: 'Gelato 2,5 kg', quantita_confezione: '2.5' },
+  { id_offerta: 'OFF-CI-TWO', prezzo: '18', unita_misura: 'KG', marca: 'Seconda marca', dicitura_fornitore: 'Gelato 2,8 kg', quantita_confezione: '2.8' },
+] }] };
+const variants = await prepareNormalizedSheet(root, 'synthetic-token', variantRequest, fetcher);
+assert.deepEqual(variants.map(row => row.mode), ['update', 'append']);
+await writeNormalizedSheet(root, 'synthetic-token', variantRequest, variants, fetcher);
+assert.equal(written.requests.length, 3);
+assert.equal(written.requests[0].updateCells.rows[0].values[0].userEnteredValue.stringValue, 'ID_OFFERTA');
+assert.equal(written.requests[1].updateCells.rows[0].values[7].userEnteredValue.stringValue, 'OFF-CI-ONE');
+assert.equal(written.requests[2].appendCells.rows[0].values[12].userEnteredValue.stringValue, 'OFF-CI-TWO');
 food[1][9] = '16';
 await assert.rejects(() => writeNormalizedSheet(root, 'synthetic-token', request, preview, fetcher), /cambiata/);
 console.log('PASS: normalized Sheet preview, package write and concurrent-change block');

@@ -449,7 +449,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       const [locRes, prodRes, matrixRes, fornitoriRes] = await Promise.all([
         fetch(`${API_BASE}/location/`, { headers }),
         fetch(`${API_BASE}/products`, { headers }),
-        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }),
         fetch(`${API_BASE}/fornitori?attivi=true`, { headers }).catch(() => null)
       ]);
 
@@ -476,12 +476,19 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         }
       }
 
-      // If matrix is available, enrich products with recommended/forced suppliers and prices
-      if (matrixRes && matrixRes.ok) {
+      // Every catalog page needs its offers, including products past position 500.
+      if (!matrixRes.ok) throw new Error('Listino non disponibile');
+      if (matrixRes.ok) {
         try {
           const matrixData = await matrixRes.json();
+          const matrixRows: any[] = [...(matrixData.rows || [])];
+          for (let offset = 500; offset < Number(matrixData.total || 0); offset += 500) {
+            const page = await fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500&offset=${offset}`, { headers });
+            if (!page.ok) throw new Error('Pagina listino non disponibile');
+            matrixRows.push(...((await page.json()).rows || []));
+          }
           const matrixMap = new Map<number, any>();
-          (matrixData.rows || []).forEach((r: any) => {
+          matrixRows.forEach((r: any) => {
             matrixMap.set(r.product_id, r);
           });
 
@@ -533,6 +540,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           });
         } catch (e) {
           console.error("Errore arricchimento listino:", e);
+          throw e;
         }
       }
 

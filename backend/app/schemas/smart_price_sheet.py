@@ -73,8 +73,7 @@ class GoogleSheetDryRunRequest(BaseModel):
 class CellPreviewRequest(BaseModel):
     product_id: int = Field(gt=0)
     supplier_id: int = Field(gt=0)
-    price: Decimal = Field(gt=0, lt=100000000)
-    package_confirmed: bool = False
+    price: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
     effective_date: date = Field(default_factory=date.today)
     uom: str = Field(default="piece", min_length=1, max_length=20)
     location_id: int | None = Field(default=None, gt=0)
@@ -94,7 +93,8 @@ class VariantPriceRow(BaseModel):
     brand: str | None = Field(default=None, max_length=100)
     quantity: Decimal | None = Field(default=None, gt=0)
     unit: str | None = Field(default=None, max_length=20)
-    price: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
+    price: Decimal = Field(gt=0, lt=100000000)
+    package_confirmed: bool = False
 
 
 class VariantPricePreviewRequest(BaseModel):

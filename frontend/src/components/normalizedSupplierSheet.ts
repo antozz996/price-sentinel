@@ -60,6 +60,7 @@ export async function prepareNormalizedSheet(root: string, token: string, reques
     const exact = offer.id_offerta ? matchingRows.filter(row => row.cells[12] === offer.id_offerta) : [];
     const legacy = matchingRows.filter(row => !row.cells[12]);
     const matchingLegacy = legacy.filter(row => {
+      if (!offer.id_offerta && legacy.length === 1) return true;
       const emptyOffer = row.cells.slice(5, 9).every(value => !value);
       if (emptyOffer) return offerIndex === 0;
       return normalize(row.cells[5]) === normalize(offer.dicitura_fornitore)
@@ -82,7 +83,7 @@ export async function prepareNormalizedSheet(root: string, token: string, reques
     const nextRow = existing ? [...existing.cells.slice(0, 5), ...values] : [item.sku_interno, productRows[0].cells[1], productRows[0].cells[2], supplierId, suppliers[0][1], ...values];
     const snapshotRow = existing?.cells || productRows[0].cells;
     const already = Boolean(existing && nextRow.every((value, col) => cellText(value) === cellText(snapshotRow[col])));
-    return { ...base, status: already ? 'already' as const : 'ready' as const, reason: already ? 'Offerta già presente.' : existing ? 'Riga identificata per ID offerta.' : 'Nuova riga per questa marca o formato.', tab, cell: existing ? `${quote(tab)}!F${existing.row}:M${existing.row}` : `${quote(tab)}!nuova riga`, current: existing?.cells[9] || '', mode: existing ? 'update' as const : 'append' as const, row: existing?.row, supplierId, snapshot: snapshotRow, nextRow };
+    return { ...base, status: already ? 'already' as const : 'ready' as const, reason: already ? 'Offerta già presente.' : existing ? 'Riga identificata per ID offerta.' : 'Nuova riga per questa marca o formato.', tab, cell: existing ? `${quote(tab)}!F${existing.row}:${offer.id_offerta ? 'M' : 'L'}${existing.row}` : `${quote(tab)}!nuova riga`, current: existing?.cells[9] || '', mode: existing ? 'update' as const : 'append' as const, row: existing?.row, supplierId, snapshot: snapshotRow, nextRow };
     });
   });
 }
@@ -110,12 +111,12 @@ export async function writeNormalizedSheet(root: string, token: string, request:
       if (target.offer_id && matches.some(row => row[12] === target.offer_id && row !== live)) throw new Error(`ID offerta duplicato per ${target.sku}.`);
     } else if ((target.offer_id ? matches.some(row => row[12] === target.offer_id) : matches.length > 0) || !rows.some(row => row[0] === target.sku && row.every((value, col) => value === target.snapshot?.[col]))) throw new Error(`Il prodotto ${target.sku} è cambiato: prepara una nuova anteprima.`);
   }
-  const headerRequests = [...new Set(ready.map(target => target.tab!))].filter(tab => !tabs.get(tab)?.[0]?.[12]).map(tab => ({ updateCells: { range: { sheetId: ids.get(tab)!, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 12, endColumnIndex: 13 }, rows: [{ values: [gridValue(OFFER_HEADER, false)] }], fields: 'userEnteredValue' } }));
+  const headerRequests = [...new Set(ready.filter(target => target.offer_id).map(target => target.tab!))].filter(tab => !tabs.get(tab)?.[0]?.[12]).map(tab => ({ updateCells: { range: { sheetId: ids.get(tab)!, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 12, endColumnIndex: 13 }, rows: [{ values: [gridValue(OFFER_HEADER, false)] }], fields: 'userEnteredValue' } }));
   const requests = ready.map(target => {
     const sheetId = ids.get(target.tab!)!;
     const next = target.nextRow!;
-    if (target.mode === 'append') return { appendCells: { sheetId, rows: [{ values: next.map((value, col) => gridValue(value, col === 7 || col === 9)) }], fields: 'userEnteredValue' } };
-    return { updateCells: { range: { sheetId, startRowIndex: target.row! - 1, endRowIndex: target.row, startColumnIndex: 5, endColumnIndex: 13 }, rows: [{ values: next.slice(5).map((value, col) => gridValue(value, col === 2 || col === 4)) }], fields: 'userEnteredValue' } };
+    if (target.mode === 'append') return { appendCells: { sheetId, rows: [{ values: next.slice(0, target.offer_id ? 13 : 12).map((value, col) => gridValue(value, col === 7 || col === 9)) }], fields: 'userEnteredValue' } };
+    return { updateCells: { range: { sheetId, startRowIndex: target.row! - 1, endRowIndex: target.row, startColumnIndex: 5, endColumnIndex: target.offer_id ? 13 : 12 }, rows: [{ values: next.slice(5, target.offer_id ? 13 : 12).map((value, col) => gridValue(value, col === 2 || col === 4)) }], fields: 'userEnteredValue' } };
   });
   if (!requests.length) return;
   await fetcher(root + ':batchUpdate', token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [...headerRequests, ...requests] }) });
