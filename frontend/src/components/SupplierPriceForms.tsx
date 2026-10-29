@@ -8,7 +8,8 @@ type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string |
 type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean> };
 type Category = { nome: string; is_active: boolean };
 type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
-type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
+type SubmittedOffer = { id_offerta: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota?: string | null; conferma_prezzo: boolean };
+type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; offerte_inviate?: SubmittedOffer[]; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
 type FormRequest = { id: number; supplier_id: number; supplier_name: string; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
 type CreatedLink = { supplier: Supplier; url: string; publicPath: string };
@@ -287,7 +288,7 @@ export default function SupplierPriceForms() {
   const writeSheetOffer = async () => {
     if (!detail || !sheetTargets?.some(target => target.status === 'ready') || sheetTargets.some(target => target.status === 'blocked') || sheetBusy) return;
     const ready = sheetTargets.filter(target => target.status === 'ready');
-    const summary = ready.map(target => (target.cell || target.tab) + ': ' + (target.current || '(vuoto)') + ' → ' + target.offered + ' ' + target.unit).join('\n');
+    const summary = ready.map(target => (target.cell || target.tab) + ' · ' + (target.offer_id || target.sku) + ': ' + (target.current || '(vuoto)') + ' → € ' + target.offered + ' per confezione').join('\n');
     if (!window.confirm('Confermi le offerte selezionate nel nuovo Sheet?\n\n' + summary)) return;
     setSheetBusy(true); setSheetError(''); setSheetNotice('');
     try {
@@ -297,7 +298,9 @@ export default function SupplierPriceForms() {
       const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(match[1]);
       await writeNormalizedSheet(root, token, detail, ready, googleSheetRequest);
       setSheetTargets(sheetTargets.map(target => target.status === 'ready' ? { ...target, status: 'written', reason: 'Offerta scritta nello Sheet.' } : target));
-      setSheetNotice('Offerte registrate nel nuovo Sheet. Per aggiornare il listino operativo V2, apri Santo Graal e conferma la relativa anteprima di importazione.');
+      setSheetNotice(detail.items.some(item => (item.offerte_inviate?.length || 0) > 1)
+        ? 'Le varianti sono state registrate come righe distinte nello Sheet. Per renderle operative, apri Sincronizzazione Santo Graal, genera l’anteprima dei prezzi e conferma l’importazione.'
+        : 'Offerte registrate nel nuovo Sheet. Per aggiornare il listino operativo V2, apri Santo Graal e conferma la relativa anteprima di importazione.');
     } catch (e) { setSheetError(e instanceof Error ? e.message : 'Scrittura nello Sheet non riuscita.'); }
     finally { setSheetBusy(false); }
   };
@@ -453,6 +456,7 @@ export default function SupplierPriceForms() {
       {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12 }}>
         <h3 style={{ marginTop: 0 }}>Revisiona l’offerta nel nuovo Sheet</h3>
         <p style={{ color: 'var(--text-secondary)' }}>Le righe vengono abbinate per ID prodotto e ID fornitore. Controlla l’anteprima prima di scrivere; poi importa i prezzi approvati nel listino operativo V2.</p>
+        <p style={{ color: '#fbbf24' }}>Più marche o formati dello stesso prodotto saranno righe separate, con ID_OFFERTA. La conferma aggiunge l’intestazione ID_OFFERTA nella colonna M se manca. Dopo la scrittura, importa i prezzi dalla Sincronizzazione Santo Graal per usarli negli ordini.</p>
         <label>Link del nuovo Google Sheet<input style={field} type="url" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('ps.normalized-sheet.url', e.target.value); setSheetTargets(null); setSheetNotice(''); setSheetAccessToken(''); }} placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
           <button type="button" className="btn" disabled={sheetBusy || !sheetUrl.trim()} onClick={() => void prepareSheetOffer()}>{sheetBusy ? 'Lettura e controllo…' : 'Prepara anteprima Sheet'}</button>
@@ -462,13 +466,16 @@ export default function SupplierPriceForms() {
         {sheetTargets?.some(target => target.status === 'blocked') && <p role="alert" style={{ color: '#fbbf24' }}>Ci sono righe bloccate. Risolvi gli ID o le associazioni indicate e prepara di nuovo l’anteprima prima di scrivere.</p>}
         {sheetNotice && <p role="status" style={{ color: '#86efac' }}>{sheetNotice}</p>}
         {sheetTargets && <div style={{ overflowX: 'auto', marginTop: 10 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Prodotto</th><th align="left">Riga</th><th align="left">Dicitura / marca</th><th align="left">Confezione</th><th align="left">Prezzo confezione</th><th align="left">Data / note</th><th align="left">Esito</th></tr></thead><tbody>
-          {sheetTargets.map(target => <tr key={target.item_id}><td>{target.product}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{target.sku}</small></td><td>{target.cell || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[5] || 'vuoto'} / {target.snapshot?.[6] || 'vuoto'} → <strong>{target.nextRow[5]} / {target.nextRow[6]}</strong></> : '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[7] || 'vuoto'} {target.snapshot?.[8] || ''} → <strong>{target.nextRow[7]} {target.nextRow[8]}</strong></> : '—'}</td><td>{target.current || 'vuoto'} → {target.offered || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[10] || 'vuoto'} → <strong>{target.nextRow[10]}</strong><small style={{ display: 'block' }}>{target.nextRow[11]}</small></> : '—'}</td><td>{target.status === 'ready' ? 'Pronto alla conferma' : target.status === 'already' ? 'Già presente' : target.status === 'written' ? 'Scritto' : target.status === 'not_trattato' ? 'Non trattato · escluso' : 'Bloccato · ' + target.reason}</td></tr>)}
+          {sheetTargets.map(target => <tr key={target.offer_id || target.item_id}><td>{target.product}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{target.sku} · {target.offer_id || 'offerta precedente'}</small></td><td>{target.cell || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[5] || 'vuoto'} / {target.snapshot?.[6] || 'vuoto'} → <strong>{target.nextRow[5]} / {target.nextRow[6]}</strong></> : '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[7] || 'vuoto'} {target.snapshot?.[8] || ''} → <strong>{target.nextRow[7]} {target.nextRow[8]}</strong></> : '—'}</td><td>{target.current || 'vuoto'} → {target.offered || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[10] || 'vuoto'} → <strong>{target.nextRow[10]}</strong><small style={{ display: 'block' }}>{target.nextRow[11]}</small></> : '—'}</td><td>{target.status === 'ready' ? 'Pronto alla conferma' : target.status === 'already' ? 'Già presente' : target.status === 'written' ? 'Scritto' : target.status === 'not_trattato' ? 'Non trattato · escluso' : 'Bloccato · ' + target.reason}</td></tr>)}
         </tbody></table></div>}
       </div>}
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
-        <div>{detail.request_type === 'new_listino' ? 'Nessun prezzo precedente · Offerta: ' : 'Pattuito: € ' + i.prezzo_corrente + ' / ' + (i.unita_corrente || 'unità da completare') + ' · Risposta: '}{i.non_trattato ? 'Non trattato dal fornitore' : i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' per confezione' : 'in attesa'}</div>
-        <div>Dicitura del fornitore: {i.dicitura_inviata || 'da compilare'} · Marca: {i.brand_inviata || 'da compilare'} · Confezione: {i.quantita_inviata || 'da compilare'} {i.unita_inviata || ''}</div>
+        {detail.request_type !== 'new_listino' && <div>Pattuito: € {i.prezzo_corrente} / {i.unita_corrente || 'unità da completare'}</div>}
+        {i.non_trattato ? <div>Non trattato dal fornitore</div> : i.offerte_inviate?.length ? i.offerte_inviate.map((offer, index) => <div key={offer.id_offerta} style={{ marginTop: 8, padding: 8, borderLeft: '2px solid #60a5fa' }}>
+          <strong>Offerta {index + 1}: € {offer.prezzo} per confezione da {offer.quantita_confezione} {offer.unita_misura}</strong>
+          <div>{offer.dicitura_fornitore} · Marca: {offer.marca}</div><small>ID offerta: {offer.id_offerta}{offer.nota ? ' · Nota: ' + offer.nota : ''}</small>
+        </div>) : <><div>Offerta: {i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' per confezione' : 'in attesa'}</div><div>Dicitura del fornitore: {i.dicitura_inviata || 'da compilare'} · Marca: {i.brand_inviata || 'da compilare'} · Confezione: {i.quantita_inviata || 'da compilare'} {i.unita_inviata || ''}</div></>}
         <div>Esito: {i.esito === 'non_trattato' ? 'Non trattato' : i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
       </div>)}</div>
       {['open','submitted','expired'].includes(detail.status) && <button className="btn" disabled={busy} onClick={() => closeForm(detail.id)}>Chiudi link</button>}

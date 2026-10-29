@@ -106,6 +106,14 @@ async def run() -> None:
                     "conferma_prezzo": False,
                     "non_trattato": False,
                     "nota": "Synthetic offer",
+                    "offerte": [
+                        {"prezzo": "4.2500", "marca": "Marca sintetica CI",
+                         "dicitura_fornitore": "Bottiglia sintetica CI", "quantita_confezione": "1.000",
+                         "unita_misura": "BT"},
+                        {"prezzo": "7.9500", "marca": "Seconda marca CI",
+                         "dicitura_fornitore": "Bottiglie sintetiche CI in coppia", "quantita_confezione": "2.000",
+                         "unita_misura": "BT"},
+                    ],
                 }],
             },
         )
@@ -123,6 +131,9 @@ async def run() -> None:
         check("admin can review the submitted proposal", detail.status_code == 200)
         reviewed = detail.json()
         check("submission remains a proposal awaiting review", reviewed["status"] == "submitted")
+        offers = reviewed["items"][0]["offerte_inviate"]
+        check("two distinct packages are retained", len(offers) == 2 and
+              len({offer["id_offerta"] for offer in offers}) == 2)
         check(
             "submitted price and validity are retained",
             reviewed["items"][0]["prezzo_inviato"] == "4.2500"
@@ -142,6 +153,57 @@ async def run() -> None:
             )
             official_rows = cursor.fetchone()[0]
     check("supplier submission never changes the official price list", official_rows == 0)
+
+    # The following is an explicit admin import on this CI-only disposable DB.
+    # No Google Sheet or live service is contacted.
+    with psycopg2.connect(DSN) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                insert into supplier_category_capabilities
+                    (supplier_id, category, enabled, reason, created_by, updated_by, created_at, updated_at)
+                values (1, 'Beverage', true, 'Synthetic CI approval', 1, 1, now(), now())
+            """)
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://testserver") as client:
+        rows = [{
+            "product_id": 1, "supplier_id": 1, "sku": "CI-SKU-FORM",
+            "offer_id": offer["id_offerta"], "description": offer["dicitura_fornitore"],
+            "brand": offer["marca"], "quantity": offer["quantita_confezione"],
+            "unit": offer["unita_misura"], "price": offer["prezzo"],
+            "package_confirmed": True,
+        } for offer in offers]
+        preview = await client.post("/api/v1/smart-price-sheet/variant-preview",
+                                    headers=admin_headers, json={"rows": rows})
+        check("two variants have a reviewable price preview", preview.status_code == 200 and
+              preview.json()["can_commit"] and preview.json()["counts"]["create"] == 2)
+        token = preview.json()["preview_token"]
+        commit = await client.post("/api/v1/smart-price-sheet/commit", headers=admin_headers,
+                                   json={"preview_token": token, "confirm": True})
+        check("admin imports both variants as separate contracts", commit.status_code == 200 and
+              commit.json()["result"]["created"] == 2)
+        repeat = await client.post("/api/v1/smart-price-sheet/commit", headers=admin_headers,
+                                   json={"preview_token": token, "confirm": True})
+        check("retry does not duplicate either price", repeat.status_code == 200 and
+              repeat.json()["result"] == commit.json()["result"])
+        resolved = await client.post("/api/v1/product-identity/orders/resolve-item", headers=admin_headers,
+                                     json={"query": "CI-SKU-FORM", "requested_qty": 2})
+        check("both formats remain separate in order suggestions", resolved.status_code == 200 and
+              len(resolved.json().get("alternatives", [])) == 1)
+        draft = await client.post("/api/v1/ordini/settore/elabora", headers=admin_headers, json={
+            "location_id": 1, "settore": "Beverage", "items": [{
+                "product_id": 1, "sku_interno": "CI-SKU-FORM", "canonical_name": "Synthetic beverage",
+                "quantita": 2, "comparison_unit": "conf", "preferred_supplier_id": 1,
+                "preferred_offer_id": offers[1]["id_offerta"],
+            }],
+        })
+        check("buyer can explicitly choose the second format", draft.status_code == 200 and
+              draft.json()["fornitori_ordini"][0]["items"][0]["prezzo_unitario"] == 7.95 and
+              "Seconda marca CI" in draft.json()["fornitori_ordini"][0]["whatsapp_message"])
+        order = await client.post("/api/v1/ordini/settore/salva", headers=admin_headers, json={
+            "location_id": 1, "settore": "Beverage",
+            "bundles": draft.json()["fornitori_ordini"],
+        })
+        check("chosen format and price survive order validation", order.status_code == 200)
 
 
 if __name__ == "__main__":

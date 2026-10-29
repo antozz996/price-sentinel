@@ -638,6 +638,11 @@ async def commit_price_preview(
     if not preview.preview_payload.get("can_commit"):
         raise HTTPException(422, "L'anteprima contiene errori bloccanti.")
 
+    if preview.preview_payload.get("version") == 3:
+        from app.services.variant_price_import import commit_variant_preview
+        result = await commit_variant_preview(db, preview)
+        return preview, result
+
     payload = preview.preview_payload
     effective_date = date.fromisoformat(payload["effective_date"])
     location_id = payload.get("location_id")

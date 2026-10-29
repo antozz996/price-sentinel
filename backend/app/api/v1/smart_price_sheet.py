@@ -16,7 +16,7 @@ from app.models.categories import MasterCategory
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.location import Location
-from app.models.products import Product
+from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import (
     ProductPurchasePolicy,
     ProductPurchasePolicyAudit,
@@ -37,15 +37,18 @@ from app.schemas.smart_price_sheet import (
     DeviationUpdateRequest,
     PolicyUpsertRequest,
     SupplierSectorUpdateRequest,
+    VariantPricePreviewRequest,
 )
 from app.services.purchase_recommendation import (
     policy_snapshot,
     rank_supplier_offers,
 )
 from app.services.smart_price_sheet import build_price_preview, commit_price_preview
+from app.services.variant_price_import import build_variant_preview
 from app.services.sheet_sync_dry_run import stage_snapshot
 from app.services.normalized_price_workbook import parse_normalized_price_workbook, parse_normalized_sheet_values
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
+from app.services.matching import normalize_price_for_comparison
 
 
 router = APIRouter()
@@ -299,8 +302,37 @@ async def matrix(
     for row in policies:
         effective_policies.setdefault(row.product_id, policy_snapshot(row))
 
+    aliases_by_id = {}
+    variant_alias_ids = {row.supplier_product_alias_id for row in active_prices if row.supplier_product_alias_id}
+    if variant_alias_ids:
+        aliases_by_id = {alias.id: alias for alias in (await db.scalars(
+            select(SupplierProductAlias).options(noload("*")).where(SupplierProductAlias.id.in_(variant_alias_ids))
+        )).all()}
+    products_by_sku = {product.sku_interno: product for product in products if product.sku_interno}
+    variant_offers_by_sku: dict[str, list[dict]] = {}
+    for row in active_prices:
+        alias = aliases_by_id.get(row.supplier_product_alias_id)
+        product = products_by_sku.get(row.sku_interno)
+        if not alias or alias.source != "normalized_sheet_offer" or not product:
+            continue
+        normalized = normalize_price_for_comparison(
+            row.prezzo_pattuito, Decimal("1"), row.unita_misura, product, alias,
+        )
+        variant_offers_by_sku.setdefault(row.sku_interno, []).append({
+            "offer_id": alias.supplier_code, "supplier_id": row.fornitore_id,
+            "supplier_name": next((s.nome_azienda for s in suppliers if s.id == row.fornitore_id), ""),
+            "description": alias.raw_description, "brand": alias.brand,
+            "pack_qty": alias.pack_qty, "volume_ml": alias.volume_ml, "weight_g": alias.weight_g,
+            "price": f"{Decimal(str(row.prezzo_pattuito)):.4f}",
+            "comparison_price": f"{normalized.normalized_unit_price:.4f}" if normalized.reliable and row.unita_misura else None,
+            "comparison_unit": normalized.comparison_unit if normalized.reliable and row.unita_misura else None,
+        })
+
+    variant_pairs = {(sku, offer["supplier_id"]) for sku, variants in variant_offers_by_sku.items() for offer in variants}
     prices: dict[tuple[str, int], dict] = {}
     for sku, supplier_id, price in spot_prices:
+        if (sku, supplier_id) in variant_pairs:
+            continue
         prices[(sku, supplier_id)] = {
             "supplier_id": supplier_id,
             "unit_price_normalized": f"{Decimal(str(price)):.4f}",
@@ -310,6 +342,24 @@ async def matrix(
         }
     for row in active_prices:
         key = (row.sku_interno, row.fornitore_id)
+        if key in variant_pairs:
+            alias = aliases_by_id.get(row.supplier_product_alias_id)
+            if not alias or alias.source != "normalized_sheet_offer":
+                continue
+            variant = next((offer for offer in variant_offers_by_sku[row.sku_interno] if offer["offer_id"] == alias.supplier_code), None)
+            if not variant or variant["comparison_price"] is None:
+                continue
+            previous = prices.get(key)
+            if previous and Decimal(previous["unit_price_normalized"]) <= Decimal(variant["comparison_price"]):
+                continue
+            prices[key] = {
+                "supplier_id": row.fornitore_id,
+                "unit_price_normalized": variant["comparison_price"],
+                "price": variant["price"],
+                "source_type": "contratto", "uom": "conf",
+                "offer_id": variant["offer_id"],
+            }
+            continue
         if key in prices and prices[key].get("source_type") == "contratto":
             continue
         prices[key] = {
@@ -353,6 +403,7 @@ async def matrix(
                 "subcategory": product.subcategory,
                 "comparison_unit": product.comparison_unit,
                 "offers": {str(item["supplier_id"]): item for item in recommendation["offers"]},
+                "variant_offers": variant_offers_by_sku.get(product.sku_interno, []),
                 "eligible_supplier_ids": sorted(eligible_supplier_ids),
                 "absolute_cheapest_supplier_id": (
                     recommendation["absolute_cheapest"]["supplier_id"]
@@ -680,6 +731,17 @@ async def preview_clipboard(
         )
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
+    return _preview_response(preview)
+
+
+@router.post("/variant-preview")
+async def preview_variants(
+    payload: VariantPricePreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(require_admin),
+):
+    """Preview separate package offers without collapsing supplier/product pairs."""
+    preview = await build_variant_preview(db, payload, user.id)
     return _preview_response(preview)
 
 

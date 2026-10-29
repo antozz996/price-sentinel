@@ -32,6 +32,17 @@ from app.services.normalization import normalize_text
 router = APIRouter()
 
 
+def _variant_label(alias: SupplierProductAlias) -> str:
+    parts = [alias.brand, alias.raw_description]
+    if alias.weight_g:
+        parts.append(f"{alias.weight_g / 1000:g} KG" if alias.weight_g >= 1000 else f"{alias.weight_g} G")
+    elif alias.volume_ml:
+        parts.append(f"{alias.volume_ml / 1000:g} L" if alias.volume_ml >= 1000 else f"{alias.volume_ml} ML")
+    elif alias.pack_qty and alias.pack_qty > 1:
+        parts.append(f"{alias.pack_qty} PZ")
+    return " · ".join(part for part in parts if part)
+
+
 def _require_order_location_access(user: Utente, location: Location, sector: str | None = None) -> None:
     """Authorize using the effective role and DB tenant, never a UI role label."""
     tenant_id = getattr(user, "tenant_id", None)
@@ -72,6 +83,7 @@ class SectorOrderItem(BaseModel):
     comparison_unit: Optional[str] = "piece"
     category: Optional[str] = None
     preferred_supplier_id: Optional[int] = None
+    preferred_offer_id: Optional[str] = Field(default=None, max_length=100)
     prezzo_unitario: Optional[float] = None
     is_omaggio: Optional[bool] = False
 
@@ -90,6 +102,7 @@ class SupplierOrderItemDetail(BaseModel):
     sku_interno: Optional[str] = None
     nome_prodotto: str
     codice_fornitore: Optional[str] = None
+    variante: Optional[str] = None
     quantita: float
     uom: str
     prezzo_unitario: float
@@ -572,9 +585,11 @@ def _format_whatsapp_text(
         qty_str = f"{int(qty)}" if qty == int(qty) else f"{qty:.2f}"
         name = it.nome_prodotto
         uom = it.uom or "pz"
-        code_str = f" [Cod. {it.codice_fornitore}]" if it.codice_fornitore else ""
+        internal_offer_id = bool(it.codice_fornitore and it.codice_fornitore.startswith(("OFF-", "SG-")))
+        code_str = f" [Cod. {it.codice_fornitore}]" if it.codice_fornitore and not internal_offer_id else ""
+        variant_str = f" — {it.variante}" if it.variante else ""
         omaggio_badge = " 🎁 *(OMAGGIO PROMO 5+1 — GRATIS)*" if getattr(it, "is_omaggio", False) else ""
-        lines.append(f"• *{qty_str} {uom}* × {name}{code_str}{omaggio_badge}")
+        lines.append(f"• *{qty_str} {uom}* × {name}{variant_str}{code_str}{omaggio_badge}")
     
     omaggi_count = sum(int(it.quantita) for it in items if getattr(it, "is_omaggio", False))
     extra_notes = []
@@ -653,7 +668,29 @@ async def elabora_ordine_settore(
         is_concordato = False
         supplier_code = None
 
-        if chosen_supplier_id:
+        if it.preferred_offer_id:
+            chosen_alias = await db.scalar(select(SupplierProductAlias).where(
+                SupplierProductAlias.supplier_code == it.preferred_offer_id,
+                SupplierProductAlias.product_id == product.id,
+                SupplierProductAlias.supplier_id == chosen_supplier_id,
+                SupplierProductAlias.status == "approved",
+            ))
+            if not chosen_alias:
+                raise HTTPException(422, "Offerta selezionata non valida per questo prodotto e fornitore")
+            chosen_price = await db.scalar(select(ListinoMaster).where(
+                ListinoMaster.supplier_product_alias_id == chosen_alias.id,
+                ListinoMaster.sku_interno == product.sku_interno,
+                ListinoMaster.fornitore_id == chosen_supplier_id,
+                ListinoMaster.data_inizio_validita <= today,
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+            ).order_by(ListinoMaster.id.desc()).limit(1))
+            if not chosen_price:
+                raise HTTPException(422, "Prezzo dell’offerta selezionata non più attivo")
+            unit_price = float(chosen_price.prezzo_pattuito)
+            uom = "conf"
+            is_concordato = True
+            supplier_code = chosen_alias.supplier_code
+        elif chosen_supplier_id:
             # Query listino_master per il fornitore forzato/preferito
             if product.sku_interno:
                 listino_query = select(ListinoMaster).where(
@@ -700,7 +737,7 @@ async def elabora_ordine_settore(
             unit_price = 0.0
 
         # Cerca il codice articolo del fornitore tramite alias.
-        if product.id:
+        if product.id and not it.preferred_offer_id:
             alias = (await db.scalars(
                 select(SupplierProductAlias).where(
                     SupplierProductAlias.product_id == product.id,
@@ -722,6 +759,7 @@ async def elabora_ordine_settore(
             sku_interno=product.sku_interno,
             nome_prodotto=display_name,
             codice_fornitore=supplier_code,
+            variante=_variant_label(chosen_alias) if it.preferred_offer_id else None,
             quantita=it.quantita,
             uom=uom,
             prezzo_unitario=unit_price,
@@ -895,6 +933,16 @@ async def salva_ordini_settore(
             product_by_id[it.product_id] = product
             if it.sku_interno != product.sku_interno or it.nome_prodotto != product.canonical_name:
                 raise HTTPException(status_code=422, detail="Identità del prodotto modificata")
+            if it.codice_fornitore and it.codice_fornitore.startswith(("OFF-", "SG-")):
+                selected_alias = await db.scalar(select(SupplierProductAlias).where(
+                    SupplierProductAlias.supplier_id == bundle.fornitore_id,
+                    SupplierProductAlias.product_id == product.id,
+                    SupplierProductAlias.supplier_code == it.codice_fornitore,
+                    SupplierProductAlias.status == "approved",
+                ))
+                expected_variant = _variant_label(selected_alias) if selected_alias else None
+                if not selected_alias or it.variante != expected_variant or it.uom != "conf":
+                    raise HTTPException(status_code=422, detail="Variante dell’ordine non più valida")
             if not math.isfinite(it.quantita) or not math.isfinite(it.prezzo_unitario):
                 raise HTTPException(status_code=422, detail="Valore numerico non valido")
             if it.quantita <= 0 or it.prezzo_unitario < 0:
@@ -918,6 +966,20 @@ async def salva_ordini_settore(
                     .order_by(ListinoMaster.prezzo_pattuito.asc())
                     .limit(1)
                 )
+                if it.codice_fornitore and it.codice_fornitore.startswith(("OFF-", "SG-")):
+                    contract_stmt = (
+                        select(ListinoMaster)
+                        .join(SupplierProductAlias, SupplierProductAlias.id == ListinoMaster.supplier_product_alias_id)
+                        .where(
+                            ListinoMaster.fornitore_id == bundle.fornitore_id,
+                            ListinoMaster.sku_interno == product.sku_interno,
+                            SupplierProductAlias.supplier_code == it.codice_fornitore,
+                            ListinoMaster.data_inizio_validita <= today,
+                            or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+                        )
+                        .order_by(ListinoMaster.id.desc())
+                        .limit(1)
+                    )
                 contract = (await db.execute(contract_stmt)).scalar_one_or_none()
                 if contract is None or Decimal(str(it.prezzo_unitario)) != Decimal(str(contract.prezzo_pattuito)):
                     raise HTTPException(status_code=422, detail="Prezzo concordato differente dal listino")
@@ -997,7 +1059,11 @@ async def salva_ordini_settore(
                 prezzo_pattuito=it.prezzo_unitario,
                 prezzo_inserito=it.prezzo_unitario,
                 stato_ottimizzazione="omaggio" if is_omaggio else ("concordato" if it.is_concordato else "settore"),
-                note_riga=getattr(it, "note_omaggio", None) or ("Omaggio Promo 5+1" if is_omaggio else None),
+                note_riga=(
+                    f"Offerta {it.codice_fornitore}: {it.variante}"
+                    if it.variante and it.codice_fornitore else
+                    getattr(it, "note_omaggio", None) or ("Omaggio Promo 5+1" if is_omaggio else None)
+                ),
             )
             db.add(riga)
 

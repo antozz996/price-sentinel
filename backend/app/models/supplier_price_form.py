@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -63,6 +63,7 @@ class SupplierPriceFormItem(Base):
     conferma_prezzo: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     nota_fornitore: Mapped[str | None] = mapped_column(Text, nullable=True)
     non_trattato: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    offerte_inviate: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
 
     request = relationship("SupplierPriceFormRequest", back_populates="items")
 

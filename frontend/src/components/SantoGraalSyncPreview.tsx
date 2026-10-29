@@ -16,16 +16,23 @@ const SOURCE_RANGES = [
   { title: 'CONTROLLO_ESCLUSIONI', range: "'CONTROLLO_ESCLUSIONI'!A1:F100" },
 ]
 const NORMALIZED_RANGES = [
-  { title: 'FOOD', range: "'FOOD'!A1:L5001" },
-  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:L5001" },
-  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:L5001" },
-  { title: 'MATERIALI', range: "'MATERIALI'!A1:L5001" },
+  { title: 'FOOD', range: "'FOOD'!A1:M5001" },
+  { title: 'BEVERAGE', range: "'BEVERAGE'!A1:M5001" },
+  { title: 'FRUTTA E VERDURA', range: "'FRUTTA E VERDURA'!A1:M5001" },
+  { title: 'MATERIALI', range: "'MATERIALI'!A1:M5001" },
   { title: 'FORNITORI', range: "'FORNITORI'!A1:H5001" },
 ]
 
 type Candidate = {
   source_product_key?: string
   source_product_sku?: string
+  source_offer_id?: string | null
+  supplier_description?: string | null
+  supplier_brand?: string | null
+  package_quantity?: string | null
+  package_unit?: string | null
+  package_price?: string | null
+  package_confirmed?: boolean
   sector?: string
   subcategory?: string | null
   source_sheet: string
@@ -715,6 +722,40 @@ export default function SantoGraalSyncPreview() {
     setPricePreview(null)
     setPriceCommitResult(null)
     try {
+      if (importableCandidates.some(item => item.source_offer_id)) {
+        const rows = []
+        const unresolved: string[] = []
+        for (const item of importableCandidates) {
+          const product = item.source_product_sku
+            ? catalogProducts.find(row => row.sku_interno === item.source_product_sku)
+            : undefined
+          const supplierId = supplierMappings[normalizeName(item.supplier)]
+          if (!product?.sku_interno || !supplierId) {
+            unresolved.push(item.product + ' / ' + item.supplier)
+            continue
+          }
+          if (!item.package_price) {
+            unresolved.push(item.product + ': prezzo confezione assente')
+            continue
+          }
+          rows.push({
+            product_id: product.id, supplier_id: Number(supplierId), sku: product.sku_interno,
+            offer_id: item.source_offer_id || null,
+            description: item.supplier_description || item.product,
+            brand: item.supplier_brand || null,
+            quantity: item.package_quantity || null, unit: item.package_unit || null,
+            price: item.package_price,
+            package_confirmed: Boolean(item.package_confirmed),
+          })
+        }
+        if (unresolved.length) throw new Error('Completa le associazioni prima dell’importazione: ' + unresolved.slice(0, 8).join('; '))
+        const result = await fetchWithAuth('/smart-price-sheet/variant-preview', {
+          method: 'POST', body: JSON.stringify({ rows }),
+        }) as ContractPreview
+        setPricePreview(result)
+        if (!result.can_commit) throw new Error('Anteprima varianti bloccata: ' + (result.errors || []).slice(0, 5).map(error => error.message).join(' · '))
+        return
+      }
       const rowsBySku = new Map<string, { productId: number; unit: string | null; prices: Map<string, string> }>()
       const productMapping: Record<string, number> = {}
       const conflicts: string[] = []

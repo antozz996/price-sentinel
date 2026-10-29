@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 from decimal import Decimal
 from hashlib import sha256
 import secrets
+import re
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -26,6 +27,19 @@ def _require_primary_tenant(user: Utente) -> None:
     # Supplier and contract records are currently global legacy tables.
     if getattr(user, "tenant_id", None) != 1:
         raise HTTPException(status_code=403, detail="Moduli listino non ancora disponibili per questa azienda")
+
+
+def _offer_id(supplier_id: int, sku: str, offer: "SupplierOffer") -> str:
+    # Price and validity are deliberately excluded: a monthly price change
+    # updates the same commercial package instead of creating a new identity.
+    identity = "|".join((
+        str(supplier_id), sku.strip().casefold(),
+        re.sub(r"\s+", " ", (offer.dicitura_fornitore or "").strip().casefold()),
+        re.sub(r"\s+", " ", (offer.marca or "").strip().casefold()),
+        str(offer.quantita_confezione.normalize()) if offer.quantita_confezione else "",
+        (offer.unita_misura or "").strip().casefold(),
+    ))
+    return "OFF-" + sha256(identity.encode("utf-8")).hexdigest()[:16].upper()
 
 
 def _request_view(request: SupplierPriceFormRequest) -> dict:
@@ -60,6 +74,7 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "conferma_prezzo": item.conferma_prezzo,
                 "nota_fornitore": item.nota_fornitore,
                 "non_trattato": item.non_trattato,
+                "offerte_inviate": item.offerte_inviate or [],
                 "esito": (
                     "non_trattato" if item.non_trattato
                     else "da_compilare" if item.prezzo_inviato is None
@@ -83,16 +98,20 @@ class CreateFormRequest(BaseModel):
     note: Optional[str] = Field(default=None, max_length=1000)
 
 
-class SupplierAnswer(BaseModel):
-    item_id: int
+class SupplierOffer(BaseModel):
     prezzo: Decimal | None = Field(default=None, gt=0, lt=Decimal("100000000"), decimal_places=4)
     unita_misura: str | None = Field(default=None, min_length=1, max_length=50)
     marca: str | None = Field(default=None, max_length=100)
-    dicitura_fornitore: str | None = Field(default=None, max_length=500)
+    dicitura_fornitore: str | None = Field(default=None, max_length=255)
     quantita_confezione: Decimal | None = Field(default=None, gt=0, lt=Decimal("100000000"), decimal_places=3)
     conferma_prezzo: bool = False
-    non_trattato: bool = False
     nota: Optional[str] = Field(default=None, max_length=1000)
+
+
+class SupplierAnswer(SupplierOffer):
+    item_id: int
+    non_trattato: bool = False
+    offerte: list[SupplierOffer] | None = Field(default=None, min_length=1, max_length=10)
 
 
 class PublicSubmission(BaseModel):
@@ -175,12 +194,8 @@ async def submit_public_form(
 
     for item in request.items:
         answer = answers_by_id[item.id]
-        item.nota_fornitore = answer.nota.strip() if answer.nota else None
-        item.brand_inviata = answer.marca.strip() if answer.marca else None
-        item.dicitura_inviata = answer.dicitura_fornitore.strip() if answer.dicitura_fornitore else None
-        item.quantita_inviata = answer.quantita_confezione
         if answer.non_trattato:
-            if answer.conferma_prezzo:
+            if answer.conferma_prezzo or answer.offerte:
                 raise HTTPException(status_code=422, detail="Un prodotto non trattato non può essere confermato")
             item.non_trattato = True
             item.prezzo_inviato = None
@@ -189,31 +204,47 @@ async def submit_public_form(
             item.dicitura_inviata = None
             item.quantita_inviata = None
             item.conferma_prezzo = False
+            item.offerte_inviate = []
             continue
-        if answer.prezzo is None:
-            raise HTTPException(status_code=422, detail=f"Inserisci un prezzo oppure indica che non tratti {item.sku_interno}")
-        unit = (answer.unita_misura or "").strip()
-        if not unit:
-            raise HTTPException(status_code=422, detail=f"Unità di misura mancante per {item.sku_interno}")
-        if not item.brand_inviata:
-            raise HTTPException(status_code=422, detail=f"Marca mancante per {item.sku_interno}; indica la marca oppure 'senza marca'")
-        if not item.dicitura_inviata:
-            raise HTTPException(status_code=422, detail=f"Dicitura fornitore mancante per {item.sku_interno}")
-        if item.quantita_inviata is None:
-            raise HTTPException(status_code=422, detail=f"Quantità confezione mancante per {item.sku_interno}")
-        same_price = item.prezzo_corrente is not None and answer.prezzo == item.prezzo_corrente
-        same_unit = item.unita_corrente is not None and unit.casefold() == item.unita_corrente.strip().casefold()
-        if request.request_type == "new_listino" and answer.conferma_prezzo:
-            raise HTTPException(status_code=422, detail="Una nuova offerta non può essere marcata come conferma")
-        if answer.conferma_prezzo and not (same_price and same_unit):
-            raise HTTPException(
-                status_code=422,
-                detail=f"La riga {item.sku_interno} è indicata come confermata ma prezzo o unità sono diversi dal pattuito",
-            )
+        offers = answer.offerte or [answer]
+        saved_offers = []
+        seen_offer_ids: set[str] = set()
+        for index, offer in enumerate(offers):
+            if offer.prezzo is None or not (offer.unita_misura or "").strip() or not (offer.marca or "").strip() or not (offer.dicitura_fornitore or "").strip() or offer.quantita_confezione is None:
+                raise HTTPException(status_code=422, detail=f"Completa dicitura, marca, quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
+            if request.request_type == "new_listino" and offer.conferma_prezzo:
+                raise HTTPException(status_code=422, detail="Una nuova offerta non può essere marcata come conferma")
+            if offer.conferma_prezzo and index != 0:
+                raise HTTPException(status_code=422, detail="Solo l'offerta principale può confermare il prezzo pattuito")
+            if offer.conferma_prezzo and not (
+                item.prezzo_corrente is not None and offer.prezzo == item.prezzo_corrente
+                and item.unita_corrente is not None and offer.unita_misura.strip().casefold() == item.unita_corrente.strip().casefold()
+            ):
+                raise HTTPException(status_code=422, detail=f"La riga {item.sku_interno} è indicata come confermata ma prezzo o unità sono diversi dal pattuito")
+            offer_id = _offer_id(request.supplier_id, item.sku_interno, offer)
+            if offer_id in seen_offer_ids:
+                raise HTTPException(status_code=422, detail=f"Due offerte identiche per {item.sku_interno}: cambia marca, formato o dicitura")
+            seen_offer_ids.add(offer_id)
+            saved_offers.append({
+                "id_offerta": offer_id,
+                "prezzo": str(offer.prezzo),
+                "unita_misura": offer.unita_misura.strip(),
+                "marca": offer.marca.strip(),
+                "dicitura_fornitore": offer.dicitura_fornitore.strip(),
+                "quantita_confezione": str(offer.quantita_confezione),
+                "conferma_prezzo": offer.conferma_prezzo,
+                "nota": offer.nota.strip() if offer.nota else None,
+            })
+        primary = offers[0]
         item.non_trattato = False
-        item.prezzo_inviato = answer.prezzo
-        item.unita_inviata = unit
-        item.conferma_prezzo = answer.conferma_prezzo
+        item.prezzo_inviato = primary.prezzo
+        item.unita_inviata = primary.unita_misura.strip()
+        item.brand_inviata = primary.marca.strip()
+        item.dicitura_inviata = primary.dicitura_fornitore.strip()
+        item.quantita_inviata = primary.quantita_confezione
+        item.nota_fornitore = primary.nota.strip() if primary.nota else None
+        item.conferma_prezzo = primary.conferma_prezzo
+        item.offerte_inviate = saved_offers
 
     request.status = "submitted"
     request.submitted_at = now

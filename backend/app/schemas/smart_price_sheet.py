@@ -29,7 +29,7 @@ class NormalizedSheetDryRunRequest(BaseModel):
         if set(self.values) != {"FOOD", "BEVERAGE", "FRUTTA E VERDURA", "MATERIALI", "FORNITORI"}:
             raise ValueError("Schede del nuovo Sheet incomplete")
         for name, rows in self.values.items():
-            if len(rows) > 5001 or any(len(row) > (8 if name == "FORNITORI" else 12) for row in rows):
+            if len(rows) > 5001 or any(len(row) > (8 if name == "FORNITORI" else 13) for row in rows):
                 raise ValueError(f"La scheda {name} supera i limiti previsti")
         return self
 
@@ -73,7 +73,8 @@ class GoogleSheetDryRunRequest(BaseModel):
 class CellPreviewRequest(BaseModel):
     product_id: int = Field(gt=0)
     supplier_id: int = Field(gt=0)
-    price: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
+    price: Decimal = Field(gt=0, lt=100000000)
+    package_confirmed: bool = False
     effective_date: date = Field(default_factory=date.today)
     uom: str = Field(default="piece", min_length=1, max_length=20)
     location_id: int | None = Field(default=None, gt=0)
@@ -82,6 +83,23 @@ class CellPreviewRequest(BaseModel):
 class CommitPreviewRequest(BaseModel):
     preview_token: UUID
     confirm: bool
+
+
+class VariantPriceRow(BaseModel):
+    product_id: int = Field(gt=0)
+    supplier_id: int = Field(gt=0)
+    sku: str = Field(min_length=1, max_length=100)
+    offer_id: str | None = Field(default=None, max_length=100)
+    description: str = Field(min_length=1, max_length=255)
+    brand: str | None = Field(default=None, max_length=100)
+    quantity: Decimal | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, max_length=20)
+    price: Decimal = Field(gt=0, max_digits=12, decimal_places=4)
+
+
+class VariantPricePreviewRequest(BaseModel):
+    rows: list[VariantPriceRow] = Field(min_length=1, max_length=5000)
+    effective_date: date = Field(default_factory=date.today)
 
 
 class SupplierSectorUpdateRequest(BaseModel):

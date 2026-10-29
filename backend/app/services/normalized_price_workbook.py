@@ -194,6 +194,9 @@ def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
             if not product_id and not product and not supplier:
                 continue
             notes = _text(cell("note"))
+            offer_id = _text(row[12]) if len(row) > 12 else ""
+            if offer_id and (len(header_row) < 13 or _text(header_row[12]) != "ID_OFFERTA"):
+                raise ValueError(f"La scheda {tab} contiene ID offerta senza l'intestazione ID_OFFERTA.")
             origin_match = re.search(r"Origine\s+(.+?!)(?:[A-Z]+)?([0-9]+)", notes)
             source_key = origin_match.group(1) + origin_match.group(2) if origin_match else f"{tab}!{row_number}"
             generated_sku = "SG3-" + hashlib.sha256(source_key.encode("utf-8")).hexdigest()[:16].upper()
@@ -272,6 +275,13 @@ def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
             candidates.append({
                 "source_product_key": source_key,
                 "source_product_sku": product_id,
+                "source_offer_id": offer_id or None,
+                "supplier_description": _text(cell("dicitura_fornitore")) or product,
+                "supplier_brand": _text(cell("marca")) or None,
+                "package_quantity": format(quantity, "f") if quantity is not None else None,
+                "package_unit": unit or None,
+                "package_price": price,
+                "package_confirmed": complete_pack,
                 "sector": sector,
                 "subcategory": _text(cell("sottocategoria")) or ("Frutta" if tab == "FRUTTA E VERDURA" else None),
                 "source_sheet": tab,
@@ -303,6 +313,15 @@ def _new_format_preview(workbook: Any, file_bytes: bytes) -> dict[str, Any]:
             else:
                 tally["review"] += 1
         sector_summary.append(tally)
+
+    offer_id_counts = Counter(item["source_offer_id"] for item in candidates if item.get("source_offer_id"))
+    for item in candidates:
+        if item.get("source_offer_id") and offer_id_counts[item["source_offer_id"]] > 1:
+            if item["status"] != "blocked":
+                next(entry for entry in sector_summary if entry["tab"] == item["source_sheet"])["blocked"] += 1
+                next(entry for entry in sector_summary if entry["tab"] == item["source_sheet"])["review"] -= 1
+            item["status"] = "blocked"
+            item["reasons"] = sorted(set(item["reasons"] + ["duplicate_offer_id"]))
 
     return {
         "mode": "dry_run_only",
@@ -344,7 +363,7 @@ def parse_normalized_sheet_values(values: dict[str, list[list[Any]]], spreadshee
             raise ValueError(f"La scheda {name} supera il limite di 5.000 righe dati.")
         sheet = workbook.create_sheet(name)
         for row in rows:
-            if len(row) > (8 if name == "FORNITORI" else 12):
+            if len(row) > (8 if name == "FORNITORI" else 13):
                 raise ValueError(f"La scheda {name} contiene colonne inattese.")
             if any(isinstance(value, str) and value.startswith("=") for value in row):
                 raise ValueError(f"La scheda {name} contiene formule: usa valori calcolati per l’anteprima.")

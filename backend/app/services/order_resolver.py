@@ -169,6 +169,28 @@ async def resolve_order_item(
     )
     aliases = (await db.execute(alias_stmt)).scalars().all()
 
+    specific_alias_ids = set()
+    if aliases:
+        specific_alias_ids = set((await db.scalars(
+            select(ListinoMaster.supplier_product_alias_id).where(
+                ListinoMaster.supplier_product_alias_id.in_([alias.id for alias in aliases]),
+                ListinoMaster.data_inizio_validita <= date.today(),
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= date.today()),
+            )
+        )).all())
+
+    variant_aliases = [alias for alias in aliases if alias.source == "normalized_sheet_offer"]
+    active_variant_ids = set()
+    if variant_aliases:
+        active_variant_ids = set((await db.scalars(
+            select(ListinoMaster.supplier_product_alias_id).where(
+                ListinoMaster.supplier_product_alias_id.in_([alias.id for alias in variant_aliases]),
+                ListinoMaster.data_inizio_validita <= date.today(),
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= date.today()),
+            )
+        )).all())
+    variant_pairs = {(alias.product_id, alias.supplier_id) for alias in variant_aliases if alias.id in active_variant_ids}
+
     offers = []
     incomplete_unit_offers = []
     warnings = []
@@ -178,13 +200,20 @@ async def resolve_order_item(
     for alias in aliases:
         prod = alias.product
         supplier = alias.supplier
+        if ((alias.product_id, alias.supplier_id) in variant_pairs
+                and alias.source != "normalized_sheet_offer" and alias.id not in specific_alias_ids):
+            continue
+
+        # Sheet offers have their own contract price. A generic price from an
+        # older import must never be borrowed by a different brand or format.
+        variant_offer = alias.source == "normalized_sheet_offer" or (alias.supplier_code or "").startswith("OFF-")
 
         # Cerca prezzo contrattuale attivo (specifico per alias o generico per SKU)
         listino_stmt = select(ListinoMaster).options(noload("*")).where(
             and_(
                 ListinoMaster.fornitore_id == alias.supplier_id,
                 ListinoMaster.sku_interno == prod.sku_interno,
-                or_(
+                (ListinoMaster.supplier_product_alias_id == alias.id) if variant_offer else or_(
                     ListinoMaster.supplier_product_alias_id == alias.id,
                     ListinoMaster.supplier_product_alias_id.is_(None)
                 ),
@@ -211,7 +240,7 @@ async def resolve_order_item(
 
         if listino:
             price_val = Decimal(str(listino.prezzo_pattuito))
-        else:
+        elif not variant_offer:
             # Fallback spot su fatture passate
             from app.models.fatture import RigaFattura, Fattura
             spot_stmt = (
@@ -239,7 +268,7 @@ async def resolve_order_item(
             continue
 
         # Esegui normalizzazione prezzo
-        offer_unit = (listino.unita_misura if listino else None) or prod.comparison_unit
+        offer_unit = listino.unita_misura if listino else prod.comparison_unit
         norm_res = normalize_price_for_comparison(
             price_or_line=price_val,
             quantity_or_product=Decimal("1"),
@@ -293,6 +322,7 @@ async def resolve_order_item(
             "supplier_id": alias.supplier_id,
             "supplier_name": supplier.nome_azienda,
             "supplier_product_name": alias.raw_description,
+            "supplier_brand": alias.brand,
             "supplier_code": alias.supplier_code,
             "pack_qty": pack_qty,
             "packs_needed": packs_needed,
