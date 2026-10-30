@@ -65,9 +65,10 @@ async function requestGoogleSheetsWriteToken(): Promise<string> {
       },
       error_callback: (error: any) => finish(() => reject(new Error(error?.message || 'Popup Google non disponibile.'))),
     });
-    // Reuse an already-authorized Google session without forcing a popup.
-    // If consent is missing, Google returns a clear error instead of leaving the UI busy forever.
-    client.requestAccessToken({ prompt: '' });
+    // This call runs directly inside the user's button click, so Google can open
+    // its consent window even when this browser has no cached access token.
+    // The timeout above still prevents a dismissed/blocked popup from freezing the UI.
+    client.requestAccessToken({ prompt: 'consent' });
   });
 }
 
