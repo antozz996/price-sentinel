@@ -7,6 +7,17 @@ type FormData = { supplier_name: string; request_type: 'confirmation' | 'new_lis
 type ExtraOffer = { key: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota: string };
 type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string; extraOffers: ExtraOffer[] };
 
+function apiErrorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map(item => item && typeof item === 'object' && 'msg' in item ? String(item.msg) : '')
+      .filter(Boolean);
+    if (messages.length) return messages.join(' · ');
+  }
+  return fallback;
+}
+
 export default function SupplierPricePublicForm({ token }: { token: string }) {
   const [data, setData] = useState<FormData | null>(null);
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
@@ -70,7 +81,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         })
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.detail || 'Invio non riuscito');
+      if (!response.ok) throw new Error(apiErrorMessage(body.detail, 'Invio non riuscito'));
       localStorage.removeItem(draftKey);
       setDone(true);
     } catch (e) { setError(e instanceof Error ? e.message : 'Invio non riuscito'); }

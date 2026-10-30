@@ -47,15 +47,27 @@ async function requestGoogleSheetsWriteToken(): Promise<string> {
   await loadGoogleIdentityScript();
   return new Promise((resolve, reject) => {
     const google = (window as any).google;
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      callback();
+    };
+    const timeoutId = window.setTimeout(() => finish(() => reject(new Error(
+      'Google non ha completato l’autorizzazione. Consenti i popup per questa pagina e riprova.'
+    ))), 20000);
     const client = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_SHEETS_CLIENT_ID, scope: GOOGLE_SHEETS_SCOPE,
       callback: (response: any) => {
-        if (response?.error || !response?.access_token) reject(new Error(response?.error_description || response?.error || 'Consenso Google non completato.'));
-        else resolve(response.access_token as string);
+        if (response?.error || !response?.access_token) finish(() => reject(new Error(response?.error_description || response?.error || 'Consenso Google non completato.')));
+        else finish(() => resolve(response.access_token as string));
       },
-      error_callback: (error: any) => reject(new Error(error?.message || 'Popup Google non disponibile.')),
+      error_callback: (error: any) => finish(() => reject(new Error(error?.message || 'Popup Google non disponibile.'))),
     });
-    client.requestAccessToken();
+    // Reuse an already-authorized Google session without forcing a popup.
+    // If consent is missing, Google returns a clear error instead of leaving the UI busy forever.
+    client.requestAccessToken({ prompt: '' });
   });
 }
 
