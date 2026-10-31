@@ -251,7 +251,8 @@ jobs:
           assert not vercel.get("rewrites"), "Staging frontend must not proxy V1 backend"
           assert not vercel.get("redirects"), "Staging frontend must not redirect to V1"
           frontend_api = Path("frontend/src/api.ts").read_text()
-          assert "export const API_BASE = '/api/v1';" in frontend_api
+          assert "VITE_API_BASE" in frontend_api
+          assert "configuredApiBase || '/api/v1'" in frontend_api
           print("PASS: V2 isolation, no host ports, no production API proxy")
           PY
 

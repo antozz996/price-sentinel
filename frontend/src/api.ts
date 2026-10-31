@@ -16,7 +16,11 @@ export interface Anomalia {
   fornitore_nome?: string;
 }
 
-export const API_BASE = '/api/v1';
+const configuredApiBase = ((import.meta as any).env?.VITE_API_BASE as string | undefined)?.trim();
+
+// Same-origin is the safe default for local and staging. Production hosting
+// may set VITE_API_BASE to the reviewed public API origin at build time.
+export const API_BASE = (configuredApiBase || '/api/v1').replace(/\/+$/, '');
 
 export function getHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
   const token = localStorage.getItem('token');
