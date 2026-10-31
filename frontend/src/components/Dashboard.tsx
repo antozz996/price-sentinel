@@ -35,10 +35,14 @@ export default function Dashboard() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
   const [varianceLoss, setVarianceLoss] = useState<VarianceLossItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
     async function loadData() {
+      setLoading(true);
+      setLoadError(null);
       try {
         const [kpiData, leaderboardData, varianceData] = await Promise.all([
           fetchWithAuth('/intelligence/kpi', { signal: controller.signal }),
@@ -55,6 +59,7 @@ export default function Dashboard() {
       } catch (error: any) {
         if (error.name !== 'AbortError') {
           console.error("Error loading Dashboard data", error);
+          setLoadError("Impossibile caricare gli indicatori economici. Controlla la connessione API e riprova.");
         }
       } finally {
         setLoading(false);
@@ -62,11 +67,21 @@ export default function Dashboard() {
     }
     loadData();
     return () => controller.abort();
-  }, []);
+  }, [retryCount]);
 
   if (loading) return <div style={{ color: 'var(--text-secondary)', padding: '24px' }}>Caricamento Intelligence...</div>;
+  if (loadError) {
+    return (
+      <div className="glass-panel" role="alert" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <h3 style={{ margin: 0 }}>Dati dashboard non disponibili</h3>
+        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{loadError}</p>
+        <button className="btn btn-primary" onClick={() => setRetryCount(count => count + 1)} style={{ alignSelf: 'flex-start' }}>Riprova</button>
+      </div>
+    );
+  }
 
-  const annualLoss = (kpi?.euro_a_rischio || 0) * 12;
+  // Current open disputed amount is not a monthly or annualized rate.
+  const openRiskAmount = kpi?.euro_a_rischio || 0;
 
   const cards = [
     { 
@@ -199,13 +214,13 @@ export default function Dashboard() {
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'rgba(239, 68, 68, 0.9)', fontWeight: 700, letterSpacing: '0.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 10px #ef4444' }}></span>
-                  PERDITA ANNUALE PROIETTATA
+                  VALORE A RISCHIO RILEVATO
                 </div>
                 <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ef4444', letterSpacing: '-0.5px', textShadow: '0 0 20px rgba(239, 68, 68, 0.3)', wordBreak: 'break-word' }}>
-                  € {Number(annualLoss).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  € {Number(openRiskAmount).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.4 }}>
-                  Calcolata come proiezione YTD su base 12 mesi dei rincari attivi non giustificati dai listini pattuiti.
+                  Somma delle anomalie attualmente contestate. Non rappresenta una proiezione annuale.
                 </div>
               </div>
 
@@ -215,9 +230,9 @@ export default function Dashboard() {
                   <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.2 }}>Coalesce LAG/Listino</span>
                 </div>
                 <div className="glass-panel" style={{ padding: '12px 14px', flex: '1 1 140px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Risparmio YTD</span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Verifica risparmio</span>
                   <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    100% Audit <ArrowUpRight size={15}/>
+                    Dati in verifica <ArrowUpRight size={15}/>
                   </span>
                 </div>
               </div>
@@ -226,7 +241,7 @@ export default function Dashboard() {
 
           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Percent size={14} color="var(--accent-blue)" style={{ flexShrink: 0 }} />
-            <span>Gli acquisti ottimali riducono il costo unitario medio del locale fino al 7.4% YTD.</span>
+            <span>Il risparmio effettivo sarà disponibile dopo la verifica degli acquisti e dei listini.</span>
           </div>
         </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Building2, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Search, Table2, Trash2 } from 'lucide-react'
 import { fetchWithAuth } from '../api'
+import SantoGraalSyncPreview from './SantoGraalSyncPreview'
 
 type Supplier = { id: number; name: string; vat: string }
 type Product = { id: number; sku_interno?: string | null; canonical_name: string; order_name?: string | null }
@@ -82,6 +83,7 @@ const input: React.CSSProperties = { padding: '10px 12px', background: 'rgba(255
 const tabs = [
   { id: 'matrix', label: 'Matrice', icon: Table2 },
   { id: 'paste', label: 'Foglio prezzi', icon: ClipboardPaste },
+  { id: 'google', label: 'Santo Graal', icon: RefreshCw },
   { id: 'sectors', label: 'Settori fornitori', icon: Building2 },
   { id: 'history', label: 'Storico e audit', icon: History },
 ] as const
@@ -156,9 +158,10 @@ function columnLabel(index: number): string {
 }
 
 const MACRO_CATEGORIES = [
+  // Keep this selector limited to the sectors used by the active purchasing workflow.
   { id: 'Beverage', label: 'Beverage', icon: '🍹', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', border: '#3b82f6' },
   { id: 'Food', label: 'Food', icon: '🍽️', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: '#f59e0b' },
-  { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: '#10b981', bg: 'rgba(16,185,129,0.15)', border: '#10b981' },
+  { id: 'Materiali', label: 'Materiali di consumo', icon: '📦', color: '#10b981', bg: 'rgba(16,185,129,0.15)', border: '#10b981' },
 ] as const
 
 type MacroCategory = typeof MACRO_CATEGORIES[number]['id']
@@ -183,7 +186,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [categorySheets, setCategorySheets] = useState<Record<string, string[][]>>({
     'Beverage': blankSheet(),
     'Food': blankSheet(),
-    'Materiali di consumo': blankSheet(),
+    'Materiali': blankSheet(),
   })
 
   const currentSheetKey = activeSubcategorySheet !== 'all' ? `${activeCategorySheet}:${activeSubcategorySheet}` : activeCategorySheet
@@ -200,7 +203,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [sheetInitialized, setSheetInitialized] = useState(false)
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
   const [defaultUom, setDefaultUom] = useState('Pz')
-  const [autoCreateProducts, setAutoCreateProducts] = useState(true)
+  const [autoCreateProducts, setAutoCreateProducts] = useState(false)
   const [supplierMapping, setSupplierMapping] = useState<Record<string, number>>({})
   const [productMapping, setProductMapping] = useState<Record<string, number>>({})
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -273,17 +276,17 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       const [bevData, foodData, matData] = await Promise.all([
         fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Beverage') as Promise<MatrixResponse>,
         fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Food') as Promise<MatrixResponse>,
-        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Materiali%20di%20consumo') as Promise<MatrixResponse>,
+        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Materiali') as Promise<MatrixResponse>,
       ])
 
       setCategorySheets(prev => ({
         ...prev,
         'Beverage': sheetFromMatrix(bevData),
         'Food': sheetFromMatrix(foodData),
-        'Materiali di consumo': sheetFromMatrix(matData),
+        'Materiali': sheetFromMatrix(matData),
       }))
       setSheetInitialized(true)
-      setNotice(`Fogli precaricati per settore: Beverage (${bevData.rows.length}), Food (${foodData.rows.length}), Materiali di consumo (${matData.rows.length}).`)
+      setNotice(`Fogli precaricati: Beverage (${bevData.rows.length}), Food (${foodData.rows.length}), Materiali di consumo (${matData.rows.length}).`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -396,6 +399,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => {
     void loadMatrix()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offset, selectedMatrixCategory])
   useEffect(() => {
     if (activeTab === 'paste') void loadProducts()
@@ -420,6 +424,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         void reloadCurrentPrices(activeCategorySheet, activeSubcategorySheet)
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, activeCategorySheet, activeSubcategorySheet])
 
   const visibleSuppliers = useMemo(
@@ -808,8 +813,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 <span>{row.sku_interno || 'SKU mancante'}</span>
                 <span>·</span>
                 <span style={{
-                  color: row.category === 'Food' ? '#f59e0b' : row.category === 'Materiali di consumo' ? '#10b981' : '#60a5fa',
-                  background: row.category === 'Food' ? 'rgba(245,158,11,0.1)' : row.category === 'Materiali di consumo' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                  color: row.category === 'Food' ? '#f59e0b' : row.category === 'Materiali' ? '#10b981' : '#60a5fa',
+                  background: row.category === 'Food' ? 'rgba(245,158,11,0.1)' : row.category === 'Materiali' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
                   padding: '1px 6px',
                   borderRadius: 4,
                   fontSize: 10,
@@ -990,6 +995,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       <PreviewPanel />
     </>}
 
+    {activeTab === 'google' && isAdmin && <SantoGraalSyncPreview />}
+
     {activeTab === 'paste' && <>
       <div className="glass-panel" style={{ ...panel, gap: 14 }}>
         {/* 3 Category Sheets Switcher */}
@@ -1099,8 +1106,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <div>
             <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Foglio Prezzi</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? '#f59e0b' : activeCategorySheet === 'Materiali di consumo' ? '#10b981' : '#60a5fa', background: activeCategorySheet === 'Food' ? 'rgba(245,158,11,0.12)' : activeCategorySheet === 'Materiali di consumo' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--border-glass)' }}>
-                Settore: {activeCategorySheet}
+              <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? '#f59e0b' : activeCategorySheet === 'Materiali' ? '#10b981' : '#60a5fa', background: activeCategorySheet === 'Food' ? 'rgba(245,158,11,0.12)' : activeCategorySheet === 'Materiali' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--border-glass)' }}>
+                Settore: {MACRO_CATEGORIES.find(category => category.id === activeCategorySheet)?.label || activeCategorySheet}
               </span>
               {activeSubcategorySheet !== 'all' && (
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid rgba(167,139,250,0.3)' }}>
@@ -1187,7 +1194,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           {sectorData?.suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
         </select>
       </label>
-      {loading && !sectorData ? <div>Caricamento settori…</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12 }}>
+      {loading && !sectorData ? <div role="status">Caricamento settori…</div> : !sectorData?.suppliers.length ? <div role="status" style={{ padding: 20, color: 'var(--text-secondary)' }}>Nessun fornitore disponibile per configurare i settori.</div> : !sectorData.suppliers.find(supplier => supplier.id === sectorSupplierId)?.sectors.length ? <div role="status" style={{ padding: 20, color: 'var(--text-secondary)' }}>Nessun settore configurabile per questo fornitore.</div> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12 }}>
         {sectorData?.suppliers.find(supplier => supplier.id === sectorSupplierId)?.sectors.map(sector => {
           const key = `${sectorSupplierId}:${sector.category}`
           const choices: Array<{ mode: SectorMode; label: string }> = [

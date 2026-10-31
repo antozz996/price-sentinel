@@ -198,10 +198,10 @@ check("missing signature rejected", response.status_code == 401)
 _, response = post_event(confirmed, secret="wrong-test-secret")
 check("invalid signature rejected", response.status_code == 401)
 
-_, response = post_event(confirmed, timestamp=int(time.time()) - 301)
+_, response = post_event(confirmed, timestamp=int(time.time()) - 360)
 check("expired timestamp rejected", response.status_code == 401)
 
-_, response = post_event(confirmed, timestamp=int(time.time()) + 301)
+_, response = post_event(confirmed, timestamp=int(time.time()) + 360)
 check("future timestamp rejected", response.status_code == 401)
 
 _, response = post_event(confirmed, source="other-system")

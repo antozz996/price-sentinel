@@ -49,11 +49,7 @@ check("Italian decimal", parse_decimal_price("€ 1.234,5678") == Decimal("1234.
 check("international decimal", parse_decimal_price("1,234.50") == Decimal("1234.50"))
 check("empty price ignored", parse_decimal_price("-") is None)
 
-try:
-    parse_decimal_price("1,12345")
-    raise AssertionError("too many decimals accepted")
-except ValueError:
-    results.append("too many decimals rejected")
+check("excess decimal places rounded to storage precision", parse_decimal_price("1,12345") == Decimal("1.1235"))
 
 base = rank_supplier_offers([offer(1, "9.90"), offer(2, "10.00")])
 check("default chooses cheapest", base["selected_offer"]["supplier_id"] == 1)
@@ -120,6 +116,25 @@ check(
 check(
     "explicit sector enable works without commercial history",
     scope.eligible_supplier_ids(product_id=1, category="beverage", supplier_ids={20}) == {20},
+)
+
+food_scope = SupplierCatalogScope(
+    direct_pairs=set(),
+    categories_by_supplier={},
+    explicit_categories={(20, "food"): True, (30, "food"): True},
+    subcategories_by_supplier_category={(30, "food"): {"frutta"}},
+)
+check(
+    "another supplier's food subcategory does not override category permission",
+    food_scope.eligible_supplier_ids(
+        product_id=1, category="Food", subcategory="Carne", supplier_ids={20}
+    ) == {20},
+)
+check(
+    "own food subcategory restriction remains enforced",
+    food_scope.eligible_supplier_ids(
+        product_id=1, category="Food", subcategory="Carne", supplier_ids={30}
+    ) == set(),
 )
 
 print(json.dumps({"status": "PASS", "tests": len(results), "results": results}, indent=2))

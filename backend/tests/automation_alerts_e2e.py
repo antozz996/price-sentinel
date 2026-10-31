@@ -76,6 +76,13 @@ def seed_conditions() -> str:
           repeat('a',64),now(),'failed','projection_failure',now()
         );
 
+        -- Existing synthetic invoice seed used a fixed July 2026 date.
+        -- Move only the disposable fixture invoice forward: a recent order
+        -- cannot have a candidate dated three months before its creation.
+        update fatture
+        set data_documento=current_date
+        where id=1 and location_id=1 and fornitore_id=1;
+
         update dispute_case_anomalies
         set recognized_amount=claimed_amount
         where dispute_case_id=%s;
@@ -115,11 +122,20 @@ async def run() -> None:
         check("only admin can run monitor", response.status_code == 403)
 
         response = await client.post("/api/v1/automation/run", headers=admin)
+        observed = response.json() if response.status_code == 200 else {}
+        if observed.get("alerts_detected", 0) < 6:
+            # CI fixture only: do not log payloads, tokens or user details.
+            print(
+                f"DIAGNOSTIC: monitor HTTP={response.status_code}, "
+                f"status={observed.get('status')}, "
+                f"alerts_detected={observed.get('alerts_detected')}",
+                flush=True,
+            )
         check(
             "monitor detects operational conditions",
             response.status_code == 200
-            and response.json()["status"] == "completed"
-            and response.json()["alerts_detected"] >= 6,
+            and observed["status"] == "completed"
+            and observed["alerts_detected"] >= 6,
         )
 
         response = await client.get("/api/v1/automation/alerts", headers=admin)

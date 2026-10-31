@@ -128,6 +128,8 @@ export default function SettingsPage() {
     const controller = new AbortController();
     loadData(controller.signal);
     return () => controller.abort();
+  // Initial settings bootstrap; saves invoke reload explicitly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const parseApiError = async (res: Response, defaultMsg: string): Promise<string> => {

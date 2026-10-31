@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, Sparkles, RefreshCw, Check, ArrowDownToLine, Zap } from 'lucide-react';
+import { FileSpreadsheet, Download, CheckCircle2, AlertCircle, Sparkles, RefreshCw, ArrowDownToLine, Zap } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
 interface Fornitore {
@@ -33,6 +33,35 @@ export default function PriceListManager() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadingMulti, setUploadingMulti] = useState(false);
+  const [multiPreview, setMultiPreview] = useState<{
+    total_rows: number;
+    valid_records: number;
+    preview_token: string;
+    warning?: string;
+    expires_at?: string;
+    suppliers_detected: string[];
+    errors_count: number;
+    records_preview: Array<{
+      sku_interno: string;
+      descrizione: string;
+      unita_misura: string;
+      prezzi: Record<string, string>;
+      confronti: Array<{
+        fornitore: string;
+        prezzo_corrente: string | null;
+        unita_corrente: string | null;
+        prezzo_proposto: string;
+        unita_proposta: string;
+        delta_unitario: string | null;
+        delta_percentuale: string | null;
+        decorrenza_proposta: string;
+        scadenza_proposta: string | null;
+        stato: string;
+      }>;
+    }>;
+    records_preview_truncated: boolean;
+  } | null>(null);
+  const [confirmMultiImport, setConfirmMultiImport] = useState(false);
   const [activeTab, setActiveTab] = useState<'standard' | 'multi' | 'extract'>('extract');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
   const [validationErrors, setValidationErrors] = useState<{ row: number, column: string, message: string }[]>([]);
@@ -41,7 +70,6 @@ export default function PriceListManager() {
   const [extractSupplier, setExtractSupplier] = useState<string>('');
   const [priceStrategy, setPriceStrategy] = useState<'latest' | 'min' | 'avg'>('latest');
   const [extractLoading, setExtractLoading] = useState(false);
-  const [importingDirect, setImportingDirect] = useState(false);
   const [extractedData, setExtractedData] = useState<ExtractedResult | null>(null);
 
   const loadFornitori = async (signal?: AbortSignal) => {
@@ -88,7 +116,7 @@ export default function PriceListManager() {
       const headers = getHeaders();
       delete headers['Content-Type'];
 
-      const res = await fetch(`${API_BASE}/listino/import-excel/${selectedFornitore}`, {
+      const res = await fetch(`${API_BASE}/listino/import-excel/${selectedFornitore}?dry_run=true`, {
         method: 'POST',
         headers,
         body: formData,
@@ -102,12 +130,13 @@ export default function PriceListManager() {
           return;
         }
         
-        let msg = `Importato con successo! Aggiunti: ${result.inserted}.`;
-        if (result.updated > 0) msg += ` Aggiornati: ${result.updated}.`;
-        if (result.skipped_duplicates > 0) msg += ` Saltati (già presenti e invariati): ${result.skipped_duplicates}.`;
-        
-        setMessage({ text: msg, type: 'success' });
-        setFile(null);
+        if (result.mode !== 'dry_run') {
+          throw new Error('Risposta di validazione inattesa: nessun import deve essere eseguito.');
+        }
+        setMessage({
+          text: 'Listino validato senza modificare prezzi o contratti. Per l’approvazione usa il flusso comparativo con anteprima firmata.',
+          type: 'success'
+        });
       } else {
         let errorMsg = result.detail || 'Impossibile caricare il listino';
         if (typeof errorMsg === 'object') {
@@ -134,14 +163,25 @@ export default function PriceListManager() {
     setMessage(null);
     setValidationErrors([]);
 
+    const isPreview = multiPreview === null;
+    if (!isPreview && !confirmMultiImport) {
+      setMessage({ text: 'Conferma di aver verificato l’anteprima prima di importare.', type: 'error' });
+      setUploadingMulti(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
+    if (!isPreview && multiPreview) {
+      formData.append('approval_token', multiPreview.preview_token);
+      formData.append('confirm_import', 'true');
+    }
 
     try {
       const headers = getHeaders();
       delete headers['Content-Type'];
 
-      const res = await fetch(`${API_BASE}/listino/import-multi-supplier`, {
+      const res = await fetch(`${API_BASE}/listino/import-multi-supplier?dry_run=${isPreview ? 'true' : 'false'}`, {
         method: 'POST',
         headers,
         body: formData,
@@ -149,9 +189,25 @@ export default function PriceListManager() {
 
       const result = await res.json();
       if (res.ok) {
+        if (isPreview && result.mode === 'dry_run') {
+          if (!result.preview_token) {
+            setMessage({ text: 'Anteprima priva di autorizzazione: impossibile procedere.', type: 'error' });
+            return;
+          }
+          if (result.errors_count) {
+            setMessage({ text: `Anteprima non valida. Errori: ${result.errors_count}. Correggi il file e riprova.`, type: 'error' });
+            setValidationErrors(result.errors || []);
+            return;
+          }
+          setMultiPreview(result);
+          setConfirmMultiImport(false);
+          setMessage({ text: 'Anteprima pronta. Nessun dato è stato scritto.', type: 'success' });
+          return;
+        }
         if (result.mode === 'validation_failed') {
           setMessage({ text: `Validazione fallita. Errori: ${result.errors?.length || 0}`, type: 'error' });
           setValidationErrors(result.errors || []);
+          setMultiPreview(null);
           return;
         }
         
@@ -161,6 +217,8 @@ export default function PriceListManager() {
         
         setMessage({ text: msg, type: 'success' });
         setFile(null);
+        setMultiPreview(null);
+        setConfirmMultiImport(false);
         await loadFornitori(); // Refresh active list of suppliers to show new ones
       } else {
         let errorMsg = result.detail || 'Impossibile caricare il listino comparativo';
@@ -252,28 +310,6 @@ export default function PriceListManager() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       alert(err.message || 'Impossibile scaricare il file Excel');
-    }
-  };
-
-  const handleImportExtractedDirect = async () => {
-    if (!extractSupplier) return;
-    if (!window.confirm("Vuoi importare direttamente questi articoli nel Listino Master? Eventuali prezzi già presenti verranno aggiornati.")) return;
-
-    setImportingDirect(true);
-    setMessage(null);
-    try {
-      const res = await fetch(`${API_BASE}/listino/import-from-invoices/${extractSupplier}?price_strategy=${priceStrategy}`, {
-        method: 'POST',
-        headers: getHeaders()
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Errore durante l'importazione diretta");
-
-      setMessage({ text: data.message || 'Listino importato con successo!', type: 'success' });
-    } catch (err: any) {
-      setMessage({ text: err.message, type: 'error' });
-    } finally {
-      setImportingDirect(false);
     }
   };
 
@@ -462,7 +498,7 @@ export default function PriceListManager() {
                       </div>
                     </div>
                     <span style={{ fontSize: '0.85rem', color: '#3b82f6', fontWeight: 700 }}>
-                      ✓ Pronto all'uso
+                      ✓ Solo analisi
                     </span>
                   </div>
 
@@ -472,7 +508,7 @@ export default function PriceListManager() {
                       <thead style={{ background: '#101018', position: 'sticky', top: 0, zIndex: 1 }}>
                         <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
                           <th style={{ padding: '8px 12px' }}>Articolo</th>
-                          <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prezzo (€)</th>
+                          <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prezzo fatturato (€)</th>
                           <th style={{ padding: '8px 8px', textAlign: 'center' }}>UoM</th>
                           <th style={{ padding: '8px 8px', textAlign: 'center' }}>Fatture</th>
                         </tr>
@@ -499,27 +535,17 @@ export default function PriceListManager() {
                     </table>
                   </div>
 
-                  {/* Pulsanti Azione */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={handleDownloadExtractedExcel}
-                      style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem' }}
-                    >
-                      <Download size={16} /> Scarica Excel (.xlsx)
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={importingDirect}
-                      onClick={handleImportExtractedDirect}
-                      style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem' }}
-                    >
-                      {importingDirect ? <RefreshCw size={16} className="animate-spin" /> : <Check size={16} />}
-                      {importingDirect ? 'Importazione...' : 'Importa a Listino'}
-                    </button>
-                  </div>
+                  <p style={{ margin: 0, fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+                    I prezzi osservati nelle fatture non sono prezzi pattuiti. Il file esportato è solo una proposta da verificare con il fornitore.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleDownloadExtractedExcel}
+                    style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem' }}
+                  >
+                    <Download size={16} /> Scarica analisi Excel
+                  </button>
                 </div>
               )}
             </>
@@ -614,7 +640,7 @@ export default function PriceListManager() {
                 onClick={handleUpload}
                 style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '12px', opacity: (uploading || !file || !selectedFornitore) ? 0.6 : 1 }}
               >
-                {uploading ? 'Caricamento in corso...' : 'Importa Listino'}
+                {uploading ? 'Validazione in corso...' : 'Valida listino (nessuna scrittura)'}
               </button>
             </>
           ) : (
@@ -623,7 +649,7 @@ export default function PriceListManager() {
               <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
                 <h4 style={{ marginBottom: '4px' }}>Come funziona l'importazione comparativa</h4>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
-                  Carica un file Excel con colonne multiple. Le prime due colonne devono identificare il <strong>PRODOTTO</strong> e l'<strong>UNITA DI MISURA (o PESO)</strong>. Le colonne successive conterranno i prezzi di listino di ciascun fornitore (es: <em>MARR</em>, <em>MELIUS</em>, <em>DAC</em>). I fornitori mancanti verranno creati automaticamente.
+                  Carica un file Excel con colonne multiple. L’anteprima mostra righe, fornitori e possibili errori senza scrivere dati. Dopo averla verificata potrai confermare esplicitamente l’importazione; i fornitori mancanti saranno creati solo allora.
                 </p>
               </div>
 
@@ -633,7 +659,7 @@ export default function PriceListManager() {
                   type="file" 
                   id="fileInputMulti" 
                   accept=".xlsx" 
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  onChange={(e) => { setFile(e.target.files?.[0] || null); setMultiPreview(null); setConfirmMultiImport(false); }}
                   style={{ display: 'none' }}
                 />
                 <label htmlFor="fileInputMulti" style={{ cursor: 'pointer' }}>
@@ -644,6 +670,63 @@ export default function PriceListManager() {
                   </div>
                 </label>
               </div>
+
+              {multiPreview && (
+                <div role="region" aria-label="Anteprima importazione comparativa" style={{ padding: 16, border: '1px solid rgba(59,130,246,.4)', borderRadius: 10, display: 'grid', gap: 10 }}>
+                  <strong>Anteprima senza scritture</strong>
+                  <span>Righe: {multiPreview.total_rows} · valide: {multiPreview.valid_records} · errori: {multiPreview.errors_count}</span>
+                  {multiPreview.warning && <p role="alert" style={{ color: '#fbbf24', margin: 0 }}>{multiPreview.warning}</p>}
+                  {multiPreview.expires_at && <small>Autorizzazione valida fino a: {new Date(multiPreview.expires_at).toLocaleString('it-IT')}</small>}
+                  <div><b>Fornitori rilevati:</b> {multiPreview.suppliers_detected.length ? multiPreview.suppliers_detected.join(', ') : 'Nessuno'}</div>
+                  <div style={{ overflowX: 'auto', maxHeight: 280, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead><tr>
+                        <th style={{ textAlign: 'left', padding: 8 }}>Prodotto</th>
+                        <th style={{ textAlign: 'left', padding: 8 }}>U.M.</th>
+                        <th style={{ textAlign: 'left', padding: 8 }}>Prezzo pattuito → proposta</th>
+                      </tr></thead>
+                      <tbody>{multiPreview.records_preview.map(record => (
+                        <tr key={record.sku_interno}>
+                          <td style={{ padding: 8 }}>
+                            <div>{record.descrizione}</div>
+                            <small style={{ color: 'var(--text-secondary)' }}>{record.sku_interno}</small>
+                          </td>
+                          <td style={{ padding: 8 }}>{record.unita_misura}</td>
+                          <td style={{ padding: 8, minWidth: 360 }}>
+                            <div style={{ display: 'grid', gap: 8 }}>
+                              {record.confronti.map(offer => (
+                                <div key={offer.fornitore} style={{ padding: 8, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                                  <strong>{offer.fornitore}</strong>
+                                  <span style={{ marginLeft: 8, color: 'var(--text-secondary)' }}>{offer.stato}</span>
+                                  <div>
+                                    {offer.prezzo_corrente === null
+                                      ? 'Nessun contratto attivo'
+                                      : `€ ${offer.prezzo_corrente} / ${offer.unita_corrente}`}
+                                    {' → '}
+                                    <strong>€ {offer.prezzo_proposto} / {offer.unita_proposta}</strong>
+                                  </div>
+                                  <small>
+                                    Delta: {offer.delta_unitario === null
+                                      ? 'non comparabile (unità diverse)'
+                                      : `€ ${offer.delta_unitario} / unità${offer.delta_percentuale ? ` (${offer.delta_percentuale}%)` : ''}`}
+                                    {' · Decorrenza: '}{new Date(offer.decorrenza_proposta).toLocaleDateString('it-IT')}
+                                    {' · Scadenza: '}{offer.scadenza_proposta ? new Date(offer.scadenza_proposta).toLocaleDateString('it-IT') : 'fino a nuova approvazione'}
+                                  </small>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  {multiPreview.records_preview_truncated && <small>Mostrate le prime 50 righe valide; il file contiene {multiPreview.valid_records} righe valide.</small>}
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <input type="checkbox" checked={confirmMultiImport} onChange={e => setConfirmMultiImport(e.target.checked)} />
+                    <span>Ho verificato prezzo pattuito, proposta, delta, unità di misura, decorrenza e validità di ogni accordo; confermo questa approvazione.</span>
+                  </label>
+                </div>
+              )}
 
               {message && (
                 <div style={{ 
@@ -684,11 +767,18 @@ export default function PriceListManager() {
 
               <button 
                 className="btn btn-primary" 
-                disabled={uploadingMulti || !file}
+                disabled={uploadingMulti || !file || (!!multiPreview && !confirmMultiImport)}
                 onClick={handleUploadMulti}
-                style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '12px', opacity: (uploadingMulti || !file) ? 0.6 : 1 }}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  fontSize: '1rem',
+                  marginTop: '12px',
+                  opacity: (uploadingMulti || !file || (!!multiPreview && !confirmMultiImport)) ? 0.55 : 1,
+                  cursor: (uploadingMulti || !file || (!!multiPreview && !confirmMultiImport)) ? 'not-allowed' : 'pointer',
+                }}
               >
-                {uploadingMulti ? 'Caricamento in corso...' : 'Importa Listino Comparativo'}
+                {uploadingMulti ? 'Caricamento in corso...' : multiPreview ? 'Conferma e importa' : 'Mostra anteprima'}
               </button>
             </>
           )}
@@ -700,7 +790,7 @@ export default function PriceListManager() {
       <div className="glass-panel" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
         <div style={{ marginBottom: '24px' }}>
           <h2 style={{ marginBottom: '12px' }}>Gestione Listini Caricati</h2>
-          <p style={{ color: 'var(--text-secondary)' }}>Svuota i listini dei fornitori per eliminare i dati caricati per errore o vecchi test.</p>
+          <p style={{ color: 'var(--text-secondary)' }}>I prezzi storici sono protetti e non possono essere cancellati direttamente.</p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '600px' }}>
@@ -710,30 +800,9 @@ export default function PriceListManager() {
                 <div style={{ fontWeight: 600 }}>{f.nome_azienda}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ID Fornitore: {f.id}</div>
               </div>
-              <button 
-                className="btn"
-                onClick={async () => {
-                  if (!window.confirm(`Sei sicuro di voler eliminare TUTTI i prodotti a listino per il fornitore ${f.nome_azienda}? L'operazione è irreversibile.`)) return;
-                  
-                  try {
-                    const res = await fetch(`${API_BASE}/listino/fornitore/${f.id}`, {
-                      method: 'DELETE',
-                      headers: getHeaders()
-                    });
-                    if (res.ok) {
-                      alert(`Listino di ${f.nome_azienda} svuotato con successo.`);
-                    } else {
-                      const data = await res.json();
-                      alert(`Errore: ${data.detail || 'Impossibile svuotare il listino'}`);
-                    }
-                  } catch {
-                    alert('Errore di rete');
-                  }
-                }}
-                style={{ padding: '8px 12px', background: 'var(--status-red-bg)', color: 'var(--status-red)', borderColor: 'rgba(239, 68, 68, 0.3)', fontSize: '0.85rem' }}
-              >
-                Svuota Listino
-              </button>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--status-green)' }}>
+                Storico protetto
+              </span>
             </div>
           ))}
         </div>

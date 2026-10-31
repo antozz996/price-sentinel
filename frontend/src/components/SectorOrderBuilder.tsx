@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   ShoppingCart, 
   Search, 
@@ -36,6 +36,20 @@ interface ProductOffer {
   price: number;
   source_type?: string;
   uom?: string | null;
+}
+
+interface VariantOffer {
+  offer_id: string;
+  supplier_id: number;
+  supplier_name: string;
+  description: string;
+  brand?: string | null;
+  pack_qty?: number | null;
+  volume_ml?: number | null;
+  weight_g?: number | null;
+  price: number;
+  comparison_price?: number | null;
+  comparison_unit?: string | null;
 }
 
 interface SupplierItem {
@@ -90,6 +104,7 @@ interface ProductItem {
   fornitore_consigliato_id?: number | null;
   fornitore_consigliato_nome?: string | null;
   offers?: Record<string, ProductOffer>;
+  variant_offers?: VariantOffer[];
 }
 
 interface LocationItem {
@@ -104,6 +119,7 @@ interface SupplierOrderItemDetail {
   sku_interno?: string | null;
   nome_prodotto: string;
   codice_fornitore?: string | null;
+  variante?: string | null;
   quantita: number;
   uom: string;
   prezzo_unitario: number;
@@ -147,6 +163,12 @@ const MACRO_CATEGORIES = [
   { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: '#10b981' }
 ];
 
+function orderSector(category?: string | null): string {
+  return category?.trim().toLowerCase() === 'materiali'
+    ? 'Materiali di consumo'
+    : category?.trim() || '';
+}
+
 export const SECTOR_UOMS: Record<string, { id: string; label: string; short: string }[]> = {
   Beverage: [
     { id: 'BT', label: 'BT (Bottiglia)', short: 'BT' },
@@ -170,8 +192,9 @@ export const SECTOR_UOMS: Record<string, { id: string; label: string; short: str
 };
 
 export function getSectorUoms(category?: string | null): { id: string; label: string; short: string }[] {
-  if (category && SECTOR_UOMS[category]) {
-    return SECTOR_UOMS[category];
+  const sector = orderSector(category);
+  if (sector && SECTOR_UOMS[sector]) {
+    return SECTOR_UOMS[sector];
   }
   return [
     { id: 'CT', label: 'CT (Cartone)', short: 'CT' },
@@ -184,6 +207,7 @@ export function getSectorUoms(category?: string | null): { id: string; label: st
 }
 
 export function normalizeDefaultUom(rawUom?: string | null, category?: string | null): string {
+  category = orderSector(category);
   if (category === 'Beverage') {
     if (!rawUom) return 'CT';
     const u = rawUom.trim().toUpperCase();
@@ -242,7 +266,7 @@ const WATER_BRANDS = [
 export function isWaterProduct(prod: ProductItem): boolean {
   const name = (prod.canonical_name || '').toLowerCase();
   const oname = (prod.order_name || '').toLowerCase();
-  const cat = (prod.category || '').toLowerCase();
+  const cat = orderSector(prod.category).toLowerCase();
   const subcat = (prod.subcategory || '').toLowerCase();
 
   for (const ex of WATER_EXCLUDE_TERMS) {
@@ -322,27 +346,32 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   const [selectedUoms, setSelectedUoms] = useState<Record<number, string>>({});
 
   // Supplier overrides per product_id: { supplier_id, supplier_name, price }
-  const [selectedSuppliers, setSelectedSuppliers] = useState<Record<number, { supplier_id: number; supplier_name: string; price: number | null }>>({});
+  const [selectedSuppliers, setSelectedSuppliers] = useState<Record<number, { supplier_id: number; supplier_name: string; price: number | null; offer_id?: string | null }>>({});
 
   // Freebie product selection for water 5+1 promo
   const [selectedWaterFreebieId, setSelectedWaterFreebieId] = useState<number | null>(null);
 
   // Helper for effective UoM
   const getEffectiveUom = (prod: ProductItem) => {
+    if (selectedSuppliers[prod.id]?.offer_id) return 'conf';
     return selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit, prod.category);
   };
 
   // Helper for effective Supplier & Price
-  const getEffectiveSupplier = (prod: ProductItem) => {
+  const getEffectiveSupplier = useCallback((prod: ProductItem) => {
     if (selectedSuppliers[prod.id]) {
       return selectedSuppliers[prod.id];
+    }
+    if (prod.variant_offers?.length) {
+      return { supplier_id: null, supplier_name: 'Seleziona marca e formato', price: null, offer_id: null as string | null };
     }
     return {
       supplier_id: prod.fornitore_consigliato_id || null,
       supplier_name: prod.fornitore_consigliato_nome || 'Miglior Listino',
-      price: prod.prezzo_listino ?? null
+      price: prod.prezzo_listino ?? null,
+      offer_id: null as string | null,
     };
-  };
+  }, [selectedSuppliers]);
 
   // Draft resolution state
   const [draftProcessing, setDraftProcessing] = useState<boolean>(false);
@@ -411,6 +440,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
   useEffect(() => {
     loadData();
+  // Initial order-builder bootstrap; explicit actions refresh data thereafter.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -420,7 +451,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       const [locRes, prodRes, matrixRes, fornitoriRes] = await Promise.all([
         fetch(`${API_BASE}/location/`, { headers }),
         fetch(`${API_BASE}/products`, { headers }),
-        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }),
         fetch(`${API_BASE}/fornitori?attivi=true`, { headers }).catch(() => null)
       ]);
 
@@ -447,12 +478,19 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         }
       }
 
-      // If matrix is available, enrich products with recommended/forced suppliers and prices
-      if (matrixRes && matrixRes.ok) {
+      // Every catalog page needs its offers, including products past position 500.
+      if (!matrixRes.ok) throw new Error('Listino non disponibile');
+      if (matrixRes.ok) {
         try {
           const matrixData = await matrixRes.json();
+          const matrixRows: any[] = [...(matrixData.rows || [])];
+          for (let offset = 500; offset < Number(matrixData.total || 0); offset += 500) {
+            const page = await fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500&offset=${offset}`, { headers });
+            if (!page.ok) throw new Error('Pagina listino non disponibile');
+            matrixRows.push(...((await page.json()).rows || []));
+          }
           const matrixMap = new Map<number, any>();
-          (matrixData.rows || []).forEach((r: any) => {
+          matrixRows.forEach((r: any) => {
             matrixMap.set(r.product_id, r);
           });
 
@@ -468,6 +506,14 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               const finalPrice = anyOffer ? parseFloat(anyOffer.price) : null;
 
               const parsedOffers: Record<string, ProductOffer> = {};
+              const variantOffers: VariantOffer[] = (m.variant_offers || []).map((off: any) => ({
+                offer_id: String(off.offer_id), supplier_id: Number(off.supplier_id),
+                supplier_name: String(off.supplier_name), description: String(off.description),
+                brand: off.brand || null, pack_qty: off.pack_qty ?? null,
+                volume_ml: off.volume_ml ?? null, weight_g: off.weight_g ?? null,
+                price: Number(off.price), comparison_price: off.comparison_price == null ? null : Number(off.comparison_price),
+                comparison_unit: off.comparison_unit || null,
+              }));
               if (m.offers) {
                 Object.entries(m.offers).forEach(([sIdStr, off]: [string, any]) => {
                   parsedOffers[sIdStr] = {
@@ -485,16 +531,18 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 category: m.category || p.category,
                 subcategory: m.subcategory || p.subcategory,
                 order_name: m.order_name || p.order_name,
-                prezzo_listino: finalPrice,
+                prezzo_listino: variantOffers.some(off => off.supplier_id === finalSupId) ? null : finalPrice,
                 fornitore_consigliato_id: finalSupId,
                 fornitore_consigliato_nome: finalSupName,
-                offers: parsedOffers
+                offers: parsedOffers,
+                variant_offers: variantOffers,
               };
             }
             return p;
           });
         } catch (e) {
           console.error("Errore arricchimento listino:", e);
+          throw e;
         }
       }
 
@@ -510,7 +558,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   // Filtered products
   const subcategories = useMemo(() => {
     const filteredBySector = products.filter(p => 
-      selectedSector === 'all' || p.category === selectedSector
+      selectedSector === 'all' || orderSector(p.category) === selectedSector
     );
     const set = new Set<string>();
     filteredBySector.forEach(p => {
@@ -521,7 +569,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
-      const matchSector = selectedSector === 'all' || p.category === selectedSector;
+      const matchSector = selectedSector === 'all' || orderSector(p.category) === selectedSector;
       const matchSubcat = selectedSubcategory === 'all' || p.subcategory === selectedSubcategory;
       const search = searchTerm.toLowerCase().trim();
       const effSup = getEffectiveSupplier(p);
@@ -534,7 +582,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         || (p.offers && Object.values(p.offers).some(o => o.supplier_name.toLowerCase().includes(search)));
       return matchSector && matchSubcat && matchSearch;
     });
-  }, [products, selectedSector, selectedSubcategory, searchTerm, selectedSuppliers]);
+  }, [products, selectedSector, selectedSubcategory, searchTerm, getEffectiveSupplier]);
 
   // Quantities and Basket Totals
   const basketItems = useMemo(() => {
@@ -545,27 +593,29 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       supplier_id?: number | null; 
       supplier_name?: string | null; 
       unit_price?: number | null 
+      offer_id?: string | null
     }[] = [];
 
     Object.entries(quantities).forEach(([prodIdStr, qty]) => {
       if (qty > 0) {
         const prod = products.find(p => p.id === Number(prodIdStr));
         if (prod) {
-          const uom = selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit, prod.category);
           const effSup = getEffectiveSupplier(prod);
+          const uom = effSup.offer_id ? 'conf' : selectedUoms[prod.id] || normalizeDefaultUom(prod.comparison_unit, prod.category);
           items.push({ 
             product: prod, 
             quantity: qty, 
             uom,
             supplier_id: effSup.supplier_id,
             supplier_name: effSup.supplier_name,
-            unit_price: effSup.price
+            unit_price: effSup.price,
+            offer_id: effSup.offer_id,
           });
         }
       }
     });
     return items;
-  }, [quantities, products, selectedUoms, selectedSuppliers]);
+  }, [quantities, products, selectedUoms, getEffectiveSupplier]);
 
   const basketStats = useMemo(() => {
     const totalItems = basketItems.length;
@@ -643,6 +693,12 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       alert("Seleziona la sede di destinazione per l'ordine.");
       return;
     }
+    const needsVariant = basketItems.find(it => it.product.variant_offers?.length &&
+      (!selectedSuppliers[it.product.id] || (!it.offer_id && it.product.variant_offers.some(off => off.supplier_id === it.supplier_id))));
+    if (needsVariant) {
+      setErrorMsg(`Seleziona una marca e un formato per ${needsVariant.product.canonical_name} prima di preparare l’ordine.`);
+      return;
+    }
 
     setDraftProcessing(true);
     setErrorMsg(null);
@@ -663,6 +719,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         comparison_unit: it.uom,
         category: it.product.category,
         preferred_supplier_id: it.supplier_id,
+        preferred_offer_id: it.offer_id || null,
         prezzo_unitario: it.unit_price
       }))
     };
@@ -1190,8 +1247,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           .map(cat => {
             const isSelected = selectedSector === cat.id;
             const count = cat.id === 'all' 
-              ? products.filter(p => allowedSectors.includes(p.category || '')).length 
-              : products.filter(p => p.category === cat.id).length;
+              ? products.filter(p => allowedSectors.includes(orderSector(p.category))).length 
+              : products.filter(p => orderSector(p.category) === cat.id).length;
 
             return (
               <button
@@ -1457,7 +1514,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             const isSelectedSup = !!selectedSuppliers[prod.id];
 
             const productOffers = prod.offers ? Object.values(prod.offers) : [];
-            const offerSupplierIds = new Set(productOffers.map(o => o.supplier_id));
+            const variantSupplierIds = new Set((prod.variant_offers || []).map(o => o.supplier_id));
+            const legacyProductOffers = productOffers.filter(o => !variantSupplierIds.has(o.supplier_id));
+            const offerSupplierIds = new Set([...productOffers.map(o => o.supplier_id), ...variantSupplierIds]);
 
             return (
               <div
@@ -1557,7 +1616,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: '1 1 0', minWidth: 0, overflow: 'hidden' }}>
                       <Truck size={13} color={isSelectedSup ? 'var(--accent-blue)' : 'var(--text-secondary)'} style={{ flexShrink: 0 }} />
                       <select
-                        value={effSup.supplier_id || ''}
+                        value={effSup.offer_id ? `off:${effSup.offer_id}` : effSup.supplier_id ? `sup:${effSup.supplier_id}` : ''}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (!val) {
@@ -1568,7 +1627,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                             });
                             return;
                           }
-                          const sId = Number(val);
+                          if (val.startsWith('off:')) {
+                            const variant = prod.variant_offers?.find(off => off.offer_id === val.slice(4));
+                            if (!variant) return;
+                            setSelectedSuppliers(prev => ({ ...prev, [prod.id]: {
+                              supplier_id: variant.supplier_id, supplier_name: variant.supplier_name,
+                              price: variant.price, offer_id: variant.offer_id,
+                            } }));
+                            return;
+                          }
+                          const sId = Number(val.replace(/^sup:/, ''));
                           const matchingOffer = prod.offers ? prod.offers[String(sId)] : null;
                           const matchingSup = allSuppliers.find(s => s.id === sId);
                           setSelectedSuppliers(prev => ({
@@ -1576,7 +1644,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                             [prod.id]: {
                               supplier_id: sId,
                               supplier_name: matchingOffer?.supplier_name || matchingSup?.nome_azienda || `Fornitore #${sId}`,
-                              price: matchingOffer ? matchingOffer.price : (prod.prezzo_listino ?? null)
+                              price: matchingOffer ? matchingOffer.price : (prod.prezzo_listino ?? null),
+                              offer_id: null,
                             }
                           }));
                         }}
@@ -1607,10 +1676,20 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         )}
 
                         {/* Offers with known prices first */}
-                        {productOffers.length > 0 && (
+                        {(prod.variant_offers?.length || 0) > 0 && (
+                          <optgroup label="Marche e formati approvati · prezzo a confezione" style={{ background: '#13131c', color: '#93c5fd' }}>
+                            {prod.variant_offers!.map(off => (
+                              <option key={off.offer_id} value={`off:${off.offer_id}`} style={{ background: '#13131c', color: 'white' }}>
+                                {off.supplier_name} · {off.brand ? off.brand + ' · ' : ''}{off.description} · € {off.price.toFixed(2)}/conf
+                                {off.comparison_price != null && off.comparison_unit ? ` · € ${off.comparison_price.toFixed(2)}/${off.comparison_unit}` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {legacyProductOffers.length > 0 && (
                           <optgroup label="Offerte e listini" style={{ background: '#13131c', color: '#93c5fd' }}>
-                            {productOffers.map(off => (
-                              <option key={off.supplier_id} value={off.supplier_id} style={{ background: '#13131c', color: 'white' }}>
+                            {legacyProductOffers.map(off => (
+                              <option key={off.supplier_id} value={`sup:${off.supplier_id}`} style={{ background: '#13131c', color: 'white' }}>
                                 {off.supplier_name} {off.price > 0 ? `(€ ${off.price.toFixed(2)})` : ''}
                               </option>
                             ))}
@@ -1621,7 +1700,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         {allSuppliers.filter(s => !offerSupplierIds.has(s.id)).length > 0 && (
                           <optgroup label="Tutti i fornitori" style={{ background: '#13131c', color: 'var(--text-secondary)' }}>
                             {allSuppliers.filter(s => !offerSupplierIds.has(s.id)).map(sup => (
-                              <option key={sup.id} value={sup.id} style={{ background: '#13131c', color: 'white' }}>
+                              <option key={sup.id} value={`sup:${sup.id}`} style={{ background: '#13131c', color: 'white' }}>
                                 {sup.nome_azienda}
                               </option>
                             ))}
@@ -1707,6 +1786,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     {/* UoM Select Dropdown */}
                     <select
                       value={getEffectiveUom(prod)}
+                      disabled={!!effSup.offer_id}
                       onChange={e => setSelectedUoms(prev => ({ ...prev, [prod.id]: e.target.value }))}
                       title="Unità di misura"
                       style={{
@@ -1724,7 +1804,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         cursor: 'pointer'
                       }}
                     >
-                      {getSectorUoms(prod.category).map(u => (
+                      {effSup.offer_id ? <option value="conf">conf</option> : getSectorUoms(prod.category).map(u => (
                         <option key={u.id} value={u.id} style={{ background: '#13131c', color: 'white' }}>
                           {u.short}
                         </option>
@@ -2265,7 +2345,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                             <tr key={iIdx} style={{ borderTop: '1px solid rgba(255,255,255,0.04)', background: isFreebie ? 'rgba(16, 185, 129, 0.08)' : 'transparent' }}>
                               <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                  <span>{it.nome_prodotto}</span>
+                                  <span>{it.nome_prodotto}{it.variante ? ` · ${it.variante}` : ''}</span>
                                   {isFreebie && (
                                     <span style={{
                                       padding: '2px 8px', borderRadius: '6px',
@@ -2278,7 +2358,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                                 </div>
                               </td>
                               <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                                <code>{it.codice_fornitore || it.sku_interno || '—'}</code>
+                                <code>{it.codice_fornitore?.startsWith('OFF-') || it.codice_fornitore?.startsWith('SG-') ? it.sku_interno || '—' : it.codice_fornitore || it.sku_interno || '—'}</code>
                               </td>
                               <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: isFreebie ? '#34d399' : '#60a5fa' }}>
                                 {it.quantita} {it.uom}
