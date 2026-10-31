@@ -6,7 +6,8 @@ import io
 import json
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select
@@ -54,7 +55,10 @@ def parse_decimal_price(raw: object) -> Decimal | None:
     if parsed >= Decimal("100000000"):
         raise ValueError(f"Prezzo fuori intervallo: {raw}")
     if parsed.as_tuple().exponent < -4:
-        parsed = parsed.quantize(Decimal("0.0001"))
+        # The database stores negotiated prices at four decimal places.
+        # Round formula-derived sheet values consistently instead of rejecting
+        # the entire import (for example 3.733821 -> 3.7338).
+        parsed = parsed.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
     return parsed
 
 
@@ -93,7 +97,7 @@ def parse_clipboard_table(text_value: str) -> dict:
 
     supplier_start = (next_col_index + 1) if has_uom_column else next_col_index
     minimum_columns = supplier_start + 1
-    if len(rows) < 2 or len(rows[0]) < minimum_columns:
+    if len(rows) < 2 or len(rows[0]) < (supplier_start if has_order_name else minimum_columns):
         raise ValueError("Servono una riga intestazioni, il prodotto e almeno una colonna fornitore")
     if len(rows) - 1 > MAX_ROWS:
         raise ValueError(f"Massimo {MAX_ROWS} prodotti per operazione")
@@ -138,7 +142,8 @@ async def build_price_preview(
     supplier_mapping: dict[str, int],
     product_mapping: dict[str, int],
     effective_date: date,
-    default_uom: str,
+    default_uom: str | None,
+    allow_missing_uom: bool = False,
     create_missing_products: bool = True,
     category: str | None = None,
     subcategory: str | None = None,
@@ -288,7 +293,7 @@ async def build_price_preview(
             if create_missing_products and ref.strip():
                 norm_ref = normalize_text(ref)
                 virtual_sku = f"IMP-{hashlib.sha256(norm_ref.encode('utf-8')).hexdigest()[:10].upper()}"
-                row_uom = source_row.get("uom", "").strip() or default_uom or "Pz"
+                row_uom = source_row.get("uom", "").strip() or default_uom or (None if allow_missing_uom else "Pz")
                 product = Product(
                     sku_interno=virtual_sku,
                     canonical_name=ref.strip(),
@@ -468,23 +473,30 @@ async def build_price_preview(
             if price is None:
                 continue
 
-            # Verifica se il settore è esplicitamente escluso per questo fornitore
-            norm_cat = (product.category or "").strip().casefold()
-            is_explicitly_disabled = bool(
-                norm_cat
-                and getattr(supplier, "id", None)
-                and supplier_scope.explicit_categories.get((supplier.id, norm_cat)) is False
+            # A supplier cannot propose prices for an existing product
+            # without being eligible for its category/product. Previously this
+            # checked only explicit exclusions and missed suppliers with NO
+            # commercial evidence or sector permission.
+            product_id = getattr(product, "id", None)
+            supplier_id = getattr(supplier, "id", None)
+            eligible_suppliers = supplier_scope.eligible_supplier_ids(
+                product_id=product_id if product_id is not None else -1,
+                category=getattr(product, "category", None),
+                subcategory=getattr(product, "subcategory", None),
+                supplier_ids={supplier_id} if supplier_id is not None else set(),
             )
-            if is_explicitly_disabled:
+            # New product drafts have no historical commercial evidence yet;
+            # allow their explicit creation workflow, not an existing SKU bypass.
+            if product_id is not None and supplier_id not in eligible_suppliers:
                 errors.append(
                     {
                         "type": "supplier_scope",
                         "row": source_row["row_number"],
-                        "product_id": getattr(product, "id", None),
-                        "supplier_id": getattr(supplier, "id", None),
+                        "product_id": product_id,
+                        "supplier_id": supplier_id,
                         "column": header,
                         "message": (
-                            f"{supplier.nome_azienda} è escluso esplicitamente per il settore "
+                            f"{supplier.nome_azienda} non è abilitato per il settore/prodotto "
                             f"“{product.category or product.canonical_name}”."
                         ),
                         "category": product.category,
@@ -527,7 +539,7 @@ async def build_price_preview(
                 source_row.get("uom", "").strip()
                 or product.comparison_unit
                 or default_uom
-                or "Pz"
+                or (None if allow_missing_uom else "Pz")
             )
 
             same = bool(
@@ -584,53 +596,54 @@ async def build_price_preview(
     now = datetime.now(timezone.utc)
     preview = SmartPriceSheetPreview(
         payload_hash=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-        status="previewed",
+        status="ready",
         location_id=location_id,
-        payload_json=preview_payload,
+        preview_payload=preview_payload,
+        created_by=actor_id,
+        created_at=now,
         expires_at=now + timedelta(minutes=30),
     )
     db.add(preview)
     await db.flush()
-
-    return {
-        "token": preview.id,
-        "hash": preview.payload_hash,
-        "delimiter": parsed["delimiter"],
-        "headers": parsed["headers"],
-        "effective_date": effective_date.isoformat(),
-        "default_uom": default_uom,
-        "supplier_mapping": mapping_report,
-        "product_mapping": product_report,
-        "order_name_changes": list(order_name_changes_by_product.values()),
-        "changes": changes,
-        "errors": errors,
-        "counts": counts,
-        "can_commit": preview_payload["can_commit"],
-    }
+    return preview
 
 
 async def commit_price_preview(
     db: AsyncSession,
     *,
-    token: str,
-    payload_hash: str,
-    created_by_user_id: int | None = None,
-) -> dict:
-    preview = await db.get(SmartPriceSheetPreview, token)
+    token: UUID,
+    actor_id: int,
+) -> tuple[SmartPriceSheetPreview, dict]:
+    # Lock the preview: concurrent retries must never create duplicate price versions.
+    preview = await db.scalar(
+        select(SmartPriceSheetPreview)
+        .where(SmartPriceSheetPreview.id == token)
+        .with_for_update()
+    )
     if not preview:
-        raise ValueError("Anteprima non trovata o scaduta: ripetere l'incolla.")
-    if preview.status != "previewed":
-        raise ValueError("Anteprima già confermata o non più valida.")
+        raise HTTPException(404, "Anteprima non trovata.")
+    if preview.created_by != actor_id:
+        raise HTTPException(403, "Anteprima appartenente a un altro utente.")
+    if preview.status == "committed":
+        return preview, preview.commit_result or {}
+    if preview.status != "ready":
+        raise HTTPException(409, "Anteprima non più valida.")
     if preview.expires_at < datetime.now(timezone.utc):
         preview.status = "expired"
         await db.flush()
-        raise ValueError("Anteprima scaduta: ripetere l'incolla.")
-    if preview.payload_hash != payload_hash:
-        raise ValueError("L'anteprima è cambiata: rigenerare prima della conferma.")
-    if not preview.payload_json.get("can_commit"):
-        raise ValueError("L'anteprima contiene errori bloccanti.")
+        raise HTTPException(409, "Anteprima scaduta: rigenerare prima della conferma.")
+    canonical = json.dumps(preview.preview_payload, sort_keys=True, separators=(",", ":"))
+    if preview.payload_hash != hashlib.sha256(canonical.encode("utf-8")).hexdigest():
+        raise HTTPException(409, "Anteprima alterata: rigenerare prima della conferma.")
+    if not preview.preview_payload.get("can_commit"):
+        raise HTTPException(422, "L'anteprima contiene errori bloccanti.")
 
-    payload = preview.payload_json
+    if preview.preview_payload.get("version") == 3:
+        from app.services.variant_price_import import commit_variant_preview
+        result = await commit_variant_preview(db, preview)
+        return preview, result
+
+    payload = preview.preview_payload
     effective_date = date.fromisoformat(payload["effective_date"])
     location_id = payload.get("location_id")
     now = datetime.now(timezone.utc)
@@ -639,11 +652,12 @@ async def commit_price_preview(
         "effective_date": effective_date.isoformat(),
         "products_created": 0,
         "suppliers_created": 0,
-        "prices_created": 0,
-        "prices_updated": 0,
+        "created": 0,
+        "updated": 0,
         "order_names_updated": 0,
         "aliases_created": 0,
         "unchanged": 0,
+        "listino_ids": [],
         "details": [],
     }
 
@@ -790,6 +804,8 @@ async def commit_price_preview(
                 or _price_string(Decimal(str(current.prezzo_pattuito))) != change["old_price"]
             ):
                 raise HTTPException(409, "Il listino è cambiato: rigenerare l'anteprima")
+            if effective_date <= current.data_inizio_validita:
+                raise HTTPException(409, "La nuova decorrenza deve essere successiva a quella del prezzo attivo.")
         else:
             concurrent = await db.scalar(
                 select(ListinoMaster)

@@ -7,6 +7,7 @@ Modulo Sviluppo Ordini per Responsabili di Settore con invio WhatsApp.
 import urllib.parse
 import re
 import secrets
+import math
 from datetime import datetime, date
 from decimal import Decimal
 from typing import List, Optional, Dict, Any, Tuple
@@ -31,6 +32,46 @@ from app.services.normalization import normalize_text
 router = APIRouter()
 
 
+def _variant_label(alias: SupplierProductAlias) -> str:
+    parts = [alias.brand, alias.raw_description]
+    if alias.weight_g:
+        parts.append(f"{alias.weight_g / 1000:g} KG" if alias.weight_g >= 1000 else f"{alias.weight_g} G")
+    elif alias.volume_ml:
+        parts.append(f"{alias.volume_ml / 1000:g} L" if alias.volume_ml >= 1000 else f"{alias.volume_ml} ML")
+    elif alias.pack_qty and alias.pack_qty > 1:
+        parts.append(f"{alias.pack_qty} PZ")
+    return " · ".join(part for part in parts if part)
+
+
+def _require_order_location_access(user: Utente, location: Location, sector: str | None = None) -> None:
+    """Authorize using the effective role and DB tenant, never a UI role label."""
+    tenant_id = getattr(user, "tenant_id", None)
+    if tenant_id is None or getattr(location, "tenant_id", None) != tenant_id:
+        raise HTTPException(status_code=403, detail="Sede non autorizzata per questa azienda")
+    if user.ruolo != "admin":
+        if user.location_id is None or user.location_id != location.id:
+            raise HTTPException(status_code=403, detail="Sede non autorizzata")
+        allowed = getattr(user, "settore_abilitato", None)
+        if sector and allowed and allowed.lower() != "all":
+            permitted = {part.strip().casefold() for part in allowed.split(",") if part.strip()}
+            if sector.strip().casefold() not in permitted:
+                raise HTTPException(status_code=403, detail="Settore non autorizzato")
+
+
+def _require_order_access(user: Utente, order: Ordine) -> None:
+    tenant_id = getattr(user, "tenant_id", None)
+    if tenant_id is None or getattr(order, "tenant_id", None) != tenant_id:
+        raise HTTPException(status_code=403, detail="Ordine non autorizzato per questa azienda")
+    if user.ruolo != "admin":
+        if user.location_id is None or user.location_id != order.location_id:
+            raise HTTPException(status_code=403, detail="Ordine di un'altra sede")
+        allowed = getattr(user, "settore_abilitato", None)
+        if order.settore and allowed and allowed.lower() != "all":
+            permitted = {part.strip().casefold() for part in allowed.split(",") if part.strip()}
+            if order.settore.strip().casefold() not in permitted:
+                raise HTTPException(status_code=403, detail="Settore dell'ordine non autorizzato")
+
+
 # ── Schemas per Settore & WhatsApp ───────────────────
 
 class SectorOrderItem(BaseModel):
@@ -42,6 +83,7 @@ class SectorOrderItem(BaseModel):
     comparison_unit: Optional[str] = "piece"
     category: Optional[str] = None
     preferred_supplier_id: Optional[int] = None
+    preferred_offer_id: Optional[str] = Field(default=None, max_length=100)
     prezzo_unitario: Optional[float] = None
     is_omaggio: Optional[bool] = False
 
@@ -60,6 +102,7 @@ class SupplierOrderItemDetail(BaseModel):
     sku_interno: Optional[str] = None
     nome_prodotto: str
     codice_fornitore: Optional[str] = None
+    variante: Optional[str] = None
     quantita: float
     uom: str
     prezzo_unitario: float
@@ -190,6 +233,8 @@ async def ottimizza_ordine(
     - Regola B: Prodotti spot confrontati sulle fatture storiche per consigliare il prezzo minimo
     - Regola C: Calcolo del risparmio preventivo ed emissione di alert di anomalia precoce
     """
+    if getattr(_admin, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="Azienda non configurata")
     righe_ottimizzate: List[RigaOttimizzataResponse] = []
     avvisi_preventivi: List[str] = []
     spesa_totale_blindata = 0.0
@@ -268,11 +313,17 @@ async def ottimizza_ordine(
                 select(
                     Fornitore.id,
                     Fornitore.nome_azienda,
-                    func.min(RigaFattura.prezzo_unitario).label("prezzo_min")
+                    func.min(RigaFattura.prezzo_netto_normalizzato).label("prezzo_min")
                 )
                 .join(Fattura, RigaFattura.fattura_id == Fattura.id)
                 .join(Fornitore, Fattura.fornitore_id == Fornitore.id)
-                .where(RigaFattura.sku_interno == clean_sku)
+                .where(
+                    RigaFattura.sku_interno == clean_sku,
+                    RigaFattura.is_omaggio.is_(False),
+                    RigaFattura.prezzo_netto_normalizzato > 0,
+                    Fattura.tenant_id == _admin.tenant_id,
+                    Fornitore.attivo_whitelist.is_(True),
+                )
                 .group_by(Fornitore.id, Fornitore.nome_azienda)
                 .order_by("prezzo_min")
             )
@@ -392,6 +443,11 @@ async def crea_ordine(
     Esegue l'ottimizzazione e suddivide gli articoli del carrello,
     generando e salvando a database un documento d'ordine per ciascun fornitore coinvolto.
     """
+    location = await db.get(Location, data.location_id)
+    if location is None:
+        raise HTTPException(status_code=404, detail="Sede non trovata")
+    _require_order_location_access(_admin, location)
+
     # 1. Chiama internamente l'ottimizzatore
     ottimizzazione = await ottimizza_ordine(items=data.items, db=db, _admin=_admin)
     
@@ -411,6 +467,8 @@ async def crea_ordine(
         ordine = Ordine(
             fornitore_id=fornitore_id,
             location_id=data.location_id,
+            user_id=_admin.id,
+            tenant_id=_admin.tenant_id,
             data_ordine=datetime.utcnow(),
             spesa_totale=totale,
             stato="inviato"
@@ -527,9 +585,11 @@ def _format_whatsapp_text(
         qty_str = f"{int(qty)}" if qty == int(qty) else f"{qty:.2f}"
         name = it.nome_prodotto
         uom = it.uom or "pz"
-        code_str = f" [Cod. {it.codice_fornitore}]" if it.codice_fornitore else ""
+        internal_offer_id = bool(it.codice_fornitore and it.codice_fornitore.startswith(("OFF-", "SG-")))
+        code_str = f" [Cod. {it.codice_fornitore}]" if it.codice_fornitore and not internal_offer_id else ""
+        variant_str = f" — {it.variante}" if it.variante else ""
         omaggio_badge = " 🎁 *(OMAGGIO PROMO 5+1 — GRATIS)*" if getattr(it, "is_omaggio", False) else ""
-        lines.append(f"• *{qty_str} {uom}* × {name}{code_str}{omaggio_badge}")
+        lines.append(f"• *{qty_str} {uom}* × {name}{variant_str}{code_str}{omaggio_badge}")
     
     omaggi_count = sum(int(it.quantita) for it in items if getattr(it, "is_omaggio", False))
     extra_notes = []
@@ -561,7 +621,8 @@ async def elabora_ordine_settore(
     loc = await db.get(Location, data.location_id)
     if not loc:
         raise HTTPException(status_code=404, detail="Location selezionata non trovata")
-    
+    _require_order_location_access(_user, loc, data.settore)
+
     # 2. Recupera tutti i fornitori per lookup
     fornitori_db = (await db.scalars(select(Fornitore))).all()
     fornitori_map = {f.id: f for f in fornitori_db}
@@ -607,7 +668,29 @@ async def elabora_ordine_settore(
         is_concordato = False
         supplier_code = None
 
-        if chosen_supplier_id:
+        if it.preferred_offer_id:
+            chosen_alias = await db.scalar(select(SupplierProductAlias).where(
+                SupplierProductAlias.supplier_code == it.preferred_offer_id,
+                SupplierProductAlias.product_id == product.id,
+                SupplierProductAlias.supplier_id == chosen_supplier_id,
+                SupplierProductAlias.status == "approved",
+            ))
+            if not chosen_alias:
+                raise HTTPException(422, "Offerta selezionata non valida per questo prodotto e fornitore")
+            chosen_price = await db.scalar(select(ListinoMaster).where(
+                ListinoMaster.supplier_product_alias_id == chosen_alias.id,
+                ListinoMaster.sku_interno == product.sku_interno,
+                ListinoMaster.fornitore_id == chosen_supplier_id,
+                ListinoMaster.data_inizio_validita <= today,
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+            ).order_by(ListinoMaster.id.desc()).limit(1))
+            if not chosen_price:
+                raise HTTPException(422, "Prezzo dell’offerta selezionata non più attivo")
+            unit_price = float(chosen_price.prezzo_pattuito)
+            uom = "conf"
+            is_concordato = True
+            supplier_code = chosen_alias.supplier_code
+        elif chosen_supplier_id:
             # Query listino_master per il fornitore forzato/preferito
             if product.sku_interno:
                 listino_query = select(ListinoMaster).where(
@@ -654,7 +737,7 @@ async def elabora_ordine_settore(
             unit_price = 0.0
 
         # Cerca il codice articolo del fornitore tramite alias.
-        if product.id:
+        if product.id and not it.preferred_offer_id:
             alias = (await db.scalars(
                 select(SupplierProductAlias).where(
                     SupplierProductAlias.product_id == product.id,
@@ -676,6 +759,7 @@ async def elabora_ordine_settore(
             sku_interno=product.sku_interno,
             nome_prodotto=display_name,
             codice_fornitore=supplier_code,
+            variante=_variant_label(chosen_alias) if it.preferred_offer_id else None,
             quantita=it.quantita,
             uom=uom,
             prezzo_unitario=unit_price,
@@ -819,6 +903,130 @@ async def salva_ordini_settore(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user),
 ):
+    location = await db.get(Location, data.location_id)
+    if location is None:
+        raise HTTPException(status_code=404, detail="Sede non trovata")
+    _require_order_location_access(_user, location, data.settore)
+    if not data.bundles:
+        raise HTTPException(status_code=422, detail="Nessun ordine fornitore da salvare")
+
+    # A saved bundle is supplied by the browser. Recheck supplier, canonical
+    # product identity, contractual prices and totals on the server BEFORE
+    # inserting any order. WhatsApp text must be regenerated, not trusted.
+    validated_messages: dict[int, str] = {}
+    seen_suppliers: set[int] = set()
+    today = date.today()
+    for bundle in data.bundles:
+        if bundle.fornitore_id in seen_suppliers or not bundle.items:
+            raise HTTPException(status_code=422, detail="Fornitore duplicato o ordine vuoto")
+        seen_suppliers.add(bundle.fornitore_id)
+        supplier = await db.get(Fornitore, bundle.fornitore_id)
+        if not supplier or not supplier.attivo_whitelist or supplier.archived_at is not None:
+            raise HTTPException(status_code=422, detail="Fornitore non disponibile")
+        product_by_id: dict[int, Product] = {}
+        expected_total = 0.0
+        expected_units = 0.0
+        for it in bundle.items:
+            product = await db.get(Product, it.product_id)
+            if not product or not product.is_active:
+                raise HTTPException(status_code=422, detail="Prodotto inattivo o inesistente")
+            product_by_id[it.product_id] = product
+            if it.sku_interno != product.sku_interno or it.nome_prodotto != product.canonical_name:
+                raise HTTPException(status_code=422, detail="Identità del prodotto modificata")
+            if it.codice_fornitore and it.codice_fornitore.startswith(("OFF-", "SG-")):
+                selected_alias = await db.scalar(select(SupplierProductAlias).where(
+                    SupplierProductAlias.supplier_id == bundle.fornitore_id,
+                    SupplierProductAlias.product_id == product.id,
+                    SupplierProductAlias.supplier_code == it.codice_fornitore,
+                    SupplierProductAlias.status == "approved",
+                ))
+                expected_variant = _variant_label(selected_alias) if selected_alias else None
+                if not selected_alias or it.variante != expected_variant or it.uom != "conf":
+                    raise HTTPException(status_code=422, detail="Variante dell’ordine non più valida")
+            if not math.isfinite(it.quantita) or not math.isfinite(it.prezzo_unitario):
+                raise HTTPException(status_code=422, detail="Valore numerico non valido")
+            if it.quantita <= 0 or it.prezzo_unitario < 0:
+                raise HTTPException(status_code=422, detail="Quantità o prezzo non valido")
+            if not it.is_omaggio and it.prezzo_unitario == 0:
+                raise HTTPException(status_code=422, detail="Prezzo non definito: richiedere una quotazione")
+            if it.is_omaggio and it.prezzo_unitario != 0:
+                raise HTTPException(status_code=422, detail="Un omaggio non può avere prezzo")
+            subtotal = round(it.prezzo_unitario * it.quantita, 2)
+            if not math.isfinite(it.subtotale) or abs(it.subtotale - subtotal) > 0.01:
+                raise HTTPException(status_code=422, detail="Subtotale articolo alterato")
+            if it.is_concordato and not it.is_omaggio:
+                contract_stmt = (
+                    select(ListinoMaster)
+                    .where(
+                        ListinoMaster.fornitore_id == bundle.fornitore_id,
+                        ListinoMaster.sku_interno == product.sku_interno,
+                        ListinoMaster.data_inizio_validita <= today,
+                        or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+                    )
+                    .order_by(ListinoMaster.prezzo_pattuito.asc())
+                    .limit(1)
+                )
+                if it.codice_fornitore and it.codice_fornitore.startswith(("OFF-", "SG-")):
+                    contract_stmt = (
+                        select(ListinoMaster)
+                        .join(SupplierProductAlias, SupplierProductAlias.id == ListinoMaster.supplier_product_alias_id)
+                        .where(
+                            ListinoMaster.fornitore_id == bundle.fornitore_id,
+                            ListinoMaster.sku_interno == product.sku_interno,
+                            SupplierProductAlias.supplier_code == it.codice_fornitore,
+                            ListinoMaster.data_inizio_validita <= today,
+                            or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+                        )
+                        .order_by(ListinoMaster.id.desc())
+                        .limit(1)
+                    )
+                contract = (await db.execute(contract_stmt)).scalar_one_or_none()
+                if contract is None or Decimal(str(it.prezzo_unitario)) != Decimal(str(contract.prezzo_pattuito)):
+                    raise HTTPException(status_code=422, detail="Prezzo concordato differente dal listino")
+            expected_total += subtotal
+            expected_units += it.quantita
+
+        free_items = [it for it in bundle.items if it.is_omaggio]
+        if free_items:
+            paid_water = [
+                it for it in bundle.items
+                if not it.is_omaggio and is_water_product(
+                    canonical_name=it.nome_prodotto,
+                    order_name=getattr(product_by_id[it.product_id], "order_name", None),
+                    category=getattr(product_by_id[it.product_id], "category", None),
+                    subcategory=getattr(product_by_id[it.product_id], "subcategory", None),
+                    uom=it.uom,
+                )
+                and (it.uom or "").upper() not in ("BT", "BOTTIGLIA", "BOTTIGLIE", "PZ", "PIECE")
+            ]
+            allowed = int(sum(it.quantita for it in paid_water) // 5)
+            used = sum(it.quantita for it in free_items)
+            if (
+                used > allowed
+                or any(it.product_id not in {p.product_id for p in paid_water} for it in free_items)
+                or any(int(it.quantita) != it.quantita for it in free_items)
+            ):
+                raise HTTPException(status_code=422, detail="Omaggio non giustificato da acquisti 5+1")
+
+        if (
+            not math.isfinite(bundle.totale_ordine)
+            or not math.isfinite(bundle.totale_colli)
+            or abs(bundle.totale_ordine - round(expected_total, 2)) > 0.01
+            or abs(bundle.totale_colli - expected_units) > 0.0001
+            or bundle.numero_articoli != len(bundle.items)
+        ):
+            raise HTTPException(status_code=422, detail="Totali del fornitore non coerenti")
+        validated_messages[bundle.fornitore_id] = _format_whatsapp_text(
+            supplier_name=supplier.nome_azienda,
+            location_name=location.nome_struttura,
+            location_address=getattr(location, "indirizzo", None) or getattr(location, "citta", None),
+            delivery_date=data.data_consegna,
+            sector=data.settore,
+            order_notes=data.note,
+            items=bundle.items,
+            total_amount=round(expected_total, 2),
+        )
+
     saved_ids = []
     now = datetime.utcnow()
 
@@ -827,10 +1035,11 @@ async def salva_ordini_settore(
             fornitore_id=bundle.fornitore_id,
             location_id=data.location_id,
             user_id=_user.id,
+            tenant_id=_user.tenant_id,
             settore=data.settore,
             data_consegna=data.data_consegna,
             note=data.note,
-            whatsapp_message=bundle.whatsapp_message,
+            whatsapp_message=validated_messages[bundle.fornitore_id],
             data_ordine=now,
             spesa_totale=bundle.totale_ordine,
             stato="inviato",
@@ -850,7 +1059,11 @@ async def salva_ordini_settore(
                 prezzo_pattuito=it.prezzo_unitario,
                 prezzo_inserito=it.prezzo_unitario,
                 stato_ottimizzazione="omaggio" if is_omaggio else ("concordato" if it.is_concordato else "settore"),
-                note_riga=getattr(it, "note_omaggio", None) or ("Omaggio Promo 5+1" if is_omaggio else None),
+                note_riga=(
+                    f"Offerta {it.codice_fornitore}: {it.variante}"
+                    if it.variante and it.codice_fornitore else
+                    getattr(it, "note_omaggio", None) or ("Omaggio Promo 5+1" if is_omaggio else None)
+                ),
             )
             db.add(riga)
 
@@ -881,14 +1094,15 @@ async def list_ordini(
     """Restituisce la lista filtrata e paginata del Registro Ordini."""
     stmt = select(Ordine).order_by(Ordine.id.desc())
 
-    # Isolamento Multi-Tenant per Azienda
-    if getattr(_user, "tenant_id", None):
-        stmt = stmt.where(Ordine.tenant_id == _user.tenant_id)
+    # Mandatory tenant scope — never fall back to all orders.
+    if getattr(_user, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="Azienda non configurata")
+    stmt = stmt.where(Ordine.tenant_id == _user.tenant_id)
 
-    # User Scoping
-    if _user.ruolo != "admin" and _user.ruolo_dettagliato != "admin":
-        if _user.location_id:
-            stmt = stmt.where(Ordine.location_id == _user.location_id)
+    if _user.ruolo != "admin":
+        if _user.location_id is None:
+            raise HTTPException(status_code=403, detail="Sede non configurata")
+        stmt = stmt.where(Ordine.location_id == _user.location_id)
         if _user.settore_abilitato and _user.settore_abilitato != "all":
             allowed_sectors = [s.strip() for s in _user.settore_abilitato.split(",") if s.strip()]
             if allowed_sectors:
@@ -964,10 +1178,7 @@ async def get_ordine_detail(
     if not ordine:
         raise HTTPException(status_code=404, detail="Ordine non trovato")
 
-    # Check permission
-    if _user.ruolo != "admin" and _user.ruolo_dettagliato != "admin":
-        if _user.location_id and ordine.location_id != _user.location_id:
-            raise HTTPException(status_code=403, detail="Accesso non autorizzato all'ordine di questa sede")
+    _require_order_access(_user, ordine)
 
     return {
         "id": ordine.id,
@@ -1031,18 +1242,21 @@ async def convalida_ricezione_ordine(
     if not ordine:
         raise HTTPException(status_code=404, detail="Ordine non trovato")
 
-    if user.ruolo != "admin" and user.ruolo_dettagliato != "admin":
-        if user.location_id and ordine.location_id != user.location_id:
-            raise HTTPException(status_code=403, detail="Non puoi validare ordini di un'altra sede")
+    _require_order_access(user, ordine)
 
     righe_map = {r.id: r for r in ordine.righe}
-
+    submitted_ids = [item.riga_id for item in data.righe]
+    if len(submitted_ids) != len(set(submitted_ids)) or set(submitted_ids) != set(righe_map):
+        raise HTTPException(status_code=422, detail="Indicare ogni riga dell'ordine una sola volta")
     for item in data.righe:
-        if item.riga_id in righe_map:
-            r = righe_map[item.riga_id]
-            r.quantita_ricevuta = item.quantita_ricevuta
-            r.stato_riga = item.stato_riga
-            r.note_riga = item.note_riga
+        r = righe_map[item.riga_id]
+        if Decimal(str(item.quantita_ricevuta)) > Decimal(str(r.quantita)):
+            raise HTTPException(status_code=422, detail="Quantità ricevuta superiore a quella ordinata")
+    for item in data.righe:
+        r = righe_map[item.riga_id]
+        r.quantita_ricevuta = item.quantita_ricevuta
+        r.stato_riga = item.stato_riga
+        r.note_riga = item.note_riga
 
     ordine.stato_ricezione = data.stato_ricezione
     ordine.data_ricezione = datetime.utcnow()
@@ -1076,11 +1290,18 @@ async def get_order_notifications(
     Restituisce gli ultimi ordini emessi con indicazione esplicita dell'autore dell'ordine,
     sede, fornitore, importo e data per il centro notifiche.
     """
-    stmt = select(Ordine).order_by(Ordine.data_ordine.desc()).limit(limit)
-
-    if user.ruolo != "admin" and user.ruolo_dettagliato != "admin":
-        if user.location_id:
-            stmt = stmt.where(Ordine.location_id == user.location_id)
+    if getattr(user, "tenant_id", None) is None:
+        raise HTTPException(status_code=403, detail="Azienda non configurata")
+    stmt = select(Ordine).where(Ordine.tenant_id == user.tenant_id)
+    if user.ruolo != "admin":
+        if user.location_id is None:
+            raise HTTPException(status_code=403, detail="Sede non configurata")
+        stmt = stmt.where(Ordine.location_id == user.location_id)
+        if user.settore_abilitato and user.settore_abilitato.lower() != "all":
+            allowed = [x.strip() for x in user.settore_abilitato.split(",") if x.strip()]
+            if allowed:
+                stmt = stmt.where(Ordine.settore.in_(allowed))
+    stmt = stmt.order_by(Ordine.data_ordine.desc()).limit(max(1, min(limit, 100)))
 
     ordini = (await db.scalars(stmt)).all()
 
@@ -1304,31 +1525,43 @@ async def genera_richiesta_prezzo_settore(
     db: AsyncSession = Depends(get_db),
     user: Utente = Depends(get_current_user),
 ):
+    category_str = (data.category or "Generale").strip()
+    cat_norm = category_str.casefold()
+    subcat_str = data.subcategory or ""
+
+    # A manager can request quotes only for their assigned location and sector.
+    # An explicit supplier list narrows the eligible set; it never grants access.
+    if user.ruolo != "admin":
+        if not data.location_id:
+            raise HTTPException(status_code=403, detail="Sede obbligatoria per la richiesta di settore")
+        allowed = (getattr(user, "settore_abilitato", None) or "").strip()
+        if allowed.casefold() != "all":
+            permitted = {part.strip().casefold() for part in allowed.split(",") if part.strip()}
+            if cat_norm not in permitted:
+                raise HTTPException(status_code=403, detail="Settore non autorizzato")
+
     # Recupera nome sede se location_id fornito
     location_name = "Tutte le Sedi / Direzione Acquisti"
     if data.location_id:
         loc = await db.get(Location, data.location_id)
-        if loc:
-            loc_addr = getattr(loc, "indirizzo", None)
-            location_name = loc.nome_struttura + (f" ({loc_addr})" if loc_addr else "")
-
-    category_str = data.category or "Generale"
-    cat_norm = category_str.strip().casefold()
-    subcat_str = data.subcategory or ""
-    subcat_norm = subcat_str.strip().casefold()
+        if not loc:
+            raise HTTPException(status_code=404, detail="Sede non trovata")
+        _require_order_location_access(user, loc, category_str)
+        loc_addr = getattr(loc, "indirizzo", None)
+        location_name = loc.nome_struttura + (f" ({loc_addr})" if loc_addr else "")
 
     # 1. Recupera tutti i fornitori attivi non archiviati
     suppliers_query = select(Fornitore).where(Fornitore.archived_at.is_(None)).order_by(Fornitore.nome_azienda)
     all_suppliers = (await db.scalars(suppliers_query)).all()
 
     # 2. Recupera capabilities
-    cap_query = select(SupplierCategoryCapability).where(SupplierCategoryCapability.enabled.is_(True))
+    cap_query = select(SupplierCategoryCapability)
     all_caps = (await db.scalars(cap_query)).all()
     caps_by_supplier: Dict[int, Set[str]] = {}
+    disabled_caps_by_supplier: Dict[int, Set[str]] = {}
     for c in all_caps:
-        if c.supplier_id not in caps_by_supplier:
-            caps_by_supplier[c.supplier_id] = set()
-        caps_by_supplier[c.supplier_id].add(c.category.strip().casefold())
+        target = caps_by_supplier if c.enabled else disabled_caps_by_supplier
+        target.setdefault(c.supplier_id, set()).add(c.category.strip().casefold())
 
     # 3. Fornitori con fatture, alias o listini in questo settore / categoria
     evidence_query = (
@@ -1346,37 +1579,26 @@ async def genera_richiesta_prezzo_settore(
     matched_reasons: Dict[int, str] = {}
 
     for s in all_suppliers:
+        if not s.attivo_whitelist:
+            continue
         if data.target_supplier_ids and s.id not in data.target_supplier_ids:
             continue
 
         s_cats = caps_by_supplier.get(s.id, set())
+        disabled_cats = disabled_caps_by_supplier.get(s.id, set())
         has_cat = False
         reason = "Fornitore attivo nel settore"
 
-        if cat_norm in s_cats or any(c in cat_norm or cat_norm in c for c in s_cats):
+        category_disabled = cat_norm in disabled_cats or any(c in cat_norm or cat_norm in c for c in disabled_cats)
+        if not category_disabled and (cat_norm in s_cats or any(c in cat_norm or cat_norm in c for c in s_cats)):
             has_cat = True
             reason = f"Abilitato per categoria: {category_str}"
-        elif s.id in evidence_ids:
+        elif not category_disabled and s.id in evidence_ids:
             has_cat = True
             reason = f"Storico listini nel settore: {category_str}"
-        elif not caps_by_supplier:  # Se non sono configurate capabilities specifiche, includi whitelist attivi
-            has_cat = bool(s.attivo_whitelist)
-            reason = "Fornitore attivo a catalogo"
-
-        # Se abbiamo target espliciti, includi sempre
-        if data.target_supplier_ids and s.id in data.target_supplier_ids:
-            has_cat = True
-
         if has_cat:
             matched_suppliers.append(s)
             matched_reasons[s.id] = reason
-
-    # Se nessun fornitore è stato agganciato tramite capability, usa tutti i fornitori whitelist attivi
-    if not matched_suppliers and not data.target_supplier_ids:
-        for s in all_suppliers:
-            if s.attivo_whitelist:
-                matched_suppliers.append(s)
-                matched_reasons[s.id] = "Fornitore attivo whitelist"
 
     # Costruisci testo broadcast e dettagli per singolo fornitore
     product_title = data.canonical_name

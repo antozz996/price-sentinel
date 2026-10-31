@@ -55,7 +55,6 @@ interface NotificationCenterModalProps {
   onClose: () => void;
   onViewOrder: (orderId: number) => void;
   onViewReviews: () => void;
-  onViewReceipt: () => void;
   onRefreshCounts?: () => void;
 }
 
@@ -64,7 +63,6 @@ export default function NotificationCenterModal({
   onClose,
   onViewOrder,
   onViewReviews,
-  onViewReceipt: _onViewReceipt,
   onRefreshCounts
 }: NotificationCenterModalProps) {
   const [activeTab, setActiveTab] = useState<'orders' | 'feedbacks'>('orders');
@@ -79,6 +77,8 @@ export default function NotificationCenterModal({
     if (isOpen) {
       loadAllNotifications();
     }
+  // Opening the modal is the intended refresh trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   async function loadAllNotifications() {

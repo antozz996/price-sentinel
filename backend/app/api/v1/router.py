@@ -34,6 +34,7 @@ from app.api.v1 import (
     company_settings,
     instances,
     god_mode,
+    supplier_price_forms,
 )
 
 api_router = APIRouter(redirect_slashes=False)
@@ -49,6 +50,7 @@ api_router.include_router(location.router, prefix="/location", tags=["Location"]
 api_router.include_router(fornitori.router, prefix="/fornitori", tags=["Fornitori"])
 api_router.include_router(categories.router, prefix="/categories", tags=["Categorie & Fornitori"])
 api_router.include_router(listino.router, prefix="/listino", tags=["Listino Master"])
+api_router.include_router(supplier_price_forms.router, prefix="/supplier-price-forms", tags=["Moduli listino fornitori"])
 api_router.include_router(fatture.router, prefix="/fatture", tags=["Fatture (API private)"])
 api_router.include_router(anomalie.router, prefix="/anomalie", tags=["Anomalie Workflow"])
 api_router.include_router(alias.router, prefix="/alias", tags=["Alias Prodotti"])

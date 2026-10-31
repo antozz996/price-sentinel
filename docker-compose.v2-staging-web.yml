@@ -1,0 +1,41 @@
+# Optional web overlay for `docker-compose.v2-staging.yml`.
+# Never invoke it on its own; always provide BOTH -f arguments.
+# Prerequisite: `frontend/dist/index.html` built from the V2 checkout.
+services:
+  web:
+    image: nginx:alpine@sha256:582c496ccf79d8aa6f8203a79d32aaf7ffd8b13362c60a701a2f9ac64886c93d
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cpus: 0.25
+    mem_limit: 128m
+    pids_limit: 64
+    ports:
+      - "127.0.0.1:18084:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./docs/staging/nginx.v2.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      # Only web joins this conventional bridge, allowing loopback publishing.
+      # Backend and DB remain exclusively on the non-routable internal bridge.
+      - v2_internal
+      - v2_ingress
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:80/ | grep -q '<html'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+# Dedicated Docker bridge only for host -> web loopback port publishing.
+# Never add backend/db to this network; do not change the 127.0.0.1 bind.
+networks:
+  v2_ingress:
+    driver: bridge

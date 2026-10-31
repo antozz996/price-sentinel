@@ -96,7 +96,8 @@ body {
 .app-container {
   display: flex;
   height: 100vh;
-  width: 100vw;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -266,8 +267,11 @@ body {
 
 .main-content {
   flex: 1;
+  min-width: 0;
   padding: 40px;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
   position: relative;
 }
 
@@ -403,10 +407,12 @@ h1, h2, h3, h4 {
 
   .header-subtitle {
     font-size: 0.75rem !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    max-width: 240px !important;
+    line-height: 1.45 !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: min(100%, 420px) !important;
   }
 
   .profile-info {
