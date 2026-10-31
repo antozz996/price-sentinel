@@ -246,8 +246,40 @@ def execute_v1_migration_rehearsal(admin_dsn: str) -> bool:
     )
     backend_root = str(Path(__file__).resolve().parents[1])
 
+    # Reproduce the observed V1 production baseline without replaying every
+    # historical migration from an empty database.  The legacy chain contains
+    # old enum bootstrap assumptions that are unrelated to this release; the
+    # real V1 database already has those tables and is stamped at this revision.
+    bootstrap = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import asyncio; from scripts.run_ci_disposable_e2e import create_tables; "
+            "asyncio.run(create_tables(__import__('os').environ['DATABASE_URL']))",
+        ],
+        cwd=backend_root,
+        env=env,
+        check=False,
+        timeout=120,
+    )
+    if bootstrap.returncode:
+        print("FAIL: V1 migration rehearsal schema bootstrap", flush=True)
+        return False
+
+    connection = psycopg2.connect(sync_dsn)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("drop table supplier_price_form_items")
+            cursor.execute("drop table supplier_price_form_requests")
+            cursor.execute("alter table supplier_product_aliases drop column brand")
+            cursor.execute("alter table products alter column comparison_unit set not null")
+            cursor.execute("alter table listino_master alter column unita_misura set not null")
+        connection.commit()
+    finally:
+        connection.close()
+
     for command in (
-        [sys.executable, "-m", "alembic", "upgrade", "supplier_safe_archiving"],
+        [sys.executable, "-m", "alembic", "stamp", "supplier_safe_archiving"],
         [sys.executable, "-m", "alembic", "upgrade", "head"],
     ):
         result = subprocess.run(
