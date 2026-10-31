@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   ShoppingCart, 
   Search, 
@@ -358,7 +358,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   };
 
   // Helper for effective Supplier & Price
-  const getEffectiveSupplier = (prod: ProductItem) => {
+  const getEffectiveSupplier = useCallback((prod: ProductItem) => {
     if (selectedSuppliers[prod.id]) {
       return selectedSuppliers[prod.id];
     }
@@ -371,7 +371,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       price: prod.prezzo_listino ?? null,
       offer_id: null as string | null,
     };
-  };
+  }, [selectedSuppliers]);
 
   // Draft resolution state
   const [draftProcessing, setDraftProcessing] = useState<boolean>(false);
@@ -440,6 +440,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
   useEffect(() => {
     loadData();
+  // Initial order-builder bootstrap; explicit actions refresh data thereafter.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -580,7 +582,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         || (p.offers && Object.values(p.offers).some(o => o.supplier_name.toLowerCase().includes(search)));
       return matchSector && matchSubcat && matchSearch;
     });
-  }, [products, selectedSector, selectedSubcategory, searchTerm, selectedSuppliers]);
+  }, [products, selectedSector, selectedSubcategory, searchTerm, getEffectiveSupplier]);
 
   // Quantities and Basket Totals
   const basketItems = useMemo(() => {
@@ -613,7 +615,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       }
     });
     return items;
-  }, [quantities, products, selectedUoms, selectedSuppliers]);
+  }, [quantities, products, selectedUoms, getEffectiveSupplier]);
 
   const basketStats = useMemo(() => {
     const totalItems = basketItems.length;

@@ -39,4 +39,3 @@ assert.equal(written.requests[1].updateCells.rows[0].values[7].userEnteredValue.
 assert.equal(written.requests[2].appendCells.rows[0].values[12].userEnteredValue.stringValue, 'OFF-CI-TWO');
 food[1][9] = '16';
 await assert.rejects(() => writeNormalizedSheet(root, 'synthetic-token', request, preview, fetcher), /cambiata/);
-console.log('PASS: normalized Sheet preview, package write and concurrent-change block');

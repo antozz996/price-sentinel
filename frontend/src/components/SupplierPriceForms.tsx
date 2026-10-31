@@ -193,9 +193,12 @@ export default function SupplierPriceForms() {
       if (live) setError(e instanceof Error ? e.message : 'Impossibile caricare uno o più listini');
     }).finally(() => { if (live) setLoadingCatalog(false); });
     return () => { live = false; };
-  }, [selectedSupplierIds.join(','), recipientMode, recipientCategory, requestType, productCategory]);
+  }, [selectedSupplierIds, recipientMode, recipientCategory, requestType, productCategory]);
 
-  const allRows = selectedSupplierIds.flatMap(id => rowsBySupplier[id] || []);
+  const allRows = useMemo(
+    () => selectedSupplierIds.flatMap(id => rowsBySupplier[id] || []),
+    [selectedSupplierIds, rowsBySupplier]
+  );
   const groupOptions = useMemo(() => {
     const names = new Map<string, number>();
     const subs = new Map<string, { category: string; subcategory: string; count: number }>();
@@ -217,7 +220,7 @@ export default function SupplierPriceForms() {
       ...Array.from(subs.entries()).sort(([, a], [, b]) => (a.category + a.subcategory).localeCompare(b.category + b.subcategory, 'it')).map(([key, item]) => ({ value: 'subcategory:' + key, label: `${item.category} · ${item.subcategory} (${item.count})`, category: item.category, subcategory: item.subcategory, uncategorized: false })),
       ...(uncategorized ? [{ value: 'uncategorized', label: `Senza categoria (${uncategorized})`, category: null, subcategory: null, uncategorized: true }] : [])
     ];
-  }, [selectedSupplierIds.join(','), rowsBySupplier]);
+  }, [allRows]);
   const activeGroup = groupOptions.find(option => option.value === listinoSection) || groupOptions[0];
   const visibleRowsBySupplier = useMemo(() => Object.fromEntries(selectedSupplierIds.map(id => {
     const rows = rowsBySupplier[id] || [];
@@ -228,7 +231,7 @@ export default function SupplierPriceForms() {
       if (activeGroup.subcategory) return row.category?.trim() === activeGroup.category && row.subcategory?.trim() === activeGroup.subcategory;
       return row.category?.trim() === activeGroup.category;
     })];
-  })), [selectedSupplierIds.join(','), rowsBySupplier, activeGroup, recipientMode, recipientCategory]);
+  })), [selectedSupplierIds, rowsBySupplier, activeGroup, recipientMode, recipientCategory]);
   const visibleRows = selectedSupplierIds.flatMap(id => visibleRowsBySupplier[id] || []);
   const selectedCount = selectedSupplierIds.reduce((sum, id) => sum + (selectedBySupplier[id]?.length || 0), 0);
   const allVisibleSelected = visibleRows.length > 0 && selectedSupplierIds.every(id =>

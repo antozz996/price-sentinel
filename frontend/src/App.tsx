@@ -244,6 +244,8 @@ export default function App() {
       const interval = setInterval(loadNotificationStats, 20000);
       return () => clearInterval(interval);
     }
+  // Authentication changes are the only intended polling lifecycle trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuth]);
 
   // Login form states
@@ -907,7 +909,6 @@ export default function App() {
           setActiveTab('orderregistry');
         }}
         onViewReviews={() => setActiveTab('productreviews')}
-        onViewReceipt={() => setActiveTab('goodsreceipt')}
         onRefreshCounts={loadNotificationStats}
       />
     </div>

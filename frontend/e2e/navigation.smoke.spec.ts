@@ -2,6 +2,15 @@ import { test, expect, type Page } from '@playwright/test'
 
 type Role = 'admin' | 'manager'
 type MockProfile = { id: number; email: string; ruolo: Role; ruolo_dettagliato: string; location_id: number | null; tenant_id: number }
+type SheetWriteBody = {
+  requests: Array<{
+    updateCells: {
+      rows: Array<{
+        values: Array<{ userEnteredValue: { numberValue: number } }>
+      }>
+    }
+  }>
+}
 
 function profileFor(email: string): MockProfile {
   if (email.includes('manager')) {
@@ -128,7 +137,7 @@ test('responsive main navigation can be opened at the mobile viewport', async ({
 })
 
 
-test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edits', async ({ page }, testInfo) => {
+test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edits', async ({ page }) => {
   const supplierName = 'FORNITORE TEST'
   const request = {
     id: 7,
@@ -178,7 +187,7 @@ test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edi
     contentType: 'application/javascript',
     body: `window.google={accounts:{oauth2:{initTokenClient:({callback})=>({requestAccessToken:()=>callback({access_token:'ci-synthetic-token'})})}}};`,
   }))
-  const sheetWrites: Array<{ method: string; body: unknown }> = []
+  const sheetWrites: Array<{ method: string; body: SheetWriteBody }> = []
   let snapshotReads = 0
   let currentPrice = '6.00'
   await page.route('https://sheets.googleapis.com/**', async route => {
@@ -196,7 +205,7 @@ test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edi
       return
     }
     if (url.pathname.endsWith(':batchUpdate')) {
-      sheetWrites.push({ method: route.request().method(), body: route.request().postDataJSON() })
+      sheetWrites.push({ method: route.request().method(), body: route.request().postDataJSON() as SheetWriteBody })
       await route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, json: { totalUpdatedCells: 1 } })
       return
     }
@@ -251,5 +260,5 @@ test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edi
   await expect(page.getByText('Scritto', { exact: true })).toBeVisible()
   expect(sheetWrites).toHaveLength(1)
   expect(sheetWrites[0].method).toBe('POST')
-  expect((sheetWrites[0].body as any).requests[0].updateCells.rows[0].values[4].userEnteredValue.numberValue).toBe(4.25)
+  expect(sheetWrites[0].body.requests[0].updateCells.rows[0].values[4].userEnteredValue.numberValue).toBe(4.25)
 })

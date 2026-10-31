@@ -18,6 +18,8 @@ export default function OrderReconciliations({isAdmin=false}:{isAdmin?:boolean})
   const [mappingVenue,setMappingVenue]=useState(''); const [locationId,setLocationId]=useState('')
   const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [message,setMessage]=useState('')
   const load=async()=>{ setBusy(true);setError('');try{const q=new URLSearchParams();if(venue)q.set('venue_id',venue);if(supplier)q.set('supplier_id',supplier);if(status)q.set('status',status);if(dateFrom)q.set('date_from',dateFrom);if(dateTo)q.set('date_to',dateTo);const rows=await fetchWithAuth(`/reconciliations/orders?${q}`);setOrders(rows)}catch(e){setError(e instanceof Error?e.message:'Caricamento non riuscito')}finally{setBusy(false)}}
+  // Initial reconciliation bootstrap; actions invoke reload explicitly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{void load()},[])
   const open=async(order:Order)=>{setSelected(order);setError('');setInvoices([]);try{if(order.reconciliation_id)setDetail(await fetchWithAuth(`/reconciliations/${order.reconciliation_id}`));else setDetail(null);setInvoices(await fetchWithAuth(`/reconciliations/orders/${order.liquidstock_supplier_order_id}/invoice-candidates`))}catch(e){setError(e instanceof Error?e.message:'Dati non disponibili')}}
   const act=async(label:string,fn:()=>Promise<unknown>)=>{setBusy(true);setError('');setMessage('');try{const value=await fn();if(value&&typeof value==='object'&&'items' in value)setDetail(value as Detail);setMessage(label);await load()}catch(e){setError(e instanceof Error?e.message:'Operazione non riuscita')}finally{setBusy(false)}}

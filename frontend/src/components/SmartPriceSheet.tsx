@@ -399,6 +399,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   useEffect(() => {
     void loadMatrix()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offset, selectedMatrixCategory])
   useEffect(() => {
     if (activeTab === 'paste') void loadProducts()
@@ -423,6 +424,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         void reloadCurrentPrices(activeCategorySheet, activeSubcategorySheet)
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, activeCategorySheet, activeSubcategorySheet])
 
   const visibleSuppliers = useMemo(
