@@ -205,12 +205,123 @@ def execute_case(name: str, admin_dsn: str) -> bool:
     return passed
 
 
+def execute_v1_migration_rehearsal(admin_dsn: str) -> bool:
+    """Prove the V1 Alembic head can upgrade to V2 and roll back in CI."""
+    import psycopg2
+    from psycopg2 import sql
+
+    db_name = "ps_ci_disposable_v1_upgrade"
+    admin_url = make_url(admin_dsn)
+    admin_uri = admin_url.set(drivername="postgresql").render_as_string(hide_password=False)
+    connection = psycopg2.connect(admin_uri)
+    try:
+        connection.autocommit = True
+        with connection.cursor() as cursor:
+            cursor.execute("select 1 from pg_database where datname=%s", (db_name,))
+            if cursor.fetchone():
+                raise SystemExit("STOP: expected a brand-new V1 migration rehearsal DB")
+            cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
+    finally:
+        connection.close()
+
+    async_dsn = admin_url.set(
+        drivername="postgresql+asyncpg", database=db_name
+    ).render_as_string(hide_password=False)
+    sync_dsn = admin_url.set(
+        drivername="postgresql", database=db_name
+    ).render_as_string(hide_password=False)
+    env = dict(os.environ)
+    env.update(
+        {
+            "DATABASE_URL": async_dsn,
+            "ENVIRONMENT": "ci",
+            "DEBUG": "false",
+            "AUTOMATION_ENABLED": "false",
+            "SECRET_KEY": secrets.token_urlsafe(48),
+            "ARUBA_WEBHOOK_API_KEY": secrets.token_urlsafe(32),
+            "LIQUIDSTOCK_INTEGRATION_SECRET": secrets.token_urlsafe(48),
+            "GOD_MODE_TOKEN": "",
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+        }
+    )
+    backend_root = str(Path(__file__).resolve().parents[1])
+
+    for command in (
+        [sys.executable, "-m", "alembic", "upgrade", "supplier_safe_archiving"],
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+    ):
+        result = subprocess.run(
+            command,
+            cwd=backend_root,
+            env=env,
+            check=False,
+            timeout=120,
+        )
+        if result.returncode:
+            print("FAIL: V1-to-V2 migration rehearsal upgrade", flush=True)
+            return False
+
+    connection = psycopg2.connect(sync_dsn)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("select version_num from alembic_version")
+            if cursor.fetchone() != ("supplier_multiple_offers",):
+                print("FAIL: unexpected V2 Alembic head", flush=True)
+                return False
+            cursor.execute(
+                """
+                select count(*)
+                from information_schema.columns
+                where table_name = 'supplier_price_form_items'
+                  and column_name in (
+                    'brand_corrente', 'brand_inviata', 'dicitura_inviata',
+                    'quantita_inviata', 'offerte_inviate'
+                  )
+                """
+            )
+            if cursor.fetchone() != (5,):
+                print("FAIL: V2 supplier form columns missing", flush=True)
+                return False
+    finally:
+        connection.close()
+
+    rollback = subprocess.run(
+        [sys.executable, "-m", "alembic", "downgrade", "supplier_safe_archiving"],
+        cwd=backend_root,
+        env=env,
+        check=False,
+        timeout=120,
+    )
+    if rollback.returncode:
+        print("FAIL: V2-to-V1 migration rehearsal rollback", flush=True)
+        return False
+
+    connection = psycopg2.connect(sync_dsn)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("select version_num from alembic_version")
+            if cursor.fetchone() != ("supplier_safe_archiving",):
+                print("FAIL: rollback did not restore V1 Alembic revision", flush=True)
+                return False
+            cursor.execute("select to_regclass('public.supplier_price_form_items')")
+            if cursor.fetchone() != (None,):
+                print("FAIL: rollback left a V2-only table in the V1 schema", flush=True)
+                return False
+    finally:
+        connection.close()
+
+    print("PASS: V1 schema upgrades to V2 and rolls back on disposable PostgreSQL", flush=True)
+    return True
+
+
 def main() -> None:
     if sys.argv[1:] != ["--github-ephemeral-only"]:
         raise SystemExit("STOP: explicit --github-ephemeral-only required")
     dsn = gate_environment()
     print("PASS: GitHub-hosted disposable Postgres isolation guard", flush=True)
     failures: list[str] = []
+    if not execute_v1_migration_rehearsal(dsn):
+        failures.append("v1_migration_rehearsal")
     for name in CASES:
         if not execute_case(name, dsn):
             failures.append(name)

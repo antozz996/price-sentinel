@@ -96,6 +96,11 @@ jobs:
           assert 'subprocess.run(' in s
           assert 'CREATE DATABASE' in s
           assert 'DROP DATABASE' not in s
+          assert 'execute_v1_migration_rehearsal' in s
+          migration = Path('backend/alembic/versions/2026_10_23_santo_graal_incomplete_quotes.py').read_text()
+          assert 'op.create_table(' in migration
+          assert 'supplier_price_form_requests' in migration
+          assert 'supplier_price_form_items' in migration
           print("PASS: E2E targets only CI disposable databases")
           PY
 
