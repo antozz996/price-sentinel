@@ -1,6 +1,11 @@
 from types import SimpleNamespace
 
-from app.api.v1.product_identity import _live_catalog_suggestion, _live_catalog_suggestions
+import app.api.v1.product_identity as product_identity
+from app.api.v1.product_identity import (
+    _build_live_catalog_index,
+    _live_catalog_suggestion,
+    _live_catalog_suggestions,
+)
 from app.services.normalization import normalize_text
 
 
@@ -72,10 +77,37 @@ def test_supplier_code_noise_and_word_order_still_produce_review_suggestion():
     assert match["score"] >= 70
 
 
+def test_inverted_index_avoids_full_catalog_pairwise_comparisons():
+    products = [product(index, f"Articolo completamente differente {index}") for index in range(1, 501)]
+    products.append(product(900, "Bicchiere long drink impilabile 370 ml", volume_ml=370))
+    catalog_index = _build_live_catalog_index(products)
+    calls = 0
+    original = product_identity._description_similarity
+
+    def tracked(left, right):
+        nonlocal calls
+        calls += 1
+        return original(left, right)
+
+    product_identity._description_similarity = tracked
+    try:
+        matches = _live_catalog_suggestions(
+            "Bicchiere long drink 370ml impilabile COD998877",
+            products,
+            catalog_index,
+        )
+    finally:
+        product_identity._description_similarity = original
+
+    assert matches and matches[0]["product_id"] == 900
+    assert calls <= 3
+
+
 if __name__ == "__main__":
     test_exact_current_catalog_name_is_suggested_even_without_saved_candidate()
     test_near_identical_name_is_suggested_when_unambiguous()
     test_conflicting_format_is_never_suggested()
     test_duplicate_exact_catalog_names_remain_for_manual_review()
     test_supplier_code_noise_and_word_order_still_produce_review_suggestion()
+    test_inverted_index_avoids_full_catalog_pairwise_comparisons()
     print("PASS: live work-queue suggestions are accurate and format-safe")

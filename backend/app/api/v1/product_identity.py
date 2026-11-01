@@ -611,7 +611,45 @@ def _description_similarity(left: str, right: str) -> float:
     return max(sequence_score, token_score)
 
 
-def _live_catalog_suggestions(raw_description: str, products: list[Product]) -> list[dict[str, Any]]:
+def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
+    """Precompute names and an inverted token index once per work-queue request."""
+    products_by_id: dict[int, Product] = {}
+    names_by_id: dict[int, list[str]] = {}
+    exact_name_ids: dict[str, set[int]] = {}
+    token_product_ids: dict[str, set[int]] = {}
+
+    for product in products:
+        names = {
+            name
+            for name in (
+                product.normalized_name,
+                normalize_text(product.canonical_name),
+                product.normalized_order_name,
+            )
+            if name
+        }
+        products_by_id[product.id] = product
+        names_by_id[product.id] = list(names)
+        product_tokens: set[str] = set()
+        for name in names:
+            exact_name_ids.setdefault(name, set()).add(product.id)
+            product_tokens.update(_matching_tokens(name))
+        for token in product_tokens:
+            token_product_ids.setdefault(token, set()).add(product.id)
+
+    return {
+        "products_by_id": products_by_id,
+        "names_by_id": names_by_id,
+        "exact_name_ids": exact_name_ids,
+        "token_product_ids": token_product_ids,
+    }
+
+
+def _live_catalog_suggestions(
+    raw_description: str,
+    products: list[Product],
+    catalog_index: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """Find current catalog suggestions for legacy parked invoice lines.
 
     Older invoice lines may have been parked before their catalog product existed,
@@ -622,6 +660,7 @@ def _live_catalog_suggestions(raw_description: str, products: list[Product]) -> 
     if not normalized:
         return []
 
+    index = catalog_index or _build_live_catalog_index(products)
     line_attributes = extract_candidate_attributes(raw_description)
 
     def has_format_conflict(product: Product) -> bool:
@@ -635,12 +674,21 @@ def _live_catalog_suggestions(raw_description: str, products: list[Product]) -> 
         product_pack = product.unit_count
         return bool(line_pack and product_pack and line_pack != product_pack)
 
+    exact_ids = set(index["exact_name_ids"].get(normalized, set()))
+    candidate_ids = set(exact_ids)
+    if not candidate_ids:
+        token_counts: dict[int, int] = {}
+        for token in _matching_tokens(normalized):
+            for product_id in index["token_product_ids"].get(token, set()):
+                token_counts[product_id] = token_counts.get(product_id, 0) + 1
+        # A single generic shared word (for example "bicchiere") is not enough
+        # to justify even a review suggestion.
+        candidate_ids = {product_id for product_id, shared in token_counts.items() if shared >= 2}
+
     ranked: list[tuple[float, Product, bool]] = []
-    for product in products:
-        names = [product.normalized_name, normalize_text(product.canonical_name)]
-        if product.normalized_order_name:
-            names.append(product.normalized_order_name)
-        names = [name for name in names if name]
+    for product_id in candidate_ids:
+        product = index["products_by_id"][product_id]
+        names = index["names_by_id"][product_id]
         exact = normalized in names
         similarity = 100.0 if exact else max(
             (_description_similarity(normalized, name) for name in names),
@@ -711,6 +759,7 @@ async def get_match_work_queue(
     active_products = (
         await db.execute(select(Product).where(Product.is_active.is_(True)))
     ).scalars().all()
+    live_catalog_index = _build_live_catalog_index(active_products)
 
     groups: dict[tuple[int, str, str], dict[str, Any]] = {}
     weak_candidates_discarded = 0
@@ -772,7 +821,9 @@ async def get_match_work_queue(
     for group in groups.values():
         alternatives = sorted(group["candidates"].values(), key=lambda item: item["score"], reverse=True)[:3]
         if not alternatives:
-            alternatives = _live_catalog_suggestions(group["raw_description"], active_products)
+            alternatives = _live_catalog_suggestions(
+                group["raw_description"], active_products, live_catalog_index
+            )
         attributes = extract_candidate_attributes(group["raw_description"])
         best_candidate = alternatives[0] if alternatives else None
         items.append({
