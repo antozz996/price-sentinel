@@ -5,14 +5,15 @@
 #     -f docker-compose.v2-staging-web.yml \
 #     -f docker-compose.v2-live.yml up -d --no-deps --force-recreate backend web
 #
-# Supplier communications and scheduled automations remain disabled until they
-# receive a separate commercial authorization.
+# The live operational monitor is enabled. It creates deduplicated alerts only;
+# supplier communications still require explicit operator actions and configured
+# provider credentials.
 services:
   backend:
     environment:
       ENVIRONMENT: production
       DEBUG: "false"
-      AUTOMATION_ENABLED: "false"
+      AUTOMATION_ENABLED: "true"
     command:
       - sh
       - -ec
