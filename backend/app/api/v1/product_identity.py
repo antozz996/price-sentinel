@@ -1,4 +1,5 @@
 from datetime import datetime, date
+from difflib import SequenceMatcher
 import hashlib
 import re
 from decimal import Decimal
@@ -575,6 +576,70 @@ def _work_queue_signature(supplier_id: int, line: RigaFattura) -> tuple[int, str
     )
 
 
+def _live_catalog_suggestion(raw_description: str, products: list[Product]) -> dict[str, Any] | None:
+    """Find a current catalog suggestion for legacy parked invoice lines.
+
+    Older invoice lines may have been parked before their catalog product existed,
+    so they have no persisted MatchCandidate. The work queue must compare them with
+    the catalog as it exists now instead of incorrectly labelling them as new.
+    """
+    normalized = normalize_text(raw_description)
+    if not normalized:
+        return None
+
+    line_attributes = extract_candidate_attributes(raw_description)
+
+    def has_format_conflict(product: Product) -> bool:
+        comparisons = (
+            (line_attributes.get("volume_ml"), product.volume_ml),
+            (line_attributes.get("weight_g"), product.weight_g),
+        )
+        if any(left is not None and right is not None and left != right for left, right in comparisons):
+            return True
+        line_pack = line_attributes.get("pack_qty")
+        product_pack = product.unit_count
+        return bool(line_pack and product_pack and line_pack != product_pack)
+
+    ranked: list[tuple[float, Product, bool]] = []
+    for product in products:
+        names = [product.normalized_name, normalize_text(product.canonical_name)]
+        if product.normalized_order_name:
+            names.append(product.normalized_order_name)
+        names = [name for name in names if name]
+        exact = normalized in names
+        similarity = 100.0 if exact else max(
+            (SequenceMatcher(None, normalized, name).ratio() * 100 for name in names),
+            default=0.0,
+        )
+        if similarity >= 90 and not has_format_conflict(product):
+            ranked.append((similarity, product, exact))
+
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    if not ranked:
+        return None
+
+    best_score, best_product, exact = ranked[0]
+    # Two equal names are genuinely ambiguous and must remain for manual review.
+    if len(ranked) > 1 and best_score - ranked[1][0] < 3:
+        return None
+
+    score = 100.0 if exact else round(best_score, 1)
+    return {
+        "candidate_id": 0,
+        "product_id": best_product.id,
+        "sku_interno": best_product.sku_interno,
+        "canonical_name": best_product.canonical_name,
+        "score": score,
+        "reason_json": {
+            "source": "live_catalog",
+            "exact_normalized_name": exact,
+            "fuzzy_score": round(best_score, 1),
+            "format_conflict": False,
+            "decision": "needs_review" if score < 100 else "auto_match",
+        },
+    }
+
+
 @router.get(
     "/match-candidates/work-queue",
     summary="Ottiene la coda prodotti raggruppata per descrizione fornitore",
@@ -600,6 +665,9 @@ async def get_match_work_queue(
         .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc(), MatchCandidate.score.desc())
     )
     rows = (await db.execute(stmt)).all()
+    active_products = (
+        await db.execute(select(Product).where(Product.is_active.is_(True)))
+    ).scalars().all()
 
     groups: dict[tuple[int, str, str], dict[str, Any]] = {}
     weak_candidates_discarded = 0
@@ -660,6 +728,10 @@ async def get_match_work_queue(
     items = []
     for group in groups.values():
         alternatives = sorted(group["candidates"].values(), key=lambda item: item["score"], reverse=True)[:3]
+        if not alternatives:
+            live_suggestion = _live_catalog_suggestion(group["raw_description"], active_products)
+            if live_suggestion:
+                alternatives = [live_suggestion]
         attributes = extract_candidate_attributes(group["raw_description"])
         best_candidate = alternatives[0] if alternatives else None
         items.append({

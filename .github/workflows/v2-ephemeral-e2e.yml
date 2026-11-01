@@ -112,6 +112,10 @@ jobs:
         working-directory: backend
         run: python tests/product_bulk_classification_unit.py
 
+      - name: Unit — Live suggestions for parked invoice products
+        working-directory: backend
+        run: python tests/product_work_queue_suggestions_unit.py
+
       - name: Unit — Order names and promotion rules
         working-directory: backend
         run: python tests/sector_orders_whatsapp_unit.py
