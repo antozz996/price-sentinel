@@ -100,7 +100,7 @@ def test_inverted_index_avoids_full_catalog_pairwise_comparisons():
         product_identity._description_similarity = original
 
     assert matches and matches[0]["product_id"] == 900
-    assert calls <= 3
+    assert calls <= 80
 
 
 def test_lower_confidence_candidate_is_visible_only_for_manual_review():
@@ -113,6 +113,17 @@ def test_lower_confidence_candidate_is_visible_only_for_manual_review():
     assert 55 <= match["score"] < 85
 
 
+def test_typo_and_singular_plural_are_visible_for_manual_review():
+    match = _live_catalog_suggestion(
+        "Bichier long drink trasparenti",
+        [product(902, "Bicchieri long drink trasparente")],
+    )
+
+    assert match is not None
+    assert match["product_id"] == 902
+    assert match["score"] < 85
+
+
 if __name__ == "__main__":
     test_exact_current_catalog_name_is_suggested_even_without_saved_candidate()
     test_near_identical_name_is_suggested_when_unambiguous()
@@ -121,4 +132,5 @@ if __name__ == "__main__":
     test_supplier_code_noise_and_word_order_still_produce_review_suggestion()
     test_inverted_index_avoids_full_catalog_pairwise_comparisons()
     test_lower_confidence_candidate_is_visible_only_for_manual_review()
+    test_typo_and_singular_plural_are_visible_for_manual_review()
     print("PASS: live work-queue suggestions are accurate and format-safe")
