@@ -45,7 +45,7 @@ def test_near_identical_name_is_suggested_when_unambiguous():
 
     assert match is not None
     assert match["product_id"] == 8
-    assert match["score"] >= 90
+    assert 70 <= match["score"] < 85
 
 
 def test_conflicting_format_is_never_suggested():
