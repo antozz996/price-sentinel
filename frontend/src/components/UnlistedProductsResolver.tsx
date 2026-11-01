@@ -186,6 +186,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   const [bulkResolving, setBulkResolving] = useState(false);
   const [showSmartPlan, setShowSmartPlan] = useState(false);
   const [smartPlanTab, setSmartPlanTab] = useState<'safe' | 'review' | 'new'>('safe');
+  const [approvedAssociationKeys, setApprovedAssociationKeys] = useState<Set<string>>(new Set());
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<Record<string, number>>({});
+  const [includeNewProducts, setIncludeNewProducts] = useState(false);
 
   // Dynamic subcategories (Food and other sectors)
   const [availableSubcategories, setAvailableSubcategories] = useState<string[]>([]);
@@ -728,8 +731,25 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       ? smartPlan.needsReview
       : smartPlan.newProducts;
 
+  const selectedDecisionCount = approvedAssociationKeys.size + (includeNewProducts ? smartPlan.newProducts.length : 0);
+
+  const openSmartPlan = () => {
+    const initialCandidates: Record<string, number> = {};
+    [...smartPlan.safeMatches, ...smartPlan.needsReview].forEach(item => {
+      if (item.best_candidate) initialCandidates[item.work_key] = item.best_candidate.product_id;
+    });
+    setSelectedCandidateIds(initialCandidates);
+    setApprovedAssociationKeys(new Set());
+    setIncludeNewProducts(false);
+    setSmartPlanTab(smartPlan.safeMatches.length ? 'safe' : smartPlan.needsReview.length ? 'review' : 'new');
+    setShowSmartPlan(true);
+  };
+
   const executeSmartPlan = async () => {
-    const actionableItems = smartPlan.safeMatches.length + smartPlan.newProducts.length;
+    const associationItems = [...smartPlan.safeMatches, ...smartPlan.needsReview]
+      .filter(item => approvedAssociationKeys.has(item.work_key));
+    const productsToCreate = includeNewProducts ? smartPlan.newProducts : [];
+    const actionableItems = associationItems.length + productsToCreate.length;
     if (actionableItems === 0) {
       setShowSmartPlan(false);
       return;
@@ -738,17 +758,17 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     setBulkResolving(true);
     setError(null);
     try {
-      const associationPayload = smartPlan.safeMatches.map(item => ({
+      const associationPayload = associationItems.map(item => ({
         invoice_line_ids: item.invoice_line_ids,
         action: 'associate_existing',
-        product_id: item.best_candidate!.product_id,
+        product_id: selectedCandidateIds[item.work_key],
         insert_in_listino: true,
         prezzo_listino: item.prezzo_unitario || undefined,
         unita_misura_listino: item.unita_misura || undefined,
         data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
       }));
 
-      const creationPayload = smartPlan.newProducts.map(item => {
+      const creationPayload = productsToCreate.map(item => {
         const suggestedUnit = item.suggested_product.comparison_unit;
         return {
           invoice_line_ids: item.invoice_line_ids,
@@ -782,9 +802,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       setShowSmartPlan(false);
       setSelectedKeys(new Set());
       setActionSuccess(
-        `Piano completato: ${smartPlan.safeMatches.length} associazioni sicure, ` +
-        `${smartPlan.newProducts.length} nuovi prodotti e ${data.resolved_lines || 0} righe fattura risolte. ` +
-        `${smartPlan.needsReview.length} casi dubbi restano da controllare.`
+        `Piano completato: ${associationItems.length} associazioni approvate, ` +
+        `${productsToCreate.length} nuovi prodotti e ${data.resolved_lines || 0} righe fattura risolte. ` +
+        `${smartPlan.safeMatches.length + smartPlan.needsReview.length - associationItems.length} suggerimenti restano da controllare.`
       );
       setTimeout(() => setActionSuccess(null), 9000);
       await loadAll();
@@ -1167,10 +1187,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           </div>
           <button
             className="btn btn-primary"
-            onClick={() => {
-              setSmartPlanTab(smartPlan.safeMatches.length ? 'safe' : smartPlan.needsReview.length ? 'review' : 'new');
-              setShowSmartPlan(true);
-            }}
+            onClick={openSmartPlan}
             disabled={bulkResolving}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '190px', justifyContent: 'center' }}
           >
@@ -1197,7 +1214,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Anteprima del piano</h3>
                 </div>
                 <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '0.88rem' }}>
-                  Nessuna corrispondenza dubbia verrà applicata automaticamente.
+                  Nessuna associazione è preselezionata: verranno applicate soltanto quelle che approvi qui.
                 </p>
               </div>
               <button onClick={() => setShowSmartPlan(false)} disabled={bulkResolving} aria-label="Chiudi"
@@ -1209,7 +1226,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', margin: '22px 0' }}>
               <div role="button" tabIndex={0} onClick={() => setSmartPlanTab('safe')} onKeyDown={event => event.key === 'Enter' && setSmartPlanTab('safe')}
                 style={{ padding: '16px', borderRadius: '10px', cursor: 'pointer', border: smartPlanTab === 'safe' ? '2px solid #34d399' : '1px solid rgba(16,185,129,.35)', background: 'rgba(16,185,129,.09)' }}>
-                <div style={{ color: '#6ee7b7', fontSize: '0.78rem', textTransform: 'uppercase' }}>Associazioni sicure</div>
+                <div style={{ color: '#6ee7b7', fontSize: '0.78rem', textTransform: 'uppercase' }}>Suggerimenti forti</div>
                 <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.safeMatches.length}</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>clicca per vedere · almeno 85%</div>
               </div>
@@ -1230,15 +1247,50 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             <div style={{ border: '1px solid var(--border-glass)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
               <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,.04)', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
                 <strong style={{ fontSize: '0.84rem' }}>
-                  {smartPlanTab === 'safe' ? 'Associazioni che verranno applicate' : smartPlanTab === 'review' ? 'Corrispondenze da verificare manualmente' : 'Prodotti senza corrispondenza trovata'}
+                  {smartPlanTab === 'safe' ? 'Suggerimenti forti da approvare' : smartPlanTab === 'review' ? 'Corrispondenze da verificare manualmente' : 'Prodotti senza corrispondenza trovata'}
                 </strong>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>{smartPlanRows.length} voci</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {smartPlanTab === 'safe' && smartPlan.safeMatches.length > 0 && (
+                    <button type="button" className="btn" onClick={() => {
+                      const safeKeys = smartPlan.safeMatches.map(item => item.work_key);
+                      const allSelected = safeKeys.every(key => approvedAssociationKeys.has(key));
+                      setApprovedAssociationKeys(previous => {
+                        const next = new Set(previous);
+                        safeKeys.forEach(key => allSelected ? next.delete(key) : next.add(key));
+                        return next;
+                      });
+                    }} style={{ padding: '5px 9px', fontSize: '0.72rem' }}>
+                      {smartPlan.safeMatches.every(item => approvedAssociationKeys.has(item.work_key)) ? 'Deseleziona sicuri' : 'Seleziona tutti i sicuri'}
+                    </button>
+                  )}
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>{smartPlanRows.length} voci</span>
+                </div>
               </div>
+              {smartPlanTab === 'new' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: 'rgba(59,130,246,.08)', cursor: 'pointer', borderTop: '1px solid var(--border-glass)' }}>
+                  <input type="checkbox" checked={includeNewProducts} onChange={event => setIncludeNewProducts(event.target.checked)} />
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>Crea in listino questi {smartPlan.newProducts.length} prodotti senza corrispondenza</span>
+                </label>
+              )}
               <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                 {smartPlanRows.length === 0 ? (
                   <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.83rem' }}>Nessuna voce in questo gruppo.</div>
                 ) : smartPlanRows.map(item => (
-                  <div key={item.work_key} style={{ padding: '11px 14px', borderTop: '1px solid var(--border-glass)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '12px', alignItems: 'center' }}>
+                  <div key={item.work_key} style={{ padding: '11px 14px', borderTop: '1px solid var(--border-glass)', display: 'grid', gridTemplateColumns: item.best_candidate ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr) auto', gap: '12px', alignItems: 'start', opacity: !item.best_candidate && !includeNewProducts ? 0.55 : 1 }}>
+                    {item.best_candidate && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Approva associazione per ${item.raw_description}`}
+                        checked={approvedAssociationKeys.has(item.work_key)}
+                        onChange={event => setApprovedAssociationKeys(previous => {
+                          const next = new Set(previous);
+                          if (event.target.checked) next.add(item.work_key);
+                          else next.delete(item.work_key);
+                          return next;
+                        })}
+                        style={{ marginTop: '3px', width: '17px', height: '17px', cursor: 'pointer' }}
+                      />
+                    )}
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: '0.84rem', fontWeight: 650, overflowWrap: 'anywhere' }}>{item.raw_description}</div>
                       <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '3px' }}>
@@ -1247,32 +1299,37 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       {item.best_candidate && (
                         <div style={{ marginTop: '5px' }}>
                           {item.alternatives.map((candidate, candidateIndex) => (
-                            <div key={`${item.work_key}-${candidate.product_id}`} style={{ color: candidateIndex === 0 ? (smartPlanTab === 'safe' ? '#6ee7b7' : '#fbbf24') : '#94a3b8', fontSize: candidateIndex === 0 ? '0.76rem' : '0.71rem', marginTop: candidateIndex ? '3px' : 0 }}>
-                              {candidateIndex === 0 ? '→ Proposta' : `↳ Alternativa ${candidateIndex}`}: {candidate.canonical_name}
-                              {candidate.sku_interno ? ` · ${candidate.sku_interno}` : ''} · {Math.round(candidate.score)}%
-                            </div>
+                            <label key={`${item.work_key}-${candidate.product_id}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', color: candidateIndex === 0 ? (smartPlanTab === 'safe' ? '#6ee7b7' : '#fbbf24') : '#94a3b8', fontSize: candidateIndex === 0 ? '0.76rem' : '0.71rem', marginTop: candidateIndex ? '6px' : 0, cursor: 'pointer' }}>
+                              <input
+                                type="radio"
+                                name={`candidate-${item.work_key}`}
+                                checked={selectedCandidateIds[item.work_key] === candidate.product_id}
+                                onChange={() => setSelectedCandidateIds(previous => ({ ...previous, [item.work_key]: candidate.product_id }))}
+                              />
+                              <span>{candidateIndex === 0 ? 'Proposta' : `Alternativa ${candidateIndex}`}: {candidate.canonical_name}
+                                {candidate.sku_interno ? ` · ${candidate.sku_interno}` : ''} · {Math.round(candidate.score)}%</span>
+                            </label>
                           ))}
                         </div>
                       )}
                     </div>
-                    <div style={{ fontWeight: 800, color: item.best_candidate ? (smartPlanTab === 'safe' ? '#34d399' : '#fbbf24') : '#93c5fd', whiteSpace: 'nowrap' }}>
-                      {item.best_candidate ? `${Math.round(item.best_candidate.score)}%` : 'NUOVO'}
-                    </div>
+                    {!item.best_candidate && <div style={{ fontWeight: 800, color: '#93c5fd', whiteSpace: 'nowrap' }}>NUOVO</div>}
                   </div>
                 ))}
               </div>
             </div>
 
             <div style={{ padding: '14px 16px', borderRadius: '9px', background: 'rgba(255,255,255,.035)', color: 'var(--text-secondary)', fontSize: '0.83rem', lineHeight: 1.55 }}>
-              Il sistema conserverà fornitore, codice, descrizione, prezzo e unità presenti in fattura e salverà l’alias per riconoscere automaticamente le fatture future. I dati mancanti non saranno inventati.
+              <strong style={{ color: 'var(--text-primary)' }}>{approvedAssociationKeys.size} associazioni approvate</strong>
+              {' · '}{includeNewProducts ? smartPlan.newProducts.length : 0} nuovi prodotti da creare. Le voci non selezionate resteranno da lavorare. I dati mancanti non saranno inventati.
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px', flexWrap: 'wrap' }}>
               <button className="btn" onClick={() => setShowSmartPlan(false)} disabled={bulkResolving}>Annulla</button>
-              <button className="btn btn-primary" onClick={executeSmartPlan} disabled={bulkResolving || (smartPlan.safeMatches.length + smartPlan.newProducts.length === 0)}
+              <button className="btn btn-primary" onClick={executeSmartPlan} disabled={bulkResolving || selectedDecisionCount === 0}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {bulkResolving ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
-                {bulkResolving ? 'Registrazione in corso…' : `Conferma ${smartPlan.safeMatches.length + smartPlan.newProducts.length} decisioni`}
+                {bulkResolving ? 'Registrazione in corso…' : `Conferma ${selectedDecisionCount} decisioni`}
               </button>
             </div>
           </div>
