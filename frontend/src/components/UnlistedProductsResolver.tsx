@@ -866,6 +866,16 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     });
   }, [queueData, searchTerm, selectedSupplierId, statusFilter]);
 
+  const selectedItems = useMemo(
+    () => filteredItems.filter(item => selectedKeys.has(item.work_key)),
+    [filteredItems, selectedKeys]
+  );
+
+  const selectedStrongSuggestions = useMemo(
+    () => selectedItems.filter(item => (item.best_candidate?.score || 0) >= 85),
+    [selectedItems]
+  );
+
   // Autocomplete suggestions for Existing Products
   const searchResultsProducts = useMemo(() => {
     if (!associateSearch || associateSearch.length < 2) {
@@ -1398,10 +1408,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               <>
                 <button
                   onClick={() => {
-                    const selItems = filteredItems.filter(i => selectedKeys.has(i.work_key) && i.best_candidate);
-                    handleResolveBulkSuggestions(selItems);
+                    handleResolveBulkSuggestions(selectedStrongSuggestions);
                   }}
-                  disabled={bulkResolving || filteredItems.filter(i => selectedKeys.has(i.work_key) && i.best_candidate).length === 0}
+                  disabled={bulkResolving || selectedStrongSuggestions.length === 0}
                   className="btn btn-primary"
                   style={{
                     display: 'flex',
@@ -1412,15 +1421,14 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   }}
                 >
                   {bulkResolving ? <Loader2 size={14} className="spin" /> : <Zap size={14} />}
-                  Accetta Suggerimenti per Selezionati ({filteredItems.filter(i => selectedKeys.has(i.work_key) && i.best_candidate).length})
+                  Accetta Suggerimenti Forti ({selectedStrongSuggestions.length})
                 </button>
 
                 <button
                   onClick={() => {
-                    const selItems = filteredItems.filter(i => selectedKeys.has(i.work_key) && !i.best_candidate);
-                    handleResolveBulkAsNew(selItems);
+                    handleResolveBulkAsNew(selectedItems);
                   }}
-                  disabled={bulkResolving || filteredItems.filter(i => selectedKeys.has(i.work_key) && !i.best_candidate).length === 0}
+                  disabled={bulkResolving || selectedItems.length === 0}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1436,7 +1444,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   }}
                 >
                   {bulkResolving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />}
-                  Crea in Listino Selezionati ({filteredItems.filter(i => selectedKeys.has(i.work_key) && !i.best_candidate).length})
+                  Crea come Nuovi Selezionati ({selectedItems.length})
                 </button>
 
                 <button
