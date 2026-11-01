@@ -117,6 +117,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
 
   useEffect(() => {
     loadProducts();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSector, reviewFilter]);
 
   async function loadProducts() {
@@ -151,8 +152,8 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
       setDraftRating(nextRating);
       setDraftMotivo(nextMotivo);
       setDraftNote(nextNote);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Errore di connessione.");
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Errore di connessione.");
     } finally {
       setLoading(false);
     }
@@ -211,7 +212,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
       }
       setSuccessToast("Prodotto escluso dal catalogo con successo.");
       loadProducts();
-    } catch (err: any) {
+    } catch {
       alert("Errore durante l'esclusione del prodotto.");
     }
   }

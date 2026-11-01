@@ -75,6 +75,8 @@ export default function ValidationRoom() {
     fetchAnomalie(controller.signal);
     fetchSKUs();
     return () => controller.abort();
+  // Pagination is the intended anomaly reload trigger; SKU lookup is static.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [limit, offset]);
 
   const handleAzione = async (id: number, azione: any, customNota?: string) => {

@@ -1,9 +1,11 @@
 from datetime import datetime, date
+import hashlib
+import re
 from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, and_, or_
+from sqlalchemy import select, delete, and_, or_, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,7 +39,7 @@ class ProductBase(BaseModel):
     weight_g: Optional[int] = None
     unit_count: Optional[int] = 1
     container_type: Optional[str] = None
-    comparison_unit: str
+    comparison_unit: Optional[str] = None
     is_commodity: Optional[bool] = False
     is_active: Optional[bool] = True
 
@@ -60,6 +62,20 @@ class ProductUpdate(BaseModel):
     is_commodity: Optional[bool] = None
     is_active: Optional[bool] = None
 
+class SantoGraalCatalogSeedItem(BaseModel):
+    source_sheet: str = Field(min_length=1, max_length=100)
+    source_product_key: Optional[str] = Field(default=None, max_length=255)
+    source_product_sku: Optional[str] = Field(default=None, max_length=30)
+    canonical_name: str = Field(min_length=1, max_length=255)
+    comparison_unit: Optional[str] = Field(default=None, max_length=50)
+    category: Optional[str] = Field(default=None, max_length=100)
+    subcategory: Optional[str] = Field(default=None, max_length=100)
+
+
+class SantoGraalCatalogSeedRequest(BaseModel):
+    items: List[SantoGraalCatalogSeedItem] = Field(min_length=1, max_length=1000)
+
+
 class ProductBulkClassificationUpdate(BaseModel):
     product_ids: List[int] = Field(min_length=1, max_length=1000)
     category: Optional[str] = Field(default=None, max_length=100)
@@ -70,6 +86,7 @@ class ProductResponse(ProductBase):
     normalized_name: Optional[str] = None
     normalized_order_name: Optional[str] = None
     supplier_pack_sizes: List[int] = Field(default_factory=list)
+    missing_supplier_details: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -180,6 +197,140 @@ class OrderOptimizeRequest(BaseModel):
 # Endpoints: Products
 # ──────────────────────────────────────────────────────────────────────
 
+@router.post(
+    "/santo-graal/bootstrap-catalog",
+    summary="Crea in modo idempotente i prodotti base dal Santo Graal",
+)
+async def bootstrap_santo_graal_catalog(
+    payload: SantoGraalCatalogSeedRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: Utente = Depends(require_admin),
+):
+    # Product and contract tables are global in this V2 schema. Keep the initial
+    # catalog operation scoped to the primary tenant until tenant scoping exists.
+    if getattr(admin, "tenant_id", None) != 1:
+        raise HTTPException(403, "Inizializzazione catalogo disponibile solo per l'azienda principale")
+
+    await db.execute(text("SELECT pg_advisory_xact_lock(481991, 2014)"))
+
+    requested: dict[str, SantoGraalCatalogSeedItem] = {}
+    for item in payload.items:
+        name = item.canonical_name.strip()
+        unit = item.comparison_unit.strip() if item.comparison_unit else ""
+        sheet = item.source_sheet.strip()
+        if not name or not sheet:
+            raise HTTPException(422, "Prodotto e scheda sono obbligatori")
+        normalized = normalize_text(name)
+        # Same normalized item and unit reuse one canonical SKU across source tabs.
+        stable_source_key = item.source_product_key or "|".join((normalized, normalize_text(item.category or "")))
+        # SG- belongs to the archived first catalog. A separate stable namespace
+        # lets a fresh import create active records without reviving old prices,
+        # aliases or purchase rules attached to those archived products.
+        sku = item.source_product_sku or (("SG3-" if item.source_product_key else "SG2-") + hashlib.sha256(stable_source_key.encode("utf-8")).hexdigest()[:16].upper())
+        if item.source_product_sku and not re.fullmatch(r"SG3-[A-F0-9]{16}", item.source_product_sku):
+            raise HTTPException(422, "SKU sorgente non valido: sono ammessi solo ID SG3 del file Santo Graal")
+        previous = requested.get(sku)
+        if previous and normalize_text(previous.canonical_name) != normalized:
+            raise HTTPException(409, "Collisione SKU durante la preparazione del catalogo")
+        if previous:
+            old_unit = (previous.comparison_unit or "").strip()
+            if old_unit and unit and normalize_text(old_unit) != normalize_text(unit):
+                raise HTTPException(409, f"Unità diverse per il prodotto {name}: chiarire prima dell'importazione")
+            requested[sku] = SantoGraalCatalogSeedItem(
+                source_sheet=previous.source_sheet,
+                source_product_key=previous.source_product_key,
+                canonical_name=previous.canonical_name,
+                comparison_unit=old_unit or unit or None,
+                category=previous.category or item.category,
+                subcategory=previous.subcategory or item.subcategory,
+            )
+        else:
+            requested[sku] = item
+
+    skus = list(requested)
+    existing_rows = list((await db.scalars(
+        select(Product).where(Product.sku_interno.in_(skus))
+    )).all())
+    existing_by_sku = {row.sku_interno: row for row in existing_rows}
+    conflicts = [
+        sku for sku, row in existing_by_sku.items()
+        if normalize_text(row.canonical_name) != normalize_text(requested[sku].canonical_name)
+        or (
+            row.comparison_unit and requested[sku].comparison_unit
+            and normalize_text(row.comparison_unit) != normalize_text(requested[sku].comparison_unit)
+        )
+    ]
+    if conflicts:
+        raise HTTPException(
+            409,
+            detail={
+                "message": "Uno SKU generato dal foglio esiste già con dati diversi; nessun articolo è stato creato.",
+                "conflicting_skus": conflicts[:20],
+            },
+        )
+
+    created = []
+    classification_updated_ids: set[int] = set()
+    for sku, item in requested.items():
+        existing_product = existing_by_sku.get(sku)
+        if existing_product:
+            if not existing_product.comparison_unit and item.comparison_unit:
+                existing_product.comparison_unit = item.comparison_unit.strip()
+            category = item.category.strip() if item.category and item.category.strip() else None
+            subcategory = item.subcategory.strip() if item.subcategory and item.subcategory.strip() else None
+            if category and existing_product.category != category:
+                existing_product.category = category
+                classification_updated_ids.add(existing_product.id)
+            if subcategory and existing_product.subcategory != subcategory:
+                existing_product.subcategory = subcategory
+                classification_updated_ids.add(existing_product.id)
+            continue
+        name = item.canonical_name.strip()
+        unit = item.comparison_unit.strip() if item.comparison_unit else None
+        product = Product(
+            sku_interno=sku,
+            canonical_name=name,
+            normalized_name=normalize_text(name),
+            category=item.category.strip() if item.category and item.category.strip() else None,
+            subcategory=item.subcategory.strip() if item.subcategory and item.subcategory.strip() else None,
+            comparison_unit=unit,
+            unit_count=1,
+            is_commodity=False,
+            is_active=True,
+        )
+        db.add(product)
+        created.append(product)
+
+    # Legacy catalog records created from this source tab used a standalone
+    # "ortofrutta" category. Preserve the products and prices while moving only
+    # their taxonomy into the current Food → Frutta hierarchy.
+    legacy_fruit_products = list((await db.scalars(
+        select(Product).where(
+            func.lower(func.btrim(Product.category)) == "ortofrutta",
+            Product.is_active.is_(True),
+        )
+    )).all())
+    for product in legacy_fruit_products:
+        if product.category != "Food" or product.subcategory != "Frutta":
+            product.category = "Food"
+            product.subcategory = "Frutta"
+            classification_updated_ids.add(product.id)
+
+    await db.flush()
+    return {
+        "created_count": len(created),
+        "already_present_count": len(existing_by_sku),
+        "classification_updated_count": len(classification_updated_ids),
+        "total_count": len(requested),
+        "products": [
+            {"sku_interno": row.sku_interno, "canonical_name": row.canonical_name}
+            for row in [*existing_rows, *created]
+        ],
+        "prices_written": 0,
+        "aliases_written": 0,
+    }
+
+
 @router.get("/products", response_model=List[ProductResponse], summary="Ottiene tutti i prodotti canonici")
 async def list_products(
     db: AsyncSession = Depends(get_db),
@@ -232,8 +383,15 @@ async def create_product(
     )
     db.add(product)
     await db.flush()
-    await db.refresh(product)
-    return product
+    # ProductResponse exposes supplier_pack_sizes, which reads Product.aliases.
+    # Load that relationship explicitly so async response serialization never
+    # triggers an implicit lazy load (MissingGreenlet).
+    response_stmt = (
+        select(Product)
+        .where(Product.id == product.id)
+        .options(selectinload(Product.aliases))
+    )
+    return (await db.execute(response_stmt)).scalar_one()
 
 @router.patch(
     "/products/bulk-classification",
@@ -318,8 +476,14 @@ async def update_product(
         setattr(product, k, v)
 
     await db.flush()
-    await db.refresh(product)
-    return product
+    # The response schema also reads supplier_pack_sizes from aliases.
+    # Re-query with selectinload to keep response serialization async-safe.
+    response_stmt = (
+        select(Product)
+        .where(Product.id == product.id)
+        .options(selectinload(Product.aliases))
+    )
+    return (await db.execute(response_stmt)).scalar_one()
 
 # ──────────────────────────────────────────────────────────────────────
 # Endpoints: Aliases

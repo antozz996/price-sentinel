@@ -125,6 +125,7 @@ export default function CrossSupplierMatrix() {
     const controller = new AbortController();
     loadData(controller.signal);
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataDa, dataA]);
 
   if (loading) {

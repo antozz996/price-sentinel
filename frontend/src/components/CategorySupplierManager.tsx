@@ -156,12 +156,15 @@ export default function CategorySupplierManager() {
   useEffect(() => {
     loadData();
     loadSubcategories('Food');
+  // Initial catalog bootstrap; reloads are invoked explicitly by mutations.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (subTab === 'subcategories') {
       loadSubcategories(subcatParentCategory);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subTab, subcatParentCategory]);
 
   // Quick feedback timeout

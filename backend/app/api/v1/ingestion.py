@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.utenti import Utente, RuoloUtente
 from app.models.fatture import (
@@ -268,7 +268,7 @@ async def get_uploads_history(
     summary="Rielabora fatture in stato parsato o errore"
 )
 async def reprocess_parked(
-    current_user: Utente = Depends(get_current_user),
+    current_user: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     # 1. Trova tutte le XMLRaw non elaborate

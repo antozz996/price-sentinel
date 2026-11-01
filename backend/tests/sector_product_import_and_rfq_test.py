@@ -4,6 +4,7 @@
 import asyncio
 from types import SimpleNamespace
 from typing import List
+from fastapi import HTTPException
 
 from app.api.v1.ordini import (
     CreateSectorProductRequest,
@@ -136,7 +137,7 @@ async def test_crea_nuovo_prodotto_settore():
 
 
 async def test_richiesta_prezzo_multi_fornitore():
-    loc = SimpleNamespace(id=1, nome_struttura="Beach Club Playa", indirizzo="Lungomare 42", citta="Rimini")
+    loc = SimpleNamespace(id=1, tenant_id=1, nome_struttura="Beach Club Playa", indirizzo="Lungomare 42", citta="Rimini")
     
     # Fornitore 1: Abilitato per Beverage (con WhatsApp e Email)
     f1 = Fornitore(id=10, nome_azienda="Beverage Distribuzione SRL", partita_iva="11122233344", email_contatto="ordini@bevdistrib.it", telefono_contatto="+393401112233", attivo_whitelist=True)
@@ -156,7 +157,7 @@ async def test_richiesta_prezzo_multi_fornitore():
         capabilities=[cap1, cap2, cap3],
         products=[]
     )
-    user = SimpleNamespace(id=1, email="buyer@playa.it", nome_completo="Mario Rossi", ruolo="manager")
+    user = SimpleNamespace(id=1, email="buyer@playa.it", nome_completo="Mario Rossi", ruolo="manager", tenant_id=1, location_id=1, settore_abilitato="Beverage")
 
     req = SectorPriceQuoteRequest(
         canonical_name="Gin Mare Capri 70cl",
@@ -200,6 +201,25 @@ async def test_richiesta_prezzo_multi_fornitore():
     assert "Beach Club Playa" in res.broadcast_email_subject
     assert "Gin Mare Capri 70cl" in res.broadcast_email_body
     assert "Mario Rossi" in res.broadcast_email_body
+
+    # Explicit targets may narrow routing, but cannot bypass capability exclusions.
+    targeted = SectorPriceQuoteRequest(**{**req.model_dump(), "target_supplier_ids": [30]})
+    targeted_res = await genera_richiesta_prezzo_settore(data=targeted, db=db, user=user)
+    assert targeted_res.fornitori == [], "A requested supplier without matching capability must stay excluded"
+
+    # Whitelist status alone is never a sector capability or an empty-config fallback.
+    no_caps_db = MockDbSession(location=loc, fornitori=[f1, f2], capabilities=[], products=[])
+    no_caps_res = await genera_richiesta_prezzo_settore(data=req, db=no_caps_db, user=user)
+    assert no_caps_res.fornitori == [], "No capability match must not broaden to every whitelisted supplier"
+
+    # The caller's sector scope is enforced before constructing any broadcast.
+    unauthorized = SimpleNamespace(**{**vars(user), "settore_abilitato": "Food"})
+    try:
+        await genera_richiesta_prezzo_settore(data=req, db=db, user=unauthorized)
+    except HTTPException as exc:
+        assert exc.status_code == 403
+    else:
+        raise AssertionError("A manager must not request a quote outside their assigned sector")
 
     print("✅ TEST PASSED: Calcolo fornitori di settore, routing WhatsApp ed Email RFQ verificato con successo!")
 

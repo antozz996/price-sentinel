@@ -69,7 +69,8 @@ interface OrderDetail extends OrderSummary {
   righe: OrderLineItem[];
 }
 
-export default function GoodsReceipt({ userProfile: _userProfile }: { userProfile?: UserProfile }) {
+export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfile }) {
+  void userProfile;
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -95,6 +96,8 @@ export default function GoodsReceipt({ userProfile: _userProfile }: { userProfil
 
   useEffect(() => {
     loadOrders();
+  // Initial order bootstrap; receipt mutations invoke reload explicitly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadOrders() {

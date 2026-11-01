@@ -102,6 +102,8 @@ export default function OrderOptimizer() {
       }
     }
     loadInitialData();
+  // Initial optimizer bootstrap; request headers are a snapshot of the session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAddRow = () => {

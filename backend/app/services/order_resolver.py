@@ -116,12 +116,16 @@ async def resolve_order_item(
     weight_g = matched_product.weight_g or 0
 
     if not requested_unit:
-        requested_unit = comp_unit or "piece"
+        requested_unit = comp_unit or "package"
 
     # Conversione quantità a unità di confronto target
     target_total_units = Decimal(str(requested_qty))
     
-    if requested_unit == "box" and comp_unit in ("piece", "bottle"):
+    if not comp_unit:
+        # Senza U.M. interpretiamo la quantità solo come numero di confezioni:
+        # l'offerta resta visibile, ma non partecipa a confronti automatici.
+        target_total_units = Decimal(str(requested_qty))
+    elif requested_unit == "box" and comp_unit in ("piece", "bottle"):
         target_total_units = Decimal(str(requested_qty)) * Decimal(str(unit_count))
     elif requested_unit in ("piece", "bottle") and comp_unit == "box" and unit_count > 0:
         target_total_units = Decimal(str(requested_qty)) / Decimal(str(unit_count))
@@ -165,7 +169,30 @@ async def resolve_order_item(
     )
     aliases = (await db.execute(alias_stmt)).scalars().all()
 
+    specific_alias_ids = set()
+    if aliases:
+        specific_alias_ids = set((await db.scalars(
+            select(ListinoMaster.supplier_product_alias_id).where(
+                ListinoMaster.supplier_product_alias_id.in_([alias.id for alias in aliases]),
+                ListinoMaster.data_inizio_validita <= date.today(),
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= date.today()),
+            )
+        )).all())
+
+    variant_aliases = [alias for alias in aliases if alias.source == "normalized_sheet_offer"]
+    active_variant_ids = set()
+    if variant_aliases:
+        active_variant_ids = set((await db.scalars(
+            select(ListinoMaster.supplier_product_alias_id).where(
+                ListinoMaster.supplier_product_alias_id.in_([alias.id for alias in variant_aliases]),
+                ListinoMaster.data_inizio_validita <= date.today(),
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= date.today()),
+            )
+        )).all())
+    variant_pairs = {(alias.product_id, alias.supplier_id) for alias in variant_aliases if alias.id in active_variant_ids}
+
     offers = []
+    incomplete_unit_offers = []
     warnings = []
     today = date.today()
 
@@ -173,13 +200,20 @@ async def resolve_order_item(
     for alias in aliases:
         prod = alias.product
         supplier = alias.supplier
+        if ((alias.product_id, alias.supplier_id) in variant_pairs
+                and alias.source != "normalized_sheet_offer" and alias.id not in specific_alias_ids):
+            continue
+
+        # Sheet offers have their own contract price. A generic price from an
+        # older import must never be borrowed by a different brand or format.
+        variant_offer = alias.source == "normalized_sheet_offer" or (alias.supplier_code or "").startswith("OFF-")
 
         # Cerca prezzo contrattuale attivo (specifico per alias o generico per SKU)
         listino_stmt = select(ListinoMaster).options(noload("*")).where(
             and_(
                 ListinoMaster.fornitore_id == alias.supplier_id,
                 ListinoMaster.sku_interno == prod.sku_interno,
-                or_(
+                (ListinoMaster.supplier_product_alias_id == alias.id) if variant_offer else or_(
                     ListinoMaster.supplier_product_alias_id == alias.id,
                     ListinoMaster.supplier_product_alias_id.is_(None)
                 ),
@@ -206,7 +240,7 @@ async def resolve_order_item(
 
         if listino:
             price_val = Decimal(str(listino.prezzo_pattuito))
-        else:
+        elif not variant_offer:
             # Fallback spot su fatture passate
             from app.models.fatture import RigaFattura, Fattura
             spot_stmt = (
@@ -234,15 +268,17 @@ async def resolve_order_item(
             continue
 
         # Esegui normalizzazione prezzo
+        offer_unit = listino.unita_misura if listino else prod.comparison_unit
         norm_res = normalize_price_for_comparison(
             price_or_line=price_val,
             quantity_or_product=Decimal("1"),
-            invoice_uom=listino.unita_misura if listino else prod.comparison_unit,
+            invoice_uom=offer_unit,
             product=prod,
             alias=alias
         )
 
-        if not norm_res.reliable:
+        unit_missing = not (offer_unit or "").strip()
+        if not norm_res.reliable and not unit_missing:
             warnings.append(
                 f"Impossibile normalizzare il prezzo per {supplier.nome_azienda}: {norm_res.explanation}"
             )
@@ -261,7 +297,10 @@ async def resolve_order_item(
         alias_w = alias.weight_g if alias.weight_g is not None else prod.weight_g
 
         # Calcolo di packs_needed e actual_units_supplied
-        if comp_unit in ("piece", "bottle"):
+        if unit_missing:
+            packs_needed = int(math.ceil(float(target_total_units)))
+            actual_units_supplied = None
+        elif comp_unit in ("piece", "bottle"):
             packs_needed = int(math.ceil(float(target_total_units) / pack_qty))
             actual_units_supplied = packs_needed * pack_qty
         elif comp_unit == "liter" and alias_vol and alias_vol > 0:
@@ -279,26 +318,49 @@ async def resolve_order_item(
         # Totale stimato dell'offerta: prezzo_confezione * packs_needed
         estimated_total = price_val * Decimal(str(packs_needed))
 
-        offers.append({
+        offer = {
             "supplier_id": alias.supplier_id,
             "supplier_name": supplier.nome_azienda,
             "supplier_product_name": alias.raw_description,
+            "supplier_brand": alias.brand,
             "supplier_code": alias.supplier_code,
             "pack_qty": pack_qty,
             "packs_needed": packs_needed,
             "actual_units_supplied": actual_units_supplied,
             "price_per_pack": f"{price_val:.4f}",
-            "unit_price_normalized": f"{norm_res.normalized_unit_price:.4f}",
-            "comparison_unit": norm_res.comparison_unit,
+            "unit_price_normalized": (
+                f"{norm_res.normalized_unit_price:.4f}" if norm_res.reliable else f"{price_val:.4f}"
+            ),
+            "comparison_unit": norm_res.comparison_unit if norm_res.reliable else None,
+            "comparison_reliable": norm_res.reliable,
+            "quantity_basis": "packages" if unit_missing else "comparison_unit",
+            "requires_manual_quantity_confirmation": unit_missing,
             "estimated_total": f"{estimated_total:.4f}",
             "source_type": source_type,
             "is_equivalent": prod.id != matched_product.id
-        })
+        }
+        if unit_missing:
+            incomplete_unit_offers.append(offer)
+        else:
+            offers.append(offer)
 
     assessments, policy = await load_effective_purchase_context(
         db, matched_product.id, location_id
     )
     recommendation = rank_supplier_offers(offers, assessments, policy)
+    # Offerte con unità mancante sono incluse come opzioni manuali e non
+    # influenzano il ranking o la scelta automatica basata sul prezzo unitario.
+    for offer in incomplete_unit_offers:
+        assessment = assessments.get(offer["supplier_id"]) or {
+            "status": "approved", "quality_score": 3, "reason": None, "scope": "default"
+        }
+        offer["assessment"] = assessment
+        offer["eligible"] = assessment.get("status") not in ("blocked", "discouraged")
+        offer["exclusion_reasons"] = [] if offer["eligible"] else ["supplier_not_eligible"]
+        offer["is_absolute_cheapest"] = False
+        offer["is_recommended"] = False
+        offer["is_selected"] = False
+    recommendation["offers"].extend(incomplete_unit_offers)
     recommended_offer = recommendation["recommended_offer"]
     selected_offer = recommendation["selected_offer"]
     best_offer = selected_offer or recommended_offer
@@ -323,6 +385,11 @@ async def resolve_order_item(
     else:
         decision = "needs_review"
         warnings.extend(recommendation["warnings"])
+    if incomplete_unit_offers:
+        warnings.append(
+            "Sono presenti offerte suggerite con unità mancante: quantità e prezzo sono per confezione, "
+            "non confrontabili automaticamente. Conferma confezione e quantità prima dell'ordine."
+        )
 
     return {
         "query": query,

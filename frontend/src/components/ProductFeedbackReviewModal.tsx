@@ -39,6 +39,8 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
     if (isOpen) {
       loadPendingFeedbacks();
     }
+  // Opening the modal is the intended refresh trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const loadPendingFeedbacks = async () => {

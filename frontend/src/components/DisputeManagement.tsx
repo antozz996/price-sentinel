@@ -171,6 +171,8 @@ export default function DisputeManagement() {
     } finally { setBusy(false) }
   }
 
+  // Initial queue bootstrap; later reloads follow explicit dispute actions.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load() }, [])
 
   const loadCandidates = async () => {

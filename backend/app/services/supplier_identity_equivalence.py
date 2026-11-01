@@ -8,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.fornitori import Fornitore
 from app.models.purchase_order_reconciliation import PurchaseOrderReconciliation
-from app.models.supplier_identity_equivalence import SupplierIdentityEquivalence
+from app.models.supplier_identity_equivalence import (
+    SupplierIdentityEquivalence,
+    SupplierIdentityEquivalenceAudit,
+)
 from app.models.utenti import Utente
 
 
@@ -160,6 +163,20 @@ async def create_equivalence(
     db.add(row)
     try:
         await db.flush()
+        # Record an immutable audit event in the SAME DB transaction.
+        db.add(
+            SupplierIdentityEquivalenceAudit(
+                equivalence_id=row.id,
+                action="created",
+                canonical_supplier_id=row.canonical_supplier_id,
+                equivalent_supplier_id=row.equivalent_supplier_id,
+                is_active=row.is_active,
+                reason=row.reason,
+                actor_id=actor.id,
+                occurred_at=now,
+            )
+        )
+        await db.flush()
     except IntegrityError as error:
         raise SupplierEquivalenceError(
             "supplier_equivalence_conflict"
@@ -208,6 +225,19 @@ async def set_equivalence_active(
         row.approved_by = actor.id
         row.approved_at = now
     try:
+        await db.flush()
+        db.add(
+            SupplierIdentityEquivalenceAudit(
+                equivalence_id=row.id,
+                action="activated" if is_active else "deactivated",
+                canonical_supplier_id=row.canonical_supplier_id,
+                equivalent_supplier_id=row.equivalent_supplier_id,
+                is_active=row.is_active,
+                reason=row.reason,
+                actor_id=actor.id,
+                occurred_at=now,
+            )
+        )
         await db.flush()
     except IntegrityError as error:
         raise SupplierEquivalenceError(

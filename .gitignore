@@ -57,3 +57,6 @@ build/
 *.xlsx
 !backend/data/import_samples/*.xlsx
 
+
+# GitHub Actions ephemeral Google WIF credentials (never commit)
+gha-creds-*.json

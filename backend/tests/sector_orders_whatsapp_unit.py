@@ -74,7 +74,7 @@ class FakeDbSession:
 
 
 async def test_whatsapp_name_resolution():
-    location = SimpleNamespace(id=1, nome_struttura="Cucina Centrale", indirizzo="Via Roma 1", citta="Milano")
+    location = SimpleNamespace(id=1, nome_struttura="Cucina Centrale", indirizzo="Via Roma 1", citta="Milano", tenant_id=1)
     fornitore = SimpleNamespace(id=10, nome_azienda="Fornitore Food SRL", partita_iva="12345678901", email_contatto="info@food.it", telefono_contatto="+393401234567")
     
     # La descrizione alias è volutamente diversa: sull'ordine deve comunque
@@ -103,7 +103,7 @@ async def test_whatsapp_name_resolution():
         ]
     )
 
-    user = SimpleNamespace(id=1, ruolo="admin", ruolo_dettagliato="admin")
+    user = SimpleNamespace(id=1, ruolo="admin", ruolo_dettagliato="admin", tenant_id=1)
 
     res = await elabora_ordine_settore(data=req, db=db, _user=user)
 
@@ -130,7 +130,7 @@ async def test_whatsapp_name_resolution():
 
 
 async def test_water_promo_5_plus_1():
-    location = SimpleNamespace(id=1, nome_struttura="Ristorante Marechiaro", indirizzo="Via Marina 5", citta="Napoli")
+    location = SimpleNamespace(id=1, nome_struttura="Ristorante Marechiaro", indirizzo="Via Marina 5", citta="Napoli", tenant_id=1)
     fornitore = SimpleNamespace(id=20, nome_azienda="Navas Beverage SRL", partita_iva="09876543210", email_contatto="ordini@navas.it", telefono_contatto="+393339998877")
 
     # Prodotti acqua
@@ -145,7 +145,7 @@ async def test_water_promo_5_plus_1():
         products=[p_ferrarelle, p_lete, p_bicchieri],
         aliases=[]
     )
-    user = SimpleNamespace(id=1, ruolo="admin", ruolo_dettagliato="admin")
+    user = SimpleNamespace(id=1, ruolo="admin", ruolo_dettagliato="admin", tenant_id=1)
 
     # TEST 1: Esattamente 5 box di acqua Ferrarelle -> 1 box omaggio a prezzo 0.00
     req1 = SectorOrderDraftRequest(

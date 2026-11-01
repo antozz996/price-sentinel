@@ -83,6 +83,8 @@ export default function FattureList() {
     loadFornitori(controller.signal);
     loadLocations(controller.signal);
     return () => controller.abort();
+  // Initial filter bootstrap; the abort controller owns this request lifecycle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Reset offset to 0 when filters or page size changes
@@ -94,6 +96,7 @@ export default function FattureList() {
     const controller = new AbortController();
     loadFatture(controller.signal);
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, searchQuery, limit, offset]);
 
   async function loadFornitori(signal?: AbortSignal) {

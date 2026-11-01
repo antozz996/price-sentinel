@@ -254,14 +254,18 @@ export default function ProductConsumptionReport() {
 
   useEffect(() => {
     loadFilters();
+  // Initial filter bootstrap.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     loadConsumption();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocations, selectedSupplier, dataDa, dataA]);
 
   useEffect(() => {
     loadSkusDetail(selectedSkus);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSkus, selectedLocations, selectedSupplier, dataDa, dataA]);
 
   const handleExcelExport = async () => {

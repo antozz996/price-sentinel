@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -11,11 +11,63 @@ class ClipboardPreviewRequest(BaseModel):
     supplier_mapping: dict[str, int] = Field(default_factory=dict)
     product_mapping: dict[str, int] = Field(default_factory=dict)
     effective_date: date = Field(default_factory=date.today)
-    default_uom: str = Field(default="piece", min_length=1, max_length=20)
+    default_uom: str | None = Field(default="piece", min_length=1, max_length=20)
+    allow_missing_uom: bool = Field(default=False)
     create_missing_products: bool = Field(default=True)
     category: str | None = Field(default=None, max_length=100)
     subcategory: str | None = Field(default=None, max_length=100)
     location_id: int | None = Field(default=None, gt=0)
+
+
+class NormalizedSheetDryRunRequest(BaseModel):
+    spreadsheet_id: str = Field(pattern=r"^[A-Za-z0-9_-]{15,200}$")
+    values: dict[str, list[list[Any]]]
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def bound_snapshot(self):
+        if set(self.values) != {"FOOD", "BEVERAGE", "FRUTTA E VERDURA", "MATERIALI", "FORNITORI"}:
+            raise ValueError("Schede del nuovo Sheet incomplete")
+        for name, rows in self.values.items():
+            if len(rows) > 5001 or any(len(row) > (8 if name == "FORNITORI" else 13) for row in rows):
+                raise ValueError(f"La scheda {name} supera i limiti previsti")
+        return self
+
+
+class GoogleSheetDryRunRequest(BaseModel):
+    dynamic_supplier_headers: bool = False
+    spreadsheet_id: str = Field(pattern=r"^[A-Za-z0-9_-]{15,200}$")
+    title: str = Field(min_length=1, max_length=200)
+    values: dict[str, list[list[Any]]]
+    model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def bound_google_snapshot(self):
+        widths = {
+            "FOOD": (1000, 11),
+            "Carne": (1000, 11),
+            "Pesce": (1000, 11),
+            "Varie": (1000, 11),
+            "BEVERAGE": (1000, 12),
+            "COMPARAZIONE MATERIALI": (1000, 14),
+            "FRUTTA E VERDURA": (1000, 10),
+            "GIOCATTOLI": (1000, 15),
+            "CONTROLLO_ESCLUSIONI": (100, 6),
+        }
+        if set(self.values) - set(widths):
+            raise ValueError("La richiesta contiene schede non previste")
+        cells = 0
+        if self.dynamic_supplier_headers:
+            for tab in ('FOOD', 'BEVERAGE', 'COMPARAZIONE MATERIALI', 'FRUTTA E VERDURA'):
+                widths[tab] = (1000, 28)
+        for tab, rows in self.values.items():
+            max_rows, max_columns = widths[tab]
+            if len(rows) > max_rows or any(len(row) > max_columns for row in rows):
+                raise ValueError(f"Dimensioni non valide per la scheda {tab}")
+            cells += sum(len(row) for row in rows)
+        if cells > 65000:
+            raise ValueError("Il controllo supera il limite di celle consentito")
+        return self
 
 
 class CellPreviewRequest(BaseModel):
@@ -30,6 +82,24 @@ class CellPreviewRequest(BaseModel):
 class CommitPreviewRequest(BaseModel):
     preview_token: UUID
     confirm: bool
+
+
+class VariantPriceRow(BaseModel):
+    product_id: int = Field(gt=0)
+    supplier_id: int = Field(gt=0)
+    sku: str = Field(min_length=1, max_length=100)
+    offer_id: str | None = Field(default=None, max_length=100)
+    description: str = Field(min_length=1, max_length=255)
+    brand: str | None = Field(default=None, max_length=100)
+    quantity: Decimal | None = Field(default=None, gt=0)
+    unit: str | None = Field(default=None, max_length=20)
+    price: Decimal = Field(gt=0, lt=100000000)
+    package_confirmed: bool = False
+
+
+class VariantPricePreviewRequest(BaseModel):
+    rows: list[VariantPriceRow] = Field(min_length=1, max_length=5000)
+    effective_date: date = Field(default_factory=date.today)
 
 
 class SupplierSectorUpdateRequest(BaseModel):

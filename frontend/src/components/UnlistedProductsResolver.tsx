@@ -245,6 +245,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
   useEffect(() => {
     loadAll();
+  // Initial resolver bootstrap; mutations invoke reload explicitly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAll = async () => {

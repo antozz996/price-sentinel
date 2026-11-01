@@ -2,10 +2,15 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "trailingSlash": false,
-  "rewrites": [
+  "headers": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://guadagnarefacileonline.it/api/$1"
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
     }
   ]
 }

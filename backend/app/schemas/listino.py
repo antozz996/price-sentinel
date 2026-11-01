@@ -15,7 +15,7 @@ class ListinoBase(BaseModel):
     sku_interno: str = Field(..., max_length=100)
     descrizione: str
     prezzo_pattuito: Decimal = Field(..., decimal_places=4)
-    unita_misura: str = Field(..., max_length=20)
+    unita_misura: str | None = Field(default=None, max_length=20)
     data_inizio_validita: date
     data_scadenza: date | None = None
     pfa_tipo: str | None = None  # "percentuale" | "fisso" | "scaglioni"

@@ -39,7 +39,9 @@ class Product(Base):
     weight_g: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_count: Mapped[int | None] = mapped_column(Integer, nullable=True, default=1, server_default="1")
     container_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    comparison_unit: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Unknown until a supplier confirms the actual unit/pack format. NULL is
+    # intentionally distinct from a guessed unit such as "Pz".
+    comparison_unit: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_commodity: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
@@ -75,6 +77,15 @@ class Product(Base):
             if alias.status == "approved" and alias.pack_qty is not None and alias.pack_qty > 0
         })
 
+    @property
+    def missing_supplier_details(self) -> list[str]:
+        missing = []
+        if not (self.brand or "").strip():
+            missing.append("marca")
+        if not (self.comparison_unit or "").strip():
+            missing.append("unità di misura")
+        return missing
+
 
 class SupplierProductAlias(Base):
     """
@@ -100,6 +111,7 @@ class SupplierProductAlias(Base):
     )
     supplier_code: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     raw_description: Mapped[str] = mapped_column(String(255), nullable=False)
+    brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     normalized_description: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     ean: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     pack_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)

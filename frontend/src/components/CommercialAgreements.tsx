@@ -79,12 +79,15 @@ export default function CommercialAgreements() {
     loadFornitori(controller.signal);
     loadLocations(controller.signal);
     return () => controller.abort();
+  // Initial lookup bootstrap; the abort controller owns this request lifecycle.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     loadAgreements(controller.signal);
     return () => controller.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterFornitore, filterLocation, filterDataDa, filterDataA]);
 
   // Fetch products when supplier selected in Modal
@@ -98,6 +101,7 @@ export default function CommercialAgreements() {
       setModalProduct('');
       setProductSearchQuery('');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modalSupplier]);
 
   async function loadFornitori(signal?: AbortSignal) {

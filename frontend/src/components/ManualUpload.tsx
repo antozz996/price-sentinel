@@ -130,7 +130,7 @@ export default function ManualUpload({
               setUploadProgress(100);
               setUploadStep('done');
               resolve(JSON.parse(xhr.responseText));
-            } catch (e) {
+            } catch {
               reject(new Error('Risposta del server non valida'));
             }
           } else {

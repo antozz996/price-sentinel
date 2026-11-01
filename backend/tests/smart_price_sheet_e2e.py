@@ -1,6 +1,7 @@
 """Smart Price Sheet API test. Run only against a disposable migrated database."""
 
 import asyncio
+import hashlib
 import json
 import os
 
@@ -37,7 +38,8 @@ def seed() -> None:
                 values (1,'Test Venue','00000000001','ristorante') on conflict do nothing;
                 insert into utenti(id,email,password_hash,ruolo,location_id,attivo,refresh_token_version)
                 values (1,'admin@test.local','x','admin',null,true,1),
-                       (2,'manager@test.local','x','manager',1,true,1) on conflict do nothing;
+                       (2,'manager@test.local','x','manager',1,true,1),
+                       (3,'second-admin@test.local','x','admin',null,true,1) on conflict do nothing;
                 insert into fornitori(id,partita_iva,nome_azienda,attivo_whitelist)
                 values (1,'10000000001','Supplier A',true),(2,'10000000002','Supplier B',true),
                        (3,'10000000003','Supplier C Unrelated',true)
@@ -62,15 +64,39 @@ def seed() -> None:
                   (2,2,'WATER-75','Water B',10,'piece','2026-01-01',2)
                 on conflict do nothing;
                 select setval(pg_get_serial_sequence('supplier_product_aliases','id'), 2, true);
+                select setval(pg_get_serial_sequence('fornitori','id'), 3, true);
                 select setval(pg_get_serial_sequence('listino_master','id'), 2, true);
                 """
             )
+            archived_name = "Synthetic Archived Sheet Supplier"
+            temporary_id = "TEMP" + hashlib.sha256(
+                archived_name.casefold().encode()
+            ).hexdigest()[:16].upper()
+            cursor.execute(
+                """
+                insert into fornitori(id,partita_iva,nome_azienda,attivo_whitelist,archived_at)
+                values (4,%s,'Old synthetic supplier name',false,now())
+                on conflict do nothing
+                """,
+                (temporary_id,),
+            )
+            cursor.execute(
+                """
+                insert into supplier_category_capabilities(
+                  id,supplier_id,category,enabled,reason,created_by,updated_by,created_at,updated_at
+                ) values (1,4,'Beverage',true,'Existing archived supplier sector',1,1,now(),now())
+                on conflict do nothing
+                """
+            )
+            cursor.execute("select setval(pg_get_serial_sequence('fornitori','id'), 4, true)")
+            cursor.execute("select setval(pg_get_serial_sequence('supplier_category_capabilities','id'), 1, true)")
 
 
 async def run() -> None:
     seed()
     admin = {"Authorization": f"Bearer {create_access_token(1, 'admin')}"}
     manager = {"Authorization": f"Bearer {create_access_token(2, 'manager')}"}
+    other_admin = {"Authorization": f"Bearer {create_access_token(3, 'admin')}"}
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="https://testserver"
     ) as client:
@@ -122,6 +148,20 @@ async def run() -> None:
             and preview["counts"]["update"] == 1,
         )
         check("preview does not write prices", scalar("select count(*) from listino_master") == before)
+        check(
+            "preview owned by creator and ready",
+            scalar("select count(*) from smart_price_sheet_previews where status='ready' and created_by=1") >= 1,
+        )
+        response = await client.post(
+            "/api/v1/smart-price-sheet/commit",
+            headers=other_admin,
+            json={"preview_token": preview["preview_token"], "confirm": True},
+        )
+        check(
+            "another admin cannot commit somebody else's preview",
+            response.status_code == 403
+            and scalar("select count(*) from listino_master") == before,
+        )
 
         response = await client.post(
             "/api/v1/smart-price-sheet/preview",
@@ -159,6 +199,28 @@ async def run() -> None:
             json={"supplier_id": 3, "category": "beverage", "mode": "enabled"},
         )
         check("supplier sector can be enabled", response.status_code == 200)
+
+        provisional = await client.post('/api/v1/fornitori/sheet-registration', headers=admin,
+            json={'nome_azienda': 'Synthetic Sheet Supplier Without Fiscal Data', 'categories': ['Beverage']})
+        check('sheet supplier can register without fiscal data', provisional.status_code == 200
+            and provisional.json()['partita_iva'].startswith('TEMP'))
+        check('sheet supplier enabled only for its source sector', scalar(
+            "select count(*) from supplier_category_capabilities where supplier_id="
+            + str(provisional.json()['id']) + " and category='Beverage' and enabled") == 1)
+        repeated = await client.post('/api/v1/fornitori/sheet-registration', headers=admin,
+            json={'nome_azienda': 'Synthetic Sheet Supplier Without Fiscal Data'})
+        check('sheet supplier registration is idempotent', repeated.status_code == 200
+            and repeated.json()['id'] == provisional.json()['id'])
+
+        reactivated_name = "Synthetic Archived Sheet Supplier"
+        reactivated = await client.post('/api/v1/fornitori/sheet-registration', headers=admin,
+            json={'nome_azienda': reactivated_name, 'categories': ['Beverage']})
+        reactivated_id = reactivated.json().get('id') if reactivated.status_code == 200 else 0
+        check('archived sheet supplier reactivates without duplicate sector',
+            reactivated.status_code == 200
+            and reactivated_id == 4
+            and reactivated.json()['archived_at'] is None
+            and scalar("select count(*) from supplier_category_capabilities where supplier_id=4 and category='Beverage'") == 1)
 
         response = await client.post(
             "/api/v1/smart-price-sheet/preview",

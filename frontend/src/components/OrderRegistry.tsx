@@ -70,12 +70,15 @@ export default function OrderRegistry(props?: { isAdmin?: boolean; selectedOrder
   useEffect(() => {
     loadLocations();
     loadOrders();
+  // Initial order/filter bootstrap.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (props?.selectedOrderId) {
       handleOpenDetail(props.selectedOrderId);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props?.selectedOrderId]);
 
   const loadLocations = async () => {
@@ -113,6 +116,7 @@ export default function OrderRegistry(props?: { isAdmin?: boolean; selectedOrder
 
   useEffect(() => {
     loadOrders();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLocation, selectedSector, selectedStatus]);
 
   const handleOpenDetail = async (orderId: number) => {

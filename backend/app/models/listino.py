@@ -49,9 +49,9 @@ class ListinoMaster(Base):
         nullable=False,
         comment="Prezzo netto contratto",
     )
-    unita_misura: Mapped[str] = mapped_column(
+    unita_misura: Mapped[str | None] = mapped_column(
         String(20),
-        nullable=False,
+        nullable=True,
         comment="Es. Kg, Lt, Pz, Cassa",
     )
     data_inizio_validita: Mapped[date] = mapped_column(Date, nullable=False)

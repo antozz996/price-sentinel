@@ -29,6 +29,8 @@ const GoodsReceipt = lazy(() => import('./components/GoodsReceipt'))
 const ProductReviewPage = lazy(() => import('./components/ProductReviewPage'))
 const GodModeControlRoom = lazy(() => import('./components/GodModeControlRoom'))
 const UnlistedProductsResolver = lazy(() => import('./components/UnlistedProductsResolver'))
+const SupplierPriceForms = lazy(() => import('./components/SupplierPriceForms'))
+const SupplierPricePublicForm = lazy(() => import('./components/SupplierPricePublicForm'))
 import { API_BASE, fetchWithAuth, getHeaders } from './api'
 
 type UserProfile = {
@@ -78,6 +80,7 @@ const NAV_SECTIONS: NavSection[] = [
       { id: 'orderregistry', label: 'Registro ordini', icon: ClipboardList },
       { id: 'productreviews', label: 'Recensioni prodotti', icon: Star },
       { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
+      { id: 'supplierforms', label: 'Moduli fornitori', icon: ClipboardList, adminOnly: true },
       { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
     ],
   },
@@ -113,7 +116,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 export function isItemPermitted(item: NavItem, profile: UserProfile | null): boolean {
   if (!profile) return false;
-  if (profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin') return true;
+  if (profile.ruolo === 'admin') return true;
 
   const det = profile.ruolo_dettagliato || 'manager_sede';
   if (det.startsWith('responsabile_')) {
@@ -241,6 +244,8 @@ export default function App() {
       const interval = setInterval(loadNotificationStats, 20000);
       return () => clearInterval(interval);
     }
+  // Authentication changes are the only intended polling lifecycle trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuth]);
 
   // Login form states
@@ -291,7 +296,7 @@ export default function App() {
 
   useEffect(() => {
     if (profile) {
-      const isAdm = profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin';
+      const isAdm = profile.ruolo === 'admin';
       const det = profile.ruolo_dettagliato || 'manager_sede';
       if (det.startsWith('responsabile_')) {
         if (activeTab !== 'sectororders' && activeTab !== 'orderregistry' && activeTab !== 'crosssupplier' && activeTab !== 'fatture' && activeTab !== 'priceanalysis') {
@@ -366,7 +371,26 @@ export default function App() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.detail || 'Credenziali non valide')
+        // FastAPI returns validation issues as an array, not a string.
+        // Coercing that array to an Error previously displayed "[object Object]".
+        const detail: unknown = errorData?.detail
+        let message = 'Credenziali non valide'
+        if (typeof detail === 'string') {
+          message = detail
+        } else if (Array.isArray(detail)) {
+          const issues = detail
+            .map((issue: unknown) => {
+              if (typeof issue === 'object' && issue !== null && 'msg' in issue && typeof issue.msg === 'string') {
+                return issue.msg
+              }
+              return null
+            })
+            .filter((issue): issue is string => typeof issue === 'string')
+          message = issues.join('; ') || 'Dati di accesso non validi'
+        } else if (res.status === 422) {
+          message = 'Controlla che email e password siano validi'
+        }
+        throw new Error(message)
       }
 
       const data = await res.json()
@@ -404,7 +428,7 @@ export default function App() {
 
   const getRoleLabel = () => {
     if (!profile) return 'Operatore';
-    if (profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin') return '👑 Amministratore';
+    if (profile.ruolo === 'admin') return '👑 Amministratore';
     if (profile.ruolo_dettagliato === 'responsabile_beverage') return '🍹 Resp. Beverage';
     if (profile.ruolo_dettagliato === 'responsabile_materiali') return '📦 Resp. Materiali';
     if (profile.ruolo_dettagliato === 'responsabile_food') return '🍽️ Resp. Food';
@@ -413,6 +437,8 @@ export default function App() {
   };
 
   const renderContent = () => {
+    const supplierFormMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
+    if (supplierFormMatch) return <SupplierPricePublicForm token={decodeURIComponent(supplierFormMatch[1])} />;
     if (isGodMode || activeTab === 'god') {
       return (
         <GodModeControlRoom
@@ -573,6 +599,7 @@ export default function App() {
       case 'fatture': return <FattureList />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
+      case 'supplierforms': return <SupplierPriceForms />;
       case 'topproducts': return <TopProductsPriceList />;
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
@@ -581,7 +608,7 @@ export default function App() {
       case 'goodsreceipt': return <GoodsReceipt userProfile={profile} />;
       case 'orderregistry': return (
         <OrderRegistry
-          isAdmin={profile.ruolo === 'admin' || profile.ruolo_dettagliato === 'admin'}
+          isAdmin={profile.ruolo === 'admin'}
           selectedOrderId={selectedOrderId}
           onOrderClose={() => setSelectedOrderId(null)}
         />
@@ -622,6 +649,7 @@ export default function App() {
       case 'fatture': return { title: 'Registro Fatture', sub: 'Visualizza, filtra e gestisci tutte le fatture' };
       case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
+      case 'supplierforms': return { title: 'Moduli fornitori', sub: 'Raccogli conferme e proposte senza modificare il listino ufficiale' };
       case 'topproducts': return { title: 'Top prodotti', sub: 'Analizza prezzi e volumi dei prodotti più acquistati' };
       case 'crosssupplier': return { title: 'Listino Smart', sub: 'Prezzi, qualità fornitori e regole di acquisto in un’unica matrice' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
@@ -648,6 +676,15 @@ export default function App() {
   const info = getHeaderInfo();
 
   const isSectorResp = profile?.ruolo_dettagliato && profile.ruolo_dettagliato.startsWith('responsabile_');
+  const supplierPublicMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
+
+  if (supplierPublicMatch) {
+    return (
+      <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: '#0b1220', color: 'white' }}>Caricamento modulo…</main>}>
+        <SupplierPricePublicForm token={decodeURIComponent(supplierPublicMatch[1])} />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="app-container">
@@ -681,7 +718,7 @@ export default function App() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Navigazione principale">
-          {!isSectorResp && (profile?.ruolo === 'admin' || profile?.ruolo_dettagliato === 'admin') && (
+          {!isSectorResp && (profile?.ruolo === 'admin') && (
             <button
               className={`sidebar-nav-item ${activeTab === 'dashboard' ? 'is-active' : ''}`}
               onClick={() => { setActiveTab('dashboard'); setMobileSidebarOpen(false); }}
@@ -872,7 +909,6 @@ export default function App() {
           setActiveTab('orderregistry');
         }}
         onViewReviews={() => setActiveTab('productreviews')}
-        onViewReceipt={() => setActiveTab('goodsreceipt')}
         onRefreshCounts={loadNotificationStats}
       />
     </div>
