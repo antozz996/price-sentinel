@@ -1,0 +1,20 @@
+# PRICE SENTINEL V2 — live promotion override.
+# Apply after the isolated V2 stack has passed its staging smoke tests:
+#   docker compose -p price_sentinel_v2 \
+#     -f docker-compose.v2-staging.yml \
+#     -f docker-compose.v2-staging-web.yml \
+#     -f docker-compose.v2-live.yml up -d --no-deps --force-recreate backend web
+#
+# Supplier communications and scheduled automations remain disabled until they
+# receive a separate commercial authorization.
+services:
+  backend:
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      AUTOMATION_ENABLED: "false"
+    command:
+      - sh
+      - -ec
+      - >
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000

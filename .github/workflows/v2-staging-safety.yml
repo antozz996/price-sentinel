@@ -34,6 +34,9 @@ jobs:
       - name: Unit test explicit production CORS origins
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_cors_settings.py' -v
+      - name: Unit test guarded V2 live promotion override
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_v2_live_compose.py' -v
       - name: Regression check staging admin login email validation
         env:
           PYTHONPATH: backend
