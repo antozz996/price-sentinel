@@ -185,6 +185,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [bulkResolving, setBulkResolving] = useState(false);
   const [showSmartPlan, setShowSmartPlan] = useState(false);
+  const [smartPlanTab, setSmartPlanTab] = useState<'safe' | 'review' | 'new'>('safe');
 
   // Dynamic subcategories (Food and other sectors)
   const [availableSubcategories, setAvailableSubcategories] = useState<string[]>([]);
@@ -721,6 +722,12 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     };
   }, [queueData]);
 
+  const smartPlanRows = smartPlanTab === 'safe'
+    ? smartPlan.safeMatches
+    : smartPlanTab === 'review'
+      ? smartPlan.needsReview
+      : smartPlan.newProducts;
+
   const executeSmartPlan = async () => {
     const actionableItems = smartPlan.safeMatches.length + smartPlan.newProducts.length;
     if (actionableItems === 0) {
@@ -1160,7 +1167,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           </div>
           <button
             className="btn btn-primary"
-            onClick={() => setShowSmartPlan(true)}
+            onClick={() => {
+              setSmartPlanTab(smartPlan.safeMatches.length ? 'safe' : smartPlan.needsReview.length ? 'review' : 'new');
+              setShowSmartPlan(true);
+            }}
             disabled={bulkResolving}
             style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '190px', justifyContent: 'center' }}
           >
@@ -1197,20 +1207,55 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', margin: '22px 0' }}>
-              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid rgba(16,185,129,.35)', background: 'rgba(16,185,129,.09)' }}>
+              <div role="button" tabIndex={0} onClick={() => setSmartPlanTab('safe')} onKeyDown={event => event.key === 'Enter' && setSmartPlanTab('safe')}
+                style={{ padding: '16px', borderRadius: '10px', cursor: 'pointer', border: smartPlanTab === 'safe' ? '2px solid #34d399' : '1px solid rgba(16,185,129,.35)', background: 'rgba(16,185,129,.09)' }}>
                 <div style={{ color: '#6ee7b7', fontSize: '0.78rem', textTransform: 'uppercase' }}>Associazioni sicure</div>
                 <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.safeMatches.length}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>confidenza almeno 85%</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>clicca per vedere · almeno 85%</div>
               </div>
-              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid rgba(245,158,11,.35)', background: 'rgba(245,158,11,.09)' }}>
+              <div role="button" tabIndex={0} onClick={() => setSmartPlanTab('review')} onKeyDown={event => event.key === 'Enter' && setSmartPlanTab('review')}
+                style={{ padding: '16px', borderRadius: '10px', cursor: 'pointer', border: smartPlanTab === 'review' ? '2px solid #fbbf24' : '1px solid rgba(245,158,11,.35)', background: 'rgba(245,158,11,.09)' }}>
                 <div style={{ color: '#fbbf24', fontSize: '0.78rem', textTransform: 'uppercase' }}>Da controllare</div>
                 <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.needsReview.length}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>non verranno modificati</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>clicca per vedere · non modificati</div>
               </div>
-              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid rgba(59,130,246,.35)', background: 'rgba(59,130,246,.09)' }}>
+              <div role="button" tabIndex={0} onClick={() => setSmartPlanTab('new')} onKeyDown={event => event.key === 'Enter' && setSmartPlanTab('new')}
+                style={{ padding: '16px', borderRadius: '10px', cursor: 'pointer', border: smartPlanTab === 'new' ? '2px solid #60a5fa' : '1px solid rgba(59,130,246,.35)', background: 'rgba(59,130,246,.09)' }}>
                 <div style={{ color: '#93c5fd', fontSize: '0.78rem', textTransform: 'uppercase' }}>Nuovi prodotti</div>
                 <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.newProducts.length}</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>creati dai dati reali in fattura</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>clicca per vedere · dati fattura</div>
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid var(--border-glass)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
+              <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,.04)', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+                <strong style={{ fontSize: '0.84rem' }}>
+                  {smartPlanTab === 'safe' ? 'Associazioni che verranno applicate' : smartPlanTab === 'review' ? 'Corrispondenze da verificare manualmente' : 'Prodotti senza corrispondenza trovata'}
+                </strong>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem' }}>{smartPlanRows.length} voci</span>
+              </div>
+              <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                {smartPlanRows.length === 0 ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.83rem' }}>Nessuna voce in questo gruppo.</div>
+                ) : smartPlanRows.map(item => (
+                  <div key={item.work_key} style={{ padding: '11px 14px', borderTop: '1px solid var(--border-glass)', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '12px', alignItems: 'center' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 650, overflowWrap: 'anywhere' }}>{item.raw_description}</div>
+                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '3px' }}>
+                        {item.supplier_name}{item.supplier_code ? ` · codice ${item.supplier_code}` : ''} · {item.occurrence_count} righe fattura
+                      </div>
+                      {item.best_candidate && (
+                        <div style={{ color: smartPlanTab === 'safe' ? '#6ee7b7' : '#fbbf24', fontSize: '0.76rem', marginTop: '5px' }}>
+                          → {item.best_candidate.canonical_name} {item.best_candidate.sku_interno ? `· ${item.best_candidate.sku_interno}` : ''}
+                          {item.alternatives.length > 1 ? ` · ${item.alternatives.length - 1} alternative` : ''}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontWeight: 800, color: item.best_candidate ? (smartPlanTab === 'safe' ? '#34d399' : '#fbbf24') : '#93c5fd', whiteSpace: 'nowrap' }}>
+                      {item.best_candidate ? `${Math.round(item.best_candidate.score)}%` : 'NUOVO'}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
