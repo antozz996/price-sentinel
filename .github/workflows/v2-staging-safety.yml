@@ -31,6 +31,9 @@ jobs:
       - name: Unit test deny-by-default staging database guard
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_v2_staging_isolation.py' -v
+      - name: Unit test explicit production CORS origins
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_cors_settings.py' -v
       - name: Regression check staging admin login email validation
         env:
           PYTHONPATH: backend

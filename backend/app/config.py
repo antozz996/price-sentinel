@@ -6,6 +6,8 @@ Legge variabili d'ambiente dal file .env via pydantic-settings.
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.cors import parse_cors_allowed_origins
+
 
 class Settings(BaseSettings):
     """Configurazione globale dell'applicazione."""
@@ -57,5 +59,14 @@ class Settings(BaseSettings):
     # ── Ambiente ─────────────────────────────
     ENVIRONMENT: str = "production"
     DEBUG: bool = False
+
+    # Comma-separated browser origins allowed to call the API in non-debug
+    # environments. Keep empty for same-origin-only deployments.
+    CORS_ALLOWED_ORIGINS: str = ""
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        """Return validated, normalized HTTP(S) origins without wildcards."""
+        return parse_cors_allowed_origins(self.CORS_ALLOWED_ORIGINS)
 
 settings = Settings()
