@@ -57,3 +57,11 @@ def test_duplicate_exact_catalog_names_remain_for_manual_review():
     match = _live_catalog_suggestion(raw, [product(11, raw), product(12, raw)])
 
     assert match is None
+
+
+if __name__ == "__main__":
+    test_exact_current_catalog_name_is_suggested_even_without_saved_candidate()
+    test_near_identical_name_is_suggested_when_unambiguous()
+    test_conflicting_format_is_never_suggested()
+    test_duplicate_exact_catalog_names_remain_for_manual_review()
+    print("PASS: live work-queue suggestions are accurate and format-safe")
