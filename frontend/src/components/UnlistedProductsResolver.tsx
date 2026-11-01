@@ -1245,9 +1245,13 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         {item.supplier_name}{item.supplier_code ? ` · codice ${item.supplier_code}` : ''} · {item.occurrence_count} righe fattura
                       </div>
                       {item.best_candidate && (
-                        <div style={{ color: smartPlanTab === 'safe' ? '#6ee7b7' : '#fbbf24', fontSize: '0.76rem', marginTop: '5px' }}>
-                          → {item.best_candidate.canonical_name} {item.best_candidate.sku_interno ? `· ${item.best_candidate.sku_interno}` : ''}
-                          {item.alternatives.length > 1 ? ` · ${item.alternatives.length - 1} alternative` : ''}
+                        <div style={{ marginTop: '5px' }}>
+                          {item.alternatives.map((candidate, candidateIndex) => (
+                            <div key={`${item.work_key}-${candidate.product_id}`} style={{ color: candidateIndex === 0 ? (smartPlanTab === 'safe' ? '#6ee7b7' : '#fbbf24') : '#94a3b8', fontSize: candidateIndex === 0 ? '0.76rem' : '0.71rem', marginTop: candidateIndex ? '3px' : 0 }}>
+                              {candidateIndex === 0 ? '→ Proposta' : `↳ Alternativa ${candidateIndex}`}: {candidate.canonical_name}
+                              {candidate.sku_interno ? ` · ${candidate.sku_interno}` : ''} · {Math.round(candidate.score)}%
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

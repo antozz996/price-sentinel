@@ -578,7 +578,12 @@ def _work_queue_signature(supplier_id: int, line: RigaFattura) -> tuple[int, str
 
 def _matching_tokens(value: str) -> set[str]:
     """Meaningful description tokens, excluding supplier/internal codes."""
-    tokens = set(normalize_text(value).split())
+    token_aliases = {
+        "bicchieri": "bicchiere", "calici": "calice", "piatti": "piatto",
+        "bottiglie": "bottiglia", "confezioni": "confezione", "cartoni": "cartone",
+        "vaschette": "vaschetta", "scatole": "scatola", "pezzi": "pezzo",
+    }
+    tokens = {token_aliases.get(token, token) for token in normalize_text(value).split()}
 
     def is_code(token: str) -> bool:
         compact = re.sub(r"[^a-z0-9]", "", token)
@@ -587,6 +592,18 @@ def _matching_tokens(value: str) -> set[str]:
         return digits >= 4 or (len(compact) >= 6 and digits >= 2 and letters >= 2)
 
     return {token for token in tokens if len(token) > 1 and not is_code(token)}
+
+
+def _token_trigrams(tokens: set[str]) -> set[str]:
+    """Character trigrams catch small typos without comparing the whole catalog."""
+    trigrams: set[str] = set()
+    for token in tokens:
+        compact = re.sub(r"[^a-z0-9]", "", token)
+        if len(compact) < 3:
+            trigrams.add(compact)
+            continue
+        trigrams.update(compact[index:index + 3] for index in range(len(compact) - 2))
+    return {item for item in trigrams if item}
 
 
 def _description_similarity(left: str, right: str) -> float:
@@ -602,13 +619,18 @@ def _description_similarity(left: str, right: str) -> float:
     left_tokens = _matching_tokens(left_normalized)
     right_tokens = _matching_tokens(right_normalized)
     shared = left_tokens & right_tokens
-    if len(shared) < 2:
-        return sequence_score
+    token_score = 0.0
+    if shared:
+        coverage = len(shared) / min(len(left_tokens), len(right_tokens))
+        jaccard = len(shared) / len(left_tokens | right_tokens)
+        token_score = (coverage * 0.7 + jaccard * 0.3) * 100
 
-    coverage = len(shared) / min(len(left_tokens), len(right_tokens))
-    jaccard = len(shared) / len(left_tokens | right_tokens)
-    token_score = (coverage * 0.7 + jaccard * 0.3) * 100
-    return max(sequence_score, token_score)
+    left_trigrams = _token_trigrams(left_tokens)
+    right_trigrams = _token_trigrams(right_tokens)
+    trigram_score = 0.0
+    if left_trigrams and right_trigrams:
+        trigram_score = 200 * len(left_trigrams & right_trigrams) / (len(left_trigrams) + len(right_trigrams))
+    return max(sequence_score, token_score, trigram_score)
 
 
 def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
@@ -617,6 +639,9 @@ def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
     names_by_id: dict[int, list[str]] = {}
     exact_name_ids: dict[str, set[int]] = {}
     token_product_ids: dict[str, set[int]] = {}
+    tokens_by_id: dict[int, set[str]] = {}
+    trigram_product_ids: dict[str, set[int]] = {}
+    trigrams_by_id: dict[int, set[str]] = {}
 
     for product in products:
         names = {
@@ -636,12 +661,20 @@ def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
             product_tokens.update(_matching_tokens(name))
         for token in product_tokens:
             token_product_ids.setdefault(token, set()).add(product.id)
+        product_trigrams = _token_trigrams(product_tokens)
+        tokens_by_id[product.id] = product_tokens
+        trigrams_by_id[product.id] = product_trigrams
+        for trigram in product_trigrams:
+            trigram_product_ids.setdefault(trigram, set()).add(product.id)
 
     return {
         "products_by_id": products_by_id,
         "names_by_id": names_by_id,
         "exact_name_ids": exact_name_ids,
         "token_product_ids": token_product_ids,
+        "tokens_by_id": tokens_by_id,
+        "trigram_product_ids": trigram_product_ids,
+        "trigrams_by_id": trigrams_by_id,
     }
 
 
@@ -676,28 +709,49 @@ def _live_catalog_suggestions(
 
     exact_ids = set(index["exact_name_ids"].get(normalized, set()))
     candidate_ids = set(exact_ids)
+    line_tokens = _matching_tokens(normalized)
+    line_trigrams = _token_trigrams(line_tokens)
+    token_counts: dict[int, int] = {}
+    trigram_counts: dict[int, int] = {}
     if not candidate_ids:
-        token_counts: dict[int, int] = {}
-        for token in _matching_tokens(normalized):
+        for token in line_tokens:
             for product_id in index["token_product_ids"].get(token, set()):
                 token_counts[product_id] = token_counts.get(product_id, 0) + 1
-        # A single generic shared word (for example "bicchiere") is not enough
-        # to justify even a review suggestion.
-        candidate_ids = {product_id for product_id, shared in token_counts.items() if shared >= 2}
+        for trigram in line_trigrams:
+            for product_id in index["trigram_product_ids"].get(trigram, set()):
+                trigram_counts[product_id] = trigram_counts.get(product_id, 0) + 1
 
-    ranked: list[tuple[float, Product, bool]] = []
+        # Limit expensive similarity calculations to the strongest lexical
+        # shortlist. One shared word or typo evidence is enough for a visible
+        # manual suggestion, never for an automatic association.
+        evidence_ids = set(token_counts) | set(trigram_counts)
+        ranked_evidence = sorted(
+            evidence_ids,
+            key=lambda product_id: (
+                token_counts.get(product_id, 0),
+                trigram_counts.get(product_id, 0),
+            ),
+            reverse=True,
+        )
+        candidate_ids = set(ranked_evidence[:80])
+
+    ranked: list[tuple[float, Product, bool, bool, int, int]] = []
     for product_id in candidate_ids:
         product = index["products_by_id"][product_id]
         names = index["names_by_id"][product_id]
         exact = normalized in names
+        shared_tokens = len(line_tokens & index["tokens_by_id"][product_id])
+        shared_trigrams = len(line_trigrams & index["trigrams_by_id"][product_id])
         similarity = 100.0 if exact else max(
             (_description_similarity(normalized, name) for name in names),
             default=0.0,
         )
-        # Scores from 55 to 84 are suggestions for manual review only; the
-        # frontend never includes them in automatic bulk associations.
-        if similarity >= 55 and not has_format_conflict(product):
-            ranked.append((similarity, product, exact))
+        product_tokens = index["tokens_by_id"][product_id]
+        strong_evidence = exact or (line_tokens == product_tokens and similarity >= 92)
+        # Permissive proposals start at 40, but weak lexical evidence is capped
+        # below the automatic threshold and therefore always requires review.
+        if similarity >= 40 and not has_format_conflict(product):
+            ranked.append((similarity, product, exact, strong_evidence, shared_tokens, shared_trigrams))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
     if not ranked:
@@ -705,9 +759,9 @@ def _live_catalog_suggestions(
 
     ambiguous = len(ranked) > 1 and ranked[0][0] - ranked[1][0] < 5
     suggestions = []
-    for similarity, product, exact in ranked[:3]:
+    for similarity, product, exact, strong_evidence, shared_tokens, shared_trigrams in ranked[:3]:
         score = 100.0 if exact else round(similarity, 1)
-        if ambiguous:
+        if ambiguous or not strong_evidence:
             score = min(score, 84.0)
         suggestions.append({
             "candidate_id": 0,
@@ -721,6 +775,9 @@ def _live_catalog_suggestions(
                 "fuzzy_score": round(similarity, 1),
                 "format_conflict": False,
                 "ambiguous": ambiguous,
+                "shared_tokens": shared_tokens,
+                "shared_trigrams": shared_trigrams,
+                "strong_evidence": strong_evidence,
                 "decision": "needs_review" if score < 100 else "auto_match",
             },
         })
