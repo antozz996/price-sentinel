@@ -648,12 +648,29 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   };
 
   // Bulk Resolve: Insert All / Selected as New Products in Listino
-  const handleResolveBulkAsNew = async (targetItems?: WorkQueueItem[], bulkCategory = 'Food') => {
+  const handleResolveBulkAsNew = async (targetItems?: WorkQueueItem[]) => {
     const itemsToResolve = targetItems || queueData?.items.filter(i => !i.best_candidate) || [];
     if (itemsToResolve.length === 0) {
       alert('Nessun prodotto da inserire come nuovo.');
       return;
     }
+
+    const unclassifiedItems = itemsToResolve.filter(item => !item.suggested_product.category?.trim());
+    if (unclassifiedItems.length > 0) {
+      const examples = unclassifiedItems.slice(0, 5).map(item => item.raw_description).join('\n• ');
+      alert(
+        `${unclassifiedItems.length} prodotti non hanno una categoria verificata e non possono essere creati in blocco. ` +
+        `Apri ciascuna voce e scegli la categoria corretta prima di inserirla.\n\nEsempi:\n• ${examples}`
+      );
+      return;
+    }
+
+    const categories = [...new Set(itemsToResolve.map(item => item.suggested_product.category!.trim()))];
+    if (categories.length > 1) {
+      alert('La selezione contiene categorie diverse. Crea i prodotti per gruppi della stessa categoria oppure classificali singolarmente.');
+      return;
+    }
+    const bulkCategory = categories[0];
 
     if (!window.confirm(`Sei sicuro di voler creare ${itemsToResolve.length} nuovi prodotti nel listino master con categoria "${bulkCategory}"?`)) {
       return;
@@ -665,7 +682,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       const payload = {
         items: itemsToResolve.map(item => {
           const rawClean = item.raw_description.trim();
-          const cat = item.suggested_product.category || bulkCategory;
+          const cat = item.suggested_product.category!.trim();
           const subcat = item.suggested_product.subcategory || '';
           const rawPrice = item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined;
           const rawUom = item.unita_misura || 'Pz';
@@ -1401,7 +1418,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 <button
                   onClick={() => {
                     const selItems = filteredItems.filter(i => selectedKeys.has(i.work_key) && !i.best_candidate);
-                    handleResolveBulkAsNew(selItems, 'Food');
+                    handleResolveBulkAsNew(selItems);
                   }}
                   disabled={bulkResolving || filteredItems.filter(i => selectedKeys.has(i.work_key) && !i.best_candidate).length === 0}
                   style={{
