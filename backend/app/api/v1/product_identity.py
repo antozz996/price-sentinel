@@ -746,7 +746,8 @@ def _live_catalog_suggestions(
             (_description_similarity(normalized, name) for name in names),
             default=0.0,
         )
-        strong_evidence = exact or (shared_tokens >= 2 and similarity >= 92)
+        product_tokens = index["tokens_by_id"][product_id]
+        strong_evidence = exact or (line_tokens == product_tokens and similarity >= 92)
         # Permissive proposals start at 40, but weak lexical evidence is capped
         # below the automatic threshold and therefore always requires review.
         if similarity >= 40 and not has_format_conflict(product):
