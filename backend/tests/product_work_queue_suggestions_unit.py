@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.api.v1.product_identity import _live_catalog_suggestion
+from app.api.v1.product_identity import _live_catalog_suggestion, _live_catalog_suggestions
 from app.services.normalization import normalize_text
 
 
@@ -54,9 +54,22 @@ def test_conflicting_format_is_never_suggested():
 
 def test_duplicate_exact_catalog_names_remain_for_manual_review():
     raw = "Basilico vaschetta"
-    match = _live_catalog_suggestion(raw, [product(11, raw), product(12, raw)])
+    matches = _live_catalog_suggestions(raw, [product(11, raw), product(12, raw)])
 
-    assert match is None
+    assert len(matches) == 2
+    assert all(match["score"] < 85 for match in matches)
+    assert all(match["reason_json"]["ambiguous"] for match in matches)
+
+
+def test_supplier_code_noise_and_word_order_still_produce_review_suggestion():
+    match = _live_catalog_suggestion(
+        "Rock Bar bicchiere Long Drink 370ml 36 pezzi impilabile 516170MEP021990",
+        [product(13, "Bicchiere Rock Bar impilabile 36 pezzi Long Drink 370 ml", volume_ml=370, unit_count=36)],
+    )
+
+    assert match is not None
+    assert match["product_id"] == 13
+    assert match["score"] >= 70
 
 
 if __name__ == "__main__":
@@ -64,4 +77,5 @@ if __name__ == "__main__":
     test_near_identical_name_is_suggested_when_unambiguous()
     test_conflicting_format_is_never_suggested()
     test_duplicate_exact_catalog_names_remain_for_manual_review()
+    test_supplier_code_noise_and_word_order_still_produce_review_suggestion()
     print("PASS: live work-queue suggestions are accurate and format-safe")

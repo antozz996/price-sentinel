@@ -576,8 +576,43 @@ def _work_queue_signature(supplier_id: int, line: RigaFattura) -> tuple[int, str
     )
 
 
-def _live_catalog_suggestion(raw_description: str, products: list[Product]) -> dict[str, Any] | None:
-    """Find a current catalog suggestion for legacy parked invoice lines.
+def _matching_tokens(value: str) -> set[str]:
+    """Meaningful description tokens, excluding supplier/internal codes."""
+    tokens = set(normalize_text(value).split())
+
+    def is_code(token: str) -> bool:
+        compact = re.sub(r"[^a-z0-9]", "", token)
+        digits = sum(character.isdigit() for character in compact)
+        letters = sum(character.isalpha() for character in compact)
+        return digits >= 4 or (len(compact) >= 6 and digits >= 2 and letters >= 2)
+
+    return {token for token in tokens if len(token) > 1 and not is_code(token)}
+
+
+def _description_similarity(left: str, right: str) -> float:
+    """Order-tolerant similarity that remains conservative on short names."""
+    left_normalized = normalize_text(left)
+    right_normalized = normalize_text(right)
+    if not left_normalized or not right_normalized:
+        return 0.0
+    if left_normalized == right_normalized:
+        return 100.0
+
+    sequence_score = SequenceMatcher(None, left_normalized, right_normalized).ratio() * 100
+    left_tokens = _matching_tokens(left_normalized)
+    right_tokens = _matching_tokens(right_normalized)
+    shared = left_tokens & right_tokens
+    if len(shared) < 2:
+        return sequence_score
+
+    coverage = len(shared) / min(len(left_tokens), len(right_tokens))
+    jaccard = len(shared) / len(left_tokens | right_tokens)
+    token_score = (coverage * 0.7 + jaccard * 0.3) * 100
+    return max(sequence_score, token_score)
+
+
+def _live_catalog_suggestions(raw_description: str, products: list[Product]) -> list[dict[str, Any]]:
+    """Find current catalog suggestions for legacy parked invoice lines.
 
     Older invoice lines may have been parked before their catalog product existed,
     so they have no persisted MatchCandidate. The work queue must compare them with
@@ -585,7 +620,7 @@ def _live_catalog_suggestion(raw_description: str, products: list[Product]) -> d
     """
     normalized = normalize_text(raw_description)
     if not normalized:
-        return None
+        return []
 
     line_attributes = extract_candidate_attributes(raw_description)
 
@@ -608,36 +643,44 @@ def _live_catalog_suggestion(raw_description: str, products: list[Product]) -> d
         names = [name for name in names if name]
         exact = normalized in names
         similarity = 100.0 if exact else max(
-            (SequenceMatcher(None, normalized, name).ratio() * 100 for name in names),
+            (_description_similarity(normalized, name) for name in names),
             default=0.0,
         )
-        if similarity >= 90 and not has_format_conflict(product):
+        if similarity >= 70 and not has_format_conflict(product):
             ranked.append((similarity, product, exact))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
     if not ranked:
-        return None
+        return []
 
-    best_score, best_product, exact = ranked[0]
-    # Two equal names are genuinely ambiguous and must remain for manual review.
-    if len(ranked) > 1 and best_score - ranked[1][0] < 3:
-        return None
+    ambiguous = len(ranked) > 1 and ranked[0][0] - ranked[1][0] < 5
+    suggestions = []
+    for similarity, product, exact in ranked[:3]:
+        score = 100.0 if exact else round(similarity, 1)
+        if ambiguous:
+            score = min(score, 84.0)
+        suggestions.append({
+            "candidate_id": 0,
+            "product_id": product.id,
+            "sku_interno": product.sku_interno,
+            "canonical_name": product.canonical_name,
+            "score": score,
+            "reason_json": {
+                "source": "live_catalog",
+                "exact_normalized_name": exact,
+                "fuzzy_score": round(similarity, 1),
+                "format_conflict": False,
+                "ambiguous": ambiguous,
+                "decision": "needs_review" if score < 100 else "auto_match",
+            },
+        })
+    return suggestions
 
-    score = 100.0 if exact else round(best_score, 1)
-    return {
-        "candidate_id": 0,
-        "product_id": best_product.id,
-        "sku_interno": best_product.sku_interno,
-        "canonical_name": best_product.canonical_name,
-        "score": score,
-        "reason_json": {
-            "source": "live_catalog",
-            "exact_normalized_name": exact,
-            "fuzzy_score": round(best_score, 1),
-            "format_conflict": False,
-            "decision": "needs_review" if score < 100 else "auto_match",
-        },
-    }
+
+def _live_catalog_suggestion(raw_description: str, products: list[Product]) -> dict[str, Any] | None:
+    """Backward-compatible best suggestion helper used by focused tests."""
+    suggestions = _live_catalog_suggestions(raw_description, products)
+    return suggestions[0] if suggestions else None
 
 
 @router.get(
@@ -729,9 +772,7 @@ async def get_match_work_queue(
     for group in groups.values():
         alternatives = sorted(group["candidates"].values(), key=lambda item: item["score"], reverse=True)[:3]
         if not alternatives:
-            live_suggestion = _live_catalog_suggestion(group["raw_description"], active_products)
-            if live_suggestion:
-                alternatives = [live_suggestion]
+            alternatives = _live_catalog_suggestions(group["raw_description"], active_products)
         attributes = extract_candidate_attributes(group["raw_description"])
         best_candidate = alternatives[0] if alternatives else None
         items.append({
