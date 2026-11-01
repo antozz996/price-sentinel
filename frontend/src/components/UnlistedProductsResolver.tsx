@@ -184,6 +184,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   // Bulk selection and resolution state
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [bulkResolving, setBulkResolving] = useState(false);
+  const [showSmartPlan, setShowSmartPlan] = useState(false);
 
   // Dynamic subcategories (Food and other sectors)
   const [availableSubcategories, setAvailableSubcategories] = useState<string[]>([]);
@@ -660,8 +661,6 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       const payload = {
         items: itemsToResolve.map(item => {
           const rawClean = item.raw_description.trim();
-          const baseCode = rawClean.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8);
-          const autoSku = `SKU-${baseCode}-${Math.floor(100 + Math.random() * 900)}`;
           const cat = item.suggested_product.category || bulkCategory;
           const subcat = item.suggested_product.subcategory || '';
           const rawPrice = item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined;
@@ -673,7 +672,6 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             action: 'create_canonical',
             canonical_data: {
               canonical_name: rawClean,
-              sku_interno: autoSku,
               category: cat,
               subcategory: subcat || undefined,
               comparison_unit: item.suggested_product.comparison_unit && item.suggested_product.comparison_unit !== 'piece' ? item.suggested_product.comparison_unit : 'Pz',
@@ -704,6 +702,87 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       await loadAll();
     } catch (err: any) {
       setError(err.message || 'Errore durante la registrazione massiva');
+    } finally {
+      setBulkResolving(false);
+    }
+  };
+
+  // Smart triage: only high-confidence matches are accepted automatically.
+  // Medium-confidence matches always remain in the queue for human review.
+  const smartPlan = useMemo(() => {
+    const items = queueData?.items || [];
+    return {
+      safeMatches: items.filter(item => (item.best_candidate?.score || 0) >= 85),
+      needsReview: items.filter(item => {
+        const score = item.best_candidate?.score || 0;
+        return score > 0 && score < 85;
+      }),
+      newProducts: items.filter(item => !item.best_candidate),
+    };
+  }, [queueData]);
+
+  const executeSmartPlan = async () => {
+    const actionableItems = smartPlan.safeMatches.length + smartPlan.newProducts.length;
+    if (actionableItems === 0) {
+      setShowSmartPlan(false);
+      return;
+    }
+
+    setBulkResolving(true);
+    setError(null);
+    try {
+      const associationPayload = smartPlan.safeMatches.map(item => ({
+        invoice_line_ids: item.invoice_line_ids,
+        action: 'associate_existing',
+        product_id: item.best_candidate!.product_id,
+        insert_in_listino: true,
+        prezzo_listino: item.prezzo_unitario || undefined,
+        unita_misura_listino: item.unita_misura || undefined,
+        data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
+      }));
+
+      const creationPayload = smartPlan.newProducts.map(item => {
+        const suggestedUnit = item.suggested_product.comparison_unit;
+        return {
+          invoice_line_ids: item.invoice_line_ids,
+          action: 'create_canonical',
+          canonical_data: {
+            canonical_name: item.raw_description.trim(),
+            // The backend generates the unique SKU from trusted server-side data.
+            // Never generate random identifiers in the browser.
+            category: item.suggested_product.category || undefined,
+            subcategory: item.suggested_product.subcategory || undefined,
+            comparison_unit: suggestedUnit && suggestedUnit !== 'piece' ? suggestedUnit : (item.unita_misura || 'Pz'),
+            prezzo_listino: item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined,
+            unita_misura_listino: item.unita_misura || undefined,
+            data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
+          },
+          insert_in_listino: true,
+          prezzo_listino: item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined,
+          unita_misura_listino: item.unita_misura || undefined,
+          data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
+        };
+      });
+
+      const res = await fetch(`${API_BASE}/product-identity/match-candidates/work-queue/resolve-bulk`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ items: [...associationPayload, ...creationPayload] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Errore durante la risoluzione intelligente');
+
+      setShowSmartPlan(false);
+      setSelectedKeys(new Set());
+      setActionSuccess(
+        `Piano completato: ${smartPlan.safeMatches.length} associazioni sicure, ` +
+        `${smartPlan.newProducts.length} nuovi prodotti e ${data.resolved_lines || 0} righe fattura risolte. ` +
+        `${smartPlan.needsReview.length} casi dubbi restano da controllare.`
+      );
+      setTimeout(() => setActionSuccess(null), 9000);
+      await loadAll();
+    } catch (err: any) {
+      setError(err.message || 'Errore durante la risoluzione intelligente');
     } finally {
       setBulkResolving(false);
     }
@@ -1059,6 +1138,98 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         </div>
       </div>
 
+      {!loading && (queueData?.summary.work_items || 0) > 0 && (
+        <div className="glass-panel" style={{
+          padding: '18px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '18px',
+          flexWrap: 'wrap',
+          border: '1px solid rgba(59, 130, 246, 0.45)',
+          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.13), rgba(16, 185, 129, 0.07))',
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', fontWeight: 700 }}>
+              <Sparkles size={18} color="#60a5fa" />
+              Risoluzione intelligente
+            </div>
+            <div style={{ marginTop: '5px', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
+              Prepara automaticamente associazioni sicure e nuovi prodotti. I casi dubbi restano separati per la revisione.
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowSmartPlan(true)}
+            disabled={bulkResolving}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '190px', justifyContent: 'center' }}
+          >
+            {bulkResolving ? <Loader2 size={16} className="spin" /> : <Zap size={16} />}
+            Analizza e prepara
+          </button>
+        </div>
+      )}
+
+      {showSmartPlan && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(2, 6, 23, 0.82)', backdropFilter: 'blur(7px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+        }} onClick={() => !bulkResolving && setShowSmartPlan(false)}>
+          <div className="glass-panel" style={{
+            width: 'min(720px, 100%)', maxHeight: '90vh', overflowY: 'auto', padding: '26px',
+            border: '1px solid rgba(96, 165, 250, 0.45)', background: '#0b1020',
+          }} onClick={event => event.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <Sparkles size={22} color="#60a5fa" />
+                  <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Anteprima del piano</h3>
+                </div>
+                <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '0.88rem' }}>
+                  Nessuna corrispondenza dubbia verrà applicata automaticamente.
+                </p>
+              </div>
+              <button onClick={() => setShowSmartPlan(false)} disabled={bulkResolving} aria-label="Chiudi"
+                style={{ border: 0, background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                <X size={21} />
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', margin: '22px 0' }}>
+              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid rgba(16,185,129,.35)', background: 'rgba(16,185,129,.09)' }}>
+                <div style={{ color: '#6ee7b7', fontSize: '0.78rem', textTransform: 'uppercase' }}>Associazioni sicure</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.safeMatches.length}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>confidenza almeno 85%</div>
+              </div>
+              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid rgba(245,158,11,.35)', background: 'rgba(245,158,11,.09)' }}>
+                <div style={{ color: '#fbbf24', fontSize: '0.78rem', textTransform: 'uppercase' }}>Da controllare</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.needsReview.length}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>non verranno modificati</div>
+              </div>
+              <div style={{ padding: '16px', borderRadius: '10px', border: '1px solid rgba(59,130,246,.35)', background: 'rgba(59,130,246,.09)' }}>
+                <div style={{ color: '#93c5fd', fontSize: '0.78rem', textTransform: 'uppercase' }}>Nuovi prodotti</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.newProducts.length}</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>creati dai dati reali in fattura</div>
+              </div>
+            </div>
+
+            <div style={{ padding: '14px 16px', borderRadius: '9px', background: 'rgba(255,255,255,.035)', color: 'var(--text-secondary)', fontSize: '0.83rem', lineHeight: 1.55 }}>
+              Il sistema conserverà fornitore, codice, descrizione, prezzo e unità presenti in fattura e salverà l’alias per riconoscere automaticamente le fatture future. I dati mancanti non saranno inventati.
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '22px', flexWrap: 'wrap' }}>
+              <button className="btn" onClick={() => setShowSmartPlan(false)} disabled={bulkResolving}>Annulla</button>
+              <button className="btn btn-primary" onClick={executeSmartPlan} disabled={bulkResolving || (smartPlan.safeMatches.length + smartPlan.newProducts.length === 0)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {bulkResolving ? <Loader2 size={15} className="spin" /> : <CheckCircle2 size={15} />}
+                {bulkResolving ? 'Registrazione in corso…' : `Conferma ${smartPlan.safeMatches.length + smartPlan.newProducts.length} decisioni`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bulk Action & Selection Toolbar */}
       {!loading && filteredItems.length > 0 && (
         <div className="glass-panel" style={{
@@ -1100,7 +1271,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           {/* Right: Quick Bulk Action Buttons */}
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             {/* If items are selected */}
-            {selectedKeys.size > 0 ? (
+            {selectedKeys.size > 0 && (
               <>
                 <button
                   onClick={() => {
@@ -1159,56 +1330,6 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 >
                   Deseleziona
                 </button>
-              </>
-            ) : (
-              /* Global Quick Bulk Action Buttons */
-              <>
-                {(queueData?.summary.reliable_suggestions || 0) > 0 && (
-                  <button
-                    onClick={() => handleResolveBulkSuggestions()}
-                    disabled={bulkResolving}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '0.84rem',
-                      padding: '8px 16px',
-                      background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      color: 'white',
-                      fontWeight: 600,
-                      cursor: bulkResolving ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
-                    }}
-                  >
-                    {bulkResolving ? <Loader2 size={14} className="spin" /> : <Zap size={14} />}
-                    ⚡ Risolvi Tutti i Suggerimenti Affidabili ({queueData?.summary.reliable_suggestions || 0})
-                  </button>
-                )}
-
-                {(queueData?.summary.probable_new_products || 0) > 0 && (
-                  <button
-                    onClick={() => handleResolveBulkAsNew(undefined, 'Food')}
-                    disabled={bulkResolving}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '0.84rem',
-                      padding: '8px 16px',
-                      background: 'rgba(16, 185, 129, 0.15)',
-                      border: '1px solid rgba(16, 185, 129, 0.4)',
-                      borderRadius: '8px',
-                      color: '#34d399',
-                      fontWeight: 600,
-                      cursor: bulkResolving ? 'not-allowed' : 'pointer'
-                    }}
-                  >
-                    {bulkResolving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />}
-                    ➕ Inserisci Tutti i Nuovi in Listino ({queueData?.summary.probable_new_products || 0})
-                  </button>
-                )}
               </>
             )}
           </div>
