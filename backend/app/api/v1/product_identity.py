@@ -694,7 +694,9 @@ def _live_catalog_suggestions(
             (_description_similarity(normalized, name) for name in names),
             default=0.0,
         )
-        if similarity >= 70 and not has_format_conflict(product):
+        # Scores from 55 to 84 are suggestions for manual review only; the
+        # frontend never includes them in automatic bulk associations.
+        if similarity >= 55 and not has_format_conflict(product):
             ranked.append((similarity, product, exact))
 
     ranked.sort(key=lambda item: item[0], reverse=True)

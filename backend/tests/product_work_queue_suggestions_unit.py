@@ -103,6 +103,16 @@ def test_inverted_index_avoids_full_catalog_pairwise_comparisons():
     assert calls <= 3
 
 
+def test_lower_confidence_candidate_is_visible_only_for_manual_review():
+    match = _live_catalog_suggestion(
+        "Bicchiere vino trasparente professionale",
+        [product(901, "Bicchiere trasparente da vino")],
+    )
+
+    assert match is not None
+    assert 55 <= match["score"] < 85
+
+
 if __name__ == "__main__":
     test_exact_current_catalog_name_is_suggested_even_without_saved_candidate()
     test_near_identical_name_is_suggested_when_unambiguous()
@@ -110,4 +120,5 @@ if __name__ == "__main__":
     test_duplicate_exact_catalog_names_remain_for_manual_review()
     test_supplier_code_noise_and_word_order_still_produce_review_suggestion()
     test_inverted_index_avoids_full_catalog_pairwise_comparisons()
+    test_lower_confidence_candidate_is_visible_only_for_manual_review()
     print("PASS: live work-queue suggestions are accurate and format-safe")
