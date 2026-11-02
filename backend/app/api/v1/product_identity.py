@@ -820,6 +820,16 @@ def _live_catalog_suggestions(
     if not ranked:
         return []
 
+    # A single semantic/exact 100% match is conclusive. Lower-scoring lexical
+    # neighbours (for example TANQUERAY TEN beside regular TANQUERAY) are
+    # different commercial products and only make the review screen noisier.
+    # Keep multiple 100% results visible because duplicate catalog entries are
+    # genuinely ambiguous and still require an operator decision.
+    top_score = ranked[0][0]
+    equally_exact = sum(1 for item in ranked if item[0] == 100.0)
+    if top_score == 100.0 and equally_exact == 1:
+        ranked = ranked[:1]
+
     ambiguous = len(ranked) > 1 and ranked[0][0] - ranked[1][0] < 5
     suggestions = []
     for similarity, product, exact, semantic_exact, strong_evidence, shared_tokens, shared_trigrams in ranked[:3]:
