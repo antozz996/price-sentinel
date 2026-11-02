@@ -33,6 +33,12 @@ interface RigaFattura {
   pfa_tipo?: string | null;
   pfa_valore?: number | null;
   netto_rientro?: number | null;
+  anomalia_id?: number | null;
+  anomalia_stato?: string | null;
+  prezzo_listino_snapshot?: number | null;
+  prezzo_fatturato_snapshot?: number | null;
+  delta_prezzo?: number | null;
+  delta_totale?: number | null;
 }
 
 interface Fornitore { id: number; nome_azienda: string; }
@@ -426,11 +432,12 @@ export default function FattureList() {
                                       <th style={{ ...thStyle, fontSize: '0.75rem', textAlign: 'right' }}>Qtà</th>
                                       <th style={{ ...thStyle, fontSize: '0.75rem', textAlign: 'right' }}>Totale</th>
                                       <th style={{ ...thStyle, fontSize: '0.75rem', textAlign: 'center' }}>Matching</th>
+                                      <th style={{ ...thStyle, fontSize: '0.75rem', textAlign: 'center' }}>Anomalia prezzo</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {righe.map(r => (
-                                      <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                      <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: r.anomalia_id ? 'rgba(239,68,68,0.08)' : 'transparent' }}>
                                         <td style={{ ...tdStyle, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.numero_linea}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem' }}>{r.descrizione_fornitore_raw || '—'}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{r.codice_fornitore_raw || '—'}</td>
@@ -458,6 +465,17 @@ export default function FattureList() {
                                           }}>
                                             {r.stato_matching}
                                           </span>
+                                        </td>
+                                        <td style={{ ...tdStyle, textAlign: 'center', minWidth: '190px' }}>
+                                          {r.anomalia_id ? (
+                                            <div style={{ color: '#fca5a5', fontSize: '0.75rem', lineHeight: 1.45 }}>
+                                              <div style={{ fontWeight: 700, color: '#ef4444' }}>Scostamento €{Number(r.delta_totale || 0).toFixed(2)}</div>
+                                              <div>Pattuito €{Number(r.prezzo_listino_snapshot || 0).toFixed(2)} · Fatturato €{Number(r.prezzo_fatturato_snapshot || 0).toFixed(2)}</div>
+                                              <div>+€{Number(r.delta_prezzo || 0).toFixed(2)} per unità</div>
+                                            </div>
+                                          ) : (
+                                            <span style={{ color: 'var(--text-secondary)' }}>—</span>
+                                          )}
                                         </td>
                                       </tr>
                                     ))}
