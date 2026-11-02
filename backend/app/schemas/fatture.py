@@ -76,6 +76,14 @@ class RigaFatturaResponse(BaseModel):
     pfa_valore: Decimal | None = None
     netto_rientro: Decimal | None = None
 
+    # Dettaglio dell'eventuale scostamento prezzo associato alla riga.
+    anomalia_id: int | None = None
+    anomalia_stato: str | None = None
+    prezzo_listino_snapshot: Decimal | None = None
+    prezzo_fatturato_snapshot: Decimal | None = None
+    delta_prezzo: Decimal | None = None
+    delta_totale: Decimal | None = None
+
     model_config = {"from_attributes": True}
 
 

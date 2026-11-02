@@ -243,6 +243,29 @@ async def list_righe_fattura(
     )
     righe = result.scalars().all()
 
+    # Espone nel dettaglio fattura quale riga ha generato l'anomalia e gli
+    # snapshot usati nel confronto. Il matching prodotto e il controllo prezzo
+    # sono due informazioni distinte e devono essere visibili insieme.
+    riga_ids = [r.id for r in righe]
+    anomalies_by_line = {}
+    if riga_ids:
+        anomalies_result = await db.execute(
+            select(Anomalia).where(Anomalia.riga_fattura_id.in_(riga_ids))
+        )
+        anomalies_by_line = {
+            anomaly.riga_fattura_id: anomaly
+            for anomaly in anomalies_result.scalars().all()
+        }
+
+    for riga in righe:
+        anomaly = anomalies_by_line.get(riga.id)
+        riga.anomalia_id = anomaly.id if anomaly else None
+        riga.anomalia_stato = anomaly.stato_validazione.value if anomaly else None
+        riga.prezzo_listino_snapshot = anomaly.prezzo_listino_snapshot if anomaly else None
+        riga.prezzo_fatturato_snapshot = anomaly.prezzo_fatturato_snapshot if anomaly else None
+        riga.delta_prezzo = anomaly.delta_prezzo if anomaly else None
+        riga.delta_totale = anomaly.delta_totale if anomaly else None
+
     # Resolve commercial agreement (PFA) details for each matched line item
     skus = [r.sku_interno for r in righe if r.sku_interno]
     if skus:
