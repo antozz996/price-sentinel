@@ -254,7 +254,19 @@ jobs:
           assert "from scripts.ensure_v2_staging import validate" in admin_bootstrap
           assert "getpass.getpass(" in admin_bootstrap
           vercel = json.loads(Path("vercel.json").read_text())
-          assert not vercel.get("rewrites"), "Staging frontend must not proxy V1 backend"
+          rewrites = vercel.get("rewrites", [])
+          allowed_spa_rewrites = {
+              ("/fornitore/listino/:path*", "/index.html"),
+              ("/god", "/index.html"),
+          }
+          assert {
+              (rewrite.get("source"), rewrite.get("destination"))
+              for rewrite in rewrites
+          }.issubset(allowed_spa_rewrites), "Vercel rewrites may only serve approved local SPA routes"
+          assert all(
+              not str(rewrite.get("destination", "")).startswith(("http://", "https://", "/api"))
+              for rewrite in rewrites
+          ), "Staging frontend must not proxy any backend"
           assert not vercel.get("redirects"), "Staging frontend must not redirect to V1"
           frontend_api = Path("frontend/src/api.ts").read_text()
           assert "VITE_API_BASE" in frontend_api
