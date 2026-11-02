@@ -2,6 +2,16 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/fornitore/listino/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/god",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
