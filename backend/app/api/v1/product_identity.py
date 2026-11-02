@@ -717,6 +717,18 @@ def _live_catalog_suggestions(
 
     line_identity = identity_tokens(line_tokens)
 
+    def effective_volume_ml(description: str, attributes: dict[str, Any]) -> int | None:
+        """Read explicit units and common invoice shorthand such as trailing 0.70."""
+        volume = attributes.get("volume_ml")
+        if volume is not None:
+            return int(volume)
+        bare_litres = re.search(r"(?:^|\s)(0[.,]\d{1,3})(?:\s|$)", description)
+        if not bare_litres:
+            return None
+        return int(round(float(bare_litres.group(1).replace(",", ".")) * 1000))
+
+    line_volume_ml = effective_volume_ml(raw_description, line_attributes)
+
     def has_format_conflict(product: Product) -> bool:
         # Older Sheet imports can carry the format only in the product name
         # (for example "1 LT") while the structured columns are NULL. Treat
@@ -724,7 +736,7 @@ def _live_catalog_suggestions(
         # the same purchasable item as 1 litre.
         product_attributes = extract_candidate_attributes(product.canonical_name or "")
         comparisons = (
-            (line_attributes.get("volume_ml"), product.volume_ml or product_attributes.get("volume_ml")),
+            (line_volume_ml, product.volume_ml or effective_volume_ml(product.canonical_name or "", product_attributes)),
             (line_attributes.get("weight_g"), product.weight_g or product_attributes.get("weight_g")),
         )
         if any(left is not None and right is not None and left != right for left, right in comparisons):
@@ -765,24 +777,44 @@ def _live_catalog_suggestions(
         )
         candidate_ids = set(ranked_evidence[:80])
 
-    ranked: list[tuple[float, Product, bool, bool, int, int]] = []
+    ranked: list[tuple[float, Product, bool, bool, bool, int, int]] = []
     for product_id in candidate_ids:
         product = index["products_by_id"][product_id]
         names = index["names_by_id"][product_id]
         exact = normalized in names
+        product_attributes = extract_candidate_attributes(product.canonical_name or "")
+        product_volume_ml = product.volume_ml or effective_volume_ml(
+            product.canonical_name or "", product_attributes
+        )
+        product_weight_g = product.weight_g or product_attributes.get("weight_g")
+        same_measured_format = bool(
+            (line_volume_ml is not None and product_volume_ml == line_volume_ml)
+            or (
+                line_attributes.get("weight_g") is not None
+                and product_weight_g == line_attributes.get("weight_g")
+            )
+        )
+        product_identity = identity_tokens(index["tokens_by_id"][product_id])
+        semantic_exact = bool(
+            not exact
+            and line_identity
+            and line_identity == product_identity
+            and same_measured_format
+            and not has_format_conflict(product)
+        )
         shared_tokens = len(line_tokens & index["tokens_by_id"][product_id])
         shared_trigrams = len(line_trigrams & index["trigrams_by_id"][product_id])
-        similarity = 100.0 if exact else max(
+        similarity = 100.0 if (exact or semantic_exact) else max(
             (_description_similarity(normalized, name) for name in names),
             default=0.0,
         )
         product_tokens = index["tokens_by_id"][product_id]
-        strong_evidence = exact or (line_tokens == product_tokens and similarity >= 92)
+        strong_evidence = exact or semantic_exact or (line_tokens == product_tokens and similarity >= 92)
         # Below 70 the lexical resemblance is too weak to be useful and often
         # reflects only a shared format or product family. Keep those rows as
         # unassociated instead of presenting a misleading percentage.
         if similarity >= 70 and not has_format_conflict(product) and not has_identity_conflict(product):
-            ranked.append((similarity, product, exact, strong_evidence, shared_tokens, shared_trigrams))
+            ranked.append((similarity, product, exact, semantic_exact, strong_evidence, shared_tokens, shared_trigrams))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
     if not ranked:
@@ -790,8 +822,8 @@ def _live_catalog_suggestions(
 
     ambiguous = len(ranked) > 1 and ranked[0][0] - ranked[1][0] < 5
     suggestions = []
-    for similarity, product, exact, strong_evidence, shared_tokens, shared_trigrams in ranked[:3]:
-        score = 100.0 if exact else round(similarity, 1)
+    for similarity, product, exact, semantic_exact, strong_evidence, shared_tokens, shared_trigrams in ranked[:3]:
+        score = 100.0 if (exact or semantic_exact) else round(similarity, 1)
         if ambiguous or not strong_evidence:
             score = min(score, 84.0)
         suggestions.append({
@@ -803,6 +835,7 @@ def _live_catalog_suggestions(
             "reason_json": {
                 "source": "live_catalog",
                 "exact_normalized_name": exact,
+                "semantic_exact_name_and_format": semantic_exact,
                 "fuzzy_score": round(similarity, 1),
                 "format_conflict": False,
                 "ambiguous": ambiguous,

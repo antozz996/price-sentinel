@@ -862,8 +862,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     [filteredItems, selectedKeys]
   );
 
-  const selectedStrongSuggestions = useMemo(
-    () => selectedItems.filter(item => (item.best_candidate?.score || 0) >= 85),
+  const selectedSuggestedItems = useMemo(
+    () => selectedItems.filter(item => Boolean(item.best_candidate)),
     [selectedItems]
   );
 
@@ -1399,9 +1399,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               <>
                 <button
                   onClick={() => {
-                    handleResolveBulkSuggestions(selectedStrongSuggestions);
+                    handleResolveBulkSuggestions(selectedSuggestedItems);
                   }}
-                  disabled={bulkResolving || selectedStrongSuggestions.length === 0}
+                  disabled={bulkResolving || selectedSuggestedItems.length === 0}
                   className="btn btn-primary"
                   style={{
                     display: 'flex',
@@ -1412,7 +1412,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   }}
                 >
                   {bulkResolving ? <Loader2 size={14} className="spin" /> : <Zap size={14} />}
-                  Accetta Suggerimenti Forti ({selectedStrongSuggestions.length})
+                  Associa selezionati ai suggerimenti ({selectedSuggestedItems.length})
                 </button>
 
                 <select
