@@ -13,8 +13,9 @@ async def get_all_skus(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Ritorna la lista di tutti gli SKU unici associati a righe fattura, prodotti e listini,
-    ordinata per frequenza di acquisto, escludendo gli SKU in blacklist.
+    Ritorna gli SKU canonici di catalogo/listino con la relativa frequenza di
+    acquisto. Descrizioni grezze e alias fornitore non sono prodotti autonomi:
+    mostrarli qui creerebbe duplicati apparenti nelle analisi prezzi.
     """
     sql = """
         WITH all_skus AS (
@@ -32,21 +33,7 @@ async def get_all_skus(
 
             UNION ALL
 
-            -- 2. Righe fattura senza SKU interno (usano descrizione raw)
-            SELECT 
-                rf.descrizione_fornitore_raw as sku, 
-                rf.descrizione_fornitore_raw as nome_prodotto,
-                COUNT(rf.id) as total_acquisti
-            FROM righe_fattura rf
-            WHERE rf.sku_interno IS NULL 
-              AND rf.descrizione_fornitore_raw IS NOT NULL 
-              AND LENGTH(TRIM(rf.descrizione_fornitore_raw)) > 0
-              AND rf.descrizione_fornitore_raw NOT IN (SELECT sku_interno FROM skus_esclusi)
-            GROUP BY rf.descrizione_fornitore_raw
-
-            UNION ALL
-
-            -- 3. Catalogo Products
+            -- 2. Catalogo Products
             SELECT 
                 p.sku_interno as sku,
                 COALESCE(p.canonical_name, p.sku_interno) as nome_prodotto,
@@ -57,19 +44,7 @@ async def get_all_skus(
 
             UNION ALL
 
-            -- 4. Alias da SupplierProductAlias
-            SELECT 
-                spa.raw_description as sku,
-                COALESCE(p.canonical_name, spa.raw_description) as nome_prodotto,
-                0 as total_acquisti
-            FROM supplier_product_aliases spa
-            LEFT JOIN products p ON p.id = spa.product_id
-            WHERE spa.raw_description IS NOT NULL
-              AND spa.raw_description NOT IN (SELECT sku_interno FROM skus_esclusi)
-
-            UNION ALL
-
-            -- 5. Listino Master
+            -- 3. Listino Master
             SELECT 
                 lm.sku_interno as sku,
                 COALESCE(lm.descrizione, lm.sku_interno) as nome_prodotto,

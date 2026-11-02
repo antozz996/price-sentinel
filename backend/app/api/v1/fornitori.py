@@ -133,6 +133,43 @@ async def create_fornitore(
         await db.flush()
         return existing_supplier
 
+    # A supplier may first enter from the Sheet without fiscal data and later
+    # arrive in an electronic invoice with its real VAT number. Promote that
+    # provisional TEMP record instead of creating a second supplier with the
+    # same commercial identity and splitting prices from invoices.
+    if not clean_piva.startswith("TEMP"):
+        identity_key = "".join(char for char in clean_nome.casefold() if char.isalnum())
+        provisional_rows = (
+            await db.scalars(
+                select(Fornitore)
+                .options(noload("*"))
+                .where(
+                    Fornitore.partita_iva.like("TEMP%"),
+                    Fornitore.archived_at.is_(None),
+                )
+            )
+        ).all()
+        provisional_matches = [
+            supplier for supplier in provisional_rows
+            if "".join(char for char in supplier.nome_azienda.casefold() if char.isalnum()) == identity_key
+        ]
+        if len(provisional_matches) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Più fornitori provvisori corrispondono a '{clean_nome}': uniscili prima di assegnare la P.IVA",
+            )
+        if provisional_matches:
+            provisional = provisional_matches[0]
+            provisional.partita_iva = clean_piva
+            provisional.nome_azienda = clean_nome
+            provisional.attivo_whitelist = data.attivo_whitelist
+            if data.email_contatto:
+                provisional.email_contatto = data.email_contatto
+            if data.telefono_contatto:
+                provisional.telefono_contatto = data.telefono_contatto.strip()
+            await db.flush()
+            return provisional
+
     fornitore = Fornitore(
         partita_iva=clean_piva,
         nome_azienda=clean_nome,
