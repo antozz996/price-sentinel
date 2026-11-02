@@ -100,6 +100,13 @@ async def run() -> None:
         normalized_name=normalize_text("VODKA ABSOLUT 1 LT"),
         is_active=True,
     )
+    vodka_belvedere = Product(
+        id=9003,
+        sku_interno="TEST-VODKA-BELVEDERE-70CL",
+        canonical_name="VODKA BELVEDERE 70 CL",
+        normalized_name=normalize_text("VODKA BELVEDERE 70 CL"),
+        is_active=True,
+    )
     exact_suggestions = _live_catalog_suggestions(
         "ACQUA FERRARELLE 0.75 VR VETRO", [ferrarelle, vodka_litre]
     )
@@ -110,8 +117,10 @@ async def run() -> None:
         and exact_suggestions[0]["score"] == 100.0,
     )
     check(
-        "70 cl is not suggested as the one litre product",
-        _live_catalog_suggestions("VODKA ABSOLUT 70 CL", [vodka_litre]) == [],
+        "70 cl Absolut is neither one litre nor a different vodka brand",
+        _live_catalog_suggestions(
+            "VODKA ABSOLUT 70 CL", [vodka_litre, vodka_belvedere]
+        ) == [],
     )
 
     seed()
