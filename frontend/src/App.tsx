@@ -31,7 +31,7 @@ const GodModeControlRoom = lazy(() => import('./components/GodModeControlRoom'))
 const UnlistedProductsResolver = lazy(() => import('./components/UnlistedProductsResolver'))
 const SupplierPriceForms = lazy(() => import('./components/SupplierPriceForms'))
 const SupplierPricePublicForm = lazy(() => import('./components/SupplierPricePublicForm'))
-import { API_BASE, fetchWithAuth, getHeaders } from './api'
+import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession } from './api'
 
 type UserProfile = {
   id: number
@@ -263,6 +263,28 @@ export default function App() {
     window.addEventListener('unauthorized', handleUnauthorized);
     return () => window.removeEventListener('unauthorized', handleUnauthorized);
   }, []);
+
+  useEffect(() => {
+    if (!isAuth) return;
+
+    const renewIfNeeded = () => {
+      void refreshAuthSession();
+    };
+    const interval = window.setInterval(renewIfNeeded, 5 * 60 * 1000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') renewIfNeeded();
+    };
+
+    window.addEventListener('focus', renewIfNeeded);
+    document.addEventListener('visibilitychange', onVisibility);
+    renewIfNeeded();
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', renewIfNeeded);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isAuth]);
 
   useEffect(() => {
     if (!isAuth) return

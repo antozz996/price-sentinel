@@ -41,6 +41,54 @@ export function getHeaders(customHeaders: Record<string, string> = {}): Record<s
   return headers;
 }
 
+let sessionRefreshInFlight: Promise<boolean> | null = null;
+
+function tokenSecondsRemaining(token: string): number {
+  try {
+    const encoded = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+    const payload = JSON.parse(atob(padded));
+    return typeof payload.exp === 'number' ? payload.exp - Date.now() / 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Keep an actively used session alive without storing the user's password. */
+export function refreshAuthSession(): Promise<boolean> {
+  const token = localStorage.getItem('token');
+  if (!token) return Promise.resolve(false);
+
+  // Refresh only in the last 15 minutes of the 30-minute JWT lifetime.
+  // A five-minute caller interval leaves ample margin without API noise.
+  if (tokenSecondsRemaining(token) > 15 * 60) return Promise.resolve(true);
+  if (sessionRefreshInFlight) return sessionRefreshInFlight;
+
+  sessionRefreshInFlight = fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then(async response => {
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          window.dispatchEvent(new Event('unauthorized'));
+        }
+        return false;
+      }
+      const data = await response.json();
+      if (!data?.access_token) return false;
+      localStorage.setItem('token', data.access_token);
+      return true;
+    })
+    .catch(() => false)
+    .finally(() => {
+      sessionRefreshInFlight = null;
+    });
+
+  return sessionRefreshInFlight;
+}
+
 function formatApiErrorDetail(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
