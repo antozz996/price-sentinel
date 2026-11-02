@@ -151,6 +151,12 @@ async def run() -> None:
         response = await client.get("/api/v1/ingestion/uploads", headers=admin)
         check("admin can read upload history", response.status_code == 200 and len(response.json()) == 4)
 
+        response = await client.post("/api/v1/intelligence/auto-catalog-initialize", headers=admin)
+        check(
+            "unsafe automatic SKU initialization is disabled",
+            response.status_code == 410 and scalar("select count(*) from listino_master") == 0,
+        )
+
     print(json.dumps({"status": "PASS", "scenario": "CI synthetic XML ingestion"}), flush=True)
 
 
