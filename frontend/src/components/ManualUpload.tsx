@@ -158,7 +158,11 @@ export default function ManualUpload({
           }
         };
 
-        xhr.onerror = () => reject(new Error('Errore di connessione di rete'));
+        xhr.onerror = () => reject(new Error(
+          navigator.onLine
+            ? 'La risposta del server è stata interrotta durante una lunga elaborazione. Le fatture già processate non verranno duplicate: puoi riprovare in sicurezza.'
+            : 'Connessione Internet assente. Controlla la rete e riprova.'
+        ));
         xhr.send(formData);
 
         progressTimer = setInterval(async () => {
