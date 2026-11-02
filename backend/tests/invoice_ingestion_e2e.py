@@ -13,7 +13,10 @@ import httpx
 import psycopg2
 
 from app.main import app
+from app.api.v1.product_identity import _live_catalog_suggestions
+from app.models.products import Product
 from app.services.auth import create_access_token
+from app.services.normalization import normalize_text
 
 DSN = os.environ["TEST_DATABASE_DSN"]
 
@@ -83,6 +86,34 @@ def seed() -> None:
 
 
 async def run() -> None:
+    ferrarelle = Product(
+        id=9001,
+        sku_interno="TEST-FERRARELLE-075",
+        canonical_name="ACQUA FERRARELLE 0.75 VR VETRO",
+        normalized_name=normalize_text("ACQUA FERRARELLE 0.75 VR VETRO"),
+        is_active=True,
+    )
+    vodka_litre = Product(
+        id=9002,
+        sku_interno="TEST-VODKA-1L",
+        canonical_name="VODKA ABSOLUT 1 LT",
+        normalized_name=normalize_text("VODKA ABSOLUT 1 LT"),
+        is_active=True,
+    )
+    exact_suggestions = _live_catalog_suggestions(
+        "ACQUA FERRARELLE 0.75 VR VETRO", [ferrarelle, vodka_litre]
+    )
+    check(
+        "exact normalized product is scored at 100 percent",
+        bool(exact_suggestions)
+        and exact_suggestions[0]["product_id"] == ferrarelle.id
+        and exact_suggestions[0]["score"] == 100.0,
+    )
+    check(
+        "70 cl is not suggested as the one litre product",
+        _live_catalog_suggestions("VODKA ABSOLUT 70 CL", [vodka_litre]) == [],
+    )
+
     seed()
     admin = {"Authorization": f"Bearer {create_access_token(1, 'admin')}"}
     manager = {"Authorization": f"Bearer {create_access_token(2, 'manager')}"}

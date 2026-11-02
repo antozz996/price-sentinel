@@ -697,14 +697,19 @@ def _live_catalog_suggestions(
     line_attributes = extract_candidate_attributes(raw_description)
 
     def has_format_conflict(product: Product) -> bool:
+        # Older Sheet imports can carry the format only in the product name
+        # (for example "1 LT") while the structured columns are NULL. Treat
+        # the name as authoritative fallback so 70 cl is never proposed as
+        # the same purchasable item as 1 litre.
+        product_attributes = extract_candidate_attributes(product.canonical_name or "")
         comparisons = (
-            (line_attributes.get("volume_ml"), product.volume_ml),
-            (line_attributes.get("weight_g"), product.weight_g),
+            (line_attributes.get("volume_ml"), product.volume_ml or product_attributes.get("volume_ml")),
+            (line_attributes.get("weight_g"), product.weight_g or product_attributes.get("weight_g")),
         )
         if any(left is not None and right is not None and left != right for left, right in comparisons):
             return True
         line_pack = line_attributes.get("pack_qty")
-        product_pack = product.unit_count
+        product_pack = product.unit_count if product.unit_count and product.unit_count > 1 else product_attributes.get("pack_qty")
         return bool(line_pack and product_pack and line_pack != product_pack)
 
     exact_ids = set(index["exact_name_ids"].get(normalized, set()))
@@ -878,11 +883,13 @@ async def get_match_work_queue(
 
     items = []
     for group in groups.values():
-        alternatives = sorted(group["candidates"].values(), key=lambda item: item["score"], reverse=True)[:3]
-        if not alternatives:
-            alternatives = _live_catalog_suggestions(
-                group["raw_description"], active_products, live_catalog_index
-            )
+        # Persisted candidates describe the catalog at ingestion time and may
+        # contain an obsolete score or miss a format conflict. Recalculate on
+        # every queue read against the current catalog; the displayed
+        # percentage must represent today's evidence, not a stale snapshot.
+        alternatives = _live_catalog_suggestions(
+            group["raw_description"], active_products, live_catalog_index
+        )
         attributes = extract_candidate_attributes(group["raw_description"])
         best_candidate = alternatives[0] if alternatives else None
         items.append({
