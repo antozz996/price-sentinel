@@ -183,6 +183,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
   // Bulk selection and resolution state
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkNewCategory, setBulkNewCategory] = useState('');
   const [bulkResolving, setBulkResolving] = useState(false);
   const [showSmartPlan, setShowSmartPlan] = useState(false);
   const [smartPlanTab, setSmartPlanTab] = useState<'safe' | 'review' | 'new'>('safe');
@@ -648,29 +649,18 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   };
 
   // Bulk Resolve: Insert All / Selected as New Products in Listino
-  const handleResolveBulkAsNew = async (targetItems?: WorkQueueItem[]) => {
+  const handleResolveBulkAsNew = async (targetItems?: WorkQueueItem[], categoryOverride?: string) => {
     const itemsToResolve = targetItems || queueData?.items.filter(i => !i.best_candidate) || [];
     if (itemsToResolve.length === 0) {
       alert('Nessun prodotto da inserire come nuovo.');
       return;
     }
 
-    const unclassifiedItems = itemsToResolve.filter(item => !item.suggested_product.category?.trim());
-    if (unclassifiedItems.length > 0) {
-      const examples = unclassifiedItems.slice(0, 5).map(item => item.raw_description).join('\n• ');
-      alert(
-        `${unclassifiedItems.length} prodotti non hanno una categoria verificata e non possono essere creati in blocco. ` +
-        `Apri ciascuna voce e scegli la categoria corretta prima di inserirla.\n\nEsempi:\n• ${examples}`
-      );
+    const bulkCategory = categoryOverride?.trim();
+    if (!bulkCategory || !CATEGORIES.includes(bulkCategory)) {
+      alert('Seleziona la categoria da applicare a tutti i prodotti scelti.');
       return;
     }
-
-    const categories = [...new Set(itemsToResolve.map(item => item.suggested_product.category!.trim()))];
-    if (categories.length > 1) {
-      alert('La selezione contiene categorie diverse. Crea i prodotti per gruppi della stessa categoria oppure classificali singolarmente.');
-      return;
-    }
-    const bulkCategory = categories[0];
 
     if (!window.confirm(`Sei sicuro di voler creare ${itemsToResolve.length} nuovi prodotti nel listino master con categoria "${bulkCategory}"?`)) {
       return;
@@ -682,7 +672,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       const payload = {
         items: itemsToResolve.map(item => {
           const rawClean = item.raw_description.trim();
-          const cat = item.suggested_product.category!.trim();
+          const cat = bulkCategory;
           const subcat = item.suggested_product.subcategory || '';
           const rawPrice = item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined;
           const rawUom = item.unita_misura || 'Pz';
@@ -720,6 +710,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       setActionSuccess(`✅ Creati e inseriti a listino ${data.resolved_items || itemsToResolve.length} nuovi prodotti!`);
       setTimeout(() => setActionSuccess(null), 6000);
       setSelectedKeys(new Set());
+      setBulkNewCategory('');
       await loadAll();
     } catch (err: any) {
       setError(err.message || 'Errore durante la registrazione massiva');
@@ -1424,11 +1415,33 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   Accetta Suggerimenti Forti ({selectedStrongSuggestions.length})
                 </button>
 
+                <select
+                  value={bulkNewCategory}
+                  onChange={event => setBulkNewCategory(event.target.value)}
+                  disabled={bulkResolving}
+                  aria-label="Categoria per i nuovi prodotti selezionati"
+                  title="Questa categoria verrà applicata a tutti i prodotti creati come nuovi"
+                  style={{
+                    minWidth: '190px',
+                    padding: '8px 12px',
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    border: `1px solid ${bulkNewCategory ? 'rgba(16, 185, 129, 0.55)' : 'rgba(245, 158, 11, 0.55)'}`,
+                    borderRadius: '8px',
+                    color: bulkNewCategory ? '#d1fae5' : '#fbbf24',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="">Scegli categoria…</option>
+                  {CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
+                </select>
+
                 <button
                   onClick={() => {
-                    handleResolveBulkAsNew(selectedItems);
+                    handleResolveBulkAsNew(selectedItems, bulkNewCategory);
                   }}
-                  disabled={bulkResolving || selectedItems.length === 0}
+                  disabled={bulkResolving || selectedItems.length === 0 || !bulkNewCategory}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1440,7 +1453,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     borderRadius: '8px',
                     color: '#34d399',
                     fontWeight: 600,
-                    cursor: 'pointer'
+                    cursor: bulkNewCategory ? 'pointer' : 'not-allowed',
+                    opacity: bulkNewCategory ? 1 : 0.55
                   }}
                 >
                   {bulkResolving ? <Loader2 size={14} className="spin" /> : <Plus size={14} />}
