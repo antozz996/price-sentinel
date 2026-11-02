@@ -778,9 +778,10 @@ def _live_catalog_suggestions(
         )
         product_tokens = index["tokens_by_id"][product_id]
         strong_evidence = exact or (line_tokens == product_tokens and similarity >= 92)
-        # Permissive proposals start at 40, but weak lexical evidence is capped
-        # below the automatic threshold and therefore always requires review.
-        if similarity >= 40 and not has_format_conflict(product) and not has_identity_conflict(product):
+        # Below 70 the lexical resemblance is too weak to be useful and often
+        # reflects only a shared format or product family. Keep those rows as
+        # unassociated instead of presenting a misleading percentage.
+        if similarity >= 70 and not has_format_conflict(product) and not has_identity_conflict(product):
             ranked.append((similarity, product, exact, strong_evidence, shared_tokens, shared_trigrams))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
