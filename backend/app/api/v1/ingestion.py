@@ -46,6 +46,7 @@ router = APIRouter()
 async def upload_fatture(
     files: List[UploadFile] = File(...),
     note: str | None = Form(None),
+    progress_id: str | None = Form(None),
     current_user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -56,7 +57,10 @@ async def upload_fatture(
         )
 
     # 1. Crea Batch
-    batch_id = str(uuid.uuid4())
+    try:
+        batch_id = str(uuid.UUID(progress_id)) if progress_id else str(uuid.uuid4())
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=400, detail="Identificativo avanzamento non valido")
     batch = UploadBatch(
         id=batch_id,
         location_id=current_user.location_id,
@@ -102,7 +106,9 @@ async def upload_fatture(
             logger.warning(f"File {upload_file.filename} estensione non supportata")
 
     batch.file_totali = len(xml_files_to_process) + batch.errori_formato
-    await db.flush()
+    # Pubblica il totale appena l'archivio è stato estratto. Il client può così
+    # mostrare un avanzamento reale mentre questa stessa richiesta continua.
+    await db.commit()
 
     non_whitelistati_fornitori = []
     non_registrate_location = []
@@ -117,6 +123,7 @@ async def upload_fatture(
             if not parsed.is_valid:
                 batch.errori_formato += 1
                 batch.file_elaborati += 1
+                await db.commit()
                 continue
 
             # Idempotenza
@@ -139,6 +146,7 @@ async def upload_fatture(
                 if existing_fattura is not None:
                     batch.gia_presenti += 1
                     batch.file_elaborati += 1
+                    await db.commit()
                     continue
                 else:
                     # Parked or error - re-process existing XML record to catch unregistered entities
@@ -159,6 +167,7 @@ async def upload_fatture(
                     batch.file_elaborati += 1
                     batch.anomalie_generate += report.get("anomalie_generate", 0)
                     batch_righe_parking += report.get("righe_parking", 0)
+                    await db.commit()
                     continue
 
             try:
@@ -196,16 +205,19 @@ async def upload_fatture(
                 batch.file_elaborati += 1
                 batch.anomalie_generate += report.get("anomalie_generate", 0)
                 batch_righe_parking += report.get("righe_parking", 0)
+                await db.commit()
             except Exception as nested_exc:
                 logger.info(f"File {filename} errore o già presente: {nested_exc}")
                 batch.gia_presenti += 1
                 batch.file_elaborati += 1
+                await db.commit()
                 continue
             
         except Exception as e:
             logger.error(f"Errore durante processamento {filename}: {e}")
             batch.errori_formato += 1
             batch.file_elaborati += 1
+            await db.commit()
 
     # 4. Finalizza Batch
     batch.stato = StatoBatch.completato if batch.errori_formato == 0 else StatoBatch.completato_con_errori

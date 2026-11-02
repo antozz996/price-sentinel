@@ -20,6 +20,15 @@ interface BatchHistoryItem {
   note: string | null;
 }
 
+interface LiveBatchProgress {
+  stato: 'in_elaborazione' | 'completato' | 'completato_con_errori';
+  file_totali: number;
+  file_elaborati: number;
+  gia_presenti: number;
+  errori_formato: number;
+  anomalie_generate: number;
+}
+
 interface UnregisteredSupplier {
   partita_iva: string;
   nome_azienda: string;
@@ -41,7 +50,8 @@ export default function ManualUpload({
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [uploadStep, setUploadStep] = useState<'uploading' | 'processing' | 'done' | null>(null);
+  const [uploadStep, setUploadStep] = useState<'uploading' | 'extracting' | 'processing' | 'finalizing' | 'done' | null>(null);
+  const [liveProgress, setLiveProgress] = useState<LiveBatchProgress | null>(null);
   const [reprocessing, setReprocessing] = useState(false);
   const [summary, setSummary] = useState<BatchSummary | null>(null);
   const [history, setHistory] = useState<BatchHistoryItem[]>([]);
@@ -87,6 +97,7 @@ export default function ManualUpload({
       setError(null);
       setUploadProgress(null);
       setUploadStep(null);
+      setLiveProgress(null);
     }
   };
 
@@ -96,6 +107,7 @@ export default function ManualUpload({
     setUploading(true);
     setUploadProgress(0);
     setUploadStep('uploading');
+    setLiveProgress(null);
     setError(null);
     setAdminNotice(null);
     setSummary(null);
@@ -104,10 +116,13 @@ export default function ManualUpload({
     const formData = new FormData();
     files.forEach(f => formData.append('files', f));
     formData.append('note', note);
+    const progressId = crypto.randomUUID();
+    formData.append('progress_id', progressId);
 
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
     try {
       const token = localStorage.getItem('token');
-      
+
       const result: any = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `${API_BASE}/ingestion/upload`);
@@ -119,7 +134,7 @@ export default function ManualUpload({
             const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
             setUploadProgress(percent);
             if (percent >= 99) {
-              setUploadStep('processing');
+              setUploadStep('extracting');
             }
           }
         };
@@ -145,7 +160,31 @@ export default function ManualUpload({
 
         xhr.onerror = () => reject(new Error('Errore di connessione di rete'));
         xhr.send(formData);
+
+        progressTimer = setInterval(async () => {
+          try {
+            const response = await fetch(`${API_BASE}/ingestion/batch/${progressId}`, {
+              headers: {
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                'bypass-tunnel-reminder': 'true'
+              }
+            });
+            if (!response.ok) return;
+            const progress: LiveBatchProgress = await response.json();
+            setLiveProgress(progress);
+            if (progress.stato === 'in_elaborazione') {
+              setUploadStep(progress.file_elaborati >= progress.file_totali && progress.file_totali > 0 ? 'finalizing' : 'processing');
+            } else {
+              setUploadStep('done');
+            }
+          } catch {
+            // Il caricamento principale resta autorevole; un singolo polling
+            // fallito non deve interrompere l'importazione.
+          }
+        }, 500);
       });
+
+      if (progressTimer) clearInterval(progressTimer);
 
       setSummary(result.riepilogo);
       setFiles([]);
@@ -185,9 +224,25 @@ export default function ManualUpload({
     } catch (err: any) {
       setError(err?.message || "Si è verificato un errore durante l'elaborazione dei file.");
     } finally {
+      if (progressTimer) clearInterval(progressTimer);
       setUploading(false);
     }
   };
+
+  const processedFiles = liveProgress?.file_elaborati || 0;
+  const totalFiles = liveProgress?.file_totali || 0;
+  const processingPercent = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
+  const overallProgress = uploadStep === 'uploading'
+    ? Math.round((uploadProgress || 0) * 0.2)
+    : uploadStep === 'extracting'
+      ? 20
+      : uploadStep === 'processing'
+        ? 25 + Math.round(processingPercent * 0.7)
+        : uploadStep === 'finalizing'
+          ? 97
+          : uploadStep === 'done'
+            ? 100
+            : 0;
 
   const handleReprocessParked = async () => {
     setReprocessing(true);
@@ -509,11 +564,15 @@ export default function ManualUpload({
                 <span style={{ fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Loader2 className="spinner" size={16} color="#38bdf8" />
                   {uploadStep === 'uploading'
-                    ? `Fase 1/2: Caricamento file in corso (${files.length} file)...`
-                    : 'Fase 2/2: Analisi righe XML e matching prodotti...'}
+                    ? `Fase 1/4: trasferimento di ${files.length} ${files.length === 1 ? 'file' : 'file'}`
+                    : uploadStep === 'extracting'
+                      ? 'Fase 2/4: estrazione e conteggio degli XML'
+                      : uploadStep === 'processing'
+                        ? `Fase 3/4: analisi XML e matching (${processedFiles}/${totalFiles})`
+                        : 'Fase 4/4: salvataggio e finalizzazione'}
                 </span>
                 <span style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.9rem' }}>
-                  {uploadStep === 'uploading' ? `${uploadProgress || 0}%` : '100%'}
+                  {overallProgress}%
                 </span>
               </div>
               
@@ -528,19 +587,50 @@ export default function ManualUpload({
               }}>
                 <div style={{
                   height: '100%',
-                  width: uploadStep === 'uploading' ? `${uploadProgress || 0}%` : '100%',
-                  background: uploadStep === 'uploading' 
-                    ? 'linear-gradient(90deg, #3b82f6, #6366f1, #38bdf8)' 
-                    : 'linear-gradient(90deg, #10b981, #34d399, #38bdf8)',
+                  width: `${overallProgress}%`,
+                  background: 'linear-gradient(90deg, #3b82f6, #10b981, #38bdf8)',
                   borderRadius: '5px',
                   transition: 'width 0.3s ease',
                   boxShadow: '0 0 12px rgba(56, 189, 248, 0.5)'
                 }} />
               </div>
-              
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '8px', fontSize: '0.72rem' }}>
+                {[
+                  ['1', 'Trasferimento', uploadStep !== 'uploading'],
+                  ['2', totalFiles > 0 ? `${totalFiles} XML trovati` : 'Estrazione XML', totalFiles > 0],
+                  ['3', totalFiles > 0 ? `${processedFiles}/${totalFiles} analizzati` : 'Analisi e matching', uploadStep === 'finalizing' || uploadStep === 'done'],
+                  ['4', 'Finalizzazione', uploadStep === 'done']
+                ].map(([number, label, complete]) => (
+                  <div key={String(number)} style={{
+                    padding: '8px', borderRadius: '7px',
+                    border: `1px solid ${complete ? 'rgba(16,185,129,.45)' : 'rgba(148,163,184,.18)'}`,
+                    color: complete ? '#6ee7b7' : 'var(--text-secondary)',
+                    background: complete ? 'rgba(16,185,129,.08)' : 'rgba(255,255,255,.02)'
+                  }}>
+                    <strong style={{ marginRight: '5px' }}>{complete ? '✓' : number}.</strong>{label}
+                  </div>
+                ))}
+              </div>
+
+              {liveProgress && (
+                <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                  <span>Elaborati: <strong style={{ color: 'white' }}>{liveProgress.file_elaborati}</strong></span>
+                  <span>Duplicati: <strong style={{ color: '#fbbf24' }}>{liveProgress.gia_presenti}</strong></span>
+                  <span>Errori: <strong style={{ color: liveProgress.errori_formato ? '#f87171' : '#6ee7b7' }}>{liveProgress.errori_formato}</strong></span>
+                  <span>Anomalie: <strong style={{ color: liveProgress.anomalie_generate ? '#fbbf24' : '#6ee7b7' }}>{liveProgress.anomalie_generate}</strong></span>
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                <span>{uploadStep === 'uploading' ? 'Invio pacchetto dati al server...' : 'Validazione XML, idempotenza e rilevamento anomalie...'}</span>
-                <span>Attendere...</span>
+                <span>{uploadStep === 'uploading'
+                  ? 'Invio sicuro dei dati al server…'
+                  : uploadStep === 'extracting'
+                    ? 'Apertura archivi e verifica dei file…'
+                    : uploadStep === 'processing'
+                      ? 'Validazione, controllo duplicati, matching prodotti e anomalie…'
+                      : 'Consolidamento dei risultati…'}</span>
+                <span>{totalFiles > 0 ? `${processingPercent}% degli XML` : 'Attendere…'}</span>
               </div>
             </div>
           )}
@@ -552,7 +642,7 @@ export default function ManualUpload({
             style={{ padding: '16px', fontSize: '1rem', display: 'flex', justifyContent: 'center', gap: '12px' }}
           >
             {uploading ? <Loader2 className="spinner" /> : <FileUp size={20} />}
-            {uploading ? (uploadStep === 'uploading' ? `Caricamento (${uploadProgress || 0}%)...` : 'Analisi XML in corso...') : 'Inizia Caricamento'}
+            {uploading ? `Elaborazione in corso (${overallProgress}%)…` : 'Inizia Caricamento'}
           </button>
 
         </div>
