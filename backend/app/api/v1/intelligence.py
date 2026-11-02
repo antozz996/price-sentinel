@@ -583,23 +583,30 @@ async def _resolve_sku_metadata(sku_list: list[str], db: AsyncSession):
             func.lower(func.trim(ListinoMaster.sku_interno)) == s_low,
             ListinoMaster.descrizione == sku,
             func.lower(func.trim(ListinoMaster.descrizione)) == s_low,
-            ListinoMaster.codice_fornitore == sku,
-            func.lower(func.trim(ListinoMaster.codice_fornitore)) == s_low,
+            SupplierProductAlias.supplier_code == sku,
+            func.lower(func.trim(SupplierProductAlias.supplier_code)) == s_low,
+            SupplierProductAlias.raw_description == sku,
+            func.lower(func.trim(SupplierProductAlias.raw_description)) == s_low,
         ]
         if len(kws) >= 2:
             lm_conds.append(and_(*[ListinoMaster.descrizione.ilike(f"%{kw}%") for kw in kws]))
         elif len(kws) == 1:
             lm_conds.append(ListinoMaster.descrizione.ilike(f"%{kws[0]}%"))
 
-        lm_stmt = select(ListinoMaster).where(or_(*lm_conds))
+        lm_stmt = (
+            select(ListinoMaster)
+            .outerjoin(
+                SupplierProductAlias,
+                ListinoMaster.supplier_product_alias_id == SupplierProductAlias.id,
+            )
+            .where(or_(*lm_conds))
+        )
         lm_res = await db.execute(lm_stmt)
         for l in lm_res.scalars().all():
             if l.sku_interno:
                 sku_synonyms[sku].add(l.sku_interno.lower().strip())
             if l.descrizione:
                 sku_synonyms[sku].add(l.descrizione.lower().strip())
-            if l.codice_fornitore:
-                sku_synonyms[sku].add(l.codice_fornitore.lower().strip())
             if l.data_scadenza is None or sku not in contracts:
                 contracts[sku] = l
 
