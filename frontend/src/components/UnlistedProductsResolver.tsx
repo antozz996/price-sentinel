@@ -635,6 +635,11 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       });
 
       const data = await res.json();
+      if (res.status === 401) {
+        localStorage.removeItem('token');
+        window.dispatchEvent(new Event('unauthorized'));
+        throw new Error('Sessione scaduta. Accedi nuovamente per continuare.');
+      }
       if (!res.ok) throw new Error(data.detail || 'Errore durante la risoluzione massiva');
 
       setActionSuccess(`✅ Risolti con successo ${data.resolved_items || itemsToResolve.length} prodotti (${data.resolved_lines || 0} righe fattura)!`);
