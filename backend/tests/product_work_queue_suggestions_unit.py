@@ -66,6 +66,21 @@ def test_duplicate_exact_catalog_names_remain_for_manual_review():
     assert all(match["reason_json"]["ambiguous"] for match in matches)
 
 
+def test_unique_exact_match_hides_lower_scoring_product_neighbours():
+    matches = _live_catalog_suggestions(
+        "GIN TANQUERAY 100 CL",
+        [
+            product(21, "GIN TANQUERAY 1 LT", volume_ml=1000),
+            product(22, "GIN TANQUERAY TEN 1 LT", volume_ml=1000),
+            product(23, "GORDON'S GIN 100 CL", volume_ml=1000),
+        ],
+    )
+
+    assert len(matches) == 1
+    assert matches[0]["product_id"] == 21
+    assert matches[0]["score"] == 100
+
+
 def test_supplier_code_noise_and_word_order_still_produce_review_suggestion():
     match = _live_catalog_suggestion(
         "Rock Bar bicchiere Long Drink 370ml 36 pezzi impilabile 516170MEP021990",
@@ -129,6 +144,7 @@ if __name__ == "__main__":
     test_equivalent_unit_notation_is_scored_as_exact()
     test_conflicting_format_is_never_suggested()
     test_duplicate_exact_catalog_names_remain_for_manual_review()
+    test_unique_exact_match_hides_lower_scoring_product_neighbours()
     test_supplier_code_noise_and_word_order_still_produce_review_suggestion()
     test_inverted_index_avoids_full_catalog_pairwise_comparisons()
     test_lower_confidence_candidate_is_visible_only_for_manual_review()
