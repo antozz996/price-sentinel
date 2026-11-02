@@ -104,6 +104,12 @@ async def run() -> None:
         matrix_row = response.json()["rows"][0]
         check("canonical matrix", response.status_code == 200 and response.json()["total"] == 1)
         check("unrelated supplier excluded", matrix_row["eligible_supplier_ids"] == [1, 2])
+        sku_response = await client.get("/api/v1/sku/", headers=admin)
+        check(
+            "price analysis lists canonical SKUs without supplier aliases",
+            sku_response.status_code == 200
+            and [item["sku_interno"] for item in sku_response.json()] == ["WATER-75"],
+        )
         response = await client.get(
             "/api/v1/smart-price-sheet/matrix?location_id=2", headers=manager
         )
@@ -211,6 +217,16 @@ async def run() -> None:
             json={'nome_azienda': 'Synthetic Sheet Supplier Without Fiscal Data'})
         check('sheet supplier registration is idempotent', repeated.status_code == 200
             and repeated.json()['id'] == provisional.json()['id'])
+        promoted = await client.post('/api/v1/fornitori/', headers=admin, json={
+            'nome_azienda': 'Synthetic Sheet Supplier Without Fiscal Data',
+            'partita_iva': '10987654321',
+            'attivo_whitelist': True,
+        })
+        check('real VAT promotes provisional supplier without duplication',
+            promoted.status_code == 201
+            and promoted.json()['id'] == provisional.json()['id']
+            and promoted.json()['partita_iva'] == '10987654321'
+            and scalar("select count(*) from fornitori where nome_azienda='Synthetic Sheet Supplier Without Fiscal Data'") == 1)
 
         reactivated_name = "Synthetic Archived Sheet Supplier"
         reactivated = await client.post('/api/v1/fornitori/sheet-registration', headers=admin,
