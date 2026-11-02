@@ -26,7 +26,7 @@ class BatchFileError(BaseModel):
 
 
 class BatchDetailResponse(BaseModel):
-    batch_id: str
+    batch_id: str = Field(validation_alias="id")
     stato: str
     file_totali: int
     file_elaborati: int

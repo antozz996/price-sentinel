@@ -111,6 +111,23 @@ async def run() -> None:
             str(scalar("select prezzo_netto_normalizzato from righe_fattura limit 1")) == "5.0000",
         )
 
+        progress_id = "12345678-1234-5678-9234-567812345678"
+        response = await client.post(
+            "/api/v1/ingestion/upload",
+            headers=admin,
+            files=upload(XML),
+            data={"progress_id": progress_id},
+        )
+        check("client progress id is preserved", response.status_code == 200 and response.json()["batch_id"] == progress_id)
+        progress = await client.get(f"/api/v1/ingestion/batch/{progress_id}", headers=admin)
+        check(
+            "batch progress is readable",
+            progress.status_code == 200
+            and progress.json()["file_totali"] == 1
+            and progress.json()["file_elaborati"] == 1
+            and progress.json()["stato"] == "completato",
+        )
+
         response = await client.post("/api/v1/ingestion/upload", headers=admin, files=upload(XML))
         check(
             "same invoice deduplicated",
@@ -132,7 +149,7 @@ async def run() -> None:
         )
 
         response = await client.get("/api/v1/ingestion/uploads", headers=admin)
-        check("admin can read upload history", response.status_code == 200 and len(response.json()) == 3)
+        check("admin can read upload history", response.status_code == 200 and len(response.json()) == 4)
 
     print(json.dumps({"status": "PASS", "scenario": "CI synthetic XML ingestion"}), flush=True)
 
