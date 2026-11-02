@@ -34,7 +34,7 @@ def test_exact_current_catalog_name_is_suggested_even_without_saved_candidate():
     assert match["reason_json"]["source"] == "live_catalog"
 
 
-def test_near_identical_name_is_suggested_when_unambiguous():
+def test_equivalent_unit_notation_is_scored_as_exact():
     match = _live_catalog_suggestion(
         "Bicchiere long drink 370 ml impilabile",
         [
@@ -45,7 +45,7 @@ def test_near_identical_name_is_suggested_when_unambiguous():
 
     assert match is not None
     assert match["product_id"] == 8
-    assert 70 <= match["score"] < 85
+    assert match["score"] == 100
 
 
 def test_conflicting_format_is_never_suggested():
@@ -126,7 +126,7 @@ def test_typo_and_singular_plural_are_visible_for_manual_review():
 
 if __name__ == "__main__":
     test_exact_current_catalog_name_is_suggested_even_without_saved_candidate()
-    test_near_identical_name_is_suggested_when_unambiguous()
+    test_equivalent_unit_notation_is_scored_as_exact()
     test_conflicting_format_is_never_suggested()
     test_duplicate_exact_catalog_names_remain_for_manual_review()
     test_supplier_code_noise_and_word_order_still_produce_review_suggestion()

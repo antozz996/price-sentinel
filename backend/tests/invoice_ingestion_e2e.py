@@ -107,6 +107,20 @@ async def run() -> None:
         normalized_name=normalize_text("VODKA BELVEDERE 70 CL"),
         is_active=True,
     )
+    vodka_grey_goose = Product(
+        id=9004,
+        sku_interno="TEST-GREY-GOOSE-70CL",
+        canonical_name="VODKA GREY GOOSE CL70",
+        normalized_name=normalize_text("VODKA GREY GOOSE CL70"),
+        is_active=True,
+    )
+    vodka_keglevich_litre = Product(
+        id=9005,
+        sku_interno="TEST-KEGLEVICH-FRAGOLA-1L",
+        canonical_name="VODKA KEGLEVICH FRAGOLA 1LT",
+        normalized_name=normalize_text("VODKA KEGLEVICH FRAGOLA 1LT"),
+        is_active=True,
+    )
     exact_suggestions = _live_catalog_suggestions(
         "ACQUA FERRARELLE 0.75 VR VETRO", [ferrarelle, vodka_litre]
     )
@@ -120,6 +134,21 @@ async def run() -> None:
         "70 cl Absolut is neither one litre nor a different vodka brand",
         _live_catalog_suggestions(
             "VODKA ABSOLUT 70 CL", [vodka_litre, vodka_belvedere]
+        ) == [],
+    )
+    grey_goose_suggestions = _live_catalog_suggestions(
+        "VODKA GREY GOOSE 70 CL", [vodka_grey_goose]
+    )
+    check(
+        "equivalent unit notation is scored at 100 percent",
+        bool(grey_goose_suggestions)
+        and grey_goose_suggestions[0]["product_id"] == vodka_grey_goose.id
+        and grey_goose_suggestions[0]["score"] == 100.0,
+    )
+    check(
+        "bare 0.70 litres is not matched to one litre",
+        _live_catalog_suggestions(
+            "VODKA KEGLEVICH FRAGOLA 0.70", [vodka_keglevich_litre]
         ) == [],
     )
 
