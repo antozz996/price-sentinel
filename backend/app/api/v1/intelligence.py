@@ -7,7 +7,7 @@ from datetime import date, timedelta, datetime, timezone
 from typing import Any
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy import select, func, and_, or_, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -2031,6 +2031,14 @@ async def auto_catalog_initialize(
     genera automaticamente gli SKU interni basandosi sulla descrizione o codice,
     popola il listino master e la tabella alias, e infine associa tutte le righe di fattura.
     """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail=(
+            "Auto-associazione SKU disattivata: usa Prodotti fuori listino per "
+            "approvare le associazioni o creare nuovi prodotti in modo controllato."
+        ),
+    )
+
     from decimal import Decimal
     import re
     from sqlalchemy import update
