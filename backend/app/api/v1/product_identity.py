@@ -695,6 +695,27 @@ def _live_catalog_suggestions(
 
     index = catalog_index or _build_live_catalog_index(products)
     line_attributes = extract_candidate_attributes(raw_description)
+    line_tokens = _matching_tokens(normalized)
+
+    # Product-family and packaging words are useful for retrieval but cannot
+    # establish commercial identity. If both descriptions contain a distinct
+    # name/brand and those names do not overlap, the proposal is unsafe (for
+    # example Absolut vs Belvedere, even when both are vodka 70 cl).
+    generic_identity_tokens = {
+        "acqua", "vodka", "gin", "rum", "rhum", "tequila", "whisky", "whiskey",
+        "amaro", "vino", "birra", "liquore", "bottiglia", "bottiglie", "vetro",
+        "pet", "lattina", "fusto", "pezzo", "cl", "ml", "lt", "litro", "litri",
+        "centilitro", "millilitro", "grammo", "kilogrammo",
+        "vr", "x",
+    }
+
+    def identity_tokens(tokens: set[str]) -> set[str]:
+        return {
+            token for token in tokens
+            if token.isalpha() and token not in generic_identity_tokens
+        }
+
+    line_identity = identity_tokens(line_tokens)
 
     def has_format_conflict(product: Product) -> bool:
         # Older Sheet imports can carry the format only in the product name
@@ -712,9 +733,13 @@ def _live_catalog_suggestions(
         product_pack = product.unit_count if product.unit_count and product.unit_count > 1 else product_attributes.get("pack_qty")
         return bool(line_pack and product_pack and line_pack != product_pack)
 
+    def has_identity_conflict(product: Product) -> bool:
+        product_tokens = index["tokens_by_id"].get(product.id, set())
+        product_identity = identity_tokens(product_tokens)
+        return bool(line_identity and product_identity and line_identity.isdisjoint(product_identity))
+
     exact_ids = set(index["exact_name_ids"].get(normalized, set()))
     candidate_ids = set(exact_ids)
-    line_tokens = _matching_tokens(normalized)
     line_trigrams = _token_trigrams(line_tokens)
     token_counts: dict[int, int] = {}
     trigram_counts: dict[int, int] = {}
@@ -755,7 +780,7 @@ def _live_catalog_suggestions(
         strong_evidence = exact or (line_tokens == product_tokens and similarity >= 92)
         # Permissive proposals start at 40, but weak lexical evidence is capped
         # below the automatic threshold and therefore always requires review.
-        if similarity >= 40 and not has_format_conflict(product):
+        if similarity >= 40 and not has_format_conflict(product) and not has_identity_conflict(product):
             ranked.append((similarity, product, exact, strong_evidence, shared_tokens, shared_trigrams))
 
     ranked.sort(key=lambda item: item[0], reverse=True)
