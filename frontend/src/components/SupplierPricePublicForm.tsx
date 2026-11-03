@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { API_BASE } from '../api';
+import { normalizeSupplierUnit, SUPPLIER_UNIT_OPTIONS } from '../constants/units';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null };
 type FormData = { supplier_name: string; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
@@ -37,7 +38,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       .then(form => {
         if (!active) return;
         setData(form);
-        const initial = Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: i.unita_corrente || '', marca: i.brand_corrente || '', dicitura_fornitore: '', quantita_confezione: '', conferma_prezzo: false, non_trattato: false, nota: '', extraOffers: [] }]));
+        const initial = Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: normalizeSupplierUnit(i.unita_corrente), marca: i.brand_corrente || '', dicitura_fornitore: '', quantita_confezione: '', conferma_prezzo: false, non_trattato: false, nota: '', extraOffers: [] }]));
         try {
           const saved = JSON.parse(localStorage.getItem(draftKey) || 'null');
           setAnswers(saved?.answers && form.items.every(i => saved.answers[i.id]) ? Object.fromEntries(form.items.map(i => [i.id, { ...initial[i.id], ...saved.answers[i.id], extraOffers: saved.answers[i.id].extraOffers || [] }])) : initial);
@@ -121,7 +122,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
           <label>Dicitura del fornitore<input style={input} required maxLength={255} value={answer.dicitura_fornitore} onChange={e => setAnswer(item.id, { dicitura_fornitore: e.target.value })} /></label>
           <label>Marca<input style={input} required maxLength={100} value={answer.marca} onChange={e => setAnswer(item.id, { marca: e.target.value })} /></label>
           <label>Quantità della confezione<input style={input} type="number" min="0.001" step="0.001" required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /></label>
-          <label>Unità di misura<input style={input} required maxLength={50} placeholder="KG, G, L, ML, PZ…" value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })} /></label>
+          <label>Unità di misura<select style={input} required value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
           <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /><small style={{ display: 'block', color: '#cbd5e1' }}>Prezzo totale della quantità indicata, non prezzo per KG.</small></label>
         </div>}
         {!answer.non_trattato && answer.extraOffers.map((offer, index) => <div key={offer.key} style={{ marginTop: 14, padding: 12, border: '1px solid rgba(255,255,255,.2)', borderRadius: 8 }}>
@@ -130,7 +131,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
             <label>Dicitura del fornitore<input style={input} required maxLength={255} value={offer.dicitura_fornitore} onChange={e => changeExtraOffer(item.id, offer.key, { dicitura_fornitore: e.target.value })} /></label>
             <label>Marca<input style={input} required maxLength={100} value={offer.marca} onChange={e => changeExtraOffer(item.id, offer.key, { marca: e.target.value })} /></label>
             <label>Quantità della confezione<input style={input} type="number" min="0.001" step="0.001" required value={offer.quantita_confezione} onChange={e => changeExtraOffer(item.id, offer.key, { quantita_confezione: e.target.value })} /></label>
-            <label>Unità di misura<input style={input} required maxLength={50} placeholder="KG, G, L, ML, PZ…" value={offer.unita_misura} onChange={e => changeExtraOffer(item.id, offer.key, { unita_misura: e.target.value })} /></label>
+            <label>Unità di misura<select style={input} required value={offer.unita_misura} onChange={e => changeExtraOffer(item.id, offer.key, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
             <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={offer.prezzo} onChange={e => changeExtraOffer(item.id, offer.key, { prezzo: e.target.value })} /></label>
           </div>
           <label style={{ display: 'block', marginTop: 10 }}>Nota su questa offerta<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={offer.nota} onChange={e => changeExtraOffer(item.id, offer.key, { nota: e.target.value })} /></label>

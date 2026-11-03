@@ -175,6 +175,7 @@ export default function App() {
   const [recentOrdersCount, setRecentOrdersCount] = useState(0);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [unlistedProductsCount, setUnlistedProductsCount] = useState(0);
+  const [pendingSupplierResponsesCount, setPendingSupplierResponsesCount] = useState(0);
 
   // White-Label & Company Branding
   const [companySettings, setCompanySettings] = useState<{
@@ -209,7 +210,8 @@ export default function App() {
       if (isAdm) {
         promises.push(
           fetch(`${API_BASE}/feedbacks/pending-count`, { headers: getHeaders() }),
-          fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, { headers: getHeaders() })
+          fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, { headers: getHeaders() }),
+          fetch(`${API_BASE}/supplier-price-forms/notifications/pending`, { headers: getHeaders() })
         );
       }
 
@@ -220,9 +222,10 @@ export default function App() {
         setRecentOrdersCount(ordData.count || 0);
       }
 
-      if (isAdm && results.length >= 3) {
+      if (isAdm && results.length >= 4) {
         const feedRes = results[1];
         const unlistedRes = results[2];
+        const supplierFormsRes = results[3];
 
         if (feedRes.ok) {
           const feedData = await feedRes.json();
@@ -231,6 +234,10 @@ export default function App() {
         if (unlistedRes.ok) {
           const unlistedData = await unlistedRes.json();
           setUnlistedProductsCount(unlistedData.summary?.work_items || 0);
+        }
+        if (supplierFormsRes.ok) {
+          const supplierFormsData = await supplierFormsRes.json();
+          setPendingSupplierResponsesCount(supplierFormsData.pending_count || 0);
         }
       }
     } catch {
@@ -855,11 +862,11 @@ export default function App() {
           <div className="header-profile" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <button
               type="button"
-              onClick={() => setNotificationModalOpen(true)}
-              title="Centro Notifiche: Nuovi Ordini & Segnalazioni"
+              onClick={() => pendingSupplierResponsesCount > 0 ? setActiveTab('supplierforms') : setNotificationModalOpen(true)}
+              title={pendingSupplierResponsesCount > 0 ? `${pendingSupplierResponsesCount} risposte fornitori da revisionare` : 'Centro Notifiche: Nuovi Ordini & Segnalazioni'}
               style={{
                 position: 'relative',
-                background: (pendingFeedbacksCount > 0 || recentOrdersCount > 0) ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                background: (pendingFeedbacksCount > 0 || recentOrdersCount > 0 || pendingSupplierResponsesCount > 0) ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
                 border: pendingFeedbacksCount > 0 ? '1px solid rgba(239, 68, 68, 0.4)' : (recentOrdersCount > 0 ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-glass)'),
                 borderRadius: '10px',
                 width: '40px',
@@ -873,7 +880,7 @@ export default function App() {
               }}
             >
               <Bell size={18} />
-              {(pendingFeedbacksCount > 0 || recentOrdersCount > 0) && (
+              {(pendingFeedbacksCount > 0 || recentOrdersCount > 0 || pendingSupplierResponsesCount > 0) && (
                 <span style={{
                   position: 'absolute',
                   top: '-4px',
@@ -886,7 +893,7 @@ export default function App() {
                   padding: '1px 5px',
                   boxShadow: pendingFeedbacksCount > 0 ? '0 0 10px rgba(239, 68, 68, 0.8)' : '0 0 10px rgba(59, 130, 246, 0.8)'
                 }}>
-                  {pendingFeedbacksCount + recentOrdersCount}
+                  {pendingFeedbacksCount + recentOrdersCount + pendingSupplierResponsesCount}
                 </span>
               )}
             </button>

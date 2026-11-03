@@ -43,7 +43,7 @@ def _dimensions(quantity: Decimal | None, unit: str | None) -> tuple[int | None,
         return (1, int(amount), None) if amount == int(amount) else (None, None, None)
     if normalized in {"ml"}:
         return (1, int(quantity), None) if quantity == int(quantity) else (None, None, None)
-    if normalized in {"pz", "pezzi", "pezzo", "bt", "bottiglie", "bottiglia"}:
+    if normalized in {"pz", "pezzi", "pezzo", "bt", "bottiglie", "bottiglia", "ct", "cf", "sc", "bx", "conf"}:
         return (int(quantity), None, None) if quantity == int(quantity) else (None, None, None)
     return None, None, None
 

@@ -19,8 +19,22 @@ from app.models.listino import ListinoMaster
 from app.models.products import Product
 from app.models.supplier_price_form import SupplierPriceFormItem, SupplierPriceFormRequest
 from app.models.utenti import Utente
+from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
+from app.services.variant_price_import import build_variant_preview, commit_variant_preview
 
 router = APIRouter()
+
+ALLOWED_UNITS = {"KG", "G", "L", "CL", "ML", "PZ", "BT", "CT", "CF", "SC", "BX", "CONF"}
+
+
+def _normalized_unit(value: str | None) -> str:
+    unit = (value or "").strip().upper()
+    if unit not in ALLOWED_UNITS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unità di misura non valida. Seleziona una tra: {', '.join(sorted(ALLOWED_UNITS))}",
+        )
+    return unit
 
 
 def _require_primary_tenant(user: Utente) -> None:
@@ -212,13 +226,14 @@ async def submit_public_form(
         for index, offer in enumerate(offers):
             if offer.prezzo is None or not (offer.unita_misura or "").strip() or not (offer.marca or "").strip() or not (offer.dicitura_fornitore or "").strip() or offer.quantita_confezione is None:
                 raise HTTPException(status_code=422, detail=f"Completa dicitura, marca, quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
+            unit = _normalized_unit(offer.unita_misura)
             if request.request_type == "new_listino" and offer.conferma_prezzo:
                 raise HTTPException(status_code=422, detail="Una nuova offerta non può essere marcata come conferma")
             if offer.conferma_prezzo and index != 0:
                 raise HTTPException(status_code=422, detail="Solo l'offerta principale può confermare il prezzo pattuito")
             if offer.conferma_prezzo and not (
                 item.prezzo_corrente is not None and offer.prezzo == item.prezzo_corrente
-                and item.unita_corrente is not None and offer.unita_misura.strip().casefold() == item.unita_corrente.strip().casefold()
+                and item.unita_corrente is not None and unit.casefold() == item.unita_corrente.strip().casefold()
             ):
                 raise HTTPException(status_code=422, detail=f"La riga {item.sku_interno} è indicata come confermata ma prezzo o unità sono diversi dal pattuito")
             offer_id = _offer_id(request.supplier_id, item.sku_interno, offer)
@@ -228,7 +243,7 @@ async def submit_public_form(
             saved_offers.append({
                 "id_offerta": offer_id,
                 "prezzo": str(offer.prezzo),
-                "unita_misura": offer.unita_misura.strip(),
+                "unita_misura": unit,
                 "marca": offer.marca.strip(),
                 "dicitura_fornitore": offer.dicitura_fornitore.strip(),
                 "quantita_confezione": str(offer.quantita_confezione),
@@ -238,7 +253,7 @@ async def submit_public_form(
         primary = offers[0]
         item.non_trattato = False
         item.prezzo_inviato = primary.prezzo
-        item.unita_inviata = primary.unita_misura.strip()
+        item.unita_inviata = _normalized_unit(primary.unita_misura)
         item.brand_inviata = primary.marca.strip()
         item.dicitura_inviata = primary.dicitura_fornitore.strip()
         item.quantita_inviata = primary.quantita_confezione
@@ -440,7 +455,7 @@ async def get_supplier_catalog(
 
 @router.get("/", summary="Elenca i moduli listino")
 async def list_form_requests(
-    status_filter: str = Query(default="all", pattern="^(all|open|submitted|expired|closed)$"),
+    status_filter: str = Query(default="all", pattern="^(all|open|submitted|approved|rejected|expired|closed)$"),
     admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -461,6 +476,103 @@ async def list_form_requests(
         result.append(_request_view(request))
     await db.commit()
     return result
+
+
+@router.get("/notifications/pending", summary="Conta le risposte dei fornitori da revisionare")
+async def pending_supplier_form_notifications(
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    count = await db.scalar(select(func.count(SupplierPriceFormRequest.id)).where(
+        SupplierPriceFormRequest.status == "submitted"
+    ))
+    return {"pending_count": int(count or 0)}
+
+
+@router.post("/{request_id}/approve", summary="Approva e integra la risposta nel listino V2")
+async def approve_form_request(
+    request_id: int,
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    request = (await db.execute(
+        select(SupplierPriceFormRequest)
+        .options(selectinload(SupplierPriceFormRequest.items))
+        .where(SupplierPriceFormRequest.id == request_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if not request:
+        raise HTTPException(status_code=404, detail="Modulo non trovato")
+    if request.status != "submitted":
+        raise HTTPException(status_code=409, detail="La risposta non è più in attesa di approvazione")
+    if not request.validita_inviata_da:
+        raise HTTPException(status_code=422, detail="La risposta non indica la data di inizio validità")
+
+    products = (await db.execute(select(Product).where(
+        Product.sku_interno.in_({item.sku_interno for item in request.items}),
+        Product.is_active.is_(True),
+    ))).scalars().all()
+    products_by_sku = {product.sku_interno: product for product in products}
+    rows: list[VariantPriceRow] = []
+    for item in request.items:
+        if item.non_trattato:
+            continue
+        product = products_by_sku.get(item.sku_interno)
+        if not product:
+            raise HTTPException(status_code=409, detail=f"Prodotto {item.sku_interno} non più disponibile")
+        for offer in item.offerte_inviate or []:
+            rows.append(VariantPriceRow(
+                product_id=product.id,
+                supplier_id=request.supplier_id,
+                sku=item.sku_interno,
+                offer_id=offer["id_offerta"],
+                description=offer["dicitura_fornitore"],
+                brand=offer.get("marca"),
+                quantity=Decimal(offer["quantita_confezione"]),
+                unit=_normalized_unit(offer.get("unita_misura")),
+                price=Decimal(offer["prezzo"]),
+                package_confirmed=True,
+            ))
+    if not rows:
+        raise HTTPException(status_code=422, detail="La risposta non contiene offerte da integrare")
+
+    preview = await build_variant_preview(db, VariantPricePreviewRequest(
+        rows=rows, effective_date=request.validita_inviata_da
+    ), admin.id)
+    errors = preview.preview_payload.get("errors") or []
+    if errors:
+        raise HTTPException(status_code=409, detail="; ".join(error["message"] for error in errors))
+    result = await commit_variant_preview(db, preview)
+    if request.validita_inviata_a and result.get("listino_ids"):
+        approved_rows = (await db.execute(select(ListinoMaster).where(
+            ListinoMaster.id.in_(result["listino_ids"])
+        ))).scalars().all()
+        for row in approved_rows:
+            row.data_scadenza = request.validita_inviata_a
+    request.status = "approved"
+    await db.commit()
+    return {"id": request.id, "status": request.status, "result": result}
+
+
+@router.post("/{request_id}/reject", summary="Rifiuta una risposta del fornitore")
+async def reject_form_request(
+    request_id: int,
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    request = (await db.execute(select(SupplierPriceFormRequest).where(
+        SupplierPriceFormRequest.id == request_id
+    ).with_for_update())).scalar_one_or_none()
+    if not request:
+        raise HTTPException(status_code=404, detail="Modulo non trovato")
+    if request.status != "submitted":
+        raise HTTPException(status_code=409, detail="La risposta non è più in attesa di revisione")
+    request.status = "rejected"
+    await db.commit()
+    return {"id": request.id, "status": request.status}
 
 
 @router.get("/{request_id}", summary="Dettaglio risposta a un modulo listino")

@@ -165,26 +165,26 @@ async def run() -> None:
             """)
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://testserver") as client:
-        rows = [{
-            "product_id": 1, "supplier_id": 1, "sku": "CI-SKU-FORM",
-            "offer_id": offer["id_offerta"], "description": offer["dicitura_fornitore"],
-            "brand": offer["marca"], "quantity": offer["quantita_confezione"],
-            "unit": offer["unita_misura"], "price": offer["prezzo"],
-            "package_confirmed": True,
-        } for offer in offers]
-        preview = await client.post("/api/v1/smart-price-sheet/variant-preview",
-                                    headers=admin_headers, json={"rows": rows})
-        check("two variants have a reviewable price preview", preview.status_code == 200 and
-              preview.json()["can_commit"] and preview.json()["counts"]["create"] == 2)
-        token = preview.json()["preview_token"]
-        commit = await client.post("/api/v1/smart-price-sheet/commit", headers=admin_headers,
-                                   json={"preview_token": token, "confirm": True})
-        check("admin imports both variants as separate contracts", commit.status_code == 200 and
-              commit.json()["result"]["created"] == 2)
-        repeat = await client.post("/api/v1/smart-price-sheet/commit", headers=admin_headers,
-                                   json={"preview_token": token, "confirm": True})
-        check("retry does not duplicate either price", repeat.status_code == 200 and
-              repeat.json()["result"] == commit.json()["result"])
+        pending = await client.get("/api/v1/supplier-price-forms/notifications/pending",
+                                   headers=admin_headers)
+        check("admin receives one pending supplier-response notification",
+              pending.status_code == 200 and pending.json()["pending_count"] == 1)
+        approval = await client.post(
+            f"/api/v1/supplier-price-forms/{created_data['request']['id']}/approve",
+            headers=admin_headers,
+        )
+        check("admin integrates both variants directly in V2 without a Sheet",
+              approval.status_code == 200 and approval.json()["status"] == "approved" and
+              approval.json()["result"]["created"] == 2)
+        repeat = await client.post(
+            f"/api/v1/supplier-price-forms/{created_data['request']['id']}/approve",
+            headers=admin_headers,
+        )
+        check("a reviewed response cannot be applied twice", repeat.status_code == 409)
+        pending_after = await client.get("/api/v1/supplier-price-forms/notifications/pending",
+                                         headers=admin_headers)
+        check("notification clears after approval",
+              pending_after.status_code == 200 and pending_after.json()["pending_count"] == 0)
         resolved = await client.post("/api/v1/product-identity/orders/resolve-item", headers=admin_headers,
                                      json={"query": "CI-SKU-FORM", "requested_qty": 2})
         check("both formats remain separate in order suggestions", resolved.status_code == 200 and
