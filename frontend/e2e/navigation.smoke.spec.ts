@@ -137,9 +137,9 @@ test('responsive main navigation can be opened at the mobile viewport', async ({
 })
 
 
-test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edits', async ({ page }) => {
+test('admin reviews and integrates a supplier response directly in V2', async ({ page }) => {
   const supplierName = 'FORNITORE TEST'
-  const request = {
+  let request = {
     id: 7,
     supplier_id: 1,
     supplier_name: supplierName,
@@ -164,18 +164,26 @@ test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edi
       non_trattato: false,
       nota_fornitore: null,
       esito: 'nuova_offerta',
+      offerte_inviate: [{ id_offerta: 'OFF-CI71', prezzo: '4.2500', unita_misura: 'BT', marca: 'Marca di prova', dicitura_fornitore: 'Prodotto di prova bottiglia', quantita_confezione: '1.000', conferma_prezzo: false }],
     }],
   }
 
   await page.addInitScript(() => {
     localStorage.setItem('ps.normalized-sheet.url', 'https://docs.google.com/spreadsheets/d/ci-synthetic-sheet/edit')
   })
+  let approvalCalls = 0
   await page.route('**/api/v1/**', async route => {
     const path = new URL(route.request().url()).pathname
     if (path === '/api/v1/fornitori/') {
       await route.fulfill({ json: [{ id: 1, nome_azienda: supplierName }] })
     } else if (path === '/api/v1/categories/matrix') {
       await route.fulfill({ json: { categories: [{ nome: 'Beverage', is_active: true }], suppliers: [] } })
+    } else if (path === '/api/v1/supplier-price-forms/notifications/pending') {
+      await route.fulfill({ json: { pending_count: request.status === 'submitted' ? 1 : 0 } })
+    } else if (path === '/api/v1/supplier-price-forms/7/approve' && route.request().method() === 'POST') {
+      approvalCalls++
+      request = { ...request, status: 'approved' }
+      await route.fulfill({ json: { id: 7, status: 'approved', result: { created: 1, updated: 0 } } })
     } else if (path === '/api/v1/supplier-price-forms/' || path === '/api/v1/supplier-price-forms/7') {
       await route.fulfill({ json: path.endsWith('/7') ? request : [request] })
     } else {
@@ -242,23 +250,11 @@ test('supplier offer preview uses normalized IDs and blocks concurrent Sheet edi
   }
   await page.locator('.sidebar-nav').getByText('Moduli fornitori', { exact: true }).click()
   await page.getByRole('button', { name: 'Dettaglio' }).click()
-  await page.getByRole('button', { name: 'Prepara anteprima Sheet' }).click()
-
-  await expect(page.getByText("'BEVERAGE'!F2:L2")).toBeVisible()
-  await expect(page.getByText('Pronto alla conferma')).toBeVisible()
-  expect(sheetWrites).toEqual([])
-
   page.once('dialog', dialog => dialog.accept())
-  await page.getByRole('button', { name: 'Conferma scrittura nello Sheet' }).click()
-  await expect(page.getByRole('alert')).toContainText('è cambiata')
+  await page.getByRole('button', { name: 'Approva e integra nel listino V2' }).click()
+  await expect(page.getByText(/Risposta approvata: 1 nuove varianti/)).toBeVisible()
+  await expect(page.getByText('Stato:')).toContainText('approved')
+  expect(approvalCalls).toBe(1)
   expect(sheetWrites).toEqual([])
-
-  await page.getByRole('button', { name: 'Prepara anteprima Sheet' }).click()
-  await expect(page.getByText('Pronto alla conferma')).toBeVisible()
-  page.once('dialog', dialog => dialog.accept())
-  await page.getByRole('button', { name: 'Conferma scrittura nello Sheet' }).click()
-  await expect(page.getByText('Scritto', { exact: true })).toBeVisible()
-  expect(sheetWrites).toHaveLength(1)
-  expect(sheetWrites[0].method).toBe('POST')
-  expect(sheetWrites[0].body.requests[0].updateCells.rows[0].values[4].userEnteredValue.numberValue).toBe(4.25)
+  await expect(page.getByText(/Lo Sheet non è necessario/)).toBeVisible()
 })
