@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { fetchWithAuth } from '../api';
-import { prepareNormalizedSheet, writeNormalizedSheet } from './normalizedSupplierSheet';
-import type { SheetOfferTarget } from './normalizedSupplierSheet';
 
 type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string | null };
 type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean> };
@@ -21,63 +19,6 @@ const configuredPublicOrigin = ((import.meta as any).env?.VITE_PUBLIC_APP_URL ||
 const localBrowserOrigin = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.origin);
 const isLocalAddress = (value: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value.trim());
 
-
-const GOOGLE_SHEETS_CLIENT_ID = '52128477187-k0hkvu9vj0v3sbk7tf07rehhvosg0ors.apps.googleusercontent.com';
-const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
-const GOOGLE_SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
-function loadGoogleIdentityScript(): Promise<void> {
-  const google = (window as any).google;
-  if (google?.accounts?.oauth2) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-google-identity-services]');
-    if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('Impossibile caricare il login Google.')), { once: true });
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true; script.defer = true; script.dataset.googleIdentityServices = 'true';
-    script.onload = () => resolve(); script.onerror = () => reject(new Error('Impossibile caricare il login Google.'));
-    document.head.appendChild(script);
-  });
-}
-
-async function requestGoogleSheetsWriteToken(): Promise<string> {
-  await loadGoogleIdentityScript();
-  return new Promise((resolve, reject) => {
-    const google = (window as any).google;
-    let settled = false;
-    const finish = (callback: () => void) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeoutId);
-      callback();
-    };
-    const timeoutId = window.setTimeout(() => finish(() => reject(new Error(
-      'Google non ha completato l’autorizzazione. Consenti i popup per questa pagina e riprova.'
-    ))), 20000);
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_SHEETS_CLIENT_ID, scope: GOOGLE_SHEETS_SCOPE,
-      callback: (response: any) => {
-        if (response?.error || !response?.access_token) finish(() => reject(new Error(response?.error_description || response?.error || 'Consenso Google non completato.')));
-        else finish(() => resolve(response.access_token as string));
-      },
-      error_callback: (error: any) => finish(() => reject(new Error(error?.message || 'Popup Google non disponibile.'))),
-    });
-    // This call runs directly inside the user's button click, so Google can open
-    // its consent window even when this browser has no cached access token.
-    // The timeout above still prevents a dismissed/blocked popup from freezing the UI.
-    client.requestAccessToken({ prompt: 'consent' });
-  });
-}
-
-async function googleSheetRequest(url: string, token: string, init?: RequestInit): Promise<any> {
-  const response = await fetch(url, { ...init, headers: { Authorization: 'Bearer ' + token, ...(init?.headers || {}) } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.error?.message || 'Google Sheets ha restituito HTTP ' + response.status);
-  return body;
-}
 
 function phoneForWhatsApp(value?: string | null) {
   let digits = (value || '').replace(/\D/g, '');
@@ -113,12 +54,6 @@ export default function SupplierPriceForms() {
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('ps.normalized-sheet.url') || '');
-  const [sheetTargets, setSheetTargets] = useState<SheetOfferTarget[] | null>(null);
-  const [sheetBusy, setSheetBusy] = useState(false);
-  const [sheetAccessToken, setSheetAccessToken] = useState('');
-  const [sheetError, setSheetError] = useState('');
-  const [sheetNotice, setSheetNotice] = useState('');
 
   const loadForms = async () => {
     try { setForms(await fetchWithAuth('/supplier-price-forms/?status_filter=all')); }
@@ -280,52 +215,37 @@ export default function SupplierPriceForms() {
     } finally { setBusy(false); }
   };
   const openDetail = async (id: number) => {
-    setError(''); setSheetTargets(null); setSheetError(''); setSheetNotice(''); setSheetAccessToken('');
+    setError('');
     try { setDetail(await fetchWithAuth('/supplier-price-forms/' + id)); }
     catch (e) { setError(e instanceof Error ? e.message : 'Impossibile caricare il dettaglio'); }
   };
-
-  const prepareSheetOffer = async () => {
-    if (!detail || detail.status !== 'submitted') return;
-    setSheetBusy(true); setSheetError(''); setSheetNotice(''); setSheetTargets(null);
-    try {
-      const match = sheetUrl.trim().match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
-      if (!match) throw new Error('Inserisci il link del nuovo Google Sheet.');
-      const token = await requestGoogleSheetsWriteToken();
-      setSheetAccessToken(token);
-      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(match[1]);
-      const targets = await prepareNormalizedSheet(root, token, detail, googleSheetRequest);
-      setSheetTargets(targets);
-      setSheetNotice('Anteprima pronta per ID prodotto e fornitore. Nessuna riga è stata modificata.');
-    } catch (e) { setSheetError(e instanceof Error ? e.message : 'Anteprima Sheet non riuscita.'); }
-    finally { setSheetBusy(false); }
-  };
-
-  const writeSheetOffer = async () => {
-    if (!detail || !sheetTargets?.some(target => target.status === 'ready') || sheetTargets.some(target => target.status === 'blocked') || sheetBusy) return;
-    const ready = sheetTargets.filter(target => target.status === 'ready');
-    const summary = ready.map(target => (target.cell || target.tab) + ' · ' + (target.offer_id || target.sku) + ': ' + (target.current || '(vuoto)') + ' → € ' + target.offered + ' per confezione').join('\n');
-    if (!window.confirm('Confermi le offerte selezionate nel nuovo Sheet?\n\n' + summary)) return;
-    setSheetBusy(true); setSheetError(''); setSheetNotice('');
-    try {
-      const match = sheetUrl.trim().match(/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
-      if (!match) throw new Error('Link Google Sheet non valido.');
-      const token = sheetAccessToken || await requestGoogleSheetsWriteToken();
-      const root = GOOGLE_SHEETS_API + '/' + encodeURIComponent(match[1]);
-      await writeNormalizedSheet(root, token, detail, ready, googleSheetRequest);
-      setSheetTargets(sheetTargets.map(target => target.status === 'ready' ? { ...target, status: 'written', reason: 'Offerta scritta nello Sheet.' } : target));
-      setSheetNotice(detail.items.some(item => (item.offerte_inviate?.length || 0) > 1)
-        ? 'Le varianti sono state registrate come righe distinte nello Sheet. Per renderle operative, apri Sincronizzazione Santo Graal, genera l’anteprima dei prezzi e conferma l’importazione.'
-        : 'Offerte registrate nel nuovo Sheet. Per aggiornare il listino operativo V2, apri Santo Graal e conferma la relativa anteprima di importazione.');
-    } catch (e) { setSheetError(e instanceof Error ? e.message : 'Scrittura nello Sheet non riuscita.'); }
-    finally { setSheetBusy(false); }
-  };
-
 
   const closeForm = async (id: number) => {
     setBusy(true); setError('');
     try { await fetchWithAuth('/supplier-price-forms/' + id + '/close', { method: 'POST' }); setDetail(null); await loadForms(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Chiusura non riuscita'); }
+    finally { setBusy(false); }
+  };
+  const approveForm = async (id: number) => {
+    if (!window.confirm('Integrare tutte le offerte di questa risposta nel listino operativo V2? I prezzi precedenti resteranno nello storico.')) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const result = await fetchWithAuth('/supplier-price-forms/' + id + '/approve', { method: 'POST' });
+      setNotice(`Risposta approvata: ${result.result?.created || 0} nuove varianti e ${result.result?.updated || 0} prezzi aggiornati nel listino V2.`);
+      setDetail(await fetchWithAuth('/supplier-price-forms/' + id));
+      await loadForms();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Approvazione non riuscita'); }
+    finally { setBusy(false); }
+  };
+  const rejectForm = async (id: number) => {
+    if (!window.confirm('Rifiutare questa risposta? Nessun prezzo verrà modificato.')) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await fetchWithAuth('/supplier-price-forms/' + id + '/reject', { method: 'POST' });
+      setNotice('Risposta rifiutata. Il listino ufficiale non è stato modificato.');
+      setDetail(await fetchWithAuth('/supplier-price-forms/' + id));
+      await loadForms();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Rifiuto non riuscito'); }
     finally { setBusy(false); }
   };
   const deleteForm = async (form: FormRequest) => {
@@ -469,21 +389,14 @@ export default function SupplierPriceForms() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{detail.status}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')}${detail.validita_inviata_a ? ` al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : ' fino a nuova approvazione'}` : 'non ancora indicata'}</strong></p>
-      {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12 }}>
-        <h3 style={{ marginTop: 0 }}>Revisiona l’offerta nel nuovo Sheet</h3>
-        <p style={{ color: 'var(--text-secondary)' }}>Le righe vengono abbinate per ID prodotto e ID fornitore. Controlla l’anteprima prima di scrivere; poi importa i prezzi approvati nel listino operativo V2.</p>
-        <p style={{ color: '#fbbf24' }}>Più marche o formati dello stesso prodotto saranno righe separate, con ID_OFFERTA. La conferma aggiunge l’intestazione ID_OFFERTA nella colonna M se manca. Dopo la scrittura, importa i prezzi dalla Sincronizzazione Santo Graal per usarli negli ordini.</p>
-        <label>Link del nuovo Google Sheet<input style={field} type="url" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('ps.normalized-sheet.url', e.target.value); setSheetTargets(null); setSheetNotice(''); setSheetAccessToken(''); }} placeholder="https://docs.google.com/spreadsheets/d/…" /></label>
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <button type="button" className="btn" disabled={sheetBusy || !sheetUrl.trim()} onClick={() => void prepareSheetOffer()}>{sheetBusy ? 'Lettura e controllo…' : 'Prepara anteprima Sheet'}</button>
-          {sheetTargets?.some(target => target.status === 'ready') && <button type="button" className="btn btn-primary" disabled={sheetBusy || sheetTargets.some(target => target.status === 'blocked')} onClick={() => void writeSheetOffer()}>{sheetBusy ? 'Scrittura…' : 'Conferma scrittura nello Sheet'}</button>}
+      {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12, borderColor: 'rgba(59,130,246,.65)' }}>
+        <h3 style={{ marginTop: 0 }}>Risposta pronta per la revisione</h3>
+        <p style={{ color: 'var(--text-secondary)' }}>Controlla prezzi, marche, formati e unità qui sotto. L’approvazione integra direttamente le offerte nel listino V2: Google Sheet non è necessario.</p>
+        <p style={{ color: '#fbbf24' }}>Più marche o formati restano varianti distinte. I prezzi precedenti vengono conservati nello storico e il nuovo prezzo resta valido fino alla prossima approvazione, salvo la scadenza indicata.</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void approveForm(detail.id)}>{busy ? 'Integrazione…' : 'Approva e integra nel listino V2'}</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => void rejectForm(detail.id)}>Rifiuta risposta</button>
         </div>
-        {sheetError && <p role="alert" style={{ color: '#fca5a5' }}>{sheetError}</p>}
-        {sheetTargets?.some(target => target.status === 'blocked') && <p role="alert" style={{ color: '#fbbf24' }}>Ci sono righe bloccate. Risolvi gli ID o le associazioni indicate e prepara di nuovo l’anteprima prima di scrivere.</p>}
-        {sheetNotice && <p role="status" style={{ color: '#86efac' }}>{sheetNotice}</p>}
-        {sheetTargets && <div style={{ overflowX: 'auto', marginTop: 10 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Prodotto</th><th align="left">Riga</th><th align="left">Dicitura / marca</th><th align="left">Confezione</th><th align="left">Prezzo confezione</th><th align="left">Data / note</th><th align="left">Esito</th></tr></thead><tbody>
-          {sheetTargets.map(target => <tr key={target.offer_id || target.item_id}><td>{target.product}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{target.sku} · {target.offer_id || 'offerta precedente'}</small></td><td>{target.cell || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[5] || 'vuoto'} / {target.snapshot?.[6] || 'vuoto'} → <strong>{target.nextRow[5]} / {target.nextRow[6]}</strong></> : '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[7] || 'vuoto'} {target.snapshot?.[8] || ''} → <strong>{target.nextRow[7]} {target.nextRow[8]}</strong></> : '—'}</td><td>{target.current || 'vuoto'} → {target.offered || '—'}</td><td>{target.nextRow ? <>{target.snapshot?.[10] || 'vuoto'} → <strong>{target.nextRow[10]}</strong><small style={{ display: 'block' }}>{target.nextRow[11]}</small></> : '—'}</td><td>{target.status === 'ready' ? 'Pronto alla conferma' : target.status === 'already' ? 'Già presente' : target.status === 'written' ? 'Scritto' : target.status === 'not_trattato' ? 'Non trattato · escluso' : 'Bloccato · ' + target.reason}</td></tr>)}
-        </tbody></table></div>}
       </div>}
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
@@ -495,7 +408,7 @@ export default function SupplierPriceForms() {
         <div>Esito: {i.esito === 'non_trattato' ? 'Non trattato' : i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
       </div>)}</div>
       {['open','submitted','expired'].includes(detail.status) && <button className="btn" disabled={busy} onClick={() => closeForm(detail.id)}>Chiudi link</button>}
-      <p style={{ color: 'var(--text-secondary)' }}>Per applicare un’eventuale variazione, revisiona la proposta e usa il normale flusso di approvazione/importazione.</p>
+      <p style={{ color: 'var(--text-secondary)' }}>Questo flusso è interamente gestito nell’app. Lo Sheet non è necessario per raccogliere o approvare i prezzi dei fornitori.</p>
     </section>}
     {error && <div role="alert" style={{ color: '#fca5a5' }}>{error}</div>}
   </div>;
