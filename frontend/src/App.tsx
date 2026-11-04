@@ -201,6 +201,7 @@ export default function App() {
   }, [activeTab]);
 
   const loadNotificationStats = async () => {
+    if (document.hidden) return;
     try {
       const isAdm = profile?.ruolo === 'admin';
       const promises: Promise<Response>[] = [
@@ -210,7 +211,7 @@ export default function App() {
       if (isAdm) {
         promises.push(
           fetch(`${API_BASE}/feedbacks/pending-count`, { headers: getHeaders() }),
-          fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, { headers: getHeaders() }),
+          fetch(`${API_BASE}/product-identity/match-candidates/work-queue/count`, { headers: getHeaders() }),
           fetch(`${API_BASE}/supplier-price-forms/notifications/pending`, { headers: getHeaders() })
         );
       }
@@ -233,7 +234,7 @@ export default function App() {
         }
         if (unlistedRes.ok) {
           const unlistedData = await unlistedRes.json();
-          setUnlistedProductsCount(unlistedData.summary?.work_items || 0);
+          setUnlistedProductsCount(unlistedData.pending_count || 0);
         }
         if (supplierFormsRes.ok) {
           const supplierFormsData = await supplierFormsRes.json();
@@ -248,7 +249,7 @@ export default function App() {
   useEffect(() => {
     if (isAuth) {
       loadNotificationStats();
-      const interval = setInterval(loadNotificationStats, 20000);
+      const interval = setInterval(loadNotificationStats, 60000);
       return () => clearInterval(interval);
     }
   // Authentication changes are the only intended polling lifecycle trigger.

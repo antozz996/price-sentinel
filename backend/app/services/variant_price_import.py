@@ -30,7 +30,7 @@ def _dimensions(quantity: Decimal | None, unit: str | None) -> tuple[int | None,
     if quantity is None or not unit:
         return None, None, None
     normalized = normalize_text(unit)
-    if normalized in {"kg", "chilo", "chili"}:
+    if normalized in {"kg", "chilo", "chili", "chilogrammo", "chilogrammi"}:
         amount = quantity * 1000
         return (1, None, int(amount)) if amount == int(amount) else (None, None, None)
     if normalized in {"g", "gr", "grammo", "grammi"}:
@@ -38,12 +38,16 @@ def _dimensions(quantity: Decimal | None, unit: str | None) -> tuple[int | None,
     if normalized in {"l", "lt", "litro", "litri"}:
         amount = quantity * 1000
         return (1, int(amount), None) if amount == int(amount) else (None, None, None)
-    if normalized in {"cl"}:
+    if normalized in {"cl", "centilitro", "centilitri"}:
         amount = quantity * 10
         return (1, int(amount), None) if amount == int(amount) else (None, None, None)
     if normalized in {"ml"}:
         return (1, int(quantity), None) if quantity == int(quantity) else (None, None, None)
-    if normalized in {"pz", "pezzi", "pezzo", "bt", "bottiglie", "bottiglia", "ct", "cf", "sc", "bx", "conf"}:
+    if normalized in {
+        "pz", "pezzi", "pezzo", "bt", "bottiglie", "bottiglia",
+        "ct", "cartone", "cartoni", "cf", "confezione", "confezioni",
+        "sc", "sacco", "sacchi", "bx", "box", "conf",
+    }:
         return (int(quantity), None, None) if quantity == int(quantity) else (None, None, None)
     return None, None, None
 

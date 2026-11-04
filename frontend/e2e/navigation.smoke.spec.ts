@@ -42,8 +42,8 @@ async function mockIsolatedBackend(page: Page) {
       body = { count: 0, notifications: [] }
     } else if (path === '/api/v1/feedbacks/pending-count') {
       body = { pending_count: 0 }
-    } else if (path === '/api/v1/product-identity/match-candidates/work-queue') {
-      body = { summary: { work_items: 0, invoice_lines: 0, weak_candidates_hidden: 0 }, items: [] }
+    } else if (path === '/api/v1/product-identity/match-candidates/work-queue/count') {
+      body = { pending_count: 0 }
     } else if (path === '/api/v1/auth/logout') {
       status = 204
     } else if (path === '/api/v1/listino/import-multi-supplier') {
