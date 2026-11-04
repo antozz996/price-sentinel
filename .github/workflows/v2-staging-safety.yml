@@ -164,7 +164,7 @@ jobs:
           print("PASS: KPI scopes through invoices, no invalid tenant columns, probe errors classified")
           PY
       - name: Typecheck and build V2 frontend (no deploy)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
