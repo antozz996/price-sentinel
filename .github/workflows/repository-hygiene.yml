@@ -19,8 +19,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          forbidden_regex='(^|/)(backup[^/]*\.(sql|dump|backup)|[^/]+\.(sql|sql\.gz|dump|backup|xml|p7m)|\.env($|\.)|[^/]*private[^/]*\.key$|privkey\.pem$)'
-          allowed_regex='(^|/)(\.env\.example|test_fattura\.xml|test_upload\.xml|backend/(rollback|scripts|tests|migrations)/[a-zA-Z0-9_]+\.sql)$'
+          forbidden_regex='(^|/)(backup[^/]*\.(sql|dump|backup)|[^/]+\.(sql|sql\.gz|dump|backup|xml|p7m|xlsx|xls)|\.env($|\.)|[^/]*private[^/]*\.key$|privkey\.pem$)'
+          allowed_regex='(^|/)(\.env\.example|test_fattura\.xml|test_upload\.xml|backend/data/import_samples/listino_test\.xlsx|backend/(rollback|scripts|tests|migrations)/[a-zA-Z0-9_]+\.sql)$'
 
           violations="$({ git ls-files || true; } | grep -Ei "$forbidden_regex" | grep -Eiv "$allowed_regex" || true)"
 

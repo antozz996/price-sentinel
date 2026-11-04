@@ -55,8 +55,11 @@ build/
 
 # Excel files
 *.xlsx
-!backend/data/import_samples/*.xlsx
+!backend/data/import_samples/listino_test.xlsx
 
+
+# Reports generated from real supplier data (never commit)
+backend/data/import_samples/*_report*.json
 
 # GitHub Actions ephemeral Google WIF credentials (never commit)
 gha-creds-*.json
