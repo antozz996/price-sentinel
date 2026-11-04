@@ -37,6 +37,7 @@ CASES = {
     "order_supplier_comparison": ("order_supplier_comparison_e2e.py", "ps_ci_disposable_supplier_compare", True),
     "comparative_approval": ("multi_supplier_approval_e2e.py", "ps_ci_disposable_multi_approval", True),
     "anomaly_lifecycle": ("anomaly_lifecycle_e2e.py", "ps_ci_disposable_anomaly_lifecycle", True),
+    "auth_session": ("auth_session_e2e.py", "ps_ci_disposable_auth_session", True),
 }
 
 

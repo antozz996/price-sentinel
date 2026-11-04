@@ -245,6 +245,7 @@ async def reset_tenant_password(
         raise HTTPException(status_code=404, detail="Utente admin non trovato per questa azienda")
 
     admin.password_hash = hash_password(data.new_password.strip())
+    admin.refresh_token_version += 1
     await db.commit()
     return {"status": "success", "message": f"Password per {admin.email} reimpostata con successo"}
 

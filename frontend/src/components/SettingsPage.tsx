@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User, Shield, Database, RefreshCw, CheckCircle2, AlertCircle, Building2, Plus, ToggleLeft, ToggleRight, MapPin, Trash2, Pencil, Phone, MessageSquare, X, Key, Lock } from 'lucide-react';
-import { API_BASE, getHeaders } from '../api';
+import { API_BASE, getHeaders, logoutSession, storeSession } from '../api';
 
 interface UserInfo {
   id: number;
@@ -580,6 +580,7 @@ export default function SettingsPage() {
         throw new Error(errorDetail);
       }
 
+      storeSession(await res.json());
       setPwdMessage({ text: 'Password aggiornata con successo!', type: 'success' });
       setCurrentPassword('');
       setNewPassword('');
@@ -591,8 +592,8 @@ export default function SettingsPage() {
     }
   };
 
-  function handleLogout() {
-    localStorage.removeItem('token');
+  async function handleLogout() {
+    await logoutSession();
     window.location.reload();
   }
 

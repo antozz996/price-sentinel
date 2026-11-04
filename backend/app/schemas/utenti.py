@@ -43,8 +43,13 @@ class UtenteLogin(BaseModel):
     password: str
 
 
+class SessionTokenRequest(BaseModel):
+    refresh_token: str | None = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
     ruolo: str
     ruolo_dettagliato: str | None = None

@@ -104,6 +104,7 @@ async def update_utente(
 
     if "password" in update_data and update_data["password"]:
         utente.password_hash = hash_password(update_data.pop("password"))
+        utente.refresh_token_version += 1
     elif "password" in update_data:
         update_data.pop("password")
 

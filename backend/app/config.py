@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(min_length=32)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minuti
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Sessione chiusa dopo 7 giorni senza attività
 
     # ── Aruba Webhook ────────────────────────
     ARUBA_WEBHOOK_API_KEY: str = Field(min_length=1)
