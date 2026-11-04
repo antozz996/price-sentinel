@@ -305,6 +305,10 @@ export interface SectorOrderUserProfile {
   location_id?: number | null;
 }
 
+// Each card is heavy and the catalog has over a thousand products: drawing them
+// all at once froze the browser. Search and filters still cover the whole catalog.
+const PRODUCTS_PER_BATCH = 100;
+
 interface SectorOrderBuilderProps {
   userProfile?: SectorOrderUserProfile | null;
 }
@@ -338,6 +342,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('all');
+  const [visibleProductCount, setVisibleProductCount] = useState<number>(PRODUCTS_PER_BATCH);
 
   // Quantities mapped by product_id
   const [quantities, setQuantities] = useState<Record<number, number>>({});
@@ -583,6 +588,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       return matchSector && matchSubcat && matchSearch;
     });
   }, [products, selectedSector, selectedSubcategory, searchTerm, getEffectiveSupplier]);
+
+  useEffect(() => {
+    setVisibleProductCount(PRODUCTS_PER_BATCH);
+  }, [selectedSector, selectedSubcategory, searchTerm]);
+
+  const visibleProducts = useMemo(
+    () => filteredProducts.slice(0, visibleProductCount),
+    [filteredProducts, visibleProductCount]
+  );
+  const hiddenProductCount = filteredProducts.length - visibleProducts.length;
 
   // Quantities and Basket Totals
   const basketItems = useMemo(() => {
@@ -1402,7 +1417,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             textAlign: isMobileScreen ? 'right' : 'left',
             whiteSpace: 'nowrap'
           }}>
-            Visualizzati: <strong>{filteredProducts.length}</strong>
+            Visualizzati: <strong>{visibleProducts.length}</strong> di <strong>{filteredProducts.length}</strong>
           </div>
         </div>
       </div>
@@ -1504,8 +1519,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           <p style={{ fontSize: '0.85rem', margin: 0 }}>Prova a modificare i filtri di ricerca o il settore selezionato.</p>
         </div>
       ) : (
+        <>
         <div className="sector-order-grid">
-          {filteredProducts.map(prod => {
+          {visibleProducts.map(prod => {
             const currentQty = quantities[prod.id] || 0;
             const hasQty = currentQty > 0;
             const effSup = getEffectiveSupplier(prod);
@@ -1891,6 +1907,18 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             );
           })}
         </div>
+        {hiddenProductCount > 0 && (
+          <div style={{ textAlign: 'center', margin: '20px 0' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setVisibleProductCount(count => count + PRODUCTS_PER_BATCH)}
+            >
+              Mostra altri {Math.min(PRODUCTS_PER_BATCH, hiddenProductCount)} ({hiddenProductCount} rimanenti)
+            </button>
+          </div>
+        )}
+        </>
       )}
 
       {/* Floating Bottom Action Bar for Cart */}

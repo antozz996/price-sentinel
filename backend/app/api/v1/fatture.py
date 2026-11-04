@@ -7,13 +7,13 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import case, select, func, and_, or_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_current_user_from_query
 from app.database import get_db
-from app.models.fatture import Fattura, RigaFattura, MarkerFattura
+from app.models.fatture import Fattura, RigaFattura, MarkerFattura, TipoDocumento
 from app.models.fornitori import Fornitore
 from app.models.location import Location
 from app.models.anomalie import Anomalia
@@ -133,6 +133,40 @@ async def list_fatture(
     total_res = await db.execute(count_query)
     total = total_res.scalar() or 0
     response.headers["X-Total-Count"] = str(total)
+
+    # Totali dei riquadri: riguardano tutte le fatture filtrate, non la sola pagina.
+    matching_ids = select(Fattura.id)
+    if search_cond is not None:
+        matching_ids = (
+            matching_ids.outerjoin(Fornitore, Fattura.fornitore_id == Fornitore.id)
+            .outerjoin(RigaFattura, RigaFattura.fattura_id == Fattura.id)
+            .where(search_cond)
+        )
+    if conditions:
+        matching_ids = matching_ids.where(and_(*conditions))
+    matching_ids = matching_ids.distinct()
+
+    amount_res = await db.execute(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Fattura.tipo_documento == TipoDocumento.TD04, -Fattura.totale_imponibile),
+                        else_=Fattura.totale_imponibile,
+                    )
+                ),
+                0,
+            )
+        ).where(Fattura.id.in_(matching_ids))
+    )
+    response.headers["X-Total-Amount"] = str(amount_res.scalar())
+
+    anomalies_res = await db.execute(
+        select(func.count(Anomalia.id))
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .where(RigaFattura.fattura_id.in_(matching_ids), operational_anomaly_filter())
+    )
+    response.headers["X-Total-Anomalies"] = str(anomalies_res.scalar() or 0)
 
     # Applica filtri alla query principale
     if conditions:

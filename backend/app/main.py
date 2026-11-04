@@ -142,8 +142,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
         # The Vercel frontend is cross-origin: without this the browser hides
-        # the pagination total from JavaScript.
-        expose_headers=["X-Total-Count"],
+        # the list totals from JavaScript.
+        expose_headers=["X-Total-Count", "X-Total-Amount", "X-Total-Anomalies"],
     )
 
     # ── Routers ──────────────────────────────
