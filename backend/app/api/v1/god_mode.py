@@ -54,11 +54,11 @@ class CreateTenantRequest(BaseModel):
     company_name: str = Field(..., min_length=2)
     slug: str = Field(..., min_length=2)
     admin_email: str = Field(..., min_length=3)
-    admin_password: str = Field(..., min_length=1)
+    admin_password: str = Field(..., min_length=12)
 
 
 class ResetPasswordRequest(BaseModel):
-    new_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=12)
 
 
 @router.post("/auth", summary="Verifica Master Token God Mode")

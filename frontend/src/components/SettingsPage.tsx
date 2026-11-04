@@ -556,8 +556,8 @@ export default function SettingsPage() {
       return;
     }
 
-    if (newPassword.length < 4) {
-      setPwdMessage({ text: 'La nuova password deve contenere almeno 4 caratteri.', type: 'error' });
+    if (newPassword.trim().length < 12) {
+      setPwdMessage({ text: 'La nuova password deve contenere almeno 12 caratteri.', type: 'error' });
       return;
     }
 

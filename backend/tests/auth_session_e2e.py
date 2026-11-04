@@ -125,6 +125,12 @@ async def run() -> None:
 
         first_device = await login(client)
         second_device = await login(client)
+        too_short = await client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": PASSWORD, "new_password": "short-pass"},
+            headers=bearer(first_device["access_token"]),
+        )
+        check("a new password needs at least 12 characters", too_short.status_code == 400)
         changed = await client.post(
             "/api/v1/auth/change-password",
             json={"current_password": PASSWORD, "new_password": "synthetic-password-2"},
