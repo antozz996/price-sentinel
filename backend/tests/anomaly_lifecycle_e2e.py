@@ -13,13 +13,14 @@ from types import SimpleNamespace
 
 import psycopg2
 from fastapi import Response
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 import app.main  # noqa: F401  (registers every model)
 from app.api.v1.anomalie import list_anomalie
 from app.api.v1.disputes import list_dispute_candidates
 from app.api.v1.fatture import ResolveActionPayload, list_fatture, resolve_parked_line
-from app.api.v1.intelligence import get_kpi
+from app.api.v1.intelligence import get_kpi, get_variance_loss
 from app.api.v1.product_identity import approve_candidate
 from app.database import async_session_factory
 from app.models.anomalie import Anomalia, NotaDiCredito, StatoValidazione
@@ -333,11 +334,48 @@ async def check_credit_note(micro_open_id: int, micro_claim_id: int, material_id
     check("credit records match the closed anomalies", credited == {micro_claim_id, material_id})
 
 
+async def check_variance_counts_each_line_once() -> None:
+    async with async_session_factory() as db:
+        fx = Fixture(db)
+        fx.fattura = await db.scalar(select(Fattura).where(Fattura.numero_documento == "CI-SYNTH-0001"))
+        fx.next_line = 300
+        await fx.product("MULTI-SUPPLIER")
+        db.add(Fornitore(id=2, partita_iva="10000000002", nome_azienda="Secondo Fornitore CI", attivo_whitelist=True))
+        await db.flush()
+        db.add(
+            ListinoMaster(
+                fornitore_id=2,
+                sku_interno="MULTI-SUPPLIER",
+                descrizione="Listino sintetico secondo fornitore",
+                prezzo_pattuito=AGREED_PRICE,
+                unita_misura="Pz",
+                data_inizio_validita=date(2026, 1, 1),
+            )
+        )
+        await fx.line("VARIANCE-LOW", "10.00", sku="MULTI-SUPPLIER")
+        await fx.line("VARIANCE-HIGH", "12.00", sku="MULTI-SUPPLIER")
+        await db.commit()
+
+    async with async_session_factory() as db:
+        rows = await get_variance_loss(_admin=ADMIN, db=db)
+    row = next(item for item in rows if item["sku_interno"] == "MULTI-SUPPLIER")
+    check("variance counts each invoice line once", row["numero_acquisti"] == 2)
+    check("variance is not multiplied by active price lists", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
+
+
+def check_cors_exposes_pagination_total() -> None:
+    cors = next(item for item in app.main.app.user_middleware if item.cls is CORSMiddleware)
+    options = getattr(cors, "kwargs", None) or getattr(cors, "options", {})
+    check("cross-origin frontend can read the pagination total", "X-Total-Count" in options.get("expose_headers", []))
+
+
 async def run() -> None:
+    check_cors_exposes_pagination_total()
     micro_open_id, micro_claim_id, material_id = await check_visibility()
     await check_remapping()
     await check_candidate_approval()
     await check_credit_note(micro_open_id, micro_claim_id, material_id)
+    await check_variance_counts_each_line_once()
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ async def get_all_skus(
             SELECT 
                 rf.sku_interno as sku, 
                 MAX(COALESCE(p.canonical_name, lm.descrizione, rf.descrizione_fornitore_raw, rf.sku_interno)) as nome_prodotto,
-                COUNT(rf.id) as total_acquisti
+                COUNT(DISTINCT rf.id) as total_acquisti
             FROM righe_fattura rf
             LEFT JOIN products p ON p.sku_interno = rf.sku_interno
             LEFT JOIN listino_master lm ON lm.sku_interno = rf.sku_interno AND lm.data_scadenza IS NULL

@@ -1050,8 +1050,14 @@ async def get_variance_loss(
     )
     SELECT 
         r.sku_interno,
-        COALESCE(MAX(lm.descrizione), MAX(r.descrizione_fornitore_raw), r.sku_interno) AS prodotto_nome,
-        COALESCE(MAX(f.nome_azienda), MAX(flm.nome_azienda), 'ND') AS fornitore_nome,
+        -- One SKU can have an active price list per supplier: read the name with a
+        -- subquery, because a join would multiply every invoice line in the totals.
+        COALESCE(
+            (SELECT MAX(lm.descrizione) FROM listino_master lm WHERE lm.sku_interno = r.sku_interno AND lm.data_scadenza IS NULL),
+            MAX(r.descrizione_fornitore_raw),
+            r.sku_interno
+        ) AS prodotto_nome,
+        COALESCE(MAX(f.nome_azienda), 'ND') AS fornitore_nome,
         COUNT(r.id) AS numero_acquisti,
         SUM(r.quantita) AS quantita_totale,
         mp.min_price AS prezzo_minimo,
@@ -1061,8 +1067,6 @@ async def get_variance_loss(
     JOIN min_prices mp ON r.sku_interno = mp.sku_interno
     LEFT JOIN fatture ft ON r.fattura_id = ft.id
     LEFT JOIN fornitori f ON ft.fornitore_id = f.id
-    LEFT JOIN listino_master lm ON lm.sku_interno = r.sku_interno AND lm.data_scadenza IS NULL
-    LEFT JOIN fornitori flm ON flm.id = lm.fornitore_id
     WHERE r.sku_interno IS NOT NULL
       AND r.is_omaggio IS NOT TRUE
     GROUP BY r.sku_interno, mp.min_price
