@@ -3,7 +3,7 @@ Price Sentinel — Fatture Router.
 Read-only con filtri per location/fornitore/tipo + marker management.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
@@ -19,6 +19,11 @@ from app.models.location import Location
 from app.models.anomalie import Anomalia
 from app.models.utenti import Utente
 from app.schemas.fatture import FatturaResponse, RigaFatturaResponse
+from app.services.anomaly_policy import (
+    delete_stale_unworked_anomalies,
+    is_material_price_increase,
+    operational_anomaly_filter,
+)
 
 router = APIRouter()
 
@@ -65,7 +70,7 @@ async def list_fatture(
             Anomalia,
             and_(
                 Anomalia.riga_fattura_id == RigaFattura.id,
-                func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
+                operational_anomaly_filter(),
             ),
         )
         .group_by(
@@ -259,7 +264,7 @@ async def list_righe_fattura(
             select(Anomalia).where(
                 and_(
                     Anomalia.riga_fattura_id.in_(riga_ids),
-                    func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
+                    operational_anomaly_filter(),
                 )
             )
         )
@@ -1016,7 +1021,6 @@ async def resolve_parked_line(
                 riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
                 delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
                 delta_total = delta * riga.quantita
-                from app.services.anomaly_policy import is_material_price_increase
                 if is_material_price_increase(delta_total):
                     await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
                     
@@ -1029,13 +1033,14 @@ async def resolve_parked_line(
                         stato_validazione=StatoValidazione.da_verificare,
                     )
                     db.add(anomalia)
+                else:
+                    await db.execute(delete_stale_unworked_anomalies(riga.id))
                     
     elif payload.action == "create_canonical":
         if not payload.canonical_data:
             raise HTTPException(status_code=400, detail="canonical_data richiesto per questa azione")
             
         c_data = payload.canonical_data
-        from datetime import datetime
         c_sku = c_data.get("sku_interno") or f"CAN-{riga.codice_fornitore_raw or 'PROD'}-{int(datetime.utcnow().timestamp())}"
         
         new_prod = Product(

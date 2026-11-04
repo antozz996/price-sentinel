@@ -324,6 +324,7 @@ async def _process_td04(
 
     # ── Caricamento Anomalie Aperte dello stesso Fornitore e Location ──
     from sqlalchemy.orm import selectinload
+    from app.services.anomaly_policy import operational_anomaly_filter
     anomalie_query = (
         select(Anomalia)
         .options(selectinload(Anomalia.riga_fattura))
@@ -338,7 +339,10 @@ async def _process_td04(
                     StatoValidazione.in_parking,
                     StatoValidazione.contestata,
                     StatoValidazione.in_reclamo,
-                ])
+                ]),
+                # Una nota di credito non deve chiudere rumore di arrotondamento
+                # mai lavorato, ma deve poter chiudere un reclamo gia' aperto.
+                operational_anomaly_filter(),
             )
         )
     )
