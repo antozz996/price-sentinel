@@ -11,12 +11,14 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+import httpx
 import psycopg2
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 import app.main  # noqa: F401  (registers every model)
+from app.api.deps import get_current_user
 from app.api.v1.anomalie import list_anomalie
 from app.api.v1.disputes import list_dispute_candidates
 from app.api.v1.fatture import ResolveActionPayload, list_fatture, resolve_parked_line
@@ -393,6 +395,19 @@ def check_cors_exposes_pagination_total() -> None:
     check("cross-origin frontend can read the pagination total", "X-Total-Count" in options.get("expose_headers", []))
 
 
+async def check_large_responses_are_compressed() -> None:
+    app.main.app.dependency_overrides[get_current_user] = lambda: ADMIN
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app.main.app), base_url="https://testserver"
+        ) as client:
+            response = await client.get("/api/v1/products", headers={"Accept-Encoding": "gzip"})
+    finally:
+        app.main.app.dependency_overrides.pop(get_current_user, None)
+    check("large API responses are compressed", response.status_code == 200 and response.headers.get("content-encoding") == "gzip")
+    check("compressed responses still decode", isinstance(response.json(), list) and len(response.json()) > 0)
+
+
 async def run() -> None:
     check_cors_exposes_pagination_total()
     micro_open_id, micro_claim_id, material_id = await check_visibility()
@@ -400,6 +415,7 @@ async def run() -> None:
     await check_candidate_approval()
     await check_credit_note(micro_open_id, micro_claim_id, material_id)
     await check_variance_counts_each_line_once()
+    await check_large_responses_are_compressed()
 
 
 if __name__ == "__main__":
