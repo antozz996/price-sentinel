@@ -253,7 +253,7 @@ test('admin reviews and integrates a supplier response directly in V2', async ({
   page.once('dialog', dialog => dialog.accept())
   await page.getByRole('button', { name: 'Approva e integra nel listino V2' }).click()
   await expect(page.getByText(/Risposta approvata: 1 nuove varianti/)).toBeVisible()
-  await expect(page.getByText('Stato:')).toContainText('approved')
+  await expect(page.getByText('Stato:')).toContainText('Approvato')
   expect(approvalCalls).toBe(1)
   expect(sheetWrites).toEqual([])
   await expect(page.getByText(/Lo Sheet non è necessario/)).toBeVisible()
