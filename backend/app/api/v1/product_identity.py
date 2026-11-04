@@ -1378,8 +1378,6 @@ async def approve_candidate(
                 supplier_id = fattura.fornitore_id
             raw_desc = riga.descrizione_fornitore_raw or raw_desc
             supplier_code = riga.codice_fornitore_raw
-            if riga.tipo_codice and riga.tipo_codice.upper() in ("EAN", "EAN13", "EAN8", "GTIN"):
-                ean = riga.codice_fornitore_raw
 
     if not supplier_id:
         raise HTTPException(status_code=400, detail="Fornitore non identificabile dal candidato")
