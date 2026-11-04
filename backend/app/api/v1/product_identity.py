@@ -779,9 +779,10 @@ def _live_catalog_suggestions(
             for product_id in index["trigram_product_ids"].get(trigram, set()):
                 trigram_counts[product_id] = trigram_counts.get(product_id, 0) + 1
 
-        # Limit expensive similarity calculations to the strongest lexical
-        # shortlist. One shared word or typo evidence is enough for a visible
-        # manual suggestion, never for an automatic association.
+        # Limit expensive SequenceMatcher calculations to the strongest lexical
+        # shortlist. Only three alternatives are displayed; keeping 24 candidates
+        # gives ample room for spelling variations while avoiding tens of
+        # thousands of comparisons on every page load.
         evidence_ids = set(token_counts) | set(trigram_counts)
         ranked_evidence = sorted(
             evidence_ids,
@@ -791,7 +792,7 @@ def _live_catalog_suggestions(
             ),
             reverse=True,
         )
-        candidate_ids = set(ranked_evidence[:80])
+        candidate_ids = set(ranked_evidence[:24])
 
     ranked: list[tuple[float, Product, bool, bool, bool, int, int]] = []
     for product_id in candidate_ids:
