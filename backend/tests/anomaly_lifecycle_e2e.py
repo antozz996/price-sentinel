@@ -196,12 +196,36 @@ async def check_visibility() -> tuple[int, int, int]:
         check("list hides unworked and closed micro-anomalies", not (listed & ids.hidden))
         check("list keeps open micro-anomalies and material ones", ids.visible <= listed)
 
+        invoice_response = Response()
         invoices = await list_fatture(
-            response=Response(), location_id=None, fornitore_id=None, tipo_documento=None, marker=None,
+            response=invoice_response, location_id=None, fornitore_id=None, tipo_documento=None, marker=None,
             data_da=None, data_a=None, search=None, limit=5, offset=0, current_user=ADMIN, db=db,
         )
         count = invoices[0]["n_anomalie"] if isinstance(invoices[0], dict) else invoices[0].n_anomalie
         check("invoice list counts only operational anomalies", count == len(ids.visible))
+        check("invoice totals count only operational anomalies", invoice_response.headers["X-Total-Anomalies"] == str(len(ids.visible)))
+        check("invoice totals sum the filtered invoices", Decimal(invoice_response.headers["X-Total-Amount"]) == Decimal("100.00"))
+
+        searched_response = Response()
+        await list_fatture(
+            response=searched_response, location_id=None, fornitore_id=None, tipo_documento=None, marker=None,
+            data_da=None, data_a=None, search="MICRO", limit=1, offset=0, current_user=ADMIN, db=db,
+        )
+        check(
+            "invoice totals count a searched invoice once",
+            Decimal(searched_response.headers["X-Total-Amount"]) == Decimal("100.00")
+            and searched_response.headers["X-Total-Count"] == "1",
+        )
+
+        empty_response = Response()
+        await list_fatture(
+            response=empty_response, location_id=None, fornitore_id=None, tipo_documento=None, marker=None,
+            data_da=None, data_a=None, search="NESSUN-RISULTATO", limit=5, offset=0, current_user=ADMIN, db=db,
+        )
+        check(
+            "invoice totals are zero when nothing matches",
+            Decimal(empty_response.headers["X-Total-Amount"]) == 0 and empty_response.headers["X-Total-Anomalies"] == "0",
+        )
 
         kpi = await get_kpi(db=db, _admin=ADMIN)
         check("KPI waiting amount excludes micro-anomalies", Decimal(str(kpi["euro_attesa_manager"])) == Decimal("2.00"))

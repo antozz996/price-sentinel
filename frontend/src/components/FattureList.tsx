@@ -81,6 +81,8 @@ export default function FattureList() {
   const [limit, setLimit] = useState(25);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
+  const [totalAmount, setTotalAmount] = useState<number | null>(null);
+  const [totalAnomalies, setTotalAnomalies] = useState<number | null>(null);
 
   const headers = getHeaders();
 
@@ -152,7 +154,11 @@ export default function FattureList() {
       } else {
         setTotal(0);
       }
-      
+      const amountHeader = res.headers.get('X-Total-Amount');
+      setTotalAmount(amountHeader === null ? null : Number(amountHeader));
+      const anomaliesHeader = res.headers.get('X-Total-Anomalies');
+      setTotalAnomalies(anomaliesHeader === null ? null : Number(anomaliesHeader));
+
       const data = await res.json();
       if (Array.isArray(data)) setFatture(data);
       else setFatture([]);
@@ -289,15 +295,15 @@ export default function FattureList() {
       {/* Stats */}
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
         <div className="glass-panel" style={{ padding: '16px 24px', flex: 1, minWidth: '120px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{fatture.length}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{total.toLocaleString('it-IT')}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Fatture</div>
         </div>
         <div className="glass-panel" style={{ padding: '16px 24px', flex: 1, minWidth: '120px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-red)' }}>{fatture.reduce((s, f) => s + f.n_anomalie, 0)}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-red)' }}>{totalAnomalies === null ? '—' : totalAnomalies.toLocaleString('it-IT')}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anomalie</div>
         </div>
         <div className="glass-panel" style={{ padding: '16px 24px', flex: 1, minWidth: '120px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)' }}>€{fatture.reduce((s, f) => s + (f.tipo_documento === 'TD04' ? -f.totale_imponibile : f.totale_imponibile), 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)' }}>{totalAmount === null ? '—' : `€${totalAmount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Totale</div>
         </div>
       </div>
