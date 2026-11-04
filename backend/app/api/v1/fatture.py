@@ -24,6 +24,7 @@ from app.services.anomaly_policy import (
     is_material_price_increase,
     operational_anomaly_filter,
 )
+from app.services.tenant_scope import invoice_belongs_to_user, invoice_tenant_filter
 
 router = APIRouter()
 
@@ -217,7 +218,7 @@ async def update_marker(
             detail=f"Marker non valido. Valori ammessi: {[m.value for m in MarkerFattura]}"
         )
 
-    query = select(Fattura).where(Fattura.id == fattura_id)
+    query = select(Fattura).where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
     if current_user.ruolo.value == "manager":
         if current_user.location_id is None:
             raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
@@ -245,7 +246,7 @@ async def get_fattura(
     current_user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Fattura).where(Fattura.id == fattura_id)
+    query = select(Fattura).where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
 
     # Manager vede solo la propria location
     if current_user.ruolo.value == "manager":
@@ -271,7 +272,7 @@ async def list_righe_fattura(
     db: AsyncSession = Depends(get_db),
 ):
     # Verifica accesso alla fattura
-    fattura_query = select(Fattura).where(Fattura.id == fattura_id)
+    fattura_query = select(Fattura).where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
     if current_user.ruolo.value == "manager":
         if current_user.location_id is None:
             raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
@@ -975,6 +976,8 @@ async def resolve_parked_line(
     fattura = await db.get(Fattura, riga.fattura_id)
     if not fattura:
         raise HTTPException(status_code=404, detail="Fattura non trovata")
+    if not invoice_belongs_to_user(fattura, current_user):
+        raise HTTPException(status_code=404, detail="Riga fattura non trovata")
     if current_user.ruolo.value == "manager" and (
         current_user.location_id is None or fattura.location_id != current_user.location_id
     ):

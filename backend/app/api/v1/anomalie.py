@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models.anomalie import Anomalia, NotaDiCredito, StatoValidazione
 from app.models.utenti import Utente
 from app.services.anomaly_policy import operational_anomaly_filter
+from app.services.tenant_scope import invoice_tenant_filter
 from app.schemas.anomalie import (
     AnomaliaAzione,
     AnomaliaEscalation,
@@ -49,10 +50,13 @@ async def list_anomalie(
 
     from app.models.esclusi import SKUEscluso
 
-    query = select(Anomalia).join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id).options(
+    query = select(Anomalia).join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id).join(
+        Fattura, RigaFattura.fattura_id == Fattura.id
+    ).options(
         selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore)
     ).where(
         and_(
+            invoice_tenant_filter(current_user),
             RigaFattura.sku_interno.is_(None) |
             ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno)),
             # Micro-deltas remain stored for audit and stay visible only while
@@ -65,10 +69,7 @@ async def list_anomalie(
         query = query.where(Anomalia.stato_validazione == StatoValidazione(stato))
 
     if current_user.ruolo.value == "manager":
-        query = (
-            query.join(Fattura, RigaFattura.fattura_id == Fattura.id)
-            .where(Fattura.location_id == current_user.location_id)
-        )
+        query = query.where(Fattura.location_id == current_user.location_id)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -95,16 +96,14 @@ async def get_anomalia(
     from app.models.fatture import RigaFattura, Fattura
     from app.models.fornitori import Fornitore
 
-    query = select(Anomalia).options(
+    query = select(Anomalia).join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id).join(
+        Fattura, RigaFattura.fattura_id == Fattura.id
+    ).options(
         selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore)
-    ).where(Anomalia.id == anomalia_id)
+    ).where(Anomalia.id == anomalia_id, invoice_tenant_filter(_user))
 
     if _user.ruolo.value == "manager":
-        query = (
-            query.join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
-            .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-            .where(Fattura.location_id == _user.location_id)
-        )
+        query = query.where(Fattura.location_id == _user.location_id)
     result = await db.execute(query)
     anomalia = result.scalar_one_or_none()
     if not anomalia:
@@ -129,7 +128,7 @@ async def azione_manager(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.fatture import RigaFattura, Fattura
-    conditions = [Anomalia.id == anomalia_id]
+    conditions = [Anomalia.id == anomalia_id, invoice_tenant_filter(manager)]
     if manager.ruolo.value != "admin":
         conditions.append(Fattura.location_id == manager.location_id)
 
@@ -247,8 +246,10 @@ async def escalation_admin(
     from app.models.fatture import RigaFattura, Fattura
     result = await db.execute(
         select(Anomalia)
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
         .options(selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore))
-        .where(Anomalia.id == anomalia_id)
+        .where(Anomalia.id == anomalia_id, invoice_tenant_filter(admin))
     )
     anomalia = result.scalar_one_or_none()
     if not anomalia:
@@ -295,9 +296,14 @@ async def registra_nota_credito(
     admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.models.fatture import RigaFattura, Fattura
+
     # Verifica anomalia esiste e in stato corretto
     result = await db.execute(
-        select(Anomalia).where(Anomalia.id == data.anomalia_id)
+        select(Anomalia)
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+        .where(Anomalia.id == data.anomalia_id, invoice_tenant_filter(admin))
     )
     anomalia = result.scalar_one_or_none()
     if not anomalia:
@@ -340,8 +346,13 @@ async def totale_recuperato(
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy import func
+    from app.models.fatture import RigaFattura, Fattura
     result = await db.execute(
         select(func.coalesce(func.sum(NotaDiCredito.importo_recuperato), 0))
+        .join(Anomalia, NotaDiCredito.anomalia_id == Anomalia.id)
+        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
+        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
+        .where(invoice_tenant_filter(_admin))
     )
     totale = result.scalar()
     return {"totale_recuperato": float(totale)}

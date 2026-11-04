@@ -23,6 +23,7 @@ from app.api.deps import get_current_user, require_manager
 from app.database import get_db
 from app.models.anomalie import Anomalia, StatoValidazione
 from app.services.anomaly_policy import operational_anomaly_filter
+from app.services.tenant_scope import invoice_tenant_filter
 from app.models.disputes import (
     DisputeCase,
     DisputeCaseAnomaly,
@@ -165,6 +166,7 @@ async def list_dispute_candidates(
                 DisputeCaseAnomaly.id.is_(None),
                 Anomalia.stato_validazione != StatoValidazione.risolta,
                 operational_anomaly_filter(),
+                invoice_tenant_filter(user),
             )
         )
         if location_id is not None:
