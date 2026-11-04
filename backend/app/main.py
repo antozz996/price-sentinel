@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import text
 
 from app.api.v1.router import api_router
@@ -145,6 +146,10 @@ def create_app() -> FastAPI:
         # the list totals from JavaScript.
         expose_headers=["X-Total-Count", "X-Total-Amount", "X-Total-Anomalies"],
     )
+
+    # The order catalog is over 2 MB of JSON: on slow connections most of the
+    # wait was transfer, not computation.
+    application.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
     # ── Routers ──────────────────────────────
     application.include_router(api_router, prefix="/api/v1")

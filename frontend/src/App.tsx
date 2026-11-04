@@ -1,36 +1,37 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { lazyPage, PageErrorBoundary, rememberActiveTab, restoreTabAfterUpdate } from './lazyPage'
 import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import NotificationCenterModal from './components/NotificationCenterModal'
 
 // Lazy-loaded heavy modules for instant first load & optimal memory
-const ValidationRoom = lazy(() => import('./components/ValidationRoom'))
-const PriceListManager = lazy(() => import('./components/PriceListManager'))
-const ManualUpload = lazy(() => import('./components/ManualUpload'))
-const FattureList = lazy(() => import('./components/FattureList'))
-const SettingsPage = lazy(() => import('./components/SettingsPage'))
-const SkuManager = lazy(() => import('./components/SkuManager'))
-const ProductConsumptionReport = lazy(() => import('./components/ProductConsumptionReport'))
-const SmartPriceSheet = lazy(() => import('./components/SmartPriceSheet'))
-const TopProductsPriceList = lazy(() => import('./components/TopProductsPriceList'))
-const PriceTrendAnalyzer = lazy(() => import('./components/PriceTrendAnalyzer'))
-const ExcludedProducts = lazy(() => import('./components/ExcludedProducts'))
-const CommercialAgreements = lazy(() => import('./components/CommercialAgreements'))
-const ProductIdentityManager = lazy(() => import('./components/ProductIdentityManager'))
-const CategorySupplierManager = lazy(() => import('./components/CategorySupplierManager'))
-const OrderReconciliations = lazy(() => import('./components/OrderReconciliations'))
-const DisputeManagement = lazy(() => import('./components/DisputeManagement'))
-const OperationalAlerts = lazy(() => import('./components/OperationalAlerts'))
-const ClientOnboarding = lazy(() => import('./components/ClientOnboarding'))
-const SectorOrderBuilder = lazy(() => import('./components/SectorOrderBuilder'))
-const OrderRegistry = lazy(() => import('./components/OrderRegistry'))
-const GoodsReceipt = lazy(() => import('./components/GoodsReceipt'))
-const ProductReviewPage = lazy(() => import('./components/ProductReviewPage'))
-const GodModeControlRoom = lazy(() => import('./components/GodModeControlRoom'))
-const UnlistedProductsResolver = lazy(() => import('./components/UnlistedProductsResolver'))
-const SupplierPriceForms = lazy(() => import('./components/SupplierPriceForms'))
-const SupplierPricePublicForm = lazy(() => import('./components/SupplierPricePublicForm'))
+const ValidationRoom = lazyPage(() => import('./components/ValidationRoom'))
+const PriceListManager = lazyPage(() => import('./components/PriceListManager'))
+const ManualUpload = lazyPage(() => import('./components/ManualUpload'))
+const FattureList = lazyPage(() => import('./components/FattureList'))
+const SettingsPage = lazyPage(() => import('./components/SettingsPage'))
+const SkuManager = lazyPage(() => import('./components/SkuManager'))
+const ProductConsumptionReport = lazyPage(() => import('./components/ProductConsumptionReport'))
+const SmartPriceSheet = lazyPage(() => import('./components/SmartPriceSheet'))
+const TopProductsPriceList = lazyPage(() => import('./components/TopProductsPriceList'))
+const PriceTrendAnalyzer = lazyPage(() => import('./components/PriceTrendAnalyzer'))
+const ExcludedProducts = lazyPage(() => import('./components/ExcludedProducts'))
+const CommercialAgreements = lazyPage(() => import('./components/CommercialAgreements'))
+const ProductIdentityManager = lazyPage(() => import('./components/ProductIdentityManager'))
+const CategorySupplierManager = lazyPage(() => import('./components/CategorySupplierManager'))
+const OrderReconciliations = lazyPage(() => import('./components/OrderReconciliations'))
+const DisputeManagement = lazyPage(() => import('./components/DisputeManagement'))
+const OperationalAlerts = lazyPage(() => import('./components/OperationalAlerts'))
+const ClientOnboarding = lazyPage(() => import('./components/ClientOnboarding'))
+const SectorOrderBuilder = lazyPage(() => import('./components/SectorOrderBuilder'))
+const OrderRegistry = lazyPage(() => import('./components/OrderRegistry'))
+const GoodsReceipt = lazyPage(() => import('./components/GoodsReceipt'))
+const ProductReviewPage = lazyPage(() => import('./components/ProductReviewPage'))
+const GodModeControlRoom = lazyPage(() => import('./components/GodModeControlRoom'))
+const UnlistedProductsResolver = lazyPage(() => import('./components/UnlistedProductsResolver'))
+const SupplierPriceForms = lazyPage(() => import('./components/SupplierPriceForms'))
+const SupplierPricePublicForm = lazyPage(() => import('./components/SupplierPricePublicForm'))
 import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession, storeSession } from './api'
 
 type UserProfile = {
@@ -140,7 +141,7 @@ export default function App() {
     return window.location.pathname === '/god' || window.location.hash === '#god' || window.location.search.includes('page=god') || window.location.search.includes('god=1');
   });
 
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [activeTab, setActiveTab] = useState(() => restoreTabAfterUpdate() ?? 'dashboard')
   const [isAuth, setIsAuth] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -261,6 +262,10 @@ export default function App() {
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
   const [loggingIn, setLoggingIn] = useState(false)
+
+  useEffect(() => {
+    rememberActiveTab(activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     // Listen for unauthorized 401 events from fetchWithAuth
@@ -710,9 +715,11 @@ export default function App() {
 
   if (supplierPublicMatch) {
     return (
-      <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: '#0b1220', color: 'white' }}>Caricamento modulo…</main>}>
-        <SupplierPricePublicForm token={decodeURIComponent(supplierPublicMatch[1])} />
-      </Suspense>
+      <PageErrorBoundary>
+        <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: '#0b1220', color: 'white' }}>Caricamento modulo…</main>}>
+          <SupplierPricePublicForm token={decodeURIComponent(supplierPublicMatch[1])} />
+        </Suspense>
+      </PageErrorBoundary>
     );
   }
 
@@ -911,6 +918,7 @@ export default function App() {
 
         {/* Dynamic Content with Code-Splitting */}
         <div style={{ position: 'relative', zIndex: 1 }}>
+          <PageErrorBoundary key={activeTab}>
           <Suspense fallback={
             <div style={{
               display: 'flex',
@@ -927,6 +935,7 @@ export default function App() {
           }>
             {renderContent()}
           </Suspense>
+          </PageErrorBoundary>
         </div>
       </main>
 

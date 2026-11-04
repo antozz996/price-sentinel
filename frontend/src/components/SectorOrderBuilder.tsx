@@ -489,11 +489,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         try {
           const matrixData = await matrixRes.json();
           const matrixRows: any[] = [...(matrixData.rows || [])];
+          const nextOffsets: number[] = [];
           for (let offset = 500; offset < Number(matrixData.total || 0); offset += 500) {
+            nextOffsets.push(offset);
+          }
+          const nextPages = await Promise.all(nextOffsets.map(async offset => {
             const page = await fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500&offset=${offset}`, { headers });
             if (!page.ok) throw new Error('Pagina listino non disponibile');
-            matrixRows.push(...((await page.json()).rows || []));
-          }
+            return (await page.json()).rows || [];
+          }));
+          nextPages.forEach(rows => matrixRows.push(...rows));
           const matrixMap = new Map<number, any>();
           matrixRows.forEach((r: any) => {
             matrixMap.set(r.product_id, r);
