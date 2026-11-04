@@ -61,7 +61,13 @@ async def list_fatture(
         .outerjoin(Fornitore, Fattura.fornitore_id == Fornitore.id)
         .outerjoin(Location, Fattura.location_id == Location.id)
         .outerjoin(RigaFattura, RigaFattura.fattura_id == Fattura.id)
-        .outerjoin(Anomalia, Anomalia.riga_fattura_id == RigaFattura.id)
+        .outerjoin(
+            Anomalia,
+            and_(
+                Anomalia.riga_fattura_id == RigaFattura.id,
+                func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
+            ),
+        )
         .group_by(
             Fattura.id, Fornitore.nome_azienda, Location.nome_struttura
         )
@@ -250,7 +256,12 @@ async def list_righe_fattura(
     anomalies_by_line = {}
     if riga_ids:
         anomalies_result = await db.execute(
-            select(Anomalia).where(Anomalia.riga_fattura_id.in_(riga_ids))
+            select(Anomalia).where(
+                and_(
+                    Anomalia.riga_fattura_id.in_(riga_ids),
+                    func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
+                )
+            )
         )
         anomalies_by_line = {
             anomaly.riga_fattura_id: anomaly

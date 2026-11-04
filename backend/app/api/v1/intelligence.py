@@ -6,6 +6,7 @@ Espone gli endpoint per la Dashboard Admin, KPI e Cross-Location Tracker.
 from datetime import date, timedelta, datetime, timezone
 from typing import Any
 from io import BytesIO
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy import select, func, and_, or_, case, text
@@ -56,6 +57,7 @@ async def get_kpi(
         .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
         .where(Fattura.tenant_id == tenant_id)
+        .where(func.abs(Anomalia.delta_totale) >= Decimal("0.10"))
     )
 
     anomalie_res = await db.execute(anomalie_stmt)
