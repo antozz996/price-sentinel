@@ -55,12 +55,9 @@ async def list_anomalie(
         and_(
             RigaFattura.sku_interno.is_(None) |
             ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno)),
-            # Keep historical decisions auditable, but hide unresolved rounding
-            # noise created before the materiality rule was introduced.
-            or_(
-                Anomalia.stato_validazione != StatoValidazione.da_verificare,
-                func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
-            ),
+            # Historical micro-deltas remain stored for audit, but never appear
+            # in operational anomaly lists regardless of their workflow state.
+            func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
         )
     ).order_by(Anomalia.id.desc())
 
