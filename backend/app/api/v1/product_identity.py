@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select, delete, and_, or_, text, func
+from sqlalchemy import select, delete, and_, or_, text, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -862,6 +862,32 @@ def _live_catalog_suggestion(raw_description: str, products: list[Product]) -> d
     """Backward-compatible best suggestion helper used by focused tests."""
     suggestions = _live_catalog_suggestions(raw_description, products)
     return suggestions[0] if suggestions else None
+
+
+@router.get(
+    "/match-candidates/work-queue/count",
+    summary="Conta rapidamente i prodotti raggruppati ancora da risolvere",
+)
+async def get_match_work_queue_count(
+    db: AsyncSession = Depends(get_db),
+    _admin: Utente = Depends(require_admin),
+):
+    """Badge leggero: non calcola similarità né serializza l'intero catalogo."""
+    supplier_code = func.upper(func.trim(func.coalesce(RigaFattura.codice_fornitore_raw, "")))
+    normalized_description = func.lower(func.regexp_replace(
+        func.trim(func.coalesce(RigaFattura.descrizione_fornitore_raw, "")),
+        r"\s+", " ", "g",
+    ))
+    identity = case((supplier_code != "", supplier_code), else_=normalized_description)
+    grouped = (
+        select(Fattura.fornitore_id, identity.label("supplier_identity"))
+        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+        .where(RigaFattura.stato_matching == StatoMatching.in_parking)
+        .group_by(Fattura.fornitore_id, identity)
+        .subquery()
+    )
+    count = await db.scalar(select(func.count()).select_from(grouped))
+    return {"pending_count": int(count or 0)}
 
 
 @router.get(
