@@ -633,6 +633,17 @@ def _description_similarity(left: str, right: str) -> float:
     return max(sequence_score, token_score, trigram_score)
 
 
+def _effective_volume_ml(description: str, attributes: dict[str, Any]) -> int | None:
+    """Read explicit units and common invoice shorthand such as trailing 0.70."""
+    volume = attributes.get("volume_ml")
+    if volume is not None:
+        return int(volume)
+    bare_litres = re.search(r"(?:^|\s)(0[.,]\d{1,3})(?:\s|$)", description)
+    if not bare_litres:
+        return None
+    return int(round(float(bare_litres.group(1).replace(",", ".")) * 1000))
+
+
 def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
     """Precompute names and an inverted token index once per work-queue request."""
     products_by_id: dict[int, Product] = {}
@@ -642,6 +653,9 @@ def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
     tokens_by_id: dict[int, set[str]] = {}
     trigram_product_ids: dict[str, set[int]] = {}
     trigrams_by_id: dict[int, set[str]] = {}
+    volume_ml_by_id: dict[int, int | None] = {}
+    weight_g_by_id: dict[int, int | None] = {}
+    pack_qty_by_id: dict[int, int | None] = {}
 
     for product in products:
         names = {
@@ -655,6 +669,16 @@ def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
         }
         products_by_id[product.id] = product
         names_by_id[product.id] = list(names)
+        attributes = extract_candidate_attributes(product.canonical_name or "")
+        volume_ml_by_id[product.id] = product.volume_ml or _effective_volume_ml(
+            product.canonical_name or "", attributes
+        )
+        weight_g_by_id[product.id] = product.weight_g or attributes.get("weight_g")
+        pack_qty_by_id[product.id] = (
+            product.unit_count
+            if product.unit_count and product.unit_count > 1
+            else attributes.get("pack_qty")
+        )
         product_tokens: set[str] = set()
         for name in names:
             exact_name_ids.setdefault(name, set()).add(product.id)
@@ -675,6 +699,9 @@ def _build_live_catalog_index(products: list[Product]) -> dict[str, Any]:
         "tokens_by_id": tokens_by_id,
         "trigram_product_ids": trigram_product_ids,
         "trigrams_by_id": trigrams_by_id,
+        "volume_ml_by_id": volume_ml_by_id,
+        "weight_g_by_id": weight_g_by_id,
+        "pack_qty_by_id": pack_qty_by_id,
     }
 
 
@@ -717,32 +744,21 @@ def _live_catalog_suggestions(
 
     line_identity = identity_tokens(line_tokens)
 
-    def effective_volume_ml(description: str, attributes: dict[str, Any]) -> int | None:
-        """Read explicit units and common invoice shorthand such as trailing 0.70."""
-        volume = attributes.get("volume_ml")
-        if volume is not None:
-            return int(volume)
-        bare_litres = re.search(r"(?:^|\s)(0[.,]\d{1,3})(?:\s|$)", description)
-        if not bare_litres:
-            return None
-        return int(round(float(bare_litres.group(1).replace(",", ".")) * 1000))
-
-    line_volume_ml = effective_volume_ml(raw_description, line_attributes)
+    line_volume_ml = _effective_volume_ml(raw_description, line_attributes)
 
     def has_format_conflict(product: Product) -> bool:
         # Older Sheet imports can carry the format only in the product name
         # (for example "1 LT") while the structured columns are NULL. Treat
         # the name as authoritative fallback so 70 cl is never proposed as
         # the same purchasable item as 1 litre.
-        product_attributes = extract_candidate_attributes(product.canonical_name or "")
         comparisons = (
-            (line_volume_ml, product.volume_ml or effective_volume_ml(product.canonical_name or "", product_attributes)),
-            (line_attributes.get("weight_g"), product.weight_g or product_attributes.get("weight_g")),
+            (line_volume_ml, index["volume_ml_by_id"].get(product.id)),
+            (line_attributes.get("weight_g"), index["weight_g_by_id"].get(product.id)),
         )
         if any(left is not None and right is not None and left != right for left, right in comparisons):
             return True
         line_pack = line_attributes.get("pack_qty")
-        product_pack = product.unit_count if product.unit_count and product.unit_count > 1 else product_attributes.get("pack_qty")
+        product_pack = index["pack_qty_by_id"].get(product.id)
         return bool(line_pack and product_pack and line_pack != product_pack)
 
     def has_identity_conflict(product: Product) -> bool:
@@ -782,11 +798,8 @@ def _live_catalog_suggestions(
         product = index["products_by_id"][product_id]
         names = index["names_by_id"][product_id]
         exact = normalized in names
-        product_attributes = extract_candidate_attributes(product.canonical_name or "")
-        product_volume_ml = product.volume_ml or effective_volume_ml(
-            product.canonical_name or "", product_attributes
-        )
-        product_weight_g = product.weight_g or product_attributes.get("weight_g")
+        product_volume_ml = index["volume_ml_by_id"].get(product.id)
+        product_weight_g = index["weight_g_by_id"].get(product.id)
         same_measured_format = bool(
             (line_volume_ml is not None and product_volume_ml == line_volume_ml)
             or (
@@ -899,53 +912,30 @@ async def get_match_work_queue(
     _admin: Utente = Depends(require_admin),
 ):
     """Una decisione operativa per prodotto, anche se ricorre su più fatture."""
-    # Fetch invoice lines once, without expanding every line by all of its
-    # historical MatchCandidate rows.  The previous five-model join could
-    # multiply the result set substantially and hydrate full Product objects
-    # that were immediately discarded because live suggestions are recomputed
-    # against the current catalog below.
     stmt = (
-        select(RigaFattura, Fattura, Fornitore)
+        select(RigaFattura, Fattura, Fornitore, MatchCandidate, Product)
         .join(Fattura, Fattura.id == RigaFattura.fattura_id)
         .outerjoin(Fornitore, Fornitore.id == Fattura.fornitore_id)
+        .outerjoin(
+            MatchCandidate,
+            and_(
+                MatchCandidate.invoice_line_id == RigaFattura.id,
+                MatchCandidate.status == "pending",
+            ),
+        )
+        .outerjoin(Product, Product.id == MatchCandidate.product_id)
         .where(RigaFattura.stato_matching == StatoMatching.in_parking)
-        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc())
+        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc(), MatchCandidate.score.desc())
     )
     rows = (await db.execute(stmt)).all()
-
-    # Candidate metadata is needed only for the two diagnostic counters. Read
-    # the four scalar columns in one compact query instead of joining them into
-    # every invoice-line row.
-    candidate_stmt = (
-        select(
-            MatchCandidate.invoice_line_id,
-            MatchCandidate.score,
-            MatchCandidate.block_flag,
-            MatchCandidate.reason_json,
-        )
-        .join(Product, Product.id == MatchCandidate.product_id)
-        .join(RigaFattura, RigaFattura.id == MatchCandidate.invoice_line_id)
-        .where(
-            MatchCandidate.status == "pending",
-            RigaFattura.stato_matching == StatoMatching.in_parking,
-        )
-    )
-    candidate_rows = (await db.execute(candidate_stmt)).all()
-    candidate_counts_by_line: dict[int, int] = {}
-    weak_candidates_discarded = 0
-    for line_id, score, block_flag, reason_json in candidate_rows:
-        candidate_counts_by_line[line_id] = candidate_counts_by_line.get(line_id, 0) + 1
-        reason = reason_json or {}
-        if float(score) < 70 or block_flag or reason.get("decision") == "parking":
-            weak_candidates_discarded += 1
-
     active_products = (
         await db.execute(select(Product).where(Product.is_active.is_(True)))
     ).scalars().all()
     live_catalog_index = _build_live_catalog_index(active_products)
 
     groups: dict[tuple[int, str, str], dict[str, Any]] = {}
-    for line, invoice, supplier in rows:
+    weak_candidates_discarded = 0
+    for line, invoice, supplier, candidate, product in rows:
         supplier_id = supplier.id if supplier else 0
         supplier_name = supplier.nome_azienda if supplier else "Fornitore non associato"
         signature = _work_queue_signature(supplier_id, line)
@@ -977,7 +967,27 @@ async def get_match_work_queue(
             group["quantita"] = float(line.quantita or 1)
             group["numero_documento"] = invoice.numero_documento
 
-        group["candidate_records"] += candidate_counts_by_line.get(line.id, 0)
+        if not candidate or not product:
+            continue
+
+        group["candidate_records"] += 1
+        reason = candidate.reason_json or {}
+        is_blocked = bool(candidate.block_flag or reason.get("decision") == "parking")
+        score = float(candidate.score)
+        if score < 70 or is_blocked:
+            weak_candidates_discarded += 1
+            continue
+
+        previous = group["candidates"].get(product.id)
+        if previous is None or score > previous["score"]:
+            group["candidates"][product.id] = {
+                "candidate_id": candidate.id,
+                "product_id": product.id,
+                "sku_interno": product.sku_interno,
+                "canonical_name": product.canonical_name,
+                "score": round(score, 1),
+                "reason_json": reason,
+            }
 
     items = []
     for group in groups.values():
