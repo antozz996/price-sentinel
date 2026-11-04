@@ -117,6 +117,33 @@ interface StandbyQuoteRequestItem {
   updated_at: string;
 }
 
+const WORK_QUEUE_CACHE_KEY = 'price-sentinel:unlisted-work-queue:v1';
+
+function readCachedWorkQueue(): WorkQueueResponse | null {
+  try {
+    const raw = sessionStorage.getItem(WORK_QUEUE_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { savedAt: number; data: WorkQueueResponse };
+    // The cached result is only a fast visual bridge while the live request runs.
+    // Discard old browser sessions so operational decisions never rely on stale data.
+    if (!parsed?.data || Date.now() - parsed.savedAt > 5 * 60 * 1000) {
+      sessionStorage.removeItem(WORK_QUEUE_CACHE_KEY);
+      return null;
+    }
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function cacheWorkQueue(data: WorkQueueResponse) {
+  try {
+    sessionStorage.setItem(WORK_QUEUE_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), data }));
+  } catch {
+    // Storage can be unavailable or full; the live request remains authoritative.
+  }
+}
+
 const CATEGORIES = [
   'Food',
   'Beverage',
@@ -124,9 +151,10 @@ const CATEGORIES = [
 ];
 
 export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: (tab: string) => void }) {
-  const [queueData, setQueueData] = useState<WorkQueueResponse | null>(null);
+  const [queueData, setQueueData] = useState<WorkQueueResponse | null>(() => readCachedWorkQueue());
   const [existingProducts, setExistingProducts] = useState<ExistingProduct[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !readCachedWorkQueue());
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -255,33 +283,41 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (activeMainTab === 'standby' && standbyItems.length === 0 && !loadingStandby) {
+      void loadStandbyData();
+    }
+  // Standby is intentionally lazy-loaded only when the operator opens its tab.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMainTab]);
+
   const loadAll = async () => {
-    setLoading(true);
+    const hasVisibleData = queueData !== null;
+    if (hasVisibleData) setRefreshing(true);
+    else setLoading(true);
     setError(null);
     try {
-      const [queueRes, prodRes] = await Promise.all([
-        fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, {
-          headers: getHeaders(),
-        }),
-        fetch(`${API_BASE}/products`, {
-          headers: getHeaders(),
-        }),
-      ]);
+      // The catalog is useful only when the operator opens manual association.
+      // Load it independently so a large product list cannot block the queue UI.
+      void fetch(`${API_BASE}/products`, { headers: getHeaders() })
+        .then(async response => {
+          if (response.ok) setExistingProducts(await response.json());
+        })
+        .catch(() => undefined);
+
+      const queueRes = await fetch(`${API_BASE}/product-identity/match-candidates/work-queue`, {
+        headers: getHeaders(),
+      });
 
       if (!queueRes.ok) throw new Error('Errore nel caricamento delle voci fuori listino');
       const qData: WorkQueueResponse = await queueRes.json();
       setQueueData(qData);
-
-      if (prodRes.ok) {
-        const pData: ExistingProduct[] = await prodRes.json();
-        setExistingProducts(pData);
-      }
-      
-      await loadStandbyData();
+      cacheWorkQueue(qData);
     } catch (err: any) {
       setError(err.message || 'Errore di connessione');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -920,7 +956,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
           <button
             onClick={loadAll}
-            disabled={loading}
+            disabled={loading || refreshing}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -930,14 +966,14 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               border: '1px solid var(--border-glass)',
               borderRadius: 'var(--border-radius-sm)',
               color: 'var(--text-primary)',
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: loading || refreshing ? 'not-allowed' : 'pointer',
               fontSize: '0.85rem',
               fontWeight: 500,
               transition: 'var(--transition-smooth)'
             }}
           >
-            <RefreshCw size={16} className={loading ? 'spin' : ''} />
-            Aggiorna Dati
+            <RefreshCw size={16} className={loading || refreshing ? 'spin' : ''} />
+            {refreshing ? 'Aggiornamento…' : 'Aggiorna Dati'}
           </button>
         </div>
 
