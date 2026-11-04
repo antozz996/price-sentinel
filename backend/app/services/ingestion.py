@@ -14,7 +14,7 @@ import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.anomalie import Anomalia, StatoValidazione, NotaDiCredito
@@ -324,6 +324,7 @@ async def _process_td04(
 
     # ── Caricamento Anomalie Aperte dello stesso Fornitore e Location ──
     from sqlalchemy.orm import selectinload
+    from app.services.anomaly_policy import material_anomaly_filter
     anomalie_query = (
         select(Anomalia)
         .options(selectinload(Anomalia.riga_fattura))
@@ -338,7 +339,16 @@ async def _process_td04(
                     StatoValidazione.in_parking,
                     StatoValidazione.contestata,
                     StatoValidazione.in_reclamo,
-                ])
+                ]),
+                # Una nota di credito non deve chiudere rumore di arrotondamento
+                # mai lavorato, ma deve poter chiudere un reclamo gia' aperto.
+                or_(
+                    material_anomaly_filter(Anomalia.delta_totale),
+                    Anomalia.stato_validazione.in_([
+                        StatoValidazione.contestata,
+                        StatoValidazione.in_reclamo,
+                    ]),
+                ),
             )
         )
     )

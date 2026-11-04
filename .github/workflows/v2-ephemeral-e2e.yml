@@ -104,6 +104,10 @@ jobs:
           print("PASS: E2E targets only CI disposable databases")
           PY
 
+      - name: Unit — Anomaly materiality policy and invoice endpoints
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_anomaly_policy.py' -v
+
       - name: Unit — Smart Price Sheet decimal parsing and recommendations
         working-directory: backend
         run: python tests/smart_price_sheet_unit.py

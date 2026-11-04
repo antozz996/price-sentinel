@@ -4,7 +4,6 @@ Workflow a stati completo — Spec §4.1, §4.2, §4.3.
 """
 
 from datetime import date, datetime, timezone
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlalchemy import select, and_, or_, func
@@ -15,6 +14,7 @@ from app.api.deps import get_current_user, require_admin, require_manager
 from app.database import get_db
 from app.models.anomalie import Anomalia, NotaDiCredito, StatoValidazione
 from app.models.utenti import Utente
+from app.services.anomaly_policy import material_anomaly_filter
 from app.schemas.anomalie import (
     AnomaliaAzione,
     AnomaliaEscalation,
@@ -57,7 +57,7 @@ async def list_anomalie(
             ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno)),
             # Historical micro-deltas remain stored for audit, but never appear
             # in operational anomaly lists regardless of their workflow state.
-            func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
+            material_anomaly_filter(Anomalia.delta_totale),
         )
     ).order_by(Anomalia.id.desc())
 

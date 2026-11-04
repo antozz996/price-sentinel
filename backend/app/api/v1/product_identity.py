@@ -1444,7 +1444,10 @@ async def approve_candidate(
                         riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
                         delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
                         delta_total = delta * riga.quantita
-                        from app.services.anomaly_policy import is_material_price_increase
+                        from app.services.anomaly_policy import (
+                            delete_stale_unworked_anomalies,
+                            is_material_price_increase,
+                        )
                         if is_material_price_increase(delta_total):
                             # Pulisce vecchie anomalie
                             await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
@@ -1458,6 +1461,8 @@ async def approve_candidate(
                                 stato_validazione=StatoValidazione.da_verificare,
                             )
                             db.add(anomalia)
+                        else:
+                            await db.execute(delete_stale_unworked_anomalies(riga.id))
             # Calcola prezzi ed eventuali anomalie... (riga)
             pass
 
