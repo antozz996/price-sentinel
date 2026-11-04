@@ -61,8 +61,5 @@ build/
 # Reports generated from real supplier data (never commit)
 backend/data/import_samples/*_report*.json
 
-# Reports generated from real supplier data (never commit)
-backend/data/import_samples/*_report*.json
-
 # GitHub Actions ephemeral Google WIF credentials (never commit)
 gha-creds-*.json
