@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.utenti import Utente
 from app.schemas.utenti import SessionTokenRequest, TokenResponse, UtenteLogin, UtenteResponse
+from app.password_policy import MIN_PASSWORD_LENGTH
 from app.services.auth import (
-    MIN_PASSWORD_LENGTH,
     REFRESH_TOKEN_TYPE,
     create_access_token,
     create_refresh_token,

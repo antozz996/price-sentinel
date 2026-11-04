@@ -27,8 +27,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # ── JWT Tokens ───────────────────────────────
 
 REFRESH_TOKEN_TYPE = "refresh"
-# Vale per le nuove password: quelle esistenti continuano a funzionare.
-MIN_PASSWORD_LENGTH = 12
 
 
 def create_access_token(

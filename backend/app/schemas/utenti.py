@@ -4,7 +4,7 @@ Price Sentinel — Schemas Utenti.
 
 from pydantic import BaseModel, EmailStr, field_validator
 
-from app.services.auth import MIN_PASSWORD_LENGTH
+from app.password_policy import MIN_PASSWORD_LENGTH
 
 
 def _require_strong_password(value: str | None) -> str | None:
