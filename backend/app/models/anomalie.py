@@ -126,6 +126,16 @@ class Anomalia(Base):
     def codice_fornitore(self) -> str | None:
         return self.riga_fattura.codice_fornitore_raw if self.riga_fattura else None
 
+    @property
+    def fornitore_id(self) -> int | None:
+        if self.riga_fattura and self.riga_fattura.fattura:
+            return self.riga_fattura.fattura.fornitore_id
+        return None
+
+    @property
+    def sku_interno(self) -> str | None:
+        return self.riga_fattura.sku_interno if self.riga_fattura else None
+
     def __repr__(self) -> str:
         return f"<Anomalia Δ{self.delta_prezzo} ({self.stato_validazione.value})>"
 

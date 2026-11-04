@@ -6,8 +6,9 @@ import Pagination from './Pagination';
 export default function ValidationRoom() {
   const [anomalie, setAnomalie] = useState<Anomalia[]>([]);
   const [loading, setLoading] = useState(true);
-  const [skus, setSkus] = useState<{ sku_interno: string; descrizione_pattuita: string }[]>([]);
+  const [products, setProducts] = useState<{ sku_interno: string | null; canonical_name: string; order_name?: string | null }[]>([]);
   const [selectedSkus, setSelectedSkus] = useState<{ [anomaliaId: number]: string }>({});
+  const [productQueries, setProductQueries] = useState<{ [anomaliaId: number]: string }>({});
   const [conversionCoefficients, setConversionCoefficients] = useState<{ [anomaliaId: number]: string }>({});
 
   // Timeline analytics states
@@ -20,18 +21,22 @@ export default function ValidationRoom() {
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
 
-  // Load all master list SKUs to allow manual override mapping
-  const fetchSKUs = async () => {
+  // Load canonical products so operators can search by a human name instead of
+  // memorising internal SKU codes.
+  const fetchProducts = async () => {
     try {
-      const res = await fetch(`${API_BASE}/listino/?limit=5000`, { headers: getHeaders() });
+      const res = await fetch(`${API_BASE}/products`, { headers: getHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setSkus(data);
+        setProducts(Array.isArray(data) ? data.filter(product => product.sku_interno) : []);
       }
     } catch (err) {
-      console.error("Error loading SKUs for manual matching", err);
+      console.error("Error loading products for manual matching", err);
     }
   };
+
+  const productLabel = (product: { sku_interno: string | null; canonical_name: string; order_name?: string | null }) =>
+    `${product.order_name ? `${product.order_name} · ` : ''}${product.canonical_name} — ${product.sku_interno}`;
 
   const fetchAnomalie = async (signal?: AbortSignal) => {
     try {
@@ -73,7 +78,7 @@ export default function ValidationRoom() {
   useEffect(() => {
     const controller = new AbortController();
     fetchAnomalie(controller.signal);
-    fetchSKUs();
+    fetchProducts();
     return () => controller.abort();
   // Pagination is the intended anomaly reload trigger; SKU lookup is static.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,7 +103,11 @@ export default function ValidationRoom() {
   const handleSaveAlias = async (anomalia: Anomalia) => {
     const sku = selectedSkus[anomalia.id];
     if (!sku) {
-      alert("Per favore, seleziona uno SKU interno prima di salvare.");
+      alert("Cerca e seleziona un prodotto prima di salvare.");
+      return;
+    }
+    if (!anomalia.fornitore_id) {
+      alert("Il fornitore della riga non è identificato: impossibile creare un collegamento sicuro.");
       return;
     }
 
@@ -113,7 +122,7 @@ export default function ValidationRoom() {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({
-          fornitore_id: anomalia.fornitore_id || 1, // Fallback safely to first vendor if null
+          fornitore_id: anomalia.fornitore_id,
           codice_fornitore_originale: anomalia.codice_fornitore || 'RAW_CODE',
           sku_interno: sku,
           coefficiente_conversione: scaleVal
@@ -264,30 +273,46 @@ export default function ValidationRoom() {
                   </div>
                 </div>
 
-                {/* Interactive Auto-Mapping bulb trigger */}
+                {/* Mapping is shown only when ingestion has not already linked the invoice line. */}
+                {ano.sku_interno ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '14px 16px', borderRadius: '12px', color: '#6ee7b7' }}>
+                    <Check size={18} />
+                    <div>
+                      <strong>Prodotto già associato</strong>
+                      <div style={{ fontSize: '0.8rem', marginTop: '2px' }}>
+                        SKU {ano.sku_interno}. L’associazione eseguita nel flusso fatture viene riutilizzata automaticamente.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(245, 158, 11, 0.04)', border: '1px solid rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Sparkles size={16} color="#f59e0b" />
                     <span style={{ fontSize: '0.85rem', color: 'rgba(245, 158, 11, 0.95)', fontWeight: 600 }}>
-                      💡 Suggerimento Auto-Mapping permanentemente:
+                      Associazione mancante: collega questa voce una sola volta
                     </span>
                   </div>
                   
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     <div style={{ flex: '2', minWidth: '240px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Associa a Prodotto Listino</span>
-                      <select 
-                        value={selectedSkus[ano.id] || ''} 
-                        onChange={(e) => setSelectedSkus({ ...selectedSkus, [ano.id]: e.target.value })}
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Cerca prodotto per nome, nome informale o SKU</span>
+                      <input
+                        list={`products-${ano.id}`}
+                        value={productQueries[ano.id] || ''}
+                        placeholder="Scrivi ad esempio Moët Ice Imperial…"
+                        onChange={(e) => {
+                          const query = e.target.value;
+                          const match = products.find(product => productLabel(product) === query || product.sku_interno === query);
+                          setProductQueries(prev => ({ ...prev, [ano.id]: query }));
+                          setSelectedSkus(prev => ({ ...prev, [ano.id]: match?.sku_interno || '' }));
+                        }}
                         style={{ background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
-                      >
-                        <option value="">Seleziona lo SKU per agganciare l'Alias...</option>
-                        {skus.map((s) => (
-                          <option key={s.sku_interno} value={s.sku_interno}>
-                            {s.sku_interno} - {s.descrizione_pattuita}
-                          </option>
+                      />
+                      <datalist id={`products-${ano.id}`}>
+                        {products.map(product => (
+                          <option key={product.sku_interno!} value={productLabel(product)} />
                         ))}
-                      </select>
+                      </datalist>
                     </div>
 
                     <div style={{ flex: '1', minWidth: '120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -309,6 +334,7 @@ export default function ValidationRoom() {
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* Collapsible Chronological Historical Price Trend Visualizer */}
                 {sku && (

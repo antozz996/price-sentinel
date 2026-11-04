@@ -29,6 +29,8 @@ class AnomaliaResponse(BaseModel):
     fornitore_nome: str | None = None
     quantita: Decimal | None = None
     codice_fornitore: str | None = None
+    fornitore_id: int | None = None
+    sku_interno: str | None = None
 
     model_config = {"from_attributes": True}
 
