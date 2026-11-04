@@ -21,7 +21,7 @@ from app.models.fornitori import Fornitore
 from fastapi.responses import Response, StreamingResponse
 from app.services.pdf_generator import generate_vendor_passport_pdf, generate_consumption_invoices_pdf
 from app.schemas.approvazioni import ApprovazionePrezzoCreate, ApprovazionePrezzoResponse
-from app.services.anomaly_policy import material_anomaly_filter
+from app.services.anomaly_policy import operational_anomaly_filter
 
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -57,7 +57,7 @@ async def get_kpi(
         .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
         .where(Fattura.tenant_id == tenant_id)
-        .where(material_anomaly_filter(Anomalia.delta_totale))
+        .where(operational_anomaly_filter())
     )
 
     anomalie_res = await db.execute(anomalie_stmt)

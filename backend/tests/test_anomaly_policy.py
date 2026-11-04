@@ -20,7 +20,7 @@ from app.services.anomaly_policy import (
     MIN_ANOMALY_TOTAL,
     delete_stale_unworked_anomalies,
     is_material_price_increase,
-    material_anomaly_filter,
+    operational_anomaly_filter,
 )
 
 
@@ -75,9 +75,25 @@ class MaterialityRuleTest(unittest.TestCase):
         self.assertTrue(is_material_price_increase(Decimal("5.00")))
 
     def test_sql_filter_uses_the_shared_threshold(self):
-        sql = compiled(select(Anomalia.id).where(material_anomaly_filter(Anomalia.delta_totale)))
+        sql = compiled(select(Anomalia.id).where(operational_anomaly_filter()))
         self.assertIn("abs(anomalie.delta_totale) >=", sql)
         self.assertIn(str(MIN_ANOMALY_TOTAL), sql)
+
+    def test_micro_anomalies_stay_visible_only_while_being_handled(self):
+        sql = compiled(select(Anomalia.id).where(operational_anomaly_filter()))
+        for open_state in (
+            StatoValidazione.proposta_aggiornamento,
+            StatoValidazione.contestata,
+            StatoValidazione.in_reclamo,
+        ):
+            self.assertIn(open_state.name, sql)
+        for hidden_state in (
+            StatoValidazione.da_verificare,
+            StatoValidazione.in_parking,
+            StatoValidazione.accettata,
+            StatoValidazione.risolta,
+        ):
+            self.assertNotIn(hidden_state.name, sql)
 
 
 class StaleAnomalyCleanupTest(unittest.TestCase):

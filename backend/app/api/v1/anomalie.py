@@ -14,7 +14,7 @@ from app.api.deps import get_current_user, require_admin, require_manager
 from app.database import get_db
 from app.models.anomalie import Anomalia, NotaDiCredito, StatoValidazione
 from app.models.utenti import Utente
-from app.services.anomaly_policy import material_anomaly_filter
+from app.services.anomaly_policy import operational_anomaly_filter
 from app.schemas.anomalie import (
     AnomaliaAzione,
     AnomaliaEscalation,
@@ -55,9 +55,9 @@ async def list_anomalie(
         and_(
             RigaFattura.sku_interno.is_(None) |
             ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno)),
-            # Historical micro-deltas remain stored for audit, but never appear
-            # in operational anomaly lists regardless of their workflow state.
-            material_anomaly_filter(Anomalia.delta_totale),
+            # Micro-deltas remain stored for audit and stay visible only while
+            # someone is still handling them.
+            operational_anomaly_filter(),
         )
     ).order_by(Anomalia.id.desc())
 

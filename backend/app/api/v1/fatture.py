@@ -22,7 +22,7 @@ from app.schemas.fatture import FatturaResponse, RigaFatturaResponse
 from app.services.anomaly_policy import (
     delete_stale_unworked_anomalies,
     is_material_price_increase,
-    material_anomaly_filter,
+    operational_anomaly_filter,
 )
 
 router = APIRouter()
@@ -70,7 +70,7 @@ async def list_fatture(
             Anomalia,
             and_(
                 Anomalia.riga_fattura_id == RigaFattura.id,
-                material_anomaly_filter(Anomalia.delta_totale),
+                operational_anomaly_filter(),
             ),
         )
         .group_by(
@@ -264,7 +264,7 @@ async def list_righe_fattura(
             select(Anomalia).where(
                 and_(
                     Anomalia.riga_fattura_id.in_(riga_ids),
-                    material_anomaly_filter(Anomalia.delta_totale),
+                    operational_anomaly_filter(),
                 )
             )
         )

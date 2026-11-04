@@ -22,7 +22,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, require_manager
 from app.database import get_db
 from app.models.anomalie import Anomalia, StatoValidazione
-from app.services.anomaly_policy import material_anomaly_filter
+from app.services.anomaly_policy import operational_anomaly_filter
 from app.models.disputes import (
     DisputeCase,
     DisputeCaseAnomaly,
@@ -164,7 +164,7 @@ async def list_dispute_candidates(
             .where(
                 DisputeCaseAnomaly.id.is_(None),
                 Anomalia.stato_validazione != StatoValidazione.risolta,
-                material_anomaly_filter(Anomalia.delta_totale),
+                operational_anomaly_filter(),
             )
         )
         if location_id is not None:
