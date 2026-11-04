@@ -1259,11 +1259,13 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
         line.prezzo_netto_normalizzato = normalized_price.normalized_unit_price
         delta = line.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
         await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == line.id))
-        if delta > 0:
+        delta_total = delta * line.quantita
+        from app.services.anomaly_policy import is_material_price_increase
+        if is_material_price_increase(delta_total):
             db.add(Anomalia(
                 riga_fattura_id=line.id,
                 delta_prezzo=delta,
-                delta_totale=delta * line.quantita,
+                delta_totale=delta_total,
                 prezzo_listino_snapshot=listino.prezzo_pattuito,
                 prezzo_fatturato_snapshot=line.prezzo_netto_normalizzato,
                 stato_validazione=StatoValidazione.da_verificare,
@@ -1441,14 +1443,16 @@ async def approve_candidate(
                     if norm_price_res.reliable:
                         riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
                         delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
-                        if delta > 0:
+                        delta_total = delta * riga.quantita
+                        from app.services.anomaly_policy import is_material_price_increase
+                        if is_material_price_increase(delta_total):
                             # Pulisce vecchie anomalie
                             await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
                             # Crea nuova anomalia
                             anomalia = Anomalia(
                                 riga_fattura_id=riga.id,
                                 delta_prezzo=delta,
-                                delta_totale=delta * riga.quantita,
+                                delta_totale=delta_total,
                                 prezzo_listino_snapshot=listino.prezzo_pattuito,
                                 prezzo_fatturato_snapshot=riga.prezzo_netto_normalizzato,
                                 stato_validazione=StatoValidazione.da_verificare,

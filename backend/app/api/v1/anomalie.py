@@ -4,9 +4,10 @@ Workflow a stati completo — Spec §4.1, §4.2, §4.3.
 """
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,7 +54,13 @@ async def list_anomalie(
     ).where(
         and_(
             RigaFattura.sku_interno.is_(None) |
-            ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno))
+            ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno)),
+            # Keep historical decisions auditable, but hide unresolved rounding
+            # noise created before the materiality rule was introduced.
+            or_(
+                Anomalia.stato_validazione != StatoValidazione.da_verificare,
+                func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
+            ),
         )
     ).order_by(Anomalia.id.desc())
 
