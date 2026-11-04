@@ -55,12 +55,8 @@ async def get_kpi(
         .select_from(Anomalia)
         .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
         .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(
-            and_(
-                Fattura.tenant_id == tenant_id,
-                func.abs(Anomalia.delta_totale) >= Decimal("0.10"),
-            )
-        )
+        .where(Fattura.tenant_id == tenant_id)
+        .where(func.abs(Anomalia.delta_totale) >= Decimal("0.10"))
     )
 
     anomalie_res = await db.execute(anomalie_stmt)
