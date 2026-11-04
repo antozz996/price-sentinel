@@ -15,13 +15,14 @@ import httpx
 import psycopg2
 from fastapi import Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import HTTPException
 from sqlalchemy import select
 
 import app.main  # noqa: F401  (registers every model)
 from app.api.deps import get_current_user
-from app.api.v1.anomalie import list_anomalie
+from app.api.v1.anomalie import get_anomalia, list_anomalie
 from app.api.v1.disputes import list_dispute_candidates
-from app.api.v1.fatture import ResolveActionPayload, list_fatture, resolve_parked_line
+from app.api.v1.fatture import ResolveActionPayload, get_fattura, list_fatture, resolve_parked_line
 from app.api.v1.intelligence import get_kpi, get_variance_loss
 from app.api.v1.product_identity import approve_candidate
 from app.database import async_session_factory
@@ -408,6 +409,57 @@ async def check_large_responses_are_compressed() -> None:
     check("compressed responses still decode", isinstance(response.json(), list) and len(response.json()) > 0)
 
 
+async def is_hidden_from(user, call) -> bool:
+    try:
+        await call(user)
+    except HTTPException as error:
+        return error.status_code == 404
+    return False
+
+
+async def check_tenant_isolation() -> None:
+    other_admin = SimpleNamespace(id=1, ruolo=SimpleNamespace(value="admin"), location_id=None, tenant_id=2)
+    async with async_session_factory() as db:
+        fx = Fixture(db)
+        xml = await fx.xml("tenant-2")
+        fx.fattura = Fattura(
+            xml_raw_id=xml.id,
+            fornitore_id=1,
+            location_id=1,
+            numero_documento="CI-SYNTH-TENANT-2",
+            data_documento=DOC_DATE,
+            data_ricezione_sdi=DOC_DATE,
+            tipo_documento=TipoDocumento.TD01,
+            totale_imponibile=Decimal("50.00"),
+            tenant_id=2,
+        )
+        db.add(fx.fattura)
+        await db.flush()
+        _, anomaly = await fx.line_with_anomaly("OTHER-TENANT", "5.00", StatoValidazione.da_verificare)
+        await db.commit()
+        anomaly_id, invoice_id = anomaly.id, fx.fattura.id
+
+    async with async_session_factory() as db:
+        rows = await list_anomalie(response=Response(), stato=None, limit=200, offset=0, current_user=ADMIN, db=db)
+        check("anomaly list hides another tenant", anomaly_id not in {row.id for row in rows})
+        rows = await list_anomalie(response=Response(), stato=None, limit=200, offset=0, current_user=other_admin, db=db)
+        check("anomaly list shows the tenant's own records", {row.id for row in rows} == {anomaly_id})
+        candidates = await list_dispute_candidates(
+            source="legacy", location_id=None, supplier_id=None, limit=200, user=ADMIN, db=db,
+        )
+        check("dispute candidates hide another tenant", anomaly_id not in {row["id"] for row in candidates})
+        check(
+            "anomaly detail is not reachable across tenants",
+            await is_hidden_from(ADMIN, lambda user: get_anomalia(anomaly_id, _user=user, db=db)),
+        )
+        check(
+            "invoice detail is not reachable across tenants",
+            await is_hidden_from(ADMIN, lambda user: get_fattura(invoice_id, current_user=user, db=db)),
+        )
+        found = await get_fattura(invoice_id, current_user=other_admin, db=db)
+        check("invoice detail works inside the tenant", found.id == invoice_id)
+
+
 async def run() -> None:
     check_cors_exposes_pagination_total()
     micro_open_id, micro_claim_id, material_id = await check_visibility()
@@ -416,6 +468,7 @@ async def run() -> None:
     await check_credit_note(micro_open_id, micro_claim_id, material_id)
     await check_variance_counts_each_line_once()
     await check_large_responses_are_compressed()
+    await check_tenant_isolation()
 
 
 if __name__ == "__main__":

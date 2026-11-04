@@ -874,7 +874,7 @@ async def get_pricing_audit(
         (SELECT MAX(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_max,
         ap.stato
     FROM lagged_prezzi lp
-    LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id
+    LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id AND lc.data_inizio_validita <= CURRENT_DATE AND (lc.data_scadenza IS NULL OR lc.data_scadenza >= CURRENT_DATE)
     LEFT JOIN approvazioni_prezzo ap ON lp.prodotto_id = ap.sku_interno AND lp.nome_normalizzato = ap.descrizione_orig AND lp.mese = ap.mese
     WHERE COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) IS NOT NULL
       AND lp.prezzo_medio > COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)
@@ -910,7 +910,7 @@ async def get_pricing_audit(
         )
         SELECT lp.prodotto_id
         FROM lagged_prezzi lp
-        LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id
+        LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id AND lc.data_inizio_validita <= CURRENT_DATE AND (lc.data_scadenza IS NULL OR lc.data_scadenza >= CURRENT_DATE)
         WHERE COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) IS NOT NULL
           AND lp.prezzo_medio > COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)
           AND (((lp.prezzo_medio - COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) / COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) * 100) >= :soglia
@@ -1140,7 +1140,7 @@ async def export_dispute_excel(
         lc.prezzo_pattuito as prezzo_concordato,
         COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) as prezzo_precedente
     FROM lagged_prezzi lp
-    LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id
+    LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id AND lc.data_inizio_validita <= CURRENT_DATE AND (lc.data_scadenza IS NULL OR lc.data_scadenza >= CURRENT_DATE)
     WHERE COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) IS NOT NULL
       AND lp.prezzo_medio > COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)
       AND (((lp.prezzo_medio - COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) / COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) * 100) >= :soglia
