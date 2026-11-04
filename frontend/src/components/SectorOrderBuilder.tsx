@@ -1309,7 +1309,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
           <input
             type="text"
-            placeholder="Cerca per prodotto, SKU, brand o fornitore..."
+            placeholder="Cerca per nome informale, prodotto, SKU, marca o fornitore..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{
@@ -2521,7 +2521,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    Nome Rapido d'Ordine
+                    Nome informale / rapido per gli ordini
                   </label>
                   <input
                     type="text"

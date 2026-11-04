@@ -921,7 +921,7 @@ export default function ProductIdentityManager() {
                           />
                         </td>
                         <td><code style={{ color: 'var(--accent-blue)' }}>{p.sku_interno || 'N/D'}</code></td>
-                        <td style={{ fontWeight: 600 }}>{p.canonical_name}{p.order_name && <div style={{ color: '#6ee7b7', fontSize: '0.72rem', marginTop: 3 }}>Ordine: {p.order_name}</div>}</td>
+                        <td style={{ fontWeight: 600 }}>{p.canonical_name}{p.order_name && <div style={{ color: '#6ee7b7', fontSize: '0.72rem', marginTop: 3 }}>Nome informale: {p.order_name}</div>}</td>
                         <td>
                           <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
                             {p.category || 'Senza categoria'}
@@ -1914,11 +1914,11 @@ export default function ProductIdentityManager() {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Nome rapido ordine (facoltativo)</label>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Nome informale / rapido per gli ordini (facoltativo)</label>
                 <input
                   type="text"
                   maxLength={120}
-                  placeholder="es. GUANTI"
+                  placeholder="es. GUANTI, BICCHIERI ACQUA, GELATO LATTE"
                   value={productForm.order_name}
                   onChange={e => setProductForm({ ...productForm, order_name: e.target.value })}
                   style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}

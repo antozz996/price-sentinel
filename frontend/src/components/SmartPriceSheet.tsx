@@ -103,7 +103,7 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
   return Array.from({ length: rows }, (_, rowIndex) =>
     Array.from({ length: columns }, (_, columnIndex) =>
       rowIndex === 0 && columnIndex === 0
-        ? 'Nome rapido ordine (facoltativo)'
+        ? 'Nome informale / rapido ordine (facoltativo)'
         : rowIndex === 0 && columnIndex === 1
         ? 'Prodotto reale'
         : rowIndex === 0 && columnIndex === 2
@@ -116,7 +116,7 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
 function sheetFromMatrix(matrix: MatrixResponse): string[][] {
   const suppliers = matrix.suppliers || []
   const rows = [
-    ['Nome rapido ordine (facoltativo)', 'Prodotto reale', 'Unità di misura', ...suppliers.map(supplier => supplier.name)],
+    ['Nome informale / rapido ordine (facoltativo)', 'Prodotto reale', 'Unità di misura', ...suppliers.map(supplier => supplier.name)],
     ...matrix.rows.map(row => [
       row.order_name || '',
       row.canonical_name,
