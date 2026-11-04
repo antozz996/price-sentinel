@@ -899,30 +899,53 @@ async def get_match_work_queue(
     _admin: Utente = Depends(require_admin),
 ):
     """Una decisione operativa per prodotto, anche se ricorre su più fatture."""
+    # Fetch invoice lines once, without expanding every line by all of its
+    # historical MatchCandidate rows.  The previous five-model join could
+    # multiply the result set substantially and hydrate full Product objects
+    # that were immediately discarded because live suggestions are recomputed
+    # against the current catalog below.
     stmt = (
-        select(RigaFattura, Fattura, Fornitore, MatchCandidate, Product)
+        select(RigaFattura, Fattura, Fornitore)
         .join(Fattura, Fattura.id == RigaFattura.fattura_id)
         .outerjoin(Fornitore, Fornitore.id == Fattura.fornitore_id)
-        .outerjoin(
-            MatchCandidate,
-            and_(
-                MatchCandidate.invoice_line_id == RigaFattura.id,
-                MatchCandidate.status == "pending",
-            ),
-        )
-        .outerjoin(Product, Product.id == MatchCandidate.product_id)
         .where(RigaFattura.stato_matching == StatoMatching.in_parking)
-        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc(), MatchCandidate.score.desc())
+        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc())
     )
     rows = (await db.execute(stmt)).all()
+
+    # Candidate metadata is needed only for the two diagnostic counters. Read
+    # the four scalar columns in one compact query instead of joining them into
+    # every invoice-line row.
+    candidate_stmt = (
+        select(
+            MatchCandidate.invoice_line_id,
+            MatchCandidate.score,
+            MatchCandidate.block_flag,
+            MatchCandidate.reason_json,
+        )
+        .join(Product, Product.id == MatchCandidate.product_id)
+        .join(RigaFattura, RigaFattura.id == MatchCandidate.invoice_line_id)
+        .where(
+            MatchCandidate.status == "pending",
+            RigaFattura.stato_matching == StatoMatching.in_parking,
+        )
+    )
+    candidate_rows = (await db.execute(candidate_stmt)).all()
+    candidate_counts_by_line: dict[int, int] = {}
+    weak_candidates_discarded = 0
+    for line_id, score, block_flag, reason_json in candidate_rows:
+        candidate_counts_by_line[line_id] = candidate_counts_by_line.get(line_id, 0) + 1
+        reason = reason_json or {}
+        if float(score) < 70 or block_flag or reason.get("decision") == "parking":
+            weak_candidates_discarded += 1
+
     active_products = (
         await db.execute(select(Product).where(Product.is_active.is_(True)))
     ).scalars().all()
     live_catalog_index = _build_live_catalog_index(active_products)
 
     groups: dict[tuple[int, str, str], dict[str, Any]] = {}
-    weak_candidates_discarded = 0
-    for line, invoice, supplier, candidate, product in rows:
+    for line, invoice, supplier in rows:
         supplier_id = supplier.id if supplier else 0
         supplier_name = supplier.nome_azienda if supplier else "Fornitore non associato"
         signature = _work_queue_signature(supplier_id, line)
@@ -954,27 +977,7 @@ async def get_match_work_queue(
             group["quantita"] = float(line.quantita or 1)
             group["numero_documento"] = invoice.numero_documento
 
-        if not candidate or not product:
-            continue
-
-        group["candidate_records"] += 1
-        reason = candidate.reason_json or {}
-        is_blocked = bool(candidate.block_flag or reason.get("decision") == "parking")
-        score = float(candidate.score)
-        if score < 70 or is_blocked:
-            weak_candidates_discarded += 1
-            continue
-
-        previous = group["candidates"].get(product.id)
-        if previous is None or score > previous["score"]:
-            group["candidates"][product.id] = {
-                "candidate_id": candidate.id,
-                "product_id": product.id,
-                "sku_interno": product.sku_interno,
-                "canonical_name": product.canonical_name,
-                "score": round(score, 1),
-                "reason_json": reason,
-            }
+        group["candidate_records"] += candidate_counts_by_line.get(line.id, 0)
 
     items = []
     for group in groups.values():
