@@ -1280,9 +1280,17 @@ async def get_product_consumption(
             params[f"loc_id_{i}"] = val
 
     sql = f"""
+    WITH product_names AS (
+        SELECT
+            lower(trim(sku_interno)) AS sku_key,
+            MAX(canonical_name) AS canonical_name
+        FROM products
+        WHERE is_active IS TRUE AND sku_interno IS NOT NULL
+        GROUP BY lower(trim(sku_interno))
+    )
     SELECT 
         rf.sku_interno, 
-        MAX(rf.descrizione_fornitore_raw) as descrizione,
+        COALESCE(MAX(pn.canonical_name), MAX(rf.descrizione_fornitore_raw)) as descrizione,
         SUM(rf.quantita) as quantita_totale,
         SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
         COALESCE(
@@ -1297,6 +1305,7 @@ async def get_product_consumption(
         END as prezzo_medio
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
+    LEFT JOIN product_names pn ON pn.sku_key = lower(trim(rf.sku_interno))
     WHERE rf.sku_interno IS NOT NULL
       AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
       {location_filter}
@@ -1677,9 +1686,17 @@ async def export_product_consumption_excel(
             params[f"loc_id_{i}"] = val
 
     sql = f"""
+    WITH product_names AS (
+        SELECT
+            lower(trim(sku_interno)) AS sku_key,
+            MAX(canonical_name) AS canonical_name
+        FROM products
+        WHERE is_active IS TRUE AND sku_interno IS NOT NULL
+        GROUP BY lower(trim(sku_interno))
+    )
     SELECT 
         rf.sku_interno, 
-        MAX(rf.descrizione_fornitore_raw) as descrizione,
+        COALESCE(MAX(pn.canonical_name), MAX(rf.descrizione_fornitore_raw)) as descrizione,
         COALESCE(string_agg(DISTINCT fo.nome_azienda, ', '), 'ND') as fornitori,
         SUM(rf.quantita) as quantita_totale,
         SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
@@ -1695,6 +1712,7 @@ async def export_product_consumption_excel(
         END as prezzo_medio
     FROM righe_fattura rf
     JOIN fatture f ON rf.fattura_id = f.id
+    LEFT JOIN product_names pn ON pn.sku_key = lower(trim(rf.sku_interno))
     LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
     WHERE rf.sku_interno IS NOT NULL
       {location_filter}
