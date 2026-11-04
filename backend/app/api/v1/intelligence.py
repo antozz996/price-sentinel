@@ -474,12 +474,25 @@ def _extract_informative_keywords(text: str) -> list[str]:
     import re
     if not text:
         return []
+
+    # Gli identificativi tecnici (es. SKU-1111014-515, SG3-..., CAN-...)
+    # non sono descrizioni di prodotto. Estrarre "sku"/"can" e usarlo con
+    # ILIKE farebbe corrispondere prodotti completamente diversi che condividono
+    # soltanto il prefisso tecnico.
+    compact_text = text.strip()
+    if (
+        re.search(r"\\d", compact_text)
+        and re.search(r"[-_]", compact_text)
+        and len(compact_text.split()) <= 2
+    ):
+        return []
     stop_words = {
         'bev', 'pet', 'per', 'con', 'del', 'dei', 'delle', 'della', 'degli', 'allo', 'alla',
         'alle', 'agli', 'vol', 'cl', 'lt', 'ml', 'gr', 'kg', 'bt', 'pz', 'crt',
         'pac', 'conf', 'cassa', 'bar', 'rist', 'doc', 'dop', 'igp', 'igt', 'san', 'sant',
         'red', 'blue', 'gold', 'plus', 'pro', 'max', 'min', 'net', 'lord', 'art', 'cod',
-        'x', 'da', 'di', 'in', 'su', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una'
+        'x', 'da', 'di', 'in', 'su', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
+        'sku'
     }
     cleaned = re.sub(r'[^a-zA-Z\s]', ' ', text.lower())
     words = []
