@@ -24,6 +24,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copia codice applicazione
 COPY . .
 
+# L'applicazione non ha bisogno di root e non deve poter modificare il proprio codice.
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin appuser
+USER 10001:10001
+
 # Porta Uvicorn
 EXPOSE 8000
 

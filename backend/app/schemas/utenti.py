@@ -2,7 +2,16 @@
 Price Sentinel — Schemas Utenti.
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+
+from app.password_policy import MIN_PASSWORD_LENGTH
+
+
+def _require_strong_password(value: str | None) -> str | None:
+    # An empty password in an update means "leave it unchanged".
+    if value and len(value.strip()) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"La password deve contenere almeno {MIN_PASSWORD_LENGTH} caratteri")
+    return value
 
 
 class UtenteBase(BaseModel):
@@ -19,6 +28,8 @@ class UtenteBase(BaseModel):
 class UtenteCreate(UtenteBase):
     password: str
 
+    _strong_password = field_validator("password")(_require_strong_password)
+
 
 class UtenteUpdate(BaseModel):
     email: EmailStr | None = None
@@ -30,6 +41,8 @@ class UtenteUpdate(BaseModel):
     tenant_id: int | None = None
     attivo: bool | None = None
     password: str | None = None
+
+    _strong_password = field_validator("password")(_require_strong_password)
 
 
 class UtenteResponse(UtenteBase):

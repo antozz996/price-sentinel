@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.utenti import Utente
 from app.schemas.utenti import SessionTokenRequest, TokenResponse, UtenteLogin, UtenteResponse
+from app.password_policy import MIN_PASSWORD_LENGTH
 from app.services.auth import (
     REFRESH_TOKEN_TYPE,
     create_access_token,
@@ -173,10 +174,10 @@ async def change_password(
             detail="La password attuale non è corretta",
         )
 
-    if len(data.new_password.strip()) < 4:
+    if len(data.new_password.strip()) < MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La nuova password deve contenere almeno 4 caratteri",
+            detail=f"La nuova password deve contenere almeno {MIN_PASSWORD_LENGTH} caratteri",
         )
 
     current_user.password_hash = hash_password(data.new_password.strip())

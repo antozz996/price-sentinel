@@ -22,6 +22,7 @@ from app.models.location import Location, TipologiaLocation
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster, PFATipo
 from app.services.auth import hash_password
+import secrets
 
 
 async def seed():
@@ -37,15 +38,18 @@ async def seed():
         print("🌱 Seeding database...")
 
         # ── 1. Admin Utente ──
+        # Password casuali: valgono solo per questo database e si vedono solo qui.
+        admin_password = secrets.token_urlsafe(18)
+        manager_password = secrets.token_urlsafe(18)
         admin = Utente(
             email="admin@pricesentinel.it",
-            password_hash=hash_password("admin2025!"),
+            password_hash=hash_password(admin_password),
             ruolo=RuoloUtente.admin,
             location_id=None,  # Admin vede tutto
             attivo=True,
         )
         session.add(admin)
-        print("  ✅ Admin: admin@pricesentinel.it / admin2025!")
+        print("  ✅ Admin: admin@pricesentinel.it")
 
         # ── 2. Location ──
         locations = [
@@ -72,13 +76,13 @@ async def seed():
         # ── 3. Manager per location 1 ──
         manager = Utente(
             email="manager.playa@pricesentinel.it",
-            password_hash=hash_password("manager2025!"),
+            password_hash=hash_password(manager_password),
             ruolo=RuoloUtente.manager,
             location_id=locations[0].id,
             attivo=True,
         )
         session.add(manager)
-        print("  ✅ Manager: manager.playa@pricesentinel.it / manager2025!")
+        print("  ✅ Manager: manager.playa@pricesentinel.it")
 
         # ── 4. Fornitori ──
         fornitori = [
@@ -163,8 +167,8 @@ async def seed():
         await session.commit()
         print("\n🎉 Seed completato con successo!")
         print("─" * 50)
-        print("Login Admin:   admin@pricesentinel.it / admin2025!")
-        print("Login Manager: manager.playa@pricesentinel.it / manager2025!")
+        print(f"Login Admin:   admin@pricesentinel.it / {admin_password}")
+        print(f"Login Manager: manager.playa@pricesentinel.it / {manager_password}")
 
 
 if __name__ == "__main__":
