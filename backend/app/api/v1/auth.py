@@ -3,16 +3,63 @@ Price Sentinel — Auth Router.
 Login e generazione JWT token.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.utenti import Utente
-from app.schemas.utenti import TokenResponse, UtenteLogin, UtenteResponse
-from app.services.auth import create_access_token, verify_password
+from app.schemas.utenti import SessionTokenRequest, TokenResponse, UtenteLogin, UtenteResponse
+from app.services.auth import (
+    REFRESH_TOKEN_TYPE,
+    create_access_token,
+    create_refresh_token,
+    decode_access_token,
+    is_token_valid_for_session,
+    verify_password,
+)
 
 router = APIRouter()
+
+
+def _session_response(user: Utente, *, with_refresh_token: bool = True) -> TokenResponse:
+    version = user.refresh_token_version
+    return TokenResponse(
+        access_token=create_access_token(
+            user_id=user.id,
+            ruolo=user.ruolo.value,
+            location_id=user.location_id,
+            tenant_id=user.tenant_id or 1,
+            session_version=version,
+        ),
+        refresh_token=create_refresh_token(user.id, version) if with_refresh_token else None,
+        ruolo=user.ruolo.value,
+        ruolo_dettagliato=user.ruolo_dettagliato or user.ruolo.value,
+        settore_abilitato=user.settore_abilitato or "all",
+        nome_completo=user.nome_completo,
+        location_id=user.location_id,
+        tenant_id=user.tenant_id or 1,
+    )
+
+
+async def _user_from_refresh_token(token: str, db: AsyncSession) -> Utente:
+    invalid_session = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Sessione scaduta",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        claims = decode_access_token(token)
+    except JWTError:
+        raise invalid_session
+    if claims.get("typ") != REFRESH_TOKEN_TYPE or claims.get("sub") is None:
+        raise invalid_session
+
+    user = await db.scalar(select(Utente).where(Utente.id == int(claims["sub"])))
+    if user is None or not user.attivo or not is_token_valid_for_session(claims, user.refresh_token_version):
+        raise invalid_session
+    return user
 
 
 @router.post(
@@ -43,22 +90,7 @@ async def login(
             detail="Account disattivato",
         )
 
-    token = create_access_token(
-        user_id=user.id,
-        ruolo=user.ruolo.value,
-        location_id=user.location_id,
-        tenant_id=user.tenant_id or 1,
-    )
-
-    return TokenResponse(
-        access_token=token,
-        ruolo=user.ruolo.value,
-        ruolo_dettagliato=user.ruolo_dettagliato or user.ruolo.value,
-        settore_abilitato=user.settore_abilitato or "all",
-        nome_completo=user.nome_completo,
-        location_id=user.location_id,
-        tenant_id=user.tenant_id or 1,
-    )
+    return _session_response(user)
 
 
 from app.api.deps import get_current_user
@@ -77,28 +109,41 @@ async def current_profile(
 @router.post(
     "/refresh",
     response_model=TokenResponse,
-    summary="Refresh del token JWT",
-    description="Genera un nuovo token JWT a partire dal token esistente (se valido e l'utente è attivo).",
+    summary="Rinnovo della sessione",
+    description="Con un token di rinnovo valido emette nuovi token e sposta la scadenza a 7 giorni. "
+    "Senza token di rinnovo rinnova solo un JWT ancora valido: serve alle sessioni aperte prima di questa versione.",
 )
 async def refresh_token(
-    current_user: Utente = Depends(get_current_user),
+    data: SessionTokenRequest | None = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    """Rigenera il JWT per l'utente corrente."""
-    token = create_access_token(
-        user_id=current_user.id,
-        ruolo=current_user.ruolo.value,
-        location_id=current_user.location_id,
-        tenant_id=current_user.tenant_id or 1,
-    )
-    return TokenResponse(
-        access_token=token,
-        ruolo=current_user.ruolo.value,
-        ruolo_dettagliato=current_user.ruolo_dettagliato or current_user.ruolo.value,
-        settore_abilitato=current_user.settore_abilitato or "all",
-        nome_completo=current_user.nome_completo,
-        location_id=current_user.location_id,
-        tenant_id=current_user.tenant_id or 1,
-    )
+    if data and data.refresh_token:
+        return _session_response(await _user_from_refresh_token(data.refresh_token, db))
+    if authorization:
+        return _session_response(await get_current_user(authorization, db), with_refresh_token=False)
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessione scaduta")
+
+
+@router.post("/logout", summary="Termina la sessione su tutti i dispositivi")
+async def logout(
+    data: SessionTokenRequest | None = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Una sessione già scaduta non ha nulla da revocare, quindi il logout riesce comunque."""
+    user: Utente | None = None
+    try:
+        if data and data.refresh_token:
+            user = await _user_from_refresh_token(data.refresh_token, db)
+        elif authorization:
+            user = await get_current_user(authorization, db)
+    except HTTPException:
+        user = None
+    if user is not None:
+        user.refresh_token_version += 1
+        await db.commit()
+    return {"status": "success"}
 
 
 from pydantic import BaseModel
@@ -135,7 +180,15 @@ async def change_password(
         )
 
     current_user.password_hash = hash_password(data.new_password.strip())
+    # Chiude ogni altra sessione: questo dispositivo resta dentro con i nuovi token.
+    current_user.refresh_token_version += 1
+    session = _session_response(current_user)
     await db.commit()
 
-    return {"status": "success", "message": "Password modificata con successo!"}
+    return {
+        "status": "success",
+        "message": "Password modificata con successo!",
+        "access_token": session.access_token,
+        "refresh_token": session.refresh_token,
+    }
 

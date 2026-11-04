@@ -31,7 +31,7 @@ const GodModeControlRoom = lazy(() => import('./components/GodModeControlRoom'))
 const UnlistedProductsResolver = lazy(() => import('./components/UnlistedProductsResolver'))
 const SupplierPriceForms = lazy(() => import('./components/SupplierPriceForms'))
 const SupplierPricePublicForm = lazy(() => import('./components/SupplierPricePublicForm'))
-import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession } from './api'
+import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession, storeSession } from './api'
 
 type UserProfile = {
   id: number
@@ -361,7 +361,7 @@ export default function App() {
           });
           if (res.ok) {
             const data = await res.json();
-            localStorage.setItem('token', data.access_token);
+            storeSession(data);
             setIsAuth(true);
             setProfile({
               id: 1,
@@ -424,7 +424,7 @@ export default function App() {
       }
 
       const data = await res.json()
-      localStorage.setItem('token', data.access_token)
+      storeSession(data)
       setIsAuth(true)
       const userProf: UserProfile = {
         id: data.id || 0,

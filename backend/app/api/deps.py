@@ -12,6 +12,7 @@ from sqlalchemy.orm import noload
 from app.config import settings
 from app.database import get_db
 from app.models.utenti import Utente
+from app.services.auth import REFRESH_TOKEN_TYPE, is_token_valid_for_session
 
 
 # ─────────────────────────────────────────────
@@ -41,7 +42,7 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: int | None = payload.get("sub")
-        if user_id is None:
+        if user_id is None or payload.get("typ") == REFRESH_TOKEN_TYPE:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
@@ -53,6 +54,8 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if user is None or not user.attivo:
+        raise credentials_exception
+    if not is_token_valid_for_session(payload, user.refresh_token_version):
         raise credentials_exception
 
     return user
@@ -75,7 +78,7 @@ async def get_current_user_from_query(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: int | None = payload.get("sub")
-        if user_id is None:
+        if user_id is None or payload.get("typ") == REFRESH_TOKEN_TYPE:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
@@ -87,6 +90,8 @@ async def get_current_user_from_query(
     user = result.scalar_one_or_none()
 
     if user is None or not user.attivo:
+        raise credentials_exception
+    if not is_token_valid_for_session(payload, user.refresh_token_version):
         raise credentials_exception
 
     return user

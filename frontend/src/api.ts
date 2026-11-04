@@ -54,31 +54,72 @@ function tokenSecondsRemaining(token: string): number {
   }
 }
 
-/** Keep an actively used session alive without storing the user's password. */
-export function refreshAuthSession(): Promise<boolean> {
+const REFRESH_TOKEN_KEY = 'refresh_token';
+
+/** Save the tokens returned by login, refresh or a password change. */
+export function storeSession(data: { access_token: string; refresh_token?: string | null }): void {
+  localStorage.setItem('token', data.access_token);
+  if (data.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+}
+
+export function clearSession(): void {
+  localStorage.removeItem('token');
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+/** End the session on the server too. Local tokens are removed even when offline. */
+export async function logoutSession(): Promise<void> {
   const token = localStorage.getItem('token');
-  if (!token) return Promise.resolve(false);
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  clearSession();
+  if (!token && !refreshToken) return;
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch {
+    // Without network the refresh token cannot be revoked, but it is gone from this browser.
+  }
+}
+
+/**
+ * Keep the session alive without storing the user's password.
+ * The 7-day limit lives in the refresh token, so a tab left idle or offline
+ * for more than 30 minutes recovers on its next request.
+ */
+export function refreshAuthSession(force = false): Promise<boolean> {
+  const token = localStorage.getItem('token');
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (!token && !refreshToken) return Promise.resolve(false);
 
   // Refresh only in the last 15 minutes of the 30-minute JWT lifetime.
   // A five-minute caller interval leaves ample margin without API noise.
-  if (tokenSecondsRemaining(token) > 15 * 60) return Promise.resolve(true);
+  if (!force && token && tokenSecondsRemaining(token) > 15 * 60) return Promise.resolve(true);
   if (sessionRefreshInFlight) return sessionRefreshInFlight;
 
   sessionRefreshInFlight = fetch(`${API_BASE}/auth/refresh`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: refreshToken
+      ? { 'Content-Type': 'application/json' }
+      : { Authorization: `Bearer ${token}` },
+    body: refreshToken ? JSON.stringify({ refresh_token: refreshToken }) : undefined,
   })
     .then(async response => {
       if (!response.ok) {
         if (response.status === 401) {
-          localStorage.removeItem('token');
+          clearSession();
           window.dispatchEvent(new Event('unauthorized'));
         }
         return false;
       }
       const data = await response.json();
       if (!data?.access_token) return false;
-      localStorage.setItem('token', data.access_token);
+      storeSession(data);
       return true;
     })
     .catch(() => false)
@@ -87,6 +128,39 @@ export function refreshAuthSession(): Promise<boolean> {
     });
 
   return sessionRefreshInFlight;
+}
+
+/**
+ * Most screens call fetch directly with getHeaders(), so an expired access token
+ * is recovered here once for all of them: renew, then repeat the same request.
+ */
+function installSessionRecovery(): void {
+  if (typeof window === 'undefined') return;
+  const nativeFetch = window.fetch.bind(window);
+
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const response = await nativeFetch(input, init);
+    if (response.status !== 401 || typeof input !== 'string') return response;
+    if (!input.startsWith(API_BASE) || input.startsWith(`${API_BASE}/auth/`)) return response;
+
+    const headers = new Headers(init?.headers);
+    if (!headers.has('Authorization') || !localStorage.getItem(REFRESH_TOKEN_KEY)) return response;
+
+    if (!(await refreshAuthSession(true))) {
+      // The refresh token survives only a network failure: that must not end the session.
+      if (localStorage.getItem(REFRESH_TOKEN_KEY)) throw new TypeError('Connessione non disponibile');
+      return response;
+    }
+    headers.set('Authorization', `Bearer ${localStorage.getItem('token')}`);
+    return nativeFetch(input, { ...init, headers });
+  };
+}
+
+installSessionRecovery();
+
+// Any screen can end the session on a final 401: the refresh token must go with it.
+if (typeof window !== 'undefined') {
+  window.addEventListener('unauthorized', () => localStorage.removeItem(REFRESH_TOKEN_KEY));
 }
 
 function formatApiErrorDetail(value: unknown): string {

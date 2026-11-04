@@ -4,7 +4,7 @@ import {
   Euro, Key, Lock, RefreshCw, CheckCircle2, AlertCircle, Plus, 
   Trash2, LogIn, ArrowLeft, Copy, Check, ShieldCheck
 } from 'lucide-react';
-import { API_BASE } from '../api';
+import { API_BASE, clearSession } from '../api';
 
 interface TenantItem {
   id: number;
@@ -173,7 +173,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
       }
 
       const loginData = await res.json();
-      // Salva token nella sessione principale e ricarica
+      // Salva token nella sessione principale e ricarica. Un token di rinnovo
+      // precedente riporterebbe alla sessione originale al primo rinnovo.
+      clearSession();
       localStorage.setItem('token', loginData.access_token);
       localStorage.setItem('impersonated_from_god', 'true');
       window.location.href = '/';
