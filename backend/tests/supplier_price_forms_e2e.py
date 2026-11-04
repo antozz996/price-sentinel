@@ -8,12 +8,14 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import date, timedelta
+from decimal import Decimal
 
 import httpx
 import psycopg2
 
 from app.main import app
 from app.services.auth import create_access_token
+from app.services.variant_price_import import _dimensions
 
 DSN = os.environ["TEST_DATABASE_DSN"]
 
@@ -46,6 +48,12 @@ def seed() -> None:
 
 
 async def run() -> None:
+    check("preset KG is converted after canonical normalization",
+          _dimensions(Decimal("2.8"), "KG") == (1, None, 2800))
+    check("preset CL is converted after canonical normalization",
+          _dimensions(Decimal("75"), "CL") == (1, 750, None))
+    check("preset package units remain countable",
+          _dimensions(Decimal("6"), "CT") == (6, None, None))
     seed()
     admin_headers = {
         "Authorization": f"Bearer {create_access_token(1, 'admin')}"
