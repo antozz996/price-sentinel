@@ -225,8 +225,12 @@ async def _process_td01(
 
         # Ignore sub-cent rounding noise: an operational anomaly starts only
         # when the total overcharge reaches the shared materiality threshold.
-        from app.services.anomaly_policy import is_material_price_increase
-        if match_result.matched and is_material_price_increase(match_result.delta_totale):
+        from app.services.anomaly_policy import invoice_in_check_scope, is_material_price_increase
+        if (
+            match_result.matched
+            and is_material_price_increase(match_result.delta_totale)
+            and await invoice_in_check_scope(db, xml_raw_id)
+        ):
             anomalia = Anomalia(
                 riga_fattura_id=riga_db.id,
                 delta_prezzo=match_result.delta_prezzo,

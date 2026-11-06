@@ -424,6 +424,28 @@ async def check_excluded_lines_do_not_set_reference_price() -> None:
     check("an excluded line still counts as a purchase", row["numero_acquisti"] == 3)
 
 
+async def check_anomaly_check_start() -> None:
+    from datetime import timedelta
+
+    from app.config import settings
+    from app.services.anomaly_policy import invoice_in_check_scope
+
+    async with async_session_factory() as db:
+        xml = await Fixture(db).xml("check-start")
+        original = settings.ANOMALY_CHECK_START
+        try:
+            settings.ANOMALY_CHECK_START = None
+            check("without a start date every invoice is checked", await invoice_in_check_scope(db, xml.id))
+            settings.ANOMALY_CHECK_START = xml.data_ricezione + timedelta(minutes=1)
+            check("an invoice uploaded before the start date is not checked",
+                  not await invoice_in_check_scope(db, xml.id))
+            settings.ANOMALY_CHECK_START = xml.data_ricezione - timedelta(minutes=1)
+            check("an invoice uploaded after the start date is checked", await invoice_in_check_scope(db, xml.id))
+        finally:
+            settings.ANOMALY_CHECK_START = original
+        await db.rollback()
+
+
 async def check_price_history_endpoints() -> None:
     async with async_session_factory() as db:
         trend = await get_price_trend("OUTLIER", _user=ADMIN, db=db)
@@ -516,6 +538,7 @@ async def run() -> None:
     await check_variance_counts_each_line_once()
     await check_excluded_lines_do_not_set_reference_price()
     await check_price_history_endpoints()
+    await check_anomaly_check_start()
     await check_large_responses_are_compressed()
     await check_tenant_isolation()
 

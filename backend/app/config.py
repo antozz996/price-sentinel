@@ -3,6 +3,8 @@ Price Sentinel — Configurazione centralizzata.
 Legge variabili d'ambiente dal file .env via pydantic-settings.
 """
 
+from datetime import datetime
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -52,6 +54,11 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
+
+    # ── Invoice price check start ────────────
+    # Invoices uploaded before this moment never create anomalies (they stay
+    # visible in the registry and in the price history). None = check everything.
+    ANOMALY_CHECK_START: datetime | None = None
 
     # ── Safe operational monitor ─────────────
     AUTOMATION_ENABLED: bool = False

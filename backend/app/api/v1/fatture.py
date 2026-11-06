@@ -21,6 +21,7 @@ from app.models.utenti import Utente
 from app.schemas.fatture import FatturaResponse, RigaFatturaResponse
 from app.services.anomaly_policy import (
     archive_and_remove_anomalies,
+    invoice_in_check_scope,
     is_material_price_increase,
     remove_stale_unworked_anomalies,
     operational_anomaly_filter,
@@ -1059,7 +1060,7 @@ async def resolve_parked_line(
                 riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
                 delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
                 delta_total = delta * riga.quantita
-                if is_material_price_increase(delta_total):
+                if is_material_price_increase(delta_total) and await invoice_in_check_scope(db, fattura.xml_raw_id):
                     await archive_and_remove_anomalies(
                         db, Anomalia.riga_fattura_id == riga.id, reason="riassociazione"
                     )
