@@ -12,6 +12,7 @@ from sqlalchemy import select, func, and_, or_, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin, get_current_user
+from app.config import settings
 from app.database import get_db
 from app.models.anomalie import Anomalia, NotaDiCredito, StatoValidazione, ApprovazionePrezzo
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
@@ -865,6 +866,7 @@ async def get_pricing_audit(
           AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
           AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
           AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
+          AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR f.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
           AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
         GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
     ),
@@ -914,6 +916,7 @@ async def get_pricing_audit(
               AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
               AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
               AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
+              AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR f.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
               AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
             GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, to_char(f.data_documento, 'YYYY-MM')
         ),
@@ -936,6 +939,8 @@ async def get_pricing_audit(
         "location_id": location_id,
         "anno": anno,
         "soglia": soglia,
+        # Only invoices uploaded since the price check restarted count.
+        "check_start": settings.ANOMALY_CHECK_START,
     }
     
     # Counts
@@ -1086,12 +1091,15 @@ async def get_variance_loss(
     LEFT JOIN fornitori f ON ft.fornitore_id = f.id
     WHERE r.sku_interno IS NOT NULL
       AND r.is_omaggio IS NOT TRUE
+      -- Waste counts only purchases uploaded since the price check restarted;
+      -- the reference minimum still comes from the whole history.
+      AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR ft.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
     GROUP BY r.sku_interno, mp.min_price
     HAVING SUM(GREATEST(0, COALESCE(NULLIF(r.prezzo_netto_normalizzato, 0), r.prezzo_unitario_fatturato, 0) - mp.min_price) * r.quantita) > 0
     ORDER BY spreco_totale DESC
     LIMIT 10;
     """
-    res = await db.execute(text(sql))
+    res = await db.execute(text(sql), {"check_start": settings.ANOMALY_CHECK_START})
     
     results = []
     for r in res.all():
@@ -1136,6 +1144,7 @@ async def export_dispute_excel(
         WHERE rf.sku_interno IS NOT NULL
           AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
           AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
+          AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR f.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
           AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
         GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
     ),
@@ -1167,6 +1176,8 @@ async def export_dispute_excel(
         "location_id": location_id,
         "anno": anno,
         "soglia": soglia,
+        # Only invoices uploaded since the price check restarted count.
+        "check_start": settings.ANOMALY_CHECK_START,
     }
     
     res = await db.execute(text(sql), params)

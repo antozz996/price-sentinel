@@ -445,6 +445,17 @@ async def check_anomaly_check_start() -> None:
             settings.ANOMALY_CHECK_START = original
         await db.rollback()
 
+    async with async_session_factory() as db:
+        original = settings.ANOMALY_CHECK_START
+        try:
+            settings.ANOMALY_CHECK_START = datetime.now(timezone.utc) + timedelta(minutes=1)
+            waste = await get_variance_loss(_admin=ADMIN, db=db)
+            check("waste ignores purchases uploaded before the start date", waste == [])
+            audit = await get_pricing_audit(location_id=None, anno=None, soglia=0.0, limit=10, offset=0, _admin=ADMIN, db=db)
+            check("price increases ignore invoices uploaded before the start date", audit["total"] == 0)
+        finally:
+            settings.ANOMALY_CHECK_START = original
+
 
 async def check_price_history_endpoints() -> None:
     async with async_session_factory() as db:
