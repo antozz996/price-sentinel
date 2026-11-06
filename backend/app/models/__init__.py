@@ -14,7 +14,7 @@ from app.models.fatture import XMLRaw, Fattura, RigaFattura  # noqa: F401
 from app.models.anomalie import Anomalia, NotaDiCredito, ApprovazionePrezzo  # noqa: F401
 from app.models.alias import AliasProdotto  # noqa: F401
 from app.models.ordini import Ordine, RigaOrdine  # noqa: F401
-from app.models.esclusi import SKUEscluso  # noqa: F401
+from app.models.esclusi import RigaEsclusaStatistiche, SKUEscluso  # noqa: F401
 from app.models.products import (  # noqa: F401
     Product,
     SupplierProductAlias,

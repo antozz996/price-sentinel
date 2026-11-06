@@ -870,7 +870,7 @@ async def get_pricing_audit(
         lp.prezzo_precedente_lag,
         lc.prezzo_pattuito as prezzo_concordato,
         COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) as prezzo_precedente,
-        (SELECT MIN(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_min,
+        (SELECT MIN(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE AND rf2.id NOT IN (SELECT riga_fattura_id FROM righe_escluse_statistiche)) as hist_prezzo_min,
         (SELECT MAX(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_max,
         ap.stato
     FROM lagged_prezzi lp
@@ -975,10 +975,11 @@ async def get_efficiency_leaderboard(
             MIN(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as hist_prezzo_min
         FROM righe_fattura rf
         JOIN fatture f ON rf.fattura_id = f.id
-        WHERE rf.sku_interno IS NOT NULL 
+        WHERE rf.sku_interno IS NOT NULL
           AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
           AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
           AND rf.is_omaggio IS NOT TRUE
+          AND rf.id NOT IN (SELECT riga_fattura_id FROM righe_escluse_statistiche)
           AND f.tenant_id = :tenant_id
         GROUP BY rf.sku_interno
     ),
@@ -1046,6 +1047,7 @@ async def get_variance_loss(
           AND COALESCE(NULLIF(prezzo_netto_normalizzato, 0), prezzo_unitario_fatturato, 0) > 0
           AND sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
           AND is_omaggio IS NOT TRUE
+          AND id NOT IN (SELECT riga_fattura_id FROM righe_escluse_statistiche)
         GROUP BY sku_interno
     )
     SELECT 
