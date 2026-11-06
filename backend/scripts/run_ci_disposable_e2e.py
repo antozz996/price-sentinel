@@ -271,6 +271,7 @@ def execute_v1_migration_rehearsal(admin_dsn: str) -> bool:
     connection = psycopg2.connect(sync_dsn)
     try:
         with connection.cursor() as cursor:
+            cursor.execute("drop table supplier_price_form_identities")
             cursor.execute("drop table supplier_price_form_items")
             cursor.execute("drop table supplier_price_form_requests")
             cursor.execute("alter table supplier_product_aliases drop column brand")
@@ -299,7 +300,7 @@ def execute_v1_migration_rehearsal(admin_dsn: str) -> bool:
     try:
         with connection.cursor() as cursor:
             cursor.execute("select version_num from alembic_version")
-            if cursor.fetchone() != ("righe_escluse_statistiche",):
+            if cursor.fetchone() != ("supplier_form_identities",):
                 print("FAIL: unexpected V2 Alembic head", flush=True)
                 return False
             cursor.execute(

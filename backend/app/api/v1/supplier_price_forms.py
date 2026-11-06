@@ -17,7 +17,7 @@ from app.database import get_db
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.products import Product
-from app.models.supplier_price_form import SupplierPriceFormItem, SupplierPriceFormRequest
+from app.models.supplier_price_form import SupplierPriceFormIdentity, SupplierPriceFormItem, SupplierPriceFormRequest
 from app.models.utenti import Utente
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
 from app.services.variant_price_import import build_variant_preview, commit_variant_preview
@@ -35,6 +35,28 @@ def _normalized_unit(value: str | None) -> str:
             detail=f"Unità di misura non valida. Seleziona una tra: {', '.join(sorted(ALLOWED_UNITS))}",
         )
     return unit
+
+
+def _needs_supplier_details(supplier: Fornitore | None) -> bool:
+    # A supplier created from the forms page has only a provisional TEMP id:
+    # the form asks for its real company name, VAT number and order phone.
+    return bool(supplier) and (supplier.partita_iva or "").upper().startswith("TEMP")
+
+
+def _clean_vat(value: str) -> str:
+    vat = re.sub(r"\s+", "", value or "").upper()
+    if vat.startswith("IT"):
+        vat = vat[2:]
+    if not re.fullmatch(r"\d{11}", vat):
+        raise HTTPException(status_code=422, detail="La partita IVA deve avere 11 cifre")
+    return vat
+
+
+def _clean_phone(value: str) -> str:
+    phone = " ".join((value or "").split())
+    if not re.fullmatch(r"[0-9+()/\- ]{6,30}", phone) or len(re.sub(r"\D", "", phone)) < 8:
+        raise HTTPException(status_code=422, detail="Numero di telefono per gli ordini non valido")
+    return phone
 
 
 def _require_primary_tenant(user: Utente) -> None:
@@ -69,6 +91,12 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
         "note": request.note,
         "validita_inviata_da": request.validita_inviata_da.isoformat() if request.validita_inviata_da else None,
         "validita_inviata_a": request.validita_inviata_a.isoformat() if request.validita_inviata_a else None,
+        "requires_supplier_details": _needs_supplier_details(request.supplier),
+        "anagrafica_inviata": {
+            "ragione_sociale": request.identity.ragione_sociale,
+            "partita_iva": request.identity.partita_iva,
+            "telefono_ordini": request.identity.telefono_ordini,
+        } if request.identity else None,
         "items": [
             {
                 "id": item.id,
@@ -128,8 +156,16 @@ class SupplierAnswer(SupplierOffer):
     offerte: list[SupplierOffer] | None = Field(default=None, min_length=1, max_length=10)
 
 
+class SupplierDetails(BaseModel):
+    ragione_sociale: str = Field(min_length=2, max_length=255)
+    partita_iva: str = Field(min_length=11, max_length=20)
+    telefono_ordini: str = Field(min_length=6, max_length=50)
+
+
 class PublicSubmission(BaseModel):
     answers: list[SupplierAnswer] = Field(min_length=1, max_length=2000)
+    # Required only for a new supplier with a provisional record.
+    anagrafica: SupplierDetails | None = None
     # Optional for compatibility with supplier pages opened before this release.
     validita_inviata_da: date | None = None
     validita_inviata_a: date | None = None
@@ -153,6 +189,7 @@ async def get_public_form(
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
     return {
         "supplier_name": request.supplier.nome_azienda,
+        "requires_supplier_details": _needs_supplier_details(request.supplier),
         "request_type": request.request_type,
         "expires_at": request.expires_at.isoformat(),
         "note": request.note,
@@ -183,13 +220,21 @@ async def submit_public_form(
     token_hash = sha256(token.encode("utf-8")).hexdigest()
     request = (await db.execute(
         select(SupplierPriceFormRequest)
-        .options(selectinload(SupplierPriceFormRequest.items))
+        .options(selectinload(SupplierPriceFormRequest.items), selectinload(SupplierPriceFormRequest.supplier))
         .where(SupplierPriceFormRequest.token_hash == token_hash)
         .with_for_update()
     )).scalar_one_or_none()
     now = datetime.now(timezone.utc)
     if not request or request.status != "open" or request.expires_at <= now:
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
+    details = None
+    if _needs_supplier_details(request.supplier):
+        if payload.anagrafica is None:
+            raise HTTPException(status_code=422, detail="Indica ragione sociale, partita IVA e telefono per gli ordini")
+        name = " ".join(payload.anagrafica.ragione_sociale.split())
+        if len(name) < 2:
+            raise HTTPException(status_code=422, detail="Indica la ragione sociale")
+        details = (name, _clean_vat(payload.anagrafica.partita_iva), _clean_phone(payload.anagrafica.telefono_ordini))
     if payload.validita_inviata_da is None:
         raise HTTPException(status_code=422, detail="Indica la data di inizio dell'offerta")
     if (
@@ -261,6 +306,12 @@ async def submit_public_form(
         item.conferma_prezzo = primary.conferma_prezzo
         item.offerte_inviate = saved_offers
 
+    if details:
+        # Kept with the response; written to the supplier record only on approval.
+        db.add(SupplierPriceFormIdentity(
+            request_id=request.id, ragione_sociale=details[0], partita_iva=details[1],
+            telefono_ordini=details[2], created_at=now,
+        ))
     request.status = "submitted"
     request.submitted_at = now
     request.validita_inviata_da = payload.validita_inviata_da
@@ -377,6 +428,44 @@ async def create_form_request(
         "token": token,
         "public_path": f"/fornitore/listino/{token}",
     }
+
+
+class NewSupplierRequest(BaseModel):
+    nome: str = Field(min_length=2, max_length=255)
+    categories: list[Literal["Food", "Beverage", "Materiali"]] = Field(min_length=1, max_length=3)
+
+
+@router.post("/new-supplier", status_code=status.HTTP_201_CREATED,
+             summary="Crea un fornitore provvisorio da invitare con il modulo")
+async def create_provisional_supplier(
+    payload: NewSupplierRequest,
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """The supplier sends company name, VAT number and order phone in the form."""
+    from app.models.purchase_policy import SupplierCategoryCapability
+
+    _require_primary_tenant(admin)
+    name = " ".join(payload.nome.split())
+    existing = await db.scalar(select(Fornitore).where(
+        func.lower(func.btrim(Fornitore.nome_azienda)) == name.casefold(),
+        Fornitore.archived_at.is_(None),
+    ))
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Esiste già un fornitore chiamato {existing.nome_azienda}")
+    # TEMP marks an internal provisional id, never a claimed VAT number.
+    supplier = Fornitore(nome_azienda=name, partita_iva="TEMP" + secrets.token_hex(8).upper(), attivo_whitelist=True)
+    db.add(supplier)
+    await db.flush()
+    now = datetime.now(timezone.utc)
+    for category in sorted(set(payload.categories)):
+        db.add(SupplierCategoryCapability(
+            supplier_id=supplier.id, category=category, enabled=True,
+            reason="Nuovo fornitore creato da Moduli fornitori",
+            created_by=admin.id, updated_by=admin.id, created_at=now, updated_at=now,
+        ))
+    await db.commit()
+    return {"id": supplier.id, "nome_azienda": supplier.nome_azienda, "telefono_contatto": None}
 
 
 @router.get("/catalog-products", summary="Elenca i prodotti attivi del catalogo per una nuova richiesta listino")
@@ -545,6 +634,23 @@ async def approve_form_request(
     errors = preview.preview_payload.get("errors") or []
     if errors:
         raise HTTPException(status_code=409, detail="; ".join(error["message"] for error in errors))
+    identity = await db.get(SupplierPriceFormIdentity, request.id)
+    if identity:
+        supplier = await db.get(Fornitore, request.supplier_id)
+        if _needs_supplier_details(supplier):
+            clash = await db.scalar(select(Fornitore).where(
+                Fornitore.id != supplier.id,
+                Fornitore.partita_iva.in_([identity.partita_iva, "IT" + identity.partita_iva]),
+            ))
+            if clash:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"La partita IVA {identity.partita_iva} è già registrata per {clash.nome_azienda}: "
+                           "rifiuta la risposta o unisci prima i due fornitori",
+                )
+            supplier.nome_azienda = identity.ragione_sociale
+            supplier.partita_iva = identity.partita_iva
+            supplier.telefono_contatto = identity.telefono_ordini
     result = await commit_variant_preview(db, preview)
     if request.validita_inviata_a and result.get("listino_ids"):
         approved_rows = (await db.execute(select(ListinoMaster).where(

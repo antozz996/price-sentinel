@@ -8,7 +8,7 @@ from app.database import Base  # noqa: F401 — Base necessaria per metadata
 from app.models.utenti import Utente  # noqa: F401
 from app.models.location import Location  # noqa: F401
 from app.models.fornitori import Fornitore  # noqa: F401
-from app.models.supplier_price_form import SupplierPriceFormRequest, SupplierPriceFormItem  # noqa: F401
+from app.models.supplier_price_form import SupplierPriceFormRequest, SupplierPriceFormItem, SupplierPriceFormIdentity  # noqa: F401
 from app.models.listino import ListinoMaster, PFAScaglione, UoMConversione  # noqa: F401
 from app.models.fatture import XMLRaw, Fattura, RigaFattura  # noqa: F401
 from app.models.anomalie import Anomalia, NotaDiCredito, ApprovazionePrezzo  # noqa: F401
@@ -72,6 +72,7 @@ __all__ = [
     "Fornitore",
     "SupplierPriceFormRequest",
     "SupplierPriceFormItem",
+    "SupplierPriceFormIdentity",
     "ListinoMaster",
     "PFAScaglione",
     "UoMConversione",
