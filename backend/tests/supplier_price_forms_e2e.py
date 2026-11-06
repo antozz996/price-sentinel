@@ -213,6 +213,30 @@ async def run() -> None:
         })
         check("chosen format and price survive order validation", order.status_code == 200)
 
+        delete_approved = await client.delete(
+            f"/api/v1/supplier-price-forms/{created_data['request']['id']}", headers=admin_headers)
+        check("an approved response cannot be deleted (audit trail)", delete_approved.status_code == 409)
+
+        overdue = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers, json={
+            "supplier_id": 1, "request_type": "new_listino", "category": "Beverage",
+            "product_ids": [1], "expires_in_days": 1,
+        })
+        check("admin creates a second form", overdue.status_code == 201)
+        overdue_id = overdue.json()["request"]["id"]
+    with psycopg2.connect(DSN) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("update supplier_price_form_requests set expires_at=now() - interval '1 minute' "
+                           "where id=%s", (overdue_id,))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://testserver") as client:
+        expired = await client.get("/api/v1/supplier-price-forms/?status_filter=expired", headers=admin_headers)
+        check("an overdue link is listed under the expired filter",
+              expired.status_code == 200 and [f["id"] for f in expired.json()] == [overdue_id])
+        still_open = await client.get("/api/v1/supplier-price-forms/?status_filter=open", headers=admin_headers)
+        check("an overdue link is not listed as open",
+              still_open.status_code == 200 and overdue_id not in [f["id"] for f in still_open.json()])
+        delete_expired = await client.delete(f"/api/v1/supplier-price-forms/{overdue_id}", headers=admin_headers)
+        check("a non-approved form can still be deleted", delete_expired.status_code == 200)
+
 
 if __name__ == "__main__":
     asyncio.run(run())

@@ -115,7 +115,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       const answer = answers[item.id]; if (!answer) return null;
       return <section key={item.id} style={{ ...box, padding: 16, margin: '14px 0', maxWidth: 'none' }}>
         <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>{item.descrizione}</h2>
-        <p style={{ color: '#cbd5e1' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente} / ${item.unita_corrente}`}</p>
+        <p style={{ color: '#cbd5e1' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? ` / ${item.unita_corrente}` : ' (unità da indicare)'}`}</p>
         {data.request_type === 'confirmation' && item.validita_corrente_da && <p style={{ color: '#cbd5e1' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
         <label style={{ display: 'block', margin: '12px 0' }}><input type="checkbox" checked={answer.non_trattato} onChange={e => setAnswer(item.id, { non_trattato: e.target.checked })} /> Non trattiamo questo prodotto</label>
         {answer.non_trattato ? <p style={{ color: '#cbd5e1' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
@@ -137,7 +137,8 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
           <label style={{ display: 'block', marginTop: 10 }}>Nota su questa offerta<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={offer.nota} onChange={e => changeExtraOffer(item.id, offer.key, { nota: e.target.value })} /></label>
         </div>)}
         {!answer.non_trattato && answer.extraOffers.length < 9 && <button type="button" className="btn" style={{ marginTop: 12 }} onClick={() => addExtraOffer(item.id)}>+ Aggiungi un’altra marca o formato</button>}
-        {data.request_type === 'confirmation' && !answer.non_trattato && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
+        {/* Without an agreed unit there is nothing to confirm: the answer is reviewed as a proposal. */}
+        {data.request_type === 'confirmation' && !answer.non_trattato && item.unita_corrente && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
       </section>;
     })}
