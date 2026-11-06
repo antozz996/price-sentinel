@@ -21,6 +21,8 @@ interface HistoryPoint {
   fornitore: string
   location: string
   prezzo_contratto: number | null
+  fattura_id?: number | null
+  numero_documento?: string | null
 }
 
 interface SkuTrend {
@@ -55,7 +57,7 @@ const CHART_COLORS = [
   '#ec4899', // Pink
 ]
 
-export default function PriceTrendAnalyzer() {
+export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: (fatturaId: number, numero: string) => void } = {}) {
   const [allProducts, setAllProducts] = useState<ProductSku[]>([])
   const [selectedProducts, setSelectedProducts] = useState<SelectedProduct[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -776,6 +778,8 @@ export default function PriceTrendAnalyzer() {
       fornitore: string
       location: string
       prezzo_contratto: number | null
+      fattura_id?: number | null
+      numero_documento?: string | null
     }[] = []
 
     selectedProducts.forEach(p => {
@@ -791,7 +795,9 @@ export default function PriceTrendAnalyzer() {
             quantita: h.quantita,
             fornitore: h.fornitore,
             location: h.location,
-            prezzo_contratto: h.prezzo_contratto
+            prezzo_contratto: h.prezzo_contratto,
+            fattura_id: h.fattura_id,
+            numero_documento: h.numero_documento
           })
         })
       } else if (data && data.prezzo_contratto_corrente !== null) {
@@ -1215,6 +1221,7 @@ export default function PriceTrendAnalyzer() {
                     <th style={{ padding: '12px 10px', cursor: 'pointer', fontWeight: 500 }} onClick={() => handleSort('delta')}>
                       Delta <ArrowUpDown size={12} style={{ marginLeft: '4px', verticalAlign: 'middle' }} />
                     </th>
+                    <th style={{ padding: '12px 10px', fontWeight: 500 }}>Fattura</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1255,6 +1262,21 @@ export default function PriceTrendAnalyzer() {
                             <span className={`badge ${delta > 0 ? 'badge-red' : delta < 0 ? 'badge-green' : 'badge-yellow'}`}>
                               {delta > 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`}
                             </span>
+                          ) : '-'}
+                        </td>
+                        <td style={{ padding: '12px 10px', whiteSpace: 'nowrap' }}>
+                          {!isListinoBaseline && r.fattura_id ? (
+                            onOpenInvoice ? (
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ padding: '4px 10px', fontSize: '0.8rem' }}
+                                title="Apri la fattura nel Registro fatture"
+                                onClick={() => onOpenInvoice(r.fattura_id!, r.numero_documento || '')}
+                              >
+                                {r.numero_documento || 'Apri'}
+                              </button>
+                            ) : (r.numero_documento || '-')
                           ) : '-'}
                         </td>
                       </tr>

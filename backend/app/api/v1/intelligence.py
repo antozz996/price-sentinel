@@ -727,6 +727,8 @@ async def get_price_trends(
     # Recupera lo storico degli acquisti cronologicamente con filtri
     stmt = (
         select(
+            Fattura.id.label("fattura_id"),
+            Fattura.numero_documento,
             Fattura.data_documento,
             Fattura.location_id,
             Fattura.fornitore_id,
@@ -823,7 +825,10 @@ async def get_price_trends(
                     "quantita": qty,
                     "fornitore": r.fornitore_nome,
                     "location": r.location_nome,
-                    "prezzo_contratto": prezzo_contratto
+                    "prezzo_contratto": prezzo_contratto,
+                    # Lets the UI open the invoice behind each price point.
+                    "fattura_id": r.fattura_id,
+                    "numero_documento": r.numero_documento,
                 })
 
     return response_data
