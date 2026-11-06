@@ -20,8 +20,9 @@ from app.models.anomalie import Anomalia
 from app.models.utenti import Utente
 from app.schemas.fatture import FatturaResponse, RigaFatturaResponse
 from app.services.anomaly_policy import (
-    delete_stale_unworked_anomalies,
+    archive_and_remove_anomalies,
     is_material_price_increase,
+    remove_stale_unworked_anomalies,
     operational_anomaly_filter,
 )
 from app.services.tenant_scope import invoice_belongs_to_user, invoice_tenant_filter
@@ -1059,8 +1060,10 @@ async def resolve_parked_line(
                 delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
                 delta_total = delta * riga.quantita
                 if is_material_price_increase(delta_total):
-                    await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
-                    
+                    await archive_and_remove_anomalies(
+                        db, Anomalia.riga_fattura_id == riga.id, reason="riassociazione"
+                    )
+
                     anomalia = Anomalia(
                         riga_fattura_id=riga.id,
                         delta_prezzo=delta,
@@ -1071,7 +1074,7 @@ async def resolve_parked_line(
                     )
                     db.add(anomalia)
                 else:
-                    await db.execute(delete_stale_unworked_anomalies(riga.id))
+                    await remove_stale_unworked_anomalies(db, riga.id)
                     
     elif payload.action == "create_canonical":
         if not payload.canonical_data:
@@ -1131,7 +1134,7 @@ async def resolve_parked_line(
         riga.is_omaggio = True
         riga.stato_matching = StatoMatching.matched
         await db.execute(delete(MatchCandidate).where(MatchCandidate.invoice_line_id == riga.id))
-        await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
+        await archive_and_remove_anomalies(db, Anomalia.riga_fattura_id == riga.id, reason="omaggio")
         
     else:
         raise HTTPException(status_code=400, detail="Azione non supportata")

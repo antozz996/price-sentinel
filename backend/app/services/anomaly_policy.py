@@ -1,10 +1,13 @@
 """Shared policy for suppressing immaterial price-rounding noise."""
 
+import enum
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import delete, func, or_
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.anomalie import Anomalia, StatoValidazione
+from app.models.anomalie import Anomalia, AnomaliaArchiviata, StatoValidazione
 
 
 MIN_ANOMALY_TOTAL = Decimal("0.10")
@@ -37,9 +40,51 @@ def operational_anomaly_filter():
     )
 
 
-def delete_stale_unworked_anomalies(riga_fattura_id: int):
-    """Statement clearing an outdated, untouched anomaly after a line is re-priced."""
-    return delete(Anomalia).where(
+def stale_unworked_anomaly_conditions(riga_fattura_id: int) -> tuple:
+    """Conditions selecting an outdated, untouched anomaly after a line is re-priced."""
+    return (
         Anomalia.riga_fattura_id == riga_fattura_id,
         Anomalia.stato_validazione.in_(UNWORKED_ANOMALY_STATES),
+    )
+
+
+def _json_value(value):
+    if isinstance(value, enum.Enum):
+        return value.value
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+async def archive_and_remove_anomalies(db: AsyncSession, *conditions, reason: str) -> int:
+    """
+    Remove anomalies only after copying every column into anomalie_archiviate.
+    Callers re-create the operational anomaly when needed: the history stays.
+    """
+    rows = (await db.scalars(select(Anomalia).where(*conditions))).all()
+    if not rows:
+        return 0
+    for row in rows:
+        db.add(
+            AnomaliaArchiviata(
+                anomalia_id=row.id,
+                riga_fattura_id=row.riga_fattura_id,
+                stato_validazione=_json_value(row.stato_validazione),
+                delta_totale=row.delta_totale,
+                motivo=reason,
+                snapshot={column.name: _json_value(getattr(row, column.name)) for column in Anomalia.__table__.columns},
+            )
+        )
+    await db.flush()
+    await db.execute(delete(Anomalia).where(Anomalia.id.in_([row.id for row in rows])))
+    return len(rows)
+
+
+async def remove_stale_unworked_anomalies(db: AsyncSession, riga_fattura_id: int) -> int:
+    return await archive_and_remove_anomalies(
+        db,
+        *stale_unworked_anomaly_conditions(riga_fattura_id),
+        reason="riassociazione_sotto_soglia",
     )
