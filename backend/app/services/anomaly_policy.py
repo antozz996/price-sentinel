@@ -27,6 +27,20 @@ OPEN_WORKED_ANOMALY_STATES = (
 )
 
 
+async def invoice_in_check_scope(db: AsyncSession, xml_raw_id: int | None) -> bool:
+    """False for invoices uploaded before ANOMALY_CHECK_START: they never create anomalies."""
+    from app.config import settings
+    from app.models.fatture import XMLRaw
+
+    start = settings.ANOMALY_CHECK_START
+    if start is None:
+        return True
+    if xml_raw_id is None:
+        return False
+    received = await db.scalar(select(XMLRaw.data_ricezione).where(XMLRaw.id == xml_raw_id))
+    return received is not None and received >= start
+
+
 def is_material_price_increase(delta_total: Decimal | float | int) -> bool:
     """Return true only when the total overcharge reaches ten euro cents."""
     return Decimal(str(delta_total)) >= MIN_ANOMALY_TOTAL

@@ -14,6 +14,9 @@ services:
       ENVIRONMENT: production
       DEBUG: "false"
       AUTOMATION_ENABLED: "true"
+      # Price check restarted on 2026-11-06 (user decision): invoices uploaded
+      # before this moment no longer create anomalies.
+      ANOMALY_CHECK_START: "2026-11-06T18:00:00+00:00"
     command:
       - sh
       - -ec

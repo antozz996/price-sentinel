@@ -1258,10 +1258,14 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
             continue
         line.prezzo_netto_normalizzato = normalized_price.normalized_unit_price
         delta = line.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
-        from app.services.anomaly_policy import archive_and_remove_anomalies, is_material_price_increase
+        from app.services.anomaly_policy import (
+            archive_and_remove_anomalies,
+            invoice_in_check_scope,
+            is_material_price_increase,
+        )
         await archive_and_remove_anomalies(db, Anomalia.riga_fattura_id == line.id, reason="risoluzione_coda")
         delta_total = delta * line.quantita
-        if is_material_price_increase(delta_total):
+        if is_material_price_increase(delta_total) and await invoice_in_check_scope(db, invoice.xml_raw_id):
             db.add(Anomalia(
                 riga_fattura_id=line.id,
                 delta_prezzo=delta,
@@ -1444,10 +1448,11 @@ async def approve_candidate(
                         delta_total = delta * riga.quantita
                         from app.services.anomaly_policy import (
                             archive_and_remove_anomalies,
+                            invoice_in_check_scope,
                             is_material_price_increase,
                             remove_stale_unworked_anomalies,
                         )
-                        if is_material_price_increase(delta_total):
+                        if is_material_price_increase(delta_total) and await invoice_in_check_scope(db, fattura.xml_raw_id):
                             # Archivia e sostituisce le vecchie anomalie
                             await archive_and_remove_anomalies(
                                 db, Anomalia.riga_fattura_id == riga.id, reason="approvazione_proposta"
