@@ -164,7 +164,7 @@ export default function App() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     operations: true,
     purchasing: true,
-    analytics: false,
+    analytics: true,
     catalog: false,
     administration: false,
   })
