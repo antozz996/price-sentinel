@@ -7,7 +7,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/src/components/SupplierPriceForms.tsx'
-      - 'frontend/src/components/SantoGraalSyncPreview.tsx'
+      - 'frontend/src/components/SmartPriceSheet.tsx'
       - 'frontend/e2e/navigation.smoke.spec.ts'
       - '.github/workflows/v2-ephemeral-e2e.yml'
   pull_request:
@@ -17,7 +17,7 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/src/components/SupplierPriceForms.tsx'
-      - 'frontend/src/components/SantoGraalSyncPreview.tsx'
+      - 'frontend/src/components/SmartPriceSheet.tsx'
       - 'frontend/e2e/navigation.smoke.spec.ts'
       - '.github/workflows/v2-ephemeral-e2e.yml'
   workflow_dispatch:
