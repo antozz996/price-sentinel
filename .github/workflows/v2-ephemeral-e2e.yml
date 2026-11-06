@@ -108,6 +108,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_anomaly_policy.py' -v
 
+      - name: Unit — Price normalization for pack units
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_price_normalization.py' -v
+
       - name: Unit — Smart Price Sheet decimal parsing and recommendations
         working-directory: backend
         run: python tests/smart_price_sheet_unit.py

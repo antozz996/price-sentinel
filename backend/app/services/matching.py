@@ -117,7 +117,8 @@ def normalize_price_for_comparison(
     raw_comp_unit = normalize_text(str(confirmed_unit))
     if raw_comp_unit in {"bottiglia", "bottiglie", "bot", "bt", "btl", "bottle"}:
         comp_unit = "bottle"
-    elif raw_comp_unit in {"cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione", "ct", "cs", "crt"}:
+    # "cf" and "cnf" are how Italian invoices and price lists write "confezione".
+    elif raw_comp_unit in {"cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione", "cf", "cnf", "ct", "cs", "crt"}:
         comp_unit = "box"
     elif raw_comp_unit in {"l", "lt", "liter", "litre", "litro", "litri"}:
         comp_unit = "liter"
@@ -144,7 +145,7 @@ def normalize_price_for_comparison(
     uom_normalized = normalize_text(str(uom or ""))
     package_uoms = {
         "cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione",
-        "confezioni", "crt", "css", "ct", "cs",
+        "confezioni", "cf", "cnf", "crt", "css", "ct", "cs",
     }
     individual_uoms = {
         "piece", "pieces", "pezzo", "pezzi", "pz", "unita", "unit",
