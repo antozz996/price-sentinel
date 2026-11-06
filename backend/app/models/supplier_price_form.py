@@ -33,6 +33,28 @@ class SupplierPriceFormRequest(Base):
     items: Mapped[list["SupplierPriceFormItem"]] = relationship(
         back_populates="request", cascade="all, delete-orphan", lazy="selectin"
     )
+    identity: Mapped["SupplierPriceFormIdentity | None"] = relationship(
+        back_populates="request", cascade="all, delete-orphan", lazy="selectin", uselist=False
+    )
+
+
+class SupplierPriceFormIdentity(Base):
+    """Company details a new (provisional) supplier sends with the form.
+
+    Applied to the supplier record only when the admin approves the response.
+    """
+
+    __tablename__ = "supplier_price_form_identities"
+
+    request_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("supplier_price_form_requests.id", ondelete="CASCADE"), primary_key=True
+    )
+    ragione_sociale: Mapped[str] = mapped_column(String(255), nullable=False)
+    partita_iva: Mapped[str] = mapped_column(String(20), nullable=False)
+    telefono_ordini: Mapped[str] = mapped_column(String(50), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    request = relationship("SupplierPriceFormRequest", back_populates="identity")
 
 
 class SupplierPriceFormItem(Base):

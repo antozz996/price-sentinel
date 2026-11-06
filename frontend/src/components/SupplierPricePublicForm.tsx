@@ -4,7 +4,7 @@ import { API_BASE } from '../api';
 import { normalizeSupplierUnit, SUPPLIER_UNIT_OPTIONS } from '../constants/units';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null };
-type FormData = { supplier_name: string; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
+type FormData = { supplier_name: string; requires_supplier_details?: boolean; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
 type ExtraOffer = { key: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota: string };
 type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string; extraOffers: ExtraOffer[] };
 
@@ -24,6 +24,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
   const [validitaDa, setValiditaDa] = useState('');
   const [validitaA, setValiditaA] = useState('');
+  const [anagrafica, setAnagrafica] = useState({ ragione_sociale: '', partita_iva: '', telefono_ordini: '' });
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -75,6 +76,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         body: JSON.stringify({
           validita_inviata_da: validitaDa,
           validita_inviata_a: validitaA || null,
+          anagrafica: data.requires_supplier_details ? anagrafica : null,
           answers: data.items.map(i => ({ item_id: i.id, non_trattato: answers[i.id].non_trattato, offerte: answers[i.id].non_trattato ? null : [
             { prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, marca: answers[i.id].marca, dicitura_fornitore: answers[i.id].dicitura_fornitore, quantita_confezione: answers[i.id].quantita_confezione, conferma_prezzo: data.request_type === 'confirmation' && answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null },
             ...answers[i.id].extraOffers.map(offer => ({ prezzo: offer.prezzo, unita_misura: offer.unita_misura, marca: offer.marca, dicitura_fornitore: offer.dicitura_fornitore, quantita_confezione: offer.quantita_confezione, nota: offer.nota, conferma_prezzo: false })),
@@ -103,6 +105,15 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     <p style={{ padding: 12, border: '1px solid #fbbf24', borderRadius: 8, color: '#fef3c7' }}><strong>Come indicare il prezzo:</strong> inserisci il prezzo del prodotto o della confezione che vendi, riferito alla quantità indicata sotto. Per esempio, per una vaschetta da 2,8 KG che costa € 18,20, indica quantità 2,8, unità KG e prezzo € 18,20. Non inserire il prezzo al KG, a meno che tu venda il prodotto in confezioni da 1 KG.</p>
     {data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: '#cbd5e1' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
+    {data.requires_supplier_details && <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
+      <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Dati aziendali</h2>
+      <p style={{ color: '#cbd5e1' }}>Servono per registrarvi come fornitori e per inviarvi gli ordini.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
+        <label>Ragione sociale<input style={input} required minLength={2} maxLength={255} value={anagrafica.ragione_sociale} onChange={e => setAnagrafica(a => ({ ...a, ragione_sociale: e.target.value }))} /></label>
+        <label>Partita IVA<input style={input} required inputMode="numeric" pattern="(IT|it)?\s*[0-9]{11}" title="11 cifre" maxLength={20} value={anagrafica.partita_iva} onChange={e => setAnagrafica(a => ({ ...a, partita_iva: e.target.value }))} /></label>
+        <label>Telefono per gli ordini<input style={input} required type="tel" maxLength={50} value={anagrafica.telefono_ordini} onChange={e => setAnagrafica(a => ({ ...a, telefono_ordini: e.target.value }))} placeholder="Es. 333 1234567" /></label>
+      </div>
+    </section>}
     <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
       <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Periodo di validità del listino</h2>
       <p style={{ color: '#cbd5e1' }}>Indica da quando vale la tua offerta. La data di fine è facoltativa; un prezzo approvato resta operativo fino alla successiva approvazione.</p>

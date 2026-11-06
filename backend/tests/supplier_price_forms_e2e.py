@@ -44,6 +44,8 @@ def seed() -> None:
                     comparison_unit,is_commodity,is_active,unit_count,created_at,updated_at)
                 values (1,'CI-SKU-FORM','Synthetic beverage','synthetic beverage',
                         'Beverage','BT',false,true,1,now(),now());
+                -- Explicit ids above do not advance the sequences used by the API.
+                select setval(pg_get_serial_sequence('fornitori','id'), (select max(id) from fornitori));
             """)
 
 
@@ -236,6 +238,64 @@ async def run() -> None:
               still_open.status_code == 200 and overdue_id not in [f["id"] for f in still_open.json()])
         delete_expired = await client.delete(f"/api/v1/supplier-price-forms/{overdue_id}", headers=admin_headers)
         check("a non-approved form can still be deleted", delete_expired.status_code == 200)
+
+        # New supplier invited from the forms page with a provisional name.
+        new_supplier = await client.post("/api/v1/supplier-price-forms/new-supplier", headers=admin_headers,
+                                         json={"nome": "Fornitore da invitare CI", "categories": ["Beverage"]})
+        check("admin creates a provisional supplier", new_supplier.status_code == 201)
+        new_id = new_supplier.json()["id"]
+        duplicate = await client.post("/api/v1/supplier-price-forms/new-supplier", headers=admin_headers,
+                                      json={"nome": "fornitore da invitare ci", "categories": ["Beverage"]})
+        check("the same provisional name cannot be created twice", duplicate.status_code == 409)
+
+        async def invite() -> tuple[int, str, int]:
+            made = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers, json={
+                "supplier_id": new_id, "request_type": "new_listino", "category": "Beverage", "product_ids": [1]})
+            body = made.json()
+            return body["request"]["id"], body["token"], body["request"]["items"][0]["id"]
+
+        def answer(item: int, details: dict | None) -> dict:
+            payload = {"validita_inviata_da": date.today().isoformat(), "answers": [{
+                "item_id": item, "non_trattato": False, "offerte": [{
+                    "prezzo": "3.9000", "marca": "Marca nuova CI", "dicitura_fornitore": "Bottiglia nuova CI",
+                    "quantita_confezione": "1.000", "unita_misura": "BT"}]}]}
+            if details is not None:
+                payload["anagrafica"] = details
+            return payload
+
+        req_id, token, item = await invite()
+        public = await client.get(f"/api/v1/supplier-price-forms/public/{token}")
+        check("the new supplier's form asks for company details",
+              public.status_code == 200 and public.json()["requires_supplier_details"] is True)
+        missing = await client.post(f"/api/v1/supplier-price-forms/public/{token}/submit", json=answer(item, None))
+        check("company details are required for a new supplier", missing.status_code == 422)
+        bad_vat = await client.post(f"/api/v1/supplier-price-forms/public/{token}/submit", json=answer(item, {
+            "ragione_sociale": "Nuova Bevande CI Srl", "partita_iva": "1234", "telefono_ordini": "333 1234567"}))
+        check("an invalid VAT number is refused", bad_vat.status_code == 422)
+        clash = await client.post(f"/api/v1/supplier-price-forms/public/{token}/submit", json=answer(item, {
+            "ragione_sociale": "Nuova Bevande CI Srl", "partita_iva": "IT 10000000001", "telefono_ordini": "333 1234567"}))
+        check("the supplier submits company details", clash.status_code == 200)
+        clash_approval = await client.post(f"/api/v1/supplier-price-forms/{req_id}/approve", headers=admin_headers)
+        check("approval stops when the VAT number belongs to another supplier", clash_approval.status_code == 409)
+        await client.post(f"/api/v1/supplier-price-forms/{req_id}/reject", headers=admin_headers)
+
+        req_id, token, item = await invite()
+        sent = await client.post(f"/api/v1/supplier-price-forms/public/{token}/submit", json=answer(item, {
+            "ragione_sociale": "Nuova Bevande CI Srl", "partita_iva": "20000000002", "telefono_ordini": "+39 333 1234567"}))
+        check("the corrected response is submitted", sent.status_code == 200)
+        review = await client.get(f"/api/v1/supplier-price-forms/{req_id}", headers=admin_headers)
+        check("admin sees the submitted company details",
+              review.json()["anagrafica_inviata"] == {"ragione_sociale": "Nuova Bevande CI Srl",
+                                                     "partita_iva": "20000000002",
+                                                     "telefono_ordini": "+39 333 1234567"})
+        approved_new = await client.post(f"/api/v1/supplier-price-forms/{req_id}/approve", headers=admin_headers)
+        check("the new supplier's offer is approved", approved_new.status_code == 200)
+
+    with psycopg2.connect(DSN) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select nome_azienda, partita_iva, telefono_contatto from fornitori where id=%s", (new_id,))
+            check("approval writes the company details on the supplier record",
+                  cursor.fetchone() == ("Nuova Bevande CI Srl", "20000000002", "+39 333 1234567"))
 
 
 if __name__ == "__main__":

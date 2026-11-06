@@ -8,7 +8,8 @@ type Category = { nome: string; is_active: boolean };
 type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
 type SubmittedOffer = { id_offerta: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota?: string | null; conferma_prezzo: boolean };
 type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; offerte_inviate?: SubmittedOffer[]; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
-type FormRequest = { id: number; supplier_id: number; supplier_name: string; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
+type SupplierDetails = { ragione_sociale: string; partita_iva: string; telefono_ordini: string };
+type FormRequest = { id: number; supplier_id: number; supplier_name: string; requires_supplier_details?: boolean; anagrafica_inviata?: SupplierDetails | null; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
 
 const FORM_STATUS_LABELS: Record<string, string> = {
@@ -64,6 +65,26 @@ export default function SupplierPriceForms() {
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [newSupplierOpen, setNewSupplierOpen] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [newSupplierCategories, setNewSupplierCategories] = useState<string[]>([]);
+
+  // A supplier not yet in the registry: created with a provisional name, it sends
+  // company name, VAT number and order phone in the form; they apply on approval.
+  const createSupplier = async () => {
+    setBusy(true); setError(''); setNotice('');
+    try {
+      const created: Supplier = await fetchWithAuth('/supplier-price-forms/new-supplier', {
+        method: 'POST',
+        body: JSON.stringify({ nome: newSupplierName.trim(), categories: newSupplierCategories }),
+      });
+      setSuppliers(current => [...current, created].sort((a, b) => a.nome_azienda.localeCompare(b.nome_azienda)));
+      setSupplierIds(current => [...current, created.id]);
+      setNotice(`Fornitore "${created.nome_azienda}" creato e selezionato. Nel modulo indicherà ragione sociale, partita IVA e telefono per gli ordini.`);
+      setNewSupplierOpen(false); setNewSupplierName(''); setNewSupplierCategories([]);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Creazione fornitore non riuscita'); }
+    finally { setBusy(false); }
+  };
 
   const loadForms = async () => {
     try { setForms(await fetchWithAuth('/supplier-price-forms/?status_filter=all')); }
@@ -320,6 +341,22 @@ export default function SupplierPriceForms() {
               <span>{s.nome_azienda}</span>
             </label>)}
           </div>
+          {!newSupplierOpen ? <button type="button" className="btn" style={{ marginTop: 8 }} onClick={() => setNewSupplierOpen(true)}>+ Nuovo fornitore</button> : <div style={{ ...card, marginTop: 8, display: 'grid', gap: 10 }}>
+            <strong>Nuovo fornitore</strong>
+            <label>Nome provvisorio<input style={field} maxLength={255} value={newSupplierName} onChange={e => setNewSupplierName(e.target.value)} placeholder="Es. Caseificio da contattare" /></label>
+            <div>Categorie trattate
+              <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 4 }}>
+                {['Food', 'Beverage', 'Materiali'].map(category => <label key={category} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input type="checkbox" checked={newSupplierCategories.includes(category)} onChange={e => setNewSupplierCategories(current => e.target.checked ? [...current, category] : current.filter(c => c !== category))} />{category}
+                </label>)}
+              </div>
+            </div>
+            <small style={{ color: 'var(--text-secondary)' }}>Ragione sociale, partita IVA e telefono per gli ordini li inserirà il fornitore nel modulo. Diventano definitivi quando approvi la sua risposta.</small>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn-primary" disabled={busy || newSupplierName.trim().length < 2 || !newSupplierCategories.length} onClick={() => void createSupplier()}>Crea fornitore</button>
+              <button type="button" className="btn" onClick={() => setNewSupplierOpen(false)}>Annulla</button>
+            </div>
+          </div>}
         </div>}
         <label>Scadenza link<select style={field} value={days} onChange={e => setDays(Number(e.target.value))}>{[7,14,21,30].map(d => <option key={d} value={d}>{d} giorni</option>)}</select></label>
         <label style={{ gridColumn: '1 / -1' }}>Nota per i fornitori<textarea style={field} rows={2} maxLength={1000} value={note} onChange={e => setNote(e.target.value)} placeholder="Facoltativa" /></label>
@@ -398,6 +435,13 @@ export default function SupplierPriceForms() {
     {detail && <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{formStatusLabel(detail.status)}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
+      {detail.anagrafica_inviata ? <div style={{ ...card, marginBottom: 12, borderColor: 'rgba(251,191,36,.6)' }}>
+        <strong>Dati aziendali inviati dal fornitore</strong>
+        <div>Ragione sociale: {detail.anagrafica_inviata.ragione_sociale}</div>
+        <div>Partita IVA: {detail.anagrafica_inviata.partita_iva}</div>
+        <div>Telefono per gli ordini: {detail.anagrafica_inviata.telefono_ordini}</div>
+        {detail.status === 'submitted' && <small style={{ color: 'var(--text-secondary)' }}>Con l’approvazione questi dati sostituiscono il nome provvisorio nell’anagrafica fornitore.</small>}
+      </div> : detail.requires_supplier_details && <p style={{ color: '#fbbf24' }}>Fornitore nuovo: ragione sociale, partita IVA e telefono arriveranno con la risposta.</p>}
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')}${detail.validita_inviata_a ? ` al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : ' fino a nuova approvazione'}` : 'non ancora indicata'}</strong></p>
       {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12, borderColor: 'rgba(59,130,246,.65)' }}>
         <h3 style={{ marginTop: 0 }}>Risposta pronta per la revisione</h3>
