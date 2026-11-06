@@ -1258,9 +1258,9 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
             continue
         line.prezzo_netto_normalizzato = normalized_price.normalized_unit_price
         delta = line.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
-        await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == line.id))
+        from app.services.anomaly_policy import archive_and_remove_anomalies, is_material_price_increase
+        await archive_and_remove_anomalies(db, Anomalia.riga_fattura_id == line.id, reason="risoluzione_coda")
         delta_total = delta * line.quantita
-        from app.services.anomaly_policy import is_material_price_increase
         if is_material_price_increase(delta_total):
             db.add(Anomalia(
                 riga_fattura_id=line.id,
@@ -1443,12 +1443,15 @@ async def approve_candidate(
                         delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
                         delta_total = delta * riga.quantita
                         from app.services.anomaly_policy import (
-                            delete_stale_unworked_anomalies,
+                            archive_and_remove_anomalies,
                             is_material_price_increase,
+                            remove_stale_unworked_anomalies,
                         )
                         if is_material_price_increase(delta_total):
-                            # Pulisce vecchie anomalie
-                            await db.execute(delete(Anomalia).where(Anomalia.riga_fattura_id == riga.id))
+                            # Archivia e sostituisce le vecchie anomalie
+                            await archive_and_remove_anomalies(
+                                db, Anomalia.riga_fattura_id == riga.id, reason="approvazione_proposta"
+                            )
                             # Crea nuova anomalia
                             anomalia = Anomalia(
                                 riga_fattura_id=riga.id,
@@ -1460,7 +1463,7 @@ async def approve_candidate(
                             )
                             db.add(anomalia)
                         else:
-                            await db.execute(delete_stale_unworked_anomalies(riga.id))
+                            await remove_stale_unworked_anomalies(db, riga.id)
             # Calcola prezzi ed eventuali anomalie... (riga)
             pass
 

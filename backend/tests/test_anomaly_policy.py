@@ -18,9 +18,9 @@ from app.api.v1.fatture import list_fatture, list_righe_fattura
 from app.models.anomalie import Anomalia, StatoValidazione
 from app.services.anomaly_policy import (
     MIN_ANOMALY_TOTAL,
-    delete_stale_unworked_anomalies,
     is_material_price_increase,
     operational_anomaly_filter,
+    stale_unworked_anomaly_conditions,
 )
 
 
@@ -98,7 +98,7 @@ class MaterialityRuleTest(unittest.TestCase):
 
 class StaleAnomalyCleanupTest(unittest.TestCase):
     def test_only_unworked_anomalies_of_the_line_are_deleted(self):
-        sql = compiled(delete_stale_unworked_anomalies(42))
+        sql = compiled(select(Anomalia.id).where(*stale_unworked_anomaly_conditions(42)))
         self.assertIn("anomalie.riga_fattura_id = 42", sql)
         self.assertIn(StatoValidazione.da_verificare.name, sql)
         self.assertIn(StatoValidazione.in_parking.name, sql)

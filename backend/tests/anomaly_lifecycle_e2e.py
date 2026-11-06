@@ -26,7 +26,7 @@ from app.api.v1.fatture import ResolveActionPayload, get_fattura, list_fatture, 
 from app.api.v1.intelligence import get_kpi, get_variance_loss
 from app.api.v1.product_identity import approve_candidate
 from app.database import async_session_factory
-from app.models.anomalie import Anomalia, NotaDiCredito, StatoValidazione
+from app.models.anomalie import Anomalia, AnomaliaArchiviata, NotaDiCredito, StatoValidazione
 from app.models.fatture import (
     Fattura,
     RigaFattura,
@@ -290,6 +290,19 @@ async def check_remapping() -> None:
         "re-mapping above threshold records the new delta",
         repriced is not None and Decimal(str(repriced.delta_totale)) == Decimal("3.00"),
     )
+
+    async with async_session_factory() as db:
+        archived = {(row.riga_fattura_id, row.motivo): row for row in await db.scalars(select(AnomaliaArchiviata))}
+    check("a cleared untouched anomaly is archived", (stale_id, "riassociazione_sotto_soglia") in archived)
+    check("a cleared parked anomaly is archived", (parked_id, "riassociazione_sotto_soglia") in archived)
+    replaced = archived.get((material_id, "riassociazione"))
+    check(
+        "a replaced anomaly keeps its previous values in the archive",
+        replaced is not None
+        and replaced.stato_validazione == "da_verificare"
+        and Decimal(replaced.snapshot["delta_totale"]) == Decimal("1.00"),
+    )
+    check("an anomaly someone is handling is never archived by re-mapping", all(line != worked_id for line, _ in archived))
 
 
 async def check_candidate_approval() -> None:

@@ -8,6 +8,7 @@ import enum
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (
+    JSON,
     Date,
     DateTime,
     Enum,
@@ -227,4 +228,30 @@ class ApprovazionePrezzo(Base):
 
     def __repr__(self) -> str:
         return f"<ApprovazionePrezzo {self.sku_interno} - {self.mese} @ {self.prezzo_approvato}>"
+
+
+class AnomaliaArchiviata(Base):
+    """
+    Copia completa di un'anomalia rimossa, per esempio quando una riga viene
+    riassociata a un altro prodotto. L'anomalia operativa sparisce, la traccia no.
+    """
+    __tablename__ = "anomalie_archiviate"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    anomalia_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    riga_fattura_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("righe_fattura.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    stato_validazione: Mapped[str] = mapped_column(String(40), nullable=False)
+    delta_totale: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False)
+    motivo: Mapped[str] = mapped_column(String(60), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    archiviata_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
 
