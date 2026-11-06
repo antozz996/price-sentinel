@@ -112,6 +112,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_price_normalization.py' -v
 
+      - name: Unit — Invoice XML per-unit discounts
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_xml_discounts.py' -v
+
       - name: Unit — Smart Price Sheet decimal parsing and recommendations
         working-directory: backend
         run: python tests/smart_price_sheet_unit.py

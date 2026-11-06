@@ -848,8 +848,8 @@ async def get_pricing_audit(
         LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
         WHERE rf.sku_interno IS NOT NULL
           AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-          AND (:location_id IS NULL OR f.location_id = :location_id)
-          AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
+          AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
+          AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
           AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
         GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
     ),
@@ -897,8 +897,8 @@ async def get_pricing_audit(
             JOIN fatture f ON rf.fattura_id = f.id
             WHERE rf.sku_interno IS NOT NULL
               AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-              AND (:location_id IS NULL OR f.location_id = :location_id)
-              AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
+              AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
+              AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
               AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
             GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, to_char(f.data_documento, 'YYYY-MM')
         ),
@@ -1119,8 +1119,8 @@ async def export_dispute_excel(
         JOIN fatture f ON rf.fattura_id = f.id
         LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
         WHERE rf.sku_interno IS NOT NULL
-          AND (:location_id IS NULL OR f.location_id = :location_id)
-          AND (:anno IS NULL OR to_char(f.data_documento, 'YYYY') = :anno)
+          AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
+          AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
           AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
         GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
     ),

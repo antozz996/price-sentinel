@@ -278,25 +278,23 @@ def parse_fattura_xml(xml_string: str) -> FatturaParsata:
 
         # ── ScontoMaggiorazione (può essere multiplo — Spec §2.3) ──
         sconti = _findall(linea, "ScontoMaggiorazione")
-        net_factor = Decimal("1")
+        # FatturaPA applies each discount in order to the unit price; an Importo is
+        # an amount per unit, not per line.
+        net_unit = riga.prezzo_unitario
         for sconto_el in sconti:
             tipo_sm = _text(sconto_el, "Tipo")  # SC = Sconto, MG = Maggiorazione
             perc = _decimal(sconto_el, "Percentuale")
             importo = _decimal(sconto_el, "Importo")
+            sign = Decimal("-1") if tipo_sm == "SC" else Decimal("1") if tipo_sm == "MG" else Decimal("0")
             if perc > Decimal("0"):
-                if tipo_sm == "SC":
-                    net_factor *= (Decimal("1") - (perc / Decimal("100")))
-                elif tipo_sm == "MG":
-                    net_factor *= (Decimal("1") + (perc / Decimal("100")))
-            elif importo > Decimal("0") and riga.prezzo_unitario > Decimal("0"):
-                base_line = (riga.prezzo_unitario * riga.quantita) if riga.quantita > Decimal("0") else riga.prezzo_unitario
-                if base_line > Decimal("0"):
-                    eq_perc = min(Decimal("100"), (importo / base_line) * Decimal("100"))
-                    if tipo_sm == "SC":
-                        net_factor *= (Decimal("1") - (eq_perc / Decimal("100")))
-                    elif tipo_sm == "MG":
-                        net_factor *= (Decimal("1") + (eq_perc / Decimal("100")))
-        riga.sconto_percentuale = (Decimal("1") - net_factor) * Decimal("100")
+                net_unit *= Decimal("1") + sign * perc / Decimal("100")
+            elif importo > Decimal("0"):
+                net_unit += sign * importo
+        net_unit = max(Decimal("0"), net_unit)
+        if riga.prezzo_unitario > Decimal("0"):
+            riga.sconto_percentuale = (Decimal("1") - net_unit / riga.prezzo_unitario) * Decimal("100")
+        else:
+            riga.sconto_percentuale = Decimal("0")
 
         # ── Rilevamento Omaggi e PrezzoTotale — Spec §3.3 e §2.2.1.11 ──
         prezzo_totale_el = _find(linea, "PrezzoTotale")
@@ -307,11 +305,13 @@ def parse_fattura_xml(xml_string: str) -> FatturaParsata:
                 riga.prezzo_totale = pt_val
                 if pt_val == Decimal("0"):
                     has_prezzo_totale_zero = True
-                elif riga.sconto_percentuale == Decimal("0") and riga.prezzo_unitario > Decimal("0") and riga.quantita > Decimal("0"):
+                elif riga.prezzo_unitario > Decimal("0") and riga.quantita > Decimal("0"):
+                    # PrezzoTotale is the authoritative net amount of the line: the
+                    # stored discount must reproduce it, whatever discounts produced it.
                     total_gross = riga.prezzo_unitario * riga.quantita
                     if total_gross > pt_val:
                         riga.sconto_percentuale = ((total_gross - pt_val) / total_gross * Decimal("100")).quantize(
-                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                            Decimal("0.0001"), rounding=ROUND_HALF_UP
                         )
             except Exception:
                 pass
