@@ -57,7 +57,8 @@ function getMarker(value: string) {
   return MARKERS.find(m => m.value === value) || MARKERS[0];
 }
 
-export default function FattureList() {
+// focus: opened from another page (e.g. Analisi prezzi) to show one invoice with its lines.
+export default function FattureList({ focus }: { focus?: { id: number; numero: string } | null } = {}) {
   const [fatture, setFatture] = useState<FatturaItem[]>([]);
   const [fornitori, setFornitori] = useState<Fornitore[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -74,7 +75,7 @@ export default function FattureList() {
   const [filterMarker, setFilterMarker] = useState('');
   const [filterDataDa, setFilterDataDa] = useState('');
   const [filterDataA, setFilterDataA] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(focus?.numero || '');
   const [showFilters, setShowFilters] = useState(false);
 
   // Pagination states
@@ -94,6 +95,14 @@ export default function FattureList() {
   // Initial filter bootstrap; the abort controller owns this request lifecycle.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (focus?.id) {
+      setExpandedId(focus.id);
+      loadRighe(focus.id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.id]);
 
   // Reset offset to 0 when filters or page size changes
   useEffect(() => {

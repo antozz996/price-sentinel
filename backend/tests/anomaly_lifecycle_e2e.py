@@ -23,7 +23,7 @@ from app.api.deps import get_current_user
 from app.api.v1.anomalie import get_anomalia, list_anomalie
 from app.api.v1.disputes import list_dispute_candidates
 from app.api.v1.fatture import ResolveActionPayload, get_fattura, list_fatture, resolve_parked_line
-from app.api.v1.intelligence import get_kpi, get_price_trend, get_pricing_audit, get_variance_loss
+from app.api.v1.intelligence import get_kpi, get_price_trend, get_price_trends, get_pricing_audit, get_variance_loss
 from app.api.v1.product_identity import approve_candidate
 from app.database import async_session_factory
 from app.models.anomalie import Anomalia, AnomaliaArchiviata, NotaDiCredito, StatoValidazione
@@ -430,6 +430,11 @@ async def check_price_history_endpoints() -> None:
         check("product price history opens", trend is not None)
         audit = await get_pricing_audit(location_id=None, anno=None, soglia=5.0, limit=10, offset=0, _admin=ADMIN, db=db)
         check("pricing audit works without filters", isinstance(audit, dict))
+        trends = await get_price_trends(skus="OUTLIER", start_date=None, end_date=None,
+                                        location_ids=None, fornitore_ids=None, _user=ADMIN, db=db)
+        history = trends["OUTLIER"]["history"]
+        check("every price point links to its invoice", bool(history) and all(
+            point["fattura_id"] and point["numero_documento"] for point in history))
 
 
 def check_cors_exposes_pagination_total() -> None:

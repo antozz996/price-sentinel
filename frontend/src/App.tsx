@@ -158,6 +158,11 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState(() => restoreTabAfterUpdate() ?? 'dashboard')
+  // Invoice to show when the Registro fatture is opened from Analisi prezzi.
+  const [invoiceFocus, setInvoiceFocus] = useState<{ id: number; numero: string } | null>(null)
+  useEffect(() => {
+    if (activeTab !== 'fatture') setInvoiceFocus(null)
+  }, [activeTab])
   const [isAuth, setIsAuth] = useState(false)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -647,14 +652,14 @@ export default function App() {
       case 'dashboard': return <Dashboard />;
       case 'upload': return <ManualUpload isAdmin={profile.ruolo === 'admin'} onNavigate={setActiveTab} />;
       case 'unlistedproducts': return <UnlistedProductsResolver onNavigate={setActiveTab} />;
-      case 'fatture': return <FattureList />;
+      case 'fatture': return <FattureList key={invoiceFocus?.id ?? 'all'} focus={invoiceFocus} />;
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
       case 'supplierforms': return <SupplierPriceForms />;
       case 'topproducts': return <TopProductsPriceList />;
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
-      case 'priceanalysis': return <PriceTrendAnalyzer />;
+      case 'priceanalysis': return <PriceTrendAnalyzer onOpenInvoice={(id, numero) => { setInvoiceFocus({ id, numero }); setActiveTab('fatture'); }} />;
       case 'sectororders': return <SectorOrderBuilder userProfile={profile} />;
       case 'goodsreceipt': return <GoodsReceipt userProfile={profile} />;
       case 'orderregistry': return (
