@@ -1,6 +1,6 @@
 import { useState, useEffect, Suspense } from 'react'
 import { lazyPage, PageErrorBoundary, rememberActiveTab, restoreTabAfterUpdate } from './lazyPage'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Tag, BarChart2, Menu, X, Award, TrendingUp, EyeOff, Percent, Layers, GitCompareArrows, HandCoins, BellRing, ListChecks, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star, Loader2 } from 'lucide-react'
+import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import NotificationCenterModal from './components/NotificationCenterModal'
@@ -50,6 +50,8 @@ type NavItem = {
   label: string
   icon: LucideIcon
   adminOnly?: boolean
+  // A menu entry grouping several pages, shown as tabs on top of the page.
+  members?: { id: string; label: string; adminOnly?: boolean }[]
 }
 
 type NavSection = {
@@ -67,9 +69,8 @@ const NAV_SECTIONS: NavSection[] = [
       { id: 'unlistedproducts', label: 'Prodotti fuori listino', icon: Layers, adminOnly: true },
       { id: 'fatture', label: 'Registro fatture', icon: FileText },
       { id: 'validation', label: 'Anomalie da validare', icon: AlertTriangle, adminOnly: true },
-      { id: 'reconciliations', label: 'Riconciliazioni', icon: GitCompareArrows, adminOnly: true },
       { id: 'disputes', label: 'Contestazioni', icon: HandCoins, adminOnly: true },
-      { id: 'monitor', label: 'Monitor operativo', icon: BellRing, adminOnly: true },
+      // 'reconciliations' is hidden: it needs the LiquidStock integration, not connected yet.
     ],
   },
   {
@@ -80,44 +81,59 @@ const NAV_SECTIONS: NavSection[] = [
       { id: 'goodsreceipt', label: 'Ricezione merci', icon: PackageCheck },
       { id: 'orderregistry', label: 'Registro ordini', icon: ClipboardList },
       { id: 'productreviews', label: 'Recensioni prodotti', icon: Star },
-      { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
       { id: 'supplierforms', label: 'Moduli fornitori', icon: ClipboardList, adminOnly: true },
-      { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
     ],
   },
   {
     id: 'analytics',
-    label: 'Analisi',
+    label: 'Prezzi e analisi',
     items: [
-      { id: 'topproducts', label: 'Top prodotti', icon: Award, adminOnly: true },
       { id: 'crosssupplier', label: 'Listino Smart', icon: Grid },
-      { id: 'productconsumption', label: 'Consumi per prodotto', icon: BarChart2, adminOnly: true },
-      { id: 'priceanalysis', label: 'Oscillazioni prezzi', icon: TrendingUp },
+      { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
+      { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
+      { id: 'priceanalysis', label: 'Analisi prezzi', icon: TrendingUp, members: [
+        { id: 'priceanalysis', label: 'Oscillazioni prezzi' },
+        { id: 'topproducts', label: 'Top prodotti', adminOnly: true },
+        { id: 'productconsumption', label: 'Consumi per prodotto', adminOnly: true },
+      ] },
     ],
   },
   {
     id: 'catalog',
     label: 'Catalogo',
     items: [
+      { id: 'productidentity', label: 'Prodotti', icon: Layers, adminOnly: true, members: [
+        { id: 'productidentity', label: 'Prodotti e alias', adminOnly: true },
+        { id: 'skumanager', label: 'Gestione SKU', adminOnly: true },
+        { id: 'excludedproducts', label: 'Prodotti esclusi', adminOnly: true },
+      ] },
       { id: 'categories', label: 'Categorie e fornitori', icon: Boxes, adminOnly: true },
-      { id: 'productidentity', label: 'Prodotti e alias', icon: Layers, adminOnly: true },
-      { id: 'skumanager', label: 'Gestione SKU', icon: Tag, adminOnly: true },
-      { id: 'excludedproducts', label: 'Prodotti esclusi', icon: EyeOff, adminOnly: true },
     ],
   },
   {
     id: 'administration',
     label: 'Amministrazione',
     items: [
-      { id: 'onboarding', label: 'Configurazione sede', icon: ListChecks, adminOnly: true },
-      { id: 'settings', label: 'Impostazioni', icon: Settings, adminOnly: true },
+      { id: 'monitor', label: 'Monitor operativo', icon: BellRing, adminOnly: true },
+      { id: 'settings', label: 'Impostazioni', icon: Settings, adminOnly: true, members: [
+        { id: 'settings', label: 'Generali', adminOnly: true },
+        { id: 'onboarding', label: 'Configurazione sede', adminOnly: true },
+      ] },
     ],
   },
 ]
 
+const navItemIncludes = (item: NavItem, tab: string) =>
+  item.id === tab || Boolean(item.members?.some(member => member.id === tab))
+const hubForTab = (tab: string) =>
+  NAV_SECTIONS.flatMap(section => section.items).find(item => item.members && navItemIncludes(item, tab))
+
 export function isItemPermitted(item: NavItem, profile: UserProfile | null): boolean {
   if (!profile) return false;
   if (profile.ruolo === 'admin') return true;
+  if (item.members) {
+    return item.members.some(member => isItemPermitted({ ...member, icon: item.icon }, profile));
+  }
 
   const det = profile.ruolo_dettagliato || 'manager_sede';
   if (det.startsWith('responsabile_')) {
@@ -148,7 +164,7 @@ export default function App() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     operations: true,
     purchasing: true,
-    analytics: false,
+    analytics: true,
     catalog: false,
     administration: false,
   })
@@ -345,7 +361,7 @@ export default function App() {
 
   useEffect(() => {
     const activeSection = NAV_SECTIONS.find(section =>
-      section.items.some(item => item.id === activeTab),
+      section.items.some(item => navItemIncludes(item, activeTab)),
     )
     if (activeSection) {
       setOpenSections(current => ({ ...current, [activeSection.id]: true }))
@@ -664,6 +680,30 @@ export default function App() {
     }
   }
 
+  // Tabs for menu entries that group several pages (e.g. Analisi prezzi).
+  const renderHubTabs = () => {
+    if (!profile) return null
+    const hub = hubForTab(activeTab)
+    const members = (hub?.members || []).filter(member => isItemPermitted({ ...member, icon: hub!.icon }, profile))
+    if (members.length < 2) return null
+    return (
+      <div role="tablist" aria-label={hub!.label} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+        {members.map(member => (
+          <button
+            key={member.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === member.id}
+            className={`btn ${activeTab === member.id ? 'btn-primary' : ''}`}
+            onClick={() => setActiveTab(member.id)}
+          >
+            {member.label}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
   const getAccountDisplayName = () => {
     if (profile?.tenant_id === 2 || profile?.nome_completo?.toLowerCase().includes('bar la sosta') || profile?.email?.toLowerCase().includes('bar.it')) {
       return 'Bar la sosta';
@@ -769,7 +809,7 @@ export default function App() {
             if (visibleItems.length === 0) return null
 
             const isOpen = openSections[section.id]
-            const hasActiveItem = visibleItems.some(item => item.id === activeTab)
+            const hasActiveItem = visibleItems.some(item => navItemIncludes(item, activeTab))
 
             return (
               <div className="sidebar-section" key={section.id}>
@@ -793,7 +833,7 @@ export default function App() {
                       const Icon = item.icon
                       return (
                         <button
-                          className={`sidebar-nav-item ${activeTab === item.id ? 'is-active' : ''}`}
+                          className={`sidebar-nav-item ${navItemIncludes(item, activeTab) ? 'is-active' : ''}`}
                           key={item.id}
                           onClick={() => { setActiveTab(item.id); setMobileSidebarOpen(false); }}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
@@ -933,6 +973,7 @@ export default function App() {
               <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Caricamento modulo in corso…</span>
             </div>
           }>
+            {renderHubTabs()}
             {renderContent()}
           </Suspense>
           </PageErrorBoundary>
