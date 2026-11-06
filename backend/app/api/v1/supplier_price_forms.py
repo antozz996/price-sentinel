@@ -469,10 +469,11 @@ async def list_form_requests(
     now = datetime.now(timezone.utc)
     result = []
     for request in records:
-        if status_filter != "all" and request.status != status_filter:
-            continue
+        # Expire first, so an overdue link is listed as expired, not as open.
         if request.status == "open" and request.expires_at <= now:
             request.status = "expired"
+        if status_filter != "all" and request.status != status_filter:
+            continue
         result.append(_request_view(request))
     await db.commit()
     return result
@@ -627,6 +628,12 @@ async def delete_form_request(
     )).scalar_one_or_none()
     if not request:
         raise HTTPException(status_code=404, detail="Modulo non trovato")
+    if request.status == "approved":
+        # An approved response is the audit trail of prices now in the price list.
+        raise HTTPException(
+            status_code=409,
+            detail="Un modulo approvato non si può eliminare: è la traccia dei prezzi entrati nel listino",
+        )
 
     # Removing the request cascades to its response snapshot items and revokes
     # the public token. It never alters the referenced official listino rows.
