@@ -27,6 +27,7 @@ from app.api.v1.intelligence import get_kpi, get_variance_loss
 from app.api.v1.product_identity import approve_candidate
 from app.database import async_session_factory
 from app.models.anomalie import Anomalia, AnomaliaArchiviata, NotaDiCredito, StatoValidazione
+from app.models.esclusi import RigaEsclusaStatistiche
 from app.models.fatture import (
     Fattura,
     RigaFattura,
@@ -403,6 +404,26 @@ async def check_variance_counts_each_line_once() -> None:
     check("variance is not multiplied by active price lists", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
 
 
+async def check_excluded_lines_do_not_set_reference_price() -> None:
+    async with async_session_factory() as db:
+        fx = Fixture(db)
+        fx.fattura = await db.scalar(select(Fattura).where(Fattura.numero_documento == "CI-SYNTH-0001"))
+        fx.next_line = 400
+        await fx.product("OUTLIER")
+        await fx.line("OUTLIER-A", "10.00", sku="OUTLIER")
+        await fx.line("OUTLIER-B", "12.00", sku="OUTLIER")
+        billing_error = await fx.line("OUTLIER-ERROR", "5.00", sku="OUTLIER")
+        db.add(RigaEsclusaStatistiche(riga_fattura_id=billing_error.id, motivo="Errore di fatturazione (test)"))
+        await db.commit()
+
+    async with async_session_factory() as db:
+        rows = await get_variance_loss(_admin=ADMIN, db=db)
+    row = next(item for item in rows if item["sku_interno"] == "OUTLIER")
+    check("an excluded line does not become the reference price", Decimal(str(row["prezzo_minimo"])) == Decimal("10.0"))
+    check("waste is measured against the real reference price", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
+    check("an excluded line still counts as a purchase", row["numero_acquisti"] == 3)
+
+
 def check_cors_exposes_pagination_total() -> None:
     cors = next(item for item in app.main.app.user_middleware if item.cls is CORSMiddleware)
     options = getattr(cors, "kwargs", None) or getattr(cors, "options", {})
@@ -480,6 +501,7 @@ async def run() -> None:
     await check_candidate_approval()
     await check_credit_note(micro_open_id, micro_claim_id, material_id)
     await check_variance_counts_each_line_once()
+    await check_excluded_lines_do_not_set_reference_price()
     await check_large_responses_are_compressed()
     await check_tenant_isolation()
 
