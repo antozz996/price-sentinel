@@ -648,7 +648,17 @@ async def get_price_trend(
     if chk.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
 
-    trends_map = await get_price_trends(skus=sku_interno, _user=_user, db=db)
+    # Called as a plain function: optional filters must be passed explicitly,
+    # otherwise they keep their FastAPI Query() defaults instead of None.
+    trends_map = await get_price_trends(
+        skus=sku_interno,
+        start_date=None,
+        end_date=None,
+        location_ids=None,
+        fornitore_ids=None,
+        _user=_user,
+        db=db,
+    )
     if sku_interno in trends_map:
         return trends_map[sku_interno]
     
