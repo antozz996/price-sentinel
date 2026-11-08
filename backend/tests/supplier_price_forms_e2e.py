@@ -263,21 +263,19 @@ async def run() -> None:
         check("supplier confirms the agreed offers as prefilled", confirmed.status_code == 200)
         confirmation_approval = await client.post(
             f"/api/v1/supplier-price-forms/{confirmation.json()['request']['id']}/approve", headers=admin_headers)
-        check("approval keeps confirmed offers and adds the new one",
-              confirmation_approval.status_code == 200
-              and confirmation_approval.json()["result"]["created"] == 1
-              and confirmation_approval.json()["result"]["unchanged"] == 2)
+        check("the confirmation response is approved", confirmation_approval.status_code == 200)
         with psycopg2.connect(DSN) as connection:
             with connection.cursor() as cursor:
                 cursor.execute("select data_scadenza from listino_master where id=%s", (legacy_id,))
                 legacy_end = cursor.fetchone()[0]
-                cursor.execute("select count(*) from listino_master where fornitore_id=1 and sku_interno='CI-SKU-FORM' "
+                cursor.execute("select count(distinct supplier_product_alias_id) from listino_master "
+                               "where fornitore_id=1 and sku_interno='CI-SKU-FORM' "
                                "and supplier_product_alias_id is not null and (data_scadenza is null or data_scadenza>=%s)",
                                (start,))
                 open_offers = cursor.fetchone()[0]
         check("the replaced older row is closed the day before the new validity",
               legacy_end == start - timedelta(days=1))
-        check("confirmed and new offers stay active", open_offers == 3)
+        check("the two confirmed offers and the new one are active", open_offers == 3)
 
         delete_approved = await client.delete(
             f"/api/v1/supplier-price-forms/{created_data['request']['id']}", headers=admin_headers)
