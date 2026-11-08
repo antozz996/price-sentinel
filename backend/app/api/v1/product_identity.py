@@ -42,6 +42,7 @@ class ProductBase(BaseModel):
     unit_count: Optional[int] = 1
     container_type: Optional[str] = None
     comparison_unit: Optional[str] = None
+    supplier_form_note: Optional[str] = Field(default=None, max_length=500)
     is_commodity: Optional[bool] = False
     is_active: Optional[bool] = True
 
@@ -61,6 +62,7 @@ class ProductUpdate(BaseModel):
     unit_count: Optional[int] = None
     container_type: Optional[str] = None
     comparison_unit: Optional[str] = None
+    supplier_form_note: Optional[str] = Field(default=None, max_length=500)
     is_commodity: Optional[bool] = None
     is_active: Optional[bool] = None
 

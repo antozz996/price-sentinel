@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    Text,
     JSON,
     UniqueConstraint,
 )
@@ -42,6 +43,8 @@ class Product(Base):
     # Unknown until a supplier confirms the actual unit/pack format. NULL is
     # intentionally distinct from a guessed unit such as "Pz".
     comparison_unit: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Shown next to this product in every supplier price form (e.g. "indica il prezzo al kg").
+    supplier_form_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_commodity: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(

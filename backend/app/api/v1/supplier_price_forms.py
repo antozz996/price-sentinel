@@ -192,6 +192,11 @@ async def get_public_form(
     now = datetime.now(timezone.utc)
     if not request or request.status != "open" or request.expires_at <= now:
         raise HTTPException(status_code=404, detail="Link non valido, scaduto o già inviato")
+    skus = {item.sku_interno for item in request.items}
+    notes_by_sku = dict((await db.execute(
+        select(Product.sku_interno, Product.supplier_form_note)
+        .where(Product.sku_interno.in_(skus), Product.supplier_form_note.is_not(None))
+    )).all()) if skus else {}
     return {
         "supplier_name": request.supplier.nome_azienda,
         "requires_supplier_details": _needs_supplier_details(request.supplier),
@@ -208,6 +213,7 @@ async def get_public_form(
                 "brand_corrente": item.brand_corrente,
                 "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
+                "istruzioni": notes_by_sku.get(item.sku_interno),
             }
             for item in request.items
         ],
@@ -274,8 +280,12 @@ async def submit_public_form(
         saved_offers = []
         seen_offer_ids: set[str] = set()
         for index, offer in enumerate(offers):
-            if offer.prezzo is None or not (offer.unita_misura or "").strip() or not (offer.marca or "").strip() or not (offer.dicitura_fornitore or "").strip() or offer.quantita_confezione is None:
-                raise HTTPException(status_code=422, detail=f"Completa dicitura, marca, quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
+            # Brand and supplier wording are optional (fresh produce): wording falls back to our description.
+            if not (offer.dicitura_fornitore or "").strip():
+                offer.dicitura_fornitore = item.descrizione[:255]
+            if offer.prezzo is None or not (offer.unita_misura or "").strip() or offer.quantita_confezione is None:
+                raise HTTPException(status_code=422, detail=f"Completa quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
+            brand = (offer.marca or "").strip() or None
             unit = _normalized_unit(offer.unita_misura)
             if request.request_type == "new_listino" and offer.conferma_prezzo:
                 raise HTTPException(status_code=422, detail="Una nuova offerta non può essere marcata come conferma")
@@ -294,7 +304,7 @@ async def submit_public_form(
                 "id_offerta": offer_id,
                 "prezzo": str(offer.prezzo),
                 "unita_misura": unit,
-                "marca": offer.marca.strip(),
+                "marca": brand,
                 "dicitura_fornitore": offer.dicitura_fornitore.strip(),
                 "quantita_confezione": str(offer.quantita_confezione),
                 "conferma_prezzo": offer.conferma_prezzo,
@@ -304,7 +314,7 @@ async def submit_public_form(
         item.non_trattato = False
         item.prezzo_inviato = primary.prezzo
         item.unita_inviata = _normalized_unit(primary.unita_misura)
-        item.brand_inviata = primary.marca.strip()
+        item.brand_inviata = (primary.marca or "").strip() or None
         item.dicitura_inviata = primary.dicitura_fornitore.strip()
         item.quantita_inviata = primary.quantita_confezione
         item.nota_fornitore = primary.nota.strip() if primary.nota else None
