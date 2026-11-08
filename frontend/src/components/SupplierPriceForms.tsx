@@ -7,7 +7,7 @@ type CapabilitySupplier = { supplier_id: number; supplier_name: string; categori
 type Category = { nome: string; is_active: boolean };
 type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
 type SubmittedOffer = { id_offerta: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota?: string | null; conferma_prezzo: boolean };
-type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; offerte_inviate?: SubmittedOffer[]; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
+type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; offerte_inviate?: SubmittedOffer[]; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
 type SupplierDetails = { ragione_sociale: string; partita_iva: string; telefono_ordini: string };
 type FormRequest = { id: number; supplier_id: number; supplier_name: string; requires_supplier_details?: boolean; anagrafica_inviata?: SupplierDetails | null; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
@@ -454,7 +454,7 @@ export default function SupplierPriceForms() {
       </div>}
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
-        {detail.request_type !== 'new_listino' && <div>Pattuito: € {i.prezzo_corrente} / {i.unita_corrente || 'unità da completare'}</div>}
+        {detail.request_type !== 'new_listino' && <div>Pattuito: € {i.prezzo_corrente} {i.unita_corrente ? (i.quantita_corrente && Number(i.quantita_corrente) !== 1 ? `per ${Number(i.quantita_corrente).toLocaleString('it-IT')} ${i.unita_corrente}` : `/ ${i.unita_corrente}`) : '/ unità da completare'}</div>}
         {i.non_trattato ? <div>Non trattato dal fornitore</div> : i.offerte_inviate?.length ? i.offerte_inviate.map((offer, index) => <div key={offer.id_offerta} style={{ marginTop: 8, padding: 8, borderLeft: '2px solid var(--accent-text)' }}>
           <strong>Offerta {index + 1}: € {offer.prezzo} per confezione da {offer.quantita_confezione} {offer.unita_misura}</strong>
           <div>{offer.dicitura_fornitore}{offer.marca ? ' · Marca: ' + offer.marca : ''}</div><small>ID offerta: {offer.id_offerta}{offer.nota ? ' · Nota: ' + offer.nota : ''}</small>

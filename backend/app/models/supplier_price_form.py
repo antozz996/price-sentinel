@@ -74,6 +74,9 @@ class SupplierPriceFormItem(Base):
     prezzo_corrente: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
     unita_corrente: Mapped[str | None] = mapped_column(String(50), nullable=True)
     brand_corrente: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Format of the agreed offer (e.g. 0.25 KG), so the supplier confirms "€ 3 per 0,25 KG" instead of "per conf".
+    quantita_corrente: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
+    dicitura_corrente: Mapped[str | None] = mapped_column(Text, nullable=True)
     validita_corrente_da: Mapped[date | None] = mapped_column(Date, nullable=True)
     validita_corrente_a: Mapped[date | None] = mapped_column(Date, nullable=True)
 
