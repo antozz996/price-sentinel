@@ -91,9 +91,9 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     finally { setSending(false); }
   };
 
-  const wrap: CSSProperties = { minHeight: '100vh', padding: '24px 14px', boxSizing: 'border-box', background: '#0b1220', color: 'white', fontFamily: 'system-ui,sans-serif' };
-  const box: React.CSSProperties = { maxWidth: 900, margin: '0 auto', padding: 20, border: '1px solid rgba(255,255,255,.14)', borderRadius: 14, background: 'rgba(255,255,255,.04)' };
-  const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: 8, border: '1px solid rgba(255,255,255,.2)', background: '#111827', color: 'white' };
+  const wrap: CSSProperties = { minHeight: '100vh', padding: '24px 14px', boxSizing: 'border-box', background: 'var(--bg-app)', color: 'var(--text-primary)', fontFamily: 'var(--font-family)' };
+  const box: React.CSSProperties = { maxWidth: 900, margin: '0 auto', padding: 20, border: '1px solid var(--line)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)' };
+  const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid var(--line)', background: 'var(--bg-inset)', color: 'var(--text-primary)' };
   if (loading) return <main style={wrap}><div style={box}>Caricamento modulo…</div></main>;
   if (error && !data) return <main style={wrap}><div style={box}><h1>Modulo non disponibile</h1><p>{error}</p></div></main>;
   if (done) return <main style={wrap}><div style={box}><h1>Risposta inviata</h1><p>Grazie. La risposta e il periodo di validità indicato sono stati registrati e saranno verificati dall’azienda. Non hanno modificato automaticamente il listino ufficiale.</p></div></main>;
@@ -102,12 +102,12 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   return <main style={wrap}><form style={box} onSubmit={submit}>
     <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'} · {data.supplier_name}</h1>
     <p>Per ogni prodotto trattato indica dicitura commerciale, marca, quantità della confezione, unità e prezzo della confezione. La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>
-    <p style={{ padding: 12, border: '1px solid #fbbf24', borderRadius: 8, color: '#fef3c7' }}><strong>Come indicare il prezzo:</strong> inserisci il prezzo del prodotto o della confezione che vendi, riferito alla quantità indicata sotto. Per esempio, per una vaschetta da 2,8 KG che costa € 18,20, indica quantità 2,8, unità KG e prezzo € 18,20. Non inserire il prezzo al KG, a meno che tu venda il prodotto in confezioni da 1 KG.</p>
+    <p style={{ padding: 12, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Come indicare il prezzo:</strong> inserisci il prezzo del prodotto o della confezione che vendi, riferito alla quantità indicata sotto. Per esempio, per una vaschetta da 2,8 KG che costa € 18,20, indica quantità 2,8, unità KG e prezzo € 18,20. Non inserire il prezzo al KG, a meno che tu venda il prodotto in confezioni da 1 KG.</p>
     {data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
-    <p style={{ color: '#cbd5e1' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
+    <p style={{ color: 'var(--text-secondary)' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
     {data.requires_supplier_details && <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
       <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Dati aziendali</h2>
-      <p style={{ color: '#cbd5e1' }}>Servono per registrarvi come fornitori e per inviarvi gli ordini.</p>
+      <p style={{ color: 'var(--text-secondary)' }}>Servono per registrarvi come fornitori e per inviarvi gli ordini.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
         <label>Ragione sociale<input style={input} required minLength={2} maxLength={255} value={anagrafica.ragione_sociale} onChange={e => setAnagrafica(a => ({ ...a, ragione_sociale: e.target.value }))} /></label>
         <label>Partita IVA<input style={input} required inputMode="numeric" pattern="(IT|it)?\s*[0-9]{11}" title="11 cifre" maxLength={20} value={anagrafica.partita_iva} onChange={e => setAnagrafica(a => ({ ...a, partita_iva: e.target.value }))} /></label>
@@ -116,7 +116,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     </section>}
     <section style={{ ...box, padding: 16, maxWidth: 'none', margin: '14px 0' }}>
       <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Periodo di validità del listino</h2>
-      <p style={{ color: '#cbd5e1' }}>Indica da quando vale la tua offerta. La data di fine è facoltativa; un prezzo approvato resta operativo fino alla successiva approvazione.</p>
+      <p style={{ color: 'var(--text-secondary)' }}>Indica da quando vale la tua offerta. La data di fine è facoltativa; un prezzo approvato resta operativo fino alla successiva approvazione.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
         <label>Valido dal<input style={input} type="date" required value={validitaDa} onChange={e => setValiditaDa(e.target.value)} /></label>
         <label>Valido fino al (facoltativo)<input style={input} type="date" min={validitaDa || undefined} value={validitaA} onChange={e => setValiditaA(e.target.value)} /></label>
@@ -126,17 +126,17 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       const answer = answers[item.id]; if (!answer) return null;
       return <section key={item.id} style={{ ...box, padding: 16, margin: '14px 0', maxWidth: 'none' }}>
         <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>{item.descrizione}</h2>
-        <p style={{ color: '#cbd5e1' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? ` / ${item.unita_corrente}` : ' (unità da indicare)'}`}</p>
-        {data.request_type === 'confirmation' && item.validita_corrente_da && <p style={{ color: '#cbd5e1' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
+        <p style={{ color: 'var(--text-secondary)' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? ` / ${item.unita_corrente}` : ' (unità da indicare)'}`}</p>
+        {data.request_type === 'confirmation' && item.validita_corrente_da && <p style={{ color: 'var(--text-secondary)' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
         <label style={{ display: 'block', margin: '12px 0' }}><input type="checkbox" checked={answer.non_trattato} onChange={e => setAnswer(item.id, { non_trattato: e.target.checked })} /> Non trattiamo questo prodotto</label>
-        {answer.non_trattato ? <p style={{ color: '#cbd5e1' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
+        {answer.non_trattato ? <p style={{ color: 'var(--text-secondary)' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
           <label>Dicitura del fornitore<input style={input} required maxLength={255} value={answer.dicitura_fornitore} onChange={e => setAnswer(item.id, { dicitura_fornitore: e.target.value })} /></label>
           <label>Marca<input style={input} required maxLength={100} value={answer.marca} onChange={e => setAnswer(item.id, { marca: e.target.value })} /></label>
           <label>Quantità della confezione<input style={input} type="number" min="0.001" step="0.001" required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /></label>
           <label>Unità di misura<select style={input} required value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-          <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /><small style={{ display: 'block', color: '#cbd5e1' }}>Prezzo totale della quantità indicata, non prezzo per KG.</small></label>
+          <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /><small style={{ display: 'block', color: 'var(--text-secondary)' }}>Prezzo totale della quantità indicata, non prezzo per KG.</small></label>
         </div>}
-        {!answer.non_trattato && answer.extraOffers.map((offer, index) => <div key={offer.key} style={{ marginTop: 14, padding: 12, border: '1px solid rgba(255,255,255,.2)', borderRadius: 8 }}>
+        {!answer.non_trattato && answer.extraOffers.map((offer, index) => <div key={offer.key} style={{ marginTop: 14, padding: 12, border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong>Altra marca o formato {index + 2}</strong><button type="button" className="btn" onClick={() => removeExtraOffer(item.id, offer.key)}>Rimuovi</button></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginTop: 10 }}>
             <label>Dicitura del fornitore<input style={input} required maxLength={255} value={offer.dicitura_fornitore} onChange={e => changeExtraOffer(item.id, offer.key, { dicitura_fornitore: e.target.value })} /></label>
@@ -153,8 +153,8 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
       </section>;
     })}
-    {error && <p role="alert" style={{ color: '#fca5a5' }}>{error}</p>}
-    {draftNotice && <p role="status" style={{ color: '#86efac' }}>{draftNotice}</p>}
+    {error && <p role="alert" style={{ color: 'var(--crit)' }}>{error}</p>}
+    {draftNotice && <p role="status" style={{ color: 'var(--ok)' }}>{draftNotice}</p>}
     <button className="btn" type="button" onClick={saveDraft} style={{ marginRight: 8 }}>Salva bozza in questo browser</button>
     <button className="btn btn-primary" disabled={sending} type="submit">{sending ? 'Invio…' : 'Invia risposte'}</button>
   </form></main>;

@@ -616,14 +616,14 @@ export default function CategorySupplierManager() {
       {message && (
         <div style={{
           padding: '12px 16px',
-          borderRadius: '8px',
+          borderRadius: 'var(--radius-md)',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
           fontSize: '0.9rem',
-          background: message.type === 'success' ? 'var(--status-green-bg, rgba(16,185,129,0.15))' : 'var(--status-red-bg, rgba(239,68,68,0.15))',
-          color: message.type === 'success' ? 'var(--status-green, #10b981)' : 'var(--status-red, #ef4444)',
-          border: `1px solid ${message.type === 'success' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`
+          background: message.type === 'success' ? 'var(--status-green-bg, var(--ok-bg))' : 'var(--status-red-bg, var(--crit-bg))',
+          color: message.type === 'success' ? 'var(--status-green, var(--ok))' : 'var(--status-red, var(--crit))',
+          border: `1px solid ${message.type === 'success' ? 'var(--ok-border)' : 'var(--crit-border)'}`
         }}>
           {message.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
           <span>{message.text}</span>
@@ -633,32 +633,32 @@ export default function CategorySupplierManager() {
       {/* KPI Stats Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         <div className="glass-panel" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(14,165,233,0.15)', color: '#0ea5e9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: 'var(--radius-md)', background: 'var(--accent-bg)', color: 'var(--accent-text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Boxes size={22} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Categorie Master</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '2px' }}>{totalCategories}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', marginTop: '2px' }}>{totalCategories}</div>
           </div>
         </div>
 
         <div className="glass-panel" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: 'var(--radius-md)', background: 'var(--info-bg)', color: 'var(--info)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Building2 size={22} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fornitori Attivi</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '2px' }}>{totalSuppliers}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', marginTop: '2px' }}>{totalSuppliers}</div>
           </div>
         </div>
 
         <div className="glass-panel" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(16,185,129,0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--ok)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <CheckCircle2 size={22} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fornitori Mappati</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '2px' }}>{mappedSuppliersCount} <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 400 }}>({coveragePercent}%)</span></div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', marginTop: '2px' }}>{mappedSuppliersCount} <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 400 }}>({coveragePercent}%)</span></div>
           </div>
         </div>
       </div>
@@ -674,7 +674,7 @@ export default function CategorySupplierManager() {
               onClick={() => setSubTab('matrix')}
               style={{
                 padding: '10px 18px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
                 cursor: 'pointer',
                 fontWeight: 600,
@@ -682,8 +682,8 @@ export default function CategorySupplierManager() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: subTab === 'matrix' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.05)',
-                color: 'white',
+                background: subTab === 'matrix' ? 'var(--accent-blue, var(--accent))' : 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
                 transition: 'all 0.15s ease'
               }}
             >
@@ -695,7 +695,7 @@ export default function CategorySupplierManager() {
               onClick={() => setSubTab('categories')}
               style={{
                 padding: '10px 18px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
                 cursor: 'pointer',
                 fontWeight: 600,
@@ -703,8 +703,8 @@ export default function CategorySupplierManager() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: subTab === 'categories' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.05)',
-                color: 'white',
+                background: subTab === 'categories' ? 'var(--accent-blue, var(--accent))' : 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
                 transition: 'all 0.15s ease'
               }}
             >
@@ -716,7 +716,7 @@ export default function CategorySupplierManager() {
               onClick={() => setSubTab('subcategories')}
               style={{
                 padding: '10px 18px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
                 cursor: 'pointer',
                 fontWeight: 600,
@@ -724,8 +724,8 @@ export default function CategorySupplierManager() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: subTab === 'subcategories' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.05)',
-                color: 'white',
+                background: subTab === 'subcategories' ? 'var(--accent-blue, var(--accent))' : 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
                 transition: 'all 0.15s ease'
               }}
             >
@@ -737,16 +737,16 @@ export default function CategorySupplierManager() {
           {/* Action buttons on the right */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {subTab === 'matrix' && (
-              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '3px', border: '1px solid var(--border-glass)' }}>
+              <div style={{ display: 'flex', background: 'var(--bg-inset)', borderRadius: 'var(--radius-md)', padding: '3px', border: '1px solid var(--border-glass)' }}>
                 <button
                   onClick={() => setViewMode('cards')}
                   title="Vista Schede"
                   style={{
-                    background: viewMode === 'cards' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    background: viewMode === 'cards' ? 'var(--bg-elevated)' : 'transparent',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     padding: '6px 10px',
-                    color: 'white',
+                    color: 'var(--text-primary)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -761,11 +761,11 @@ export default function CategorySupplierManager() {
                   onClick={() => setViewMode('table')}
                   title="Vista Griglia Matrice"
                   style={{
-                    background: viewMode === 'table' ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    background: viewMode === 'table' ? 'var(--bg-elevated)' : 'transparent',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     padding: '6px 10px',
-                    color: 'white',
+                    color: 'var(--text-primary)',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -788,7 +788,7 @@ export default function CategorySupplierManager() {
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
                   title="Carica le sottocategorie alimentari standard Ho.Re.Ca (Carni, Pesce, Latticini, Salumi, Surgelati, ecc.)"
                 >
-                  <Sparkles size={15} style={{ color: '#f59e0b' }} />
+                  <Sparkles size={15} style={{ color: 'var(--warn)' }} />
                   Carica Predefinite Food
                 </button>
                 <button
@@ -811,7 +811,7 @@ export default function CategorySupplierManager() {
                     className="btn btn-secondary"
                     style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}
                   >
-                    <Sparkles size={15} style={{ color: '#f59e0b' }} />
+                    <Sparkles size={15} style={{ color: 'var(--warn)' }} />
                     Carica Categorie Ho.Re.Ca.
                   </button>
                 )}
@@ -835,9 +835,9 @@ export default function CategorySupplierManager() {
               disabled={loading || subcatLoading}
               title="Ricarica dati"
               style={{
-                background: 'rgba(255,255,255,0.05)',
+                background: 'var(--bg-elevated)',
                 border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 padding: '9px 12px',
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
@@ -864,10 +864,10 @@ export default function CategorySupplierManager() {
                 width: '100%',
                 boxSizing: 'border-box',
                 padding: '10px 12px 10px 38px',
-                background: 'rgba(0,0,0,0.25)',
+                background: 'var(--bg-inset)',
                 border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
                 fontSize: '0.85rem'
               }}
             />
@@ -881,10 +881,10 @@ export default function CategorySupplierManager() {
                 onChange={e => setSelectedCategoryFilter(e.target.value)}
                 style={{
                   padding: '9px 12px',
-                  background: '#13131c',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem'
                 }}
               >
@@ -904,10 +904,10 @@ export default function CategorySupplierManager() {
                 onChange={e => setSubcatParentCategory(e.target.value)}
                 style={{
                   padding: '9px 12px',
-                  background: '#13131c',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem',
                   fontWeight: 600
                 }}
@@ -961,14 +961,14 @@ export default function CategorySupplierManager() {
                         display: 'flex', 
                         flexDirection: 'column', 
                         gap: '16px',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(255,255,255,0.02)'
+                        border: '1px solid var(--line)',
+                        background: 'var(--bg-inset)'
                       }}
                     >
                       {/* Supplier Card Header */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'white' }}>{supplier.supplier_name}</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{supplier.supplier_name}</div>
                           <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                             P.IVA: {supplier.partita_iva}
                           </div>
@@ -976,9 +976,9 @@ export default function CategorySupplierManager() {
                         <span style={{
                           fontSize: '0.75rem',
                           padding: '3px 8px',
-                          borderRadius: '12px',
-                          background: enabledCount > 0 ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.05)',
-                          color: enabledCount > 0 ? '#3b82f6' : 'var(--text-secondary)',
+                          borderRadius: 'var(--radius-lg)',
+                          background: enabledCount > 0 ? 'var(--accent-bg)' : 'var(--bg-elevated)',
+                          color: enabledCount > 0 ? 'var(--accent-text)' : 'var(--text-secondary)',
                           fontWeight: 600
                         }}>
                           {enabledCount} {enabledCount === 1 ? 'settore' : 'settori'}
@@ -1000,12 +1000,12 @@ export default function CategorySupplierManager() {
                                 onClick={() => handleToggleCapability(supplier.supplier_id, cat.nome, isEnabled)}
                                 style={{
                                   padding: '5px 10px',
-                                  borderRadius: '6px',
+                                  borderRadius: 'var(--radius-sm)',
                                   fontSize: '0.78rem',
                                   cursor: 'pointer',
-                                  border: isEnabled ? `1px solid ${cat.colore || '#3b82f6'}` : '1px solid rgba(255,255,255,0.1)',
-                                  background: isEnabled ? `${cat.colore || '#3b82f6'}25` : 'rgba(0,0,0,0.2)',
-                                  color: isEnabled ? '#ffffff' : 'rgba(255,255,255,0.4)',
+                                  border: isEnabled ? `1px solid ${cat.colore || '#4f8ff7'}` : '1px solid var(--line-strong)',
+                                  background: isEnabled ? `${cat.colore || '#4f8ff7'}25` : 'var(--bg-inset)',
+                                  color: isEnabled ? 'var(--text-primary)' : 'var(--text-muted)',
                                   fontWeight: isEnabled ? 600 : 400,
                                   display: 'flex',
                                   alignItems: 'center',
@@ -1018,10 +1018,10 @@ export default function CategorySupplierManager() {
                                   width: '6px',
                                   height: '6px',
                                   borderRadius: '50%',
-                                  background: isEnabled ? (cat.colore || '#3b82f6') : 'rgba(255,255,255,0.2)'
+                                  background: isEnabled ? (cat.colore || '#4f8ff7') : 'var(--bg-elevated)'
                                 }} />
                                 {cat.nome}
-                                {isEnabled && <Check size={12} style={{ color: cat.colore || '#3b82f6' }} />}
+                                {isEnabled && <Check size={12} style={{ color: cat.colore || '#4f8ff7' }} />}
                               </button>
                             );
                           })}
@@ -1040,24 +1040,24 @@ export default function CategorySupplierManager() {
                             style={{
                               marginTop: '4px',
                               padding: '12px 14px',
-                              background: 'rgba(0,0,0,0.25)',
-                              borderRadius: '8px',
-                              border: `1px solid ${cat.colore || '#3b82f6'}35`,
+                              background: 'var(--bg-inset)',
+                              borderRadius: 'var(--radius-md)',
+                              border: `1px solid ${cat.colore || '#4f8ff7'}35`,
                               display: 'flex',
                               flexDirection: 'column',
                               gap: '8px'
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, color: cat.colore || '#3b82f6' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 600, color: cat.colore || '#4f8ff7' }}>
                                 <FolderTree size={14} />
                                 <span>Sottocategorie {cat.nome}:</span>
                                 <span style={{
                                   fontSize: '0.7rem',
                                   padding: '1px 7px',
-                                  borderRadius: '10px',
-                                  background: allEnabledByDefault ? 'rgba(255,255,255,0.08)' : `${cat.colore || '#3b82f6'}25`,
-                                  color: allEnabledByDefault ? 'var(--text-secondary)' : 'white',
+                                  borderRadius: 'var(--radius-md)',
+                                  background: allEnabledByDefault ? 'var(--bg-elevated)' : `${cat.colore || '#4f8ff7'}25`,
+                                  color: allEnabledByDefault ? 'var(--text-secondary)' : 'var(--text-primary)',
                                   fontWeight: 500
                                 }}>
                                   {allEnabledByDefault ? 'Tutte (default)' : `${enabledSubs.length} di ${catSubs.length} attive`}
@@ -1068,11 +1068,11 @@ export default function CategorySupplierManager() {
                                 <button
                                   type="button"
                                   onClick={() => handleBulkSubcategories(supplier.supplier_id, cat.nome, true)}
-                                  style={{ background: 'none', border: 'none', color: cat.colore || '#3b82f6', cursor: 'pointer', padding: 0 }}
+                                  style={{ background: 'none', border: 'none', color: cat.colore || '#4f8ff7', cursor: 'pointer', padding: 0 }}
                                 >
                                   Tutte
                                 </button>
-                                <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+                                <span style={{ color: 'var(--text-muted)' }}>•</span>
                                 <button
                                   type="button"
                                   onClick={() => handleBulkSubcategories(supplier.supplier_id, cat.nome, false)}
@@ -1095,12 +1095,12 @@ export default function CategorySupplierManager() {
                                     onClick={() => handleToggleSubcategory(supplier.supplier_id, cat.nome, sub.nome, isSubEnabled)}
                                     style={{
                                       padding: '4px 9px',
-                                      borderRadius: '6px',
+                                      borderRadius: 'var(--radius-sm)',
                                       fontSize: '0.74rem',
                                       cursor: 'pointer',
-                                      border: isSubEnabled ? `1px solid ${cat.colore || '#3b82f6'}` : '1px solid rgba(255,255,255,0.08)',
-                                      background: isSubEnabled ? `${cat.colore || '#3b82f6'}30` : 'rgba(255,255,255,0.02)',
-                                      color: isSubEnabled ? '#ffffff' : 'rgba(255,255,255,0.5)',
+                                      border: isSubEnabled ? `1px solid ${cat.colore || '#4f8ff7'}` : '1px solid var(--line)',
+                                      background: isSubEnabled ? `${cat.colore || '#4f8ff7'}30` : 'var(--bg-inset)',
+                                      color: isSubEnabled ? 'var(--text-primary)' : 'var(--text-secondary)',
                                       fontWeight: isSubEnabled ? 600 : 400,
                                       display: 'flex',
                                       alignItems: 'center',
@@ -1110,9 +1110,9 @@ export default function CategorySupplierManager() {
                                     title={isSubEnabled ? `Disabilita ${sub.nome}` : `Abilita ${sub.nome}`}
                                   >
                                     {isSubEnabled ? (
-                                      <Check size={11} style={{ color: cat.colore || '#3b82f6' }} />
+                                      <Check size={11} style={{ color: cat.colore || '#4f8ff7' }} />
                                     ) : (
-                                      <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />
+                                      <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--bg-elevated)' }} />
                                     )}
                                     {sub.nome}
                                   </button>
@@ -1124,11 +1124,11 @@ export default function CategorySupplierManager() {
                       })}
 
                       {/* Card Footer Quick Actions */}
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.75rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '10px', borderTop: '1px solid var(--line)', fontSize: '0.75rem' }}>
                         <button
                           type="button"
                           onClick={() => handleBulkSupplierCategories(supplier.supplier_id, true)}
-                          style={{ background: 'none', border: 'none', color: '#0ea5e9', cursor: 'pointer', padding: 0 }}
+                          style={{ background: 'none', border: 'none', color: 'var(--accent-text)', cursor: 'pointer', padding: 0 }}
                         >
                           Abilita tutte
                         </button>
@@ -1147,11 +1147,11 @@ export default function CategorySupplierManager() {
               </div>
             ) : (
               /* MATRIX TABLE VIEW */
-              <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+              <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem', textAlign: 'left' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(0,0,0,0.4)', borderBottom: '1px solid var(--border-glass)' }}>
-                      <th style={{ padding: '12px 16px', position: 'sticky', left: 0, background: '#101018', zIndex: 2, minWidth: '200px' }}>
+                    <tr style={{ background: 'var(--bg-inset)', borderBottom: '1px solid var(--border-glass)' }}>
+                      <th style={{ padding: '12px 16px', position: 'sticky', left: 0, background: 'var(--bg-card)', zIndex: 2, minWidth: '200px' }}>
                         Fornitore
                       </th>
                       {categories.map(cat => (
@@ -1161,7 +1161,7 @@ export default function CategorySupplierManager() {
                             padding: '12px 10px', 
                             textAlign: 'center', 
                             whiteSpace: 'nowrap',
-                            color: cat.colore || 'white'
+                            color: cat.colore || 'var(--text-primary)'
                           }}
                         >
                           {cat.nome}
@@ -1174,12 +1174,12 @@ export default function CategorySupplierManager() {
                       <tr 
                         key={supplier.supplier_id} 
                         style={{ 
-                          borderBottom: '1px solid rgba(255,255,255,0.05)',
-                          background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)'
+                          borderBottom: '1px solid var(--line)',
+                          background: idx % 2 === 0 ? 'transparent' : 'var(--bg-inset)'
                         }}
                       >
-                        <td style={{ padding: '12px 16px', position: 'sticky', left: 0, background: '#101018', zIndex: 1 }}>
-                          <div style={{ fontWeight: 600, color: 'white' }}>{supplier.supplier_name}</div>
+                        <td style={{ padding: '12px 16px', position: 'sticky', left: 0, background: 'var(--bg-card)', zIndex: 1 }}>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{supplier.supplier_name}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{supplier.partita_iva}</div>
                         </td>
                         {categories.map(cat => {
@@ -1192,10 +1192,10 @@ export default function CategorySupplierManager() {
                                 style={{
                                   width: '26px',
                                   height: '26px',
-                                  borderRadius: '6px',
-                                  border: isEnabled ? `1px solid ${cat.colore || '#3b82f6'}` : '1px solid rgba(255,255,255,0.1)',
-                                  background: isEnabled ? `${cat.colore || '#3b82f6'}30` : 'transparent',
-                                  color: isEnabled ? (cat.colore || '#3b82f6') : 'transparent',
+                                  borderRadius: 'var(--radius-sm)',
+                                  border: isEnabled ? `1px solid ${cat.colore || '#4f8ff7'}` : '1px solid var(--line-strong)',
+                                  background: isEnabled ? `${cat.colore || '#4f8ff7'}30` : 'transparent',
+                                  color: isEnabled ? (cat.colore || '#4f8ff7') : 'transparent',
                                   cursor: 'pointer',
                                   display: 'inline-flex',
                                   alignItems: 'center',
@@ -1203,7 +1203,7 @@ export default function CategorySupplierManager() {
                                   transition: 'all 0.1s ease'
                                 }}
                               >
-                                {isEnabled ? <Check size={14} /> : <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }} />}
+                                {isEnabled ? <Check size={14} /> : <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--bg-elevated)' }} />}
                               </button>
                             </td>
                           );
@@ -1249,15 +1249,15 @@ export default function CategorySupplierManager() {
                       flexDirection: 'column', 
                       justifyContent: 'space-between',
                       gap: '14px',
-                      borderLeft: `4px solid ${cat.colore || '#3b82f6'}`,
-                      background: 'rgba(255,255,255,0.02)'
+                      borderLeft: `4px solid ${cat.colore || '#4f8ff7'}`,
+                      background: 'var(--bg-inset)'
                     }}
                   >
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: cat.colore || '#3b82f6' }} />
-                          <div style={{ fontWeight: 700, fontSize: '1rem', color: 'white' }}>{cat.nome}</div>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: cat.colore || '#4f8ff7' }} />
+                          <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>{cat.nome}</div>
                         </div>
 
                         <div style={{ display: 'flex', gap: '6px' }}>
@@ -1266,9 +1266,9 @@ export default function CategorySupplierManager() {
                             onClick={() => openCategoryModal(cat)}
                             title="Modifica categoria"
                             style={{
-                              background: 'rgba(255,255,255,0.05)',
+                              background: 'var(--bg-elevated)',
                               border: '1px solid var(--border-glass)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '5px',
                               color: 'var(--text-secondary)',
                               cursor: 'pointer'
@@ -1281,11 +1281,11 @@ export default function CategorySupplierManager() {
                             onClick={() => handleDeleteCategory(cat)}
                             title="Elimina categoria"
                             style={{
-                              background: 'rgba(239,68,68,0.1)',
-                              border: '1px solid rgba(239,68,68,0.2)',
-                              borderRadius: '6px',
+                              background: 'var(--crit-bg)',
+                              border: '1px solid var(--crit-border)',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '5px',
-                              color: 'var(--status-red, #ef4444)',
+                              color: 'var(--status-red, var(--crit))',
                               cursor: 'pointer'
                             }}
                           >
@@ -1301,7 +1301,7 @@ export default function CategorySupplierManager() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '16px', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', gap: '16px', paddingTop: '10px', borderTop: '1px solid var(--line)', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                       <div>
                         <strong>{cat.supplier_count}</strong> {cat.supplier_count === 1 ? 'fornitore abilitato' : 'fornitori abilitati'}
                       </div>
@@ -1324,9 +1324,9 @@ export default function CategorySupplierManager() {
             {/* Info Banner */}
             <div style={{
               padding: '16px 20px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(245, 158, 11, 0.08))',
-              border: '1px solid rgba(245, 158, 11, 0.25)',
+              borderRadius: 'var(--radius-lg)',
+              background: 'var(--crit-bg)',
+              border: '1px solid var(--warn-border)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
@@ -1334,7 +1334,7 @@ export default function CategorySupplierManager() {
               gap: '14px'
             }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.05rem', color: '#f59e0b' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '1.05rem', color: 'var(--warn)' }}>
                   <Utensils size={18} />
                   Suddivisione Sottocategorie & Reparti: {subcatParentCategory}
                 </div>
@@ -1350,7 +1350,7 @@ export default function CategorySupplierManager() {
                   className="btn btn-secondary"
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}
                 >
-                  <Sparkles size={15} style={{ color: '#f59e0b' }} />
+                  <Sparkles size={15} style={{ color: 'var(--warn)' }} />
                   Carica Predefinite Food Ho.Re.Ca.
                 </button>
                 <button
@@ -1374,7 +1374,7 @@ export default function CategorySupplierManager() {
               <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
                 <FolderTree size={40} style={{ opacity: 0.3 }} />
                 <div>
-                  <h4 style={{ margin: '0 0 6px', color: 'white', fontSize: '1.1rem' }}>Nessuna sottocategoria trovata</h4>
+                  <h4 style={{ margin: '0 0 6px', color: 'var(--text-primary)', fontSize: '1.1rem' }}>Nessuna sottocategoria trovata</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem' }}>
                     Non hai ancora creato sottocategorie per <strong>{subcatParentCategory}</strong> oppure i filtri applicati non producono risultati.
                   </p>
@@ -1409,9 +1409,9 @@ export default function CategorySupplierManager() {
                   <div
                     key={sub.id}
                     style={{
-                      background: 'rgba(255,255,255,0.03)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--radius-lg)',
                       padding: '18px',
                       display: 'flex',
                       flexDirection: 'column',
@@ -1426,9 +1426,9 @@ export default function CategorySupplierManager() {
                           <div style={{
                             width: '36px',
                             height: '36px',
-                            borderRadius: '8px',
-                            background: 'rgba(245, 158, 11, 0.15)',
-                            color: '#f59e0b',
+                            borderRadius: 'var(--radius-md)',
+                            background: 'var(--warn-bg)',
+                            color: 'var(--warn)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center'
@@ -1436,7 +1436,7 @@ export default function CategorySupplierManager() {
                             <Tag size={18} />
                           </div>
                           <div>
-                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'white' }}>
+                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                               {sub.nome}
                             </h4>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1451,9 +1451,9 @@ export default function CategorySupplierManager() {
                             onClick={() => openSubcategoryModal(sub)}
                             title="Modifica sottocategoria"
                             style={{
-                              background: 'rgba(255,255,255,0.05)',
+                              background: 'var(--bg-elevated)',
                               border: '1px solid var(--border-glass)',
-                              borderRadius: '6px',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '6px',
                               color: 'var(--text-secondary)',
                               cursor: 'pointer'
@@ -1466,11 +1466,11 @@ export default function CategorySupplierManager() {
                             onClick={() => handleDeleteSubcategory(sub)}
                             title="Elimina sottocategoria"
                             style={{
-                              background: 'rgba(239,68,68,0.1)',
-                              border: '1px solid rgba(239,68,68,0.2)',
-                              borderRadius: '6px',
+                              background: 'var(--crit-bg)',
+                              border: '1px solid var(--crit-border)',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '6px',
-                              color: 'var(--status-red, #ef4444)',
+                              color: 'var(--status-red, var(--crit))',
                               cursor: 'pointer'
                             }}
                           >
@@ -1486,7 +1486,7 @@ export default function CategorySupplierManager() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid var(--line)', fontSize: '0.8rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                         <Boxes size={14} />
                         <span><strong>{sub.product_count}</strong> {sub.product_count === 1 ? 'prodotto associato' : 'prodotti associati'}</span>
@@ -1496,11 +1496,11 @@ export default function CategorySupplierManager() {
                         type="button"
                         onClick={() => handleToggleSubcatActive(sub)}
                         style={{
-                          background: sub.is_active ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)',
-                          border: `1px solid ${sub.is_active ? 'rgba(16,185,129,0.3)' : 'var(--border-glass)'}`,
-                          borderRadius: '6px',
+                          background: sub.is_active ? 'var(--ok-bg)' : 'var(--bg-elevated)',
+                          border: `1px solid ${sub.is_active ? 'var(--ok-border)' : 'var(--border-glass)'}`,
+                          borderRadius: 'var(--radius-sm)',
                           padding: '3px 8px',
-                          color: sub.is_active ? 'var(--status-green, #10b981)' : 'var(--text-secondary)',
+                          color: sub.is_active ? 'var(--status-green, var(--ok))' : 'var(--text-secondary)',
                           fontSize: '0.75rem',
                           fontWeight: 600,
                           cursor: 'pointer'
@@ -1524,14 +1524,14 @@ export default function CategorySupplierManager() {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.75)',
+          background: 'var(--bg-overlay)',
           zIndex: 1100,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '20px'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(255,255,255,0.15)' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid var(--line-strong)' }}>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
@@ -1558,10 +1558,10 @@ export default function CategorySupplierManager() {
                   onChange={e => setCatFormNome(e.target.value)}
                   style={{
                     padding: '11px',
-                    background: 'rgba(0,0,0,0.25)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white'
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)'
                   }}
                 />
               </label>
@@ -1575,10 +1575,10 @@ export default function CategorySupplierManager() {
                   onChange={e => setCatFormDesc(e.target.value)}
                   style={{
                     padding: '11px',
-                    background: 'rgba(0,0,0,0.25)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                     resize: 'vertical'
                   }}
                 />
@@ -1639,18 +1639,18 @@ export default function CategorySupplierManager() {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.75)',
+          background: 'var(--bg-overlay)',
           zIndex: 1100,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '20px'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(255,255,255,0.15)' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid var(--line-strong)' }}>
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--warn)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Utensils size={18} />
                 </div>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
@@ -1676,10 +1676,10 @@ export default function CategorySupplierManager() {
                   value={subcatParentCategory}
                   style={{
                     padding: '11px',
-                    background: 'rgba(255,255,255,0.05)',
+                    background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: '#93c5fd',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--accent-text)',
                     fontWeight: 600
                   }}
                 />
@@ -1695,10 +1695,10 @@ export default function CategorySupplierManager() {
                   onChange={e => setSubcatFormNome(e.target.value)}
                   style={{
                     padding: '11px',
-                    background: 'rgba(0,0,0,0.25)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white'
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)'
                   }}
                 />
               </label>
@@ -1712,21 +1712,21 @@ export default function CategorySupplierManager() {
                   onChange={e => setSubcatFormDesc(e.target.value)}
                   style={{
                     padding: '11px',
-                    background: 'rgba(0,0,0,0.25)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                     resize: 'vertical'
                   }}
                 />
               </label>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: 'white', cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={subcatFormIsActive}
                   onChange={e => setSubcatFormIsActive(e.target.checked)}
-                  style={{ width: '16px', height: '16px', accentColor: '#10b981' }}
+                  style={{ width: '16px', height: '16px', accentColor: 'var(--ok)' }}
                 />
                 Sottocategoria attiva e visibile nei listini e ordini
               </label>

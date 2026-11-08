@@ -248,23 +248,22 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'radial-gradient(circle at center, #111827 0%, #030712 100%)',
-        color: '#f3f4f6',
+        background: 'var(--bg-app)',
+        color: 'var(--text-primary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '20px',
-        fontFamily: 'Inter, system-ui, sans-serif'
+        fontFamily: 'var(--font-family)'
       }}>
         <div style={{
           width: '100%',
           maxWidth: '440px',
-          background: 'rgba(17, 24, 39, 0.8)',
-          backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
-          borderRadius: '20px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--crit-border)',
+          borderRadius: 'var(--radius-lg)',
           padding: '36px 32px',
-          boxShadow: '0 25px 50px -12px rgba(239, 68, 68, 0.25)',
+          boxShadow: 'var(--shadow-pop)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -273,38 +272,38 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           <div style={{
             width: '64px',
             height: '64px',
-            borderRadius: '16px',
-            background: 'rgba(239, 68, 68, 0.15)',
-            color: '#ef4444',
+            borderRadius: 'var(--radius-lg)',
+            background: 'var(--crit-bg)',
+            color: 'var(--crit)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: '20px',
-            border: '1px solid rgba(239, 68, 68, 0.3)'
+            border: '1px solid var(--crit-border)'
           }}>
             <ShieldAlert size={32} />
           </div>
 
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '0 0 6px', letterSpacing: '-0.02em', color: '#f87171' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em', color: 'var(--crit)' }}>
             GOD MODE CONTROL ROOM
           </h2>
-          <p style={{ fontSize: '0.82rem', color: '#9ca3af', margin: '0 0 24px' }}>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 24px' }}>
             Accesso riservato SuperAdmin per la supervisione globale multi-tenant e gestione istanze.
           </p>
 
           <form onSubmit={(e) => { e.preventDefault(); verifyAndLoadData(tokenInput); }} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {authError && (
-              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#ef4444', fontSize: '0.8rem', textAlign: 'left' }}>
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'var(--crit-bg)', border: '1px solid var(--crit-border)', color: 'var(--crit)', fontSize: '0.8rem', textAlign: 'left' }}>
                 ⚠️ {authError}
               </div>
             )}
 
             <div style={{ textAlign: 'left' }}>
-              <label style={{ display: 'block', fontSize: '0.78rem', color: '#9ca3af', marginBottom: '6px', fontWeight: 600 }}>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
                 MASTER SECRET TOKEN
               </label>
               <div style={{ position: 'relative' }}>
-                <Key size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#6b7280' }} />
+                <Key size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input
                   type="password"
                   value={tokenInput}
@@ -314,10 +313,10 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                     width: '100%',
                     boxSizing: 'border-box',
                     padding: '12px 12px 12px 38px',
-                    background: 'rgba(0, 0, 0, 0.5)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '10px',
-                    color: 'white',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--line-strong)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.9rem',
                     outline: 'none'
                   }}
@@ -333,13 +332,13 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 width: '100%',
                 padding: '12px',
                 borderRadius: '10px',
-                background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                color: 'white',
+                background: 'var(--crit)',
+                color: 'var(--bg-app)',
                 border: 'none',
                 fontWeight: 700,
                 fontSize: '0.9rem',
                 cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
+                boxShadow: 'none',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -354,7 +353,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
               <button
                 type="button"
                 onClick={onExit}
-                style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '0.8rem', cursor: 'pointer', marginTop: '4px' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.8rem', cursor: 'pointer', marginTop: '4px' }}
               >
                 ← Torna alla piattaforma standard
               </button>
@@ -369,10 +368,10 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#090d16',
-      color: '#f3f4f6',
+      background: 'var(--bg-app)',
+      color: 'var(--text-primary)',
       padding: '28px',
-      fontFamily: 'Inter, system-ui, sans-serif'
+      fontFamily: 'var(--font-family)'
     }}>
       <div style={{ maxWidth: '1300px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
@@ -384,32 +383,32 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           flexWrap: 'wrap',
           gap: '16px',
           paddingBottom: '20px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)'
+          borderBottom: '1px solid var(--line)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{
               width: '44px',
               height: '44px',
               borderRadius: '12px',
-              background: 'rgba(239, 68, 68, 0.15)',
-              color: '#ef4444',
+              background: 'var(--crit-bg)',
+              color: 'var(--crit)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              border: '1px solid rgba(239, 68, 68, 0.3)'
+              border: '1px solid var(--crit-border)'
             }}>
               <ShieldAlert size={24} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h1 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: 'white' }}>
+                <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
                   SUPERADMIN GOD MODE
                 </h1>
-                <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 800, background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+                <span style={{ padding: '3px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, background: 'var(--crit-bg)', color: 'var(--crit)', border: '1px solid var(--crit-border)' }}>
                   ● LIVE CONTROL ACTIVE
                 </span>
               </div>
-              <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#9ca3af' }}>
+              <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 Supervisione globale cross-tenant, gestione istanze isolate, telemetria e switch operatore.
               </p>
             </div>
@@ -422,9 +421,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
               style={{
                 padding: '8px 14px',
                 borderRadius: '8px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                color: 'white',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--line-strong)',
+                color: 'var(--text-primary)',
                 fontSize: '0.82rem',
                 cursor: 'pointer',
                 display: 'flex',
@@ -442,9 +441,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 style={{
                   padding: '8px 16px',
                   borderRadius: '8px',
-                  background: 'rgba(59, 130, 246, 0.15)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  color: '#60a5fa',
+                  background: 'var(--accent-bg)',
+                  border: '1px solid var(--accent-border)',
+                  color: 'var(--accent-text)',
                   fontSize: '0.82rem',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -461,9 +460,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 style={{
                   padding: '8px 16px',
                   borderRadius: '8px',
-                  background: 'rgba(59, 130, 246, 0.15)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  color: '#60a5fa',
+                  background: 'var(--accent-bg)',
+                  border: '1px solid var(--accent-border)',
+                  color: 'var(--accent-text)',
                   fontSize: '0.82rem',
                   fontWeight: 600,
                   textDecoration: 'none',
@@ -482,9 +481,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           <div style={{
             padding: '12px 16px',
             borderRadius: '10px',
-            background: message.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-            border: `1px solid ${message.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-            color: message.type === 'success' ? '#34d399' : '#f87171',
+            background: message.type === 'success' ? 'var(--ok-bg)' : 'var(--crit-bg)',
+            border: `1px solid ${message.type === 'success' ? 'var(--ok-border)' : 'var(--crit-border)'}`,
+            color: message.type === 'success' ? 'var(--ok)' : 'var(--crit)',
             fontSize: '0.85rem',
             display: 'flex',
             alignItems: 'center',
@@ -501,62 +500,62 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px'
         }}>
-          <div style={{ padding: '20px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.78rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <Server size={16} color="#60a5fa" /> AZIENDE / TENANT
+          <div style={{ padding: '20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <Server size={16} color="var(--accent-text)" /> AZIENDE / TENANT
             </div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
               {overview?.total_tenants || tenants.length}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#34d399', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--ok)', marginTop: '4px' }}>
               100% Spazio e Dati Isolati
             </div>
           </div>
 
-          <div style={{ padding: '20px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.78rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <FileText size={16} color="#a78bfa" /> FATTURE GLOBALI
+          <div style={{ padding: '20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <FileText size={16} color="var(--info)" /> FATTURE GLOBALI
             </div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
               {overview?.total_invoices || 0}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Totale documenti nel sistema
             </div>
           </div>
 
-          <div style={{ padding: '20px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.78rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <ShoppingCart size={16} color="#34d399" /> ORDINI TRACCIATI
+          <div style={{ padding: '20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <ShoppingCart size={16} color="var(--ok)" /> ORDINI TRACCIATI
             </div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
               {overview?.total_orders || 0}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Ordini d'acquisto emessi
             </div>
           </div>
 
-          <div style={{ padding: '20px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.78rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <Users size={16} color="#f59e0b" /> OPERATORI / ADMIN
+          <div style={{ padding: '20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <Users size={16} color="var(--warn)" /> OPERATORI / ADMIN
             </div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'white' }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
               {overview?.total_users || 0}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Account attivi nel network
             </div>
           </div>
 
-          <div style={{ padding: '20px', borderRadius: '14px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <div style={{ fontSize: '0.78rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <Euro size={16} color="#10b981" /> VOLUME TRANSATO
+          <div style={{ padding: '20px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)', border: '1px solid var(--line)' }}>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+              <Euro size={16} color="var(--ok)" /> VOLUME TRANSATO
             </div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#34d399' }}>
+            <div style={{ fontSize: '1.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--ok)' }}>
               € {((overview?.total_spend_volume || 0) / 1000).toFixed(1)}k
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '4px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Imponibile complessivo
             </div>
           </div>
@@ -565,9 +564,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
         {/* TENANTS & CLIENT COMPANIES MANAGEMENT PANEL */}
         <div style={{
           padding: '24px',
-          borderRadius: '16px',
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
+          borderRadius: 'var(--radius-lg)',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--line)',
           display: 'flex',
           flexDirection: 'column',
           gap: '20px'
@@ -575,9 +574,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
             <div>
               <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Server size={20} color="#ef4444" /> Gestione Istanze Aziendali Clienti
+                <Server size={20} color="var(--crit)" /> Gestione Istanze Aziendali Clienti
               </h2>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                 Tutte le aziende clienti che utilizzano la piattaforma in modalità multi-tenant isolata.
               </p>
             </div>
@@ -594,8 +593,8 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
               style={{
                 padding: '10px 18px',
                 borderRadius: '10px',
-                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                color: 'white',
+                background: 'var(--crit)',
+                color: 'var(--bg-app)',
                 border: 'none',
                 fontWeight: 700,
                 fontSize: '0.85rem',
@@ -603,7 +602,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)'
+                boxShadow: 'none'
               }}
             >
               <Plus size={16} /> Nuova Istanza Azienda
@@ -617,8 +616,8 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 style={{
                   padding: '18px 20px',
                   borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.03)',
-                  border: '1px solid rgba(255, 255, 255, 0.07)',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -632,36 +631,36 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                     width: '46px',
                     height: '46px',
                     borderRadius: '12px',
-                    background: t.id === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                    color: t.id === 1 ? '#60a5fa' : '#34d399',
+                    background: t.id === 1 ? 'var(--accent-bg)' : 'var(--ok-bg)',
+                    color: t.id === 1 ? 'var(--accent-text)' : 'var(--ok)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: '1.2rem',
-                    fontWeight: 800
+                    fontWeight: 700
                   }}>
                     {t.id === 1 ? '👑' : '🏢'}
                   </div>
 
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ fontSize: '1.05rem', color: 'white' }}>{t.company_name}</strong>
+                      <strong style={{ fontSize: '1.05rem', color: 'var(--text-primary)' }}>{t.company_name}</strong>
                       <span style={{
                         padding: '2px 8px',
                         borderRadius: '6px',
                         fontSize: '0.72rem',
                         fontWeight: 700,
-                        background: t.id === 1 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
-                        color: t.id === 1 ? '#93c5fd' : '#6ee7b7'
+                        background: t.id === 1 ? 'var(--accent-bg)' : 'var(--ok-bg)',
+                        color: t.id === 1 ? 'var(--accent-text)' : 'var(--ok)'
                       }}>
                         {t.id === 1 ? 'Principale (Root)' : `Tenant #${t.id}`}
                       </span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', fontSize: '0.75rem', color: '#9ca3af' }}>
-                      <span>Slug: <code style={{ color: '#f3f4f6' }}>{t.slug}</code></span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      <span>Slug: <code style={{ color: 'var(--text-primary)' }}>{t.slug}</code></span>
                       <span>•</span>
-                      <span>Admin: <strong style={{ color: '#e5e7eb' }}>{t.admin_email}</strong></span>
+                      <span>Admin: <strong style={{ color: 'var(--text-primary)' }}>{t.admin_email}</strong></span>
                     </div>
                   </div>
                 </div>
@@ -669,23 +668,23 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 {/* METRICHE AZIENDA */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '0.8rem' }}>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 700, color: 'white', fontSize: '1rem' }}>{t.invoices_count}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Fatture</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{t.invoices_count}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Fatture</div>
                   </div>
 
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 700, color: 'white', fontSize: '1rem' }}>{t.orders_count}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Ordini</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{t.orders_count}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Ordini</div>
                   </div>
 
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 700, color: 'white', fontSize: '1rem' }}>{t.users_count}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Utenti</div>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{t.users_count}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Utenti</div>
                   </div>
 
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 700, color: '#34d399', fontSize: '1rem' }}>€ {t.spend_volume.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Imponibile</div>
+                    <div style={{ fontWeight: 600, color: 'var(--ok)', fontSize: '1rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {t.spend_volume.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Imponibile</div>
                   </div>
                 </div>
 
@@ -697,9 +696,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                     style={{
                       padding: '8px 14px',
                       borderRadius: '8px',
-                      background: 'rgba(59, 130, 246, 0.2)',
-                      border: '1px solid rgba(59, 130, 246, 0.4)',
-                      color: '#93c5fd',
+                      background: 'var(--accent-bg)',
+                      border: '1px solid var(--accent-border)',
+                      color: 'var(--accent-text)',
                       fontSize: '0.8rem',
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -717,9 +716,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                     style={{
                       padding: '8px 12px',
                       borderRadius: '8px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      color: copiedId === t.id ? '#34d399' : '#d1d5db',
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--line-strong)',
+                      color: copiedId === t.id ? 'var(--ok)' : 'var(--text-secondary)',
                       fontSize: '0.8rem',
                       cursor: 'pointer',
                       display: 'flex',
@@ -740,9 +739,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                     style={{
                       padding: '8px 12px',
                       borderRadius: '8px',
-                      background: 'rgba(245, 158, 11, 0.15)',
-                      border: '1px solid rgba(245, 158, 11, 0.3)',
-                      color: '#fbbf24',
+                      background: 'var(--warn-bg)',
+                      border: '1px solid var(--warn-border)',
+                      color: 'var(--warn)',
                       fontSize: '0.8rem',
                       cursor: 'pointer',
                       display: 'flex',
@@ -760,9 +759,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                       style={{
                         padding: '8px 10px',
                         borderRadius: '8px',
-                        background: 'rgba(239, 68, 68, 0.15)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: '#f87171',
+                        background: 'var(--crit-bg)',
+                        border: '1px solid var(--crit-border)',
+                        color: 'var(--crit)',
                         cursor: 'pointer'
                       }}
                     >
@@ -779,18 +778,18 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
         <div style={{
           padding: '18px 22px',
           borderRadius: '12px',
-          background: 'rgba(255, 255, 255, 0.02)',
-          border: '1px solid rgba(255, 255, 255, 0.05)',
+          background: 'var(--bg-inset)',
+          border: '1px solid var(--line)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
           gap: '12px',
           fontSize: '0.78rem',
-          color: '#9ca3af'
+          color: 'var(--text-secondary)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <ShieldCheck size={16} color="#34d399" />
+            <ShieldCheck size={16} color="var(--ok)" />
             <span>Database PostgreSQL: <strong>Connesso & Operativo</strong></span>
             <span>•</span>
             <span>Isolamento Multi-Tenant: <strong>Attivo con scoping row-level</strong></span>
@@ -810,8 +809,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(8px)',
+          background: 'var(--bg-overlay)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -821,20 +819,20 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           <div style={{
             width: '100%',
             maxWidth: '500px',
-            background: '#111827',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '18px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--line-strong)',
+            borderRadius: 'var(--radius-lg)',
             padding: '28px',
-            boxShadow: '0 25px 50px -12px rgba(239, 68, 68, 0.35)'
+            boxShadow: 'var(--shadow-pop)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', color: 'white' }}>
-                <Plus size={20} color="#ef4444" /> Attiva Nuova Istanza Azienda
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
+                <Plus size={20} color="var(--crit)" /> Attiva Nuova Istanza Azienda
               </h3>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
               >
                 ✕
               </button>
@@ -842,7 +840,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
 
             <form onSubmit={handleCreateTenant} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: '#9ca3af', marginBottom: '4px' }}>Nome Azienda / Ragione Sociale</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Nome Azienda / Ragione Sociale</label>
                 <input
                   type="text"
                   placeholder="Es. Bar la sosta / Ristorante Marechiaro"
@@ -853,49 +851,49 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                       setNewSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''));
                     }
                   }}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                   required
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: '#9ca3af', marginBottom: '4px' }}>Slug Identificativo Univoco</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Slug Identificativo Univoco</label>
                 <input
                   type="text"
                   placeholder="Es. barlasosta"
                   value={newSlug}
                   onChange={e => setNewSlug(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                   required
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: '#9ca3af', marginBottom: '4px' }}>Email Amministratore</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Email Amministratore</label>
                 <input
                   type="email"
                   placeholder="Es. ilaria@bar.it"
                   value={newAdminEmail}
                   onChange={e => setNewAdminEmail(e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                   required
                 />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: '#9ca3af', marginBottom: '4px' }}>Password Iniziale</label>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Password Iniziale</label>
                 <input
                   type="password"
                   placeholder="••••••••"
                   value={newAdminPassword}
                   onChange={e => setNewAdminPassword(e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                   required
                 />
               </div>
 
               {modalError && (
-                <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '0.8rem' }}>
+                <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--crit-bg)', color: 'var(--crit)', fontSize: '0.8rem' }}>
                   {modalError}
                 </div>
               )}
@@ -904,7 +902,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  style={{ padding: '10px 16px', borderRadius: '8px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#d1d5db', cursor: 'pointer' }}
+                  style={{ padding: '10px 16px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--line-strong)', color: 'var(--text-secondary)', cursor: 'pointer' }}
                 >
                   Annulla
                 </button>
@@ -914,9 +912,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                   style={{
                     padding: '10px 18px',
                     borderRadius: '8px',
-                    background: '#ef4444',
+                    background: 'var(--crit)',
                     border: 'none',
-                    color: 'white',
+                    color: 'var(--bg-app)',
                     fontWeight: 700,
                     cursor: 'pointer'
                   }}
@@ -937,8 +935,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(8px)',
+          background: 'var(--bg-overlay)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -948,15 +945,16 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
           <div style={{
             width: '100%',
             maxWidth: '440px',
-            background: '#111827',
-            border: '1px solid rgba(245, 158, 11, 0.3)',
-            borderRadius: '16px',
-            padding: '26px'
+            background: 'var(--bg-card)',
+            border: '1px solid var(--warn-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '26px',
+            boxShadow: 'var(--shadow-pop)'
           }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '1.15rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Key size={18} color="#fbbf24" /> Reset Password Admin
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.15rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Key size={18} color="var(--warn)" /> Reset Password Admin
             </h3>
-            <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: '0 0 16px' }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '0 0 16px' }}>
               Imposta una nuova password per l'amministratore di <strong>{resetModalTenant.company_name}</strong> ({resetModalTenant.admin_email}).
             </p>
 
@@ -966,7 +964,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 placeholder="Nuova password..."
                 value={newPasswordValue}
                 onChange={e => setNewPasswordValue(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 required
               />
 
@@ -974,7 +972,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 <button
                   type="button"
                   onClick={() => setResetModalTenant(null)}
-                  style={{ padding: '8px 14px', borderRadius: '8px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#d1d5db', cursor: 'pointer' }}
+                  style={{ padding: '8px 14px', borderRadius: '8px', background: 'transparent', border: '1px solid var(--line-strong)', color: 'var(--text-secondary)', cursor: 'pointer' }}
                 >
                   Annulla
                 </button>
@@ -984,9 +982,9 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                   style={{
                     padding: '8px 16px',
                     borderRadius: '8px',
-                    background: '#f59e0b',
+                    background: 'var(--warn)',
                     border: 'none',
-                    color: '#111827',
+                    color: 'var(--bg-app)',
                     fontWeight: 700,
                     cursor: 'pointer'
                   }}

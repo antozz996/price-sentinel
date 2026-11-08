@@ -45,12 +45,12 @@ interface Fornitore { id: number; nome_azienda: string; }
 interface Location { id: number; nome_struttura: string; }
 
 const MARKERS = [
-  { value: 'nessuno', label: 'Nessuno', color: '#6b7280', bg: 'rgba(107,114,128,0.15)' },
-  { value: 'da_verificare', label: 'Da Verificare', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
-  { value: 'verificata', label: 'Verificata', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)' },
-  { value: 'contestata', label: 'Contestata', color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
-  { value: 'approvata', label: 'Approvata', color: '#10b981', bg: 'rgba(16,185,129,0.15)' },
-  { value: 'sospesa', label: 'Sospesa', color: '#8b5cf6', bg: 'rgba(139,92,246,0.15)' },
+  { value: 'nessuno', label: 'Nessuno', color: 'var(--text-muted)', bg: 'var(--bg-elevated)' },
+  { value: 'da_verificare', label: 'Da Verificare', color: 'var(--warn)', bg: 'var(--warn-bg)' },
+  { value: 'verificata', label: 'Verificata', color: 'var(--accent-text)', bg: 'var(--accent-bg)' },
+  { value: 'contestata', label: 'Contestata', color: 'var(--crit)', bg: 'var(--crit-bg)' },
+  { value: 'approvata', label: 'Approvata', color: 'var(--ok)', bg: 'var(--ok-bg)' },
+  { value: 'sospesa', label: 'Sospesa', color: 'var(--info)', bg: 'var(--info-bg)' },
 ];
 
 function getMarker(value: string) {
@@ -227,8 +227,8 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
   const hasActiveFilters = filterFornitore || filterLocation || filterMarker || filterDataDa || filterDataA || searchQuery;
 
   const selectStyle: React.CSSProperties = {
-    padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)',
-    borderRadius: '8px', color: 'white', fontSize: '0.85rem', outline: 'none', minWidth: '160px', flex: 1
+    padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none', minWidth: '160px', flex: 1
   };
 
   const inputStyle: React.CSSProperties = {
@@ -254,20 +254,20 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
           <button
             className="btn"
             onClick={() => setShowFilters(!showFilters)}
-            style={{ background: showFilters ? 'rgba(59,130,246,0.2)' : 'transparent', border: '1px solid var(--border-glass)', gap: '8px' }}
+            style={{ background: showFilters ? 'var(--accent-bg)' : 'transparent', border: '1px solid var(--line)', gap: '8px' }}
           >
             <Filter size={16} /> Filtri
-            {hasActiveFilters && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-blue)', display: 'inline-block' }} />}
+            {hasActiveFilters && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />}
           </button>
           {hasActiveFilters && (
-            <button className="btn" onClick={clearFilters} style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: '#ef4444', gap: '6px' }}>
+            <button className="btn" onClick={clearFilters} style={{ background: 'var(--crit-bg)', border: 'none', color: 'var(--crit)', gap: '6px' }}>
               <X size={14} /> Reset
             </button>
           )}
         </div>
 
         {showFilters && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-glass)' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--line)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '150px' }}>
               <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}><Truck size={12} /> Fornitore</label>
               <select value={filterFornitore} onChange={e => setFilterFornitore(e.target.value)} style={selectStyle}>
@@ -304,15 +304,15 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
       {/* Stats */}
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
         <div className="glass-panel" style={{ padding: '16px 24px', flex: 1, minWidth: '120px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{total.toLocaleString('it-IT')}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{total.toLocaleString('it-IT')}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Fatture</div>
         </div>
         <div className="glass-panel" style={{ padding: '16px 24px', flex: 1, minWidth: '120px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-red)' }}>{totalAnomalies === null ? '—' : totalAnomalies.toLocaleString('it-IT')}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{totalAnomalies === null ? '—' : totalAnomalies.toLocaleString('it-IT')}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anomalie</div>
         </div>
         <div className="glass-panel" style={{ padding: '16px 24px', flex: 1, minWidth: '120px', textAlign: 'center' }}>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)' }}>{totalAmount === null ? '—' : `€${totalAmount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`}</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{totalAmount === null ? '—' : `€${totalAmount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}`}</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Totale</div>
         </div>
       </div>
@@ -336,9 +336,9 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
         ) : (
           <>
             <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg-inset)' }}>
                   <th style={thStyle}>Marker</th>
                   <th style={thStyle}>N° Documento</th>
                   <th style={thStyle}>Data</th>
@@ -360,20 +360,20 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                         key={f.id}
                         onClick={() => toggleExpand(f.id)}
                         style={{
-                          borderBottom: '1px solid var(--border-glass)',
+                          borderBottom: '1px solid var(--line)',
                           cursor: 'pointer',
-                          background: isExpanded ? 'rgba(59,130,246,0.05)' : 'transparent',
+                          background: isExpanded ? 'var(--accent-bg)' : 'transparent',
                           transition: 'background 0.2s'
                         }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = isExpanded ? 'rgba(59,130,246,0.05)' : 'transparent')}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = isExpanded ? 'var(--accent-bg)' : 'transparent')}
                       >
                         <td style={tdStyle}>
                           <div style={{ position: 'relative' }}>
                             <button
                               onClick={e => { e.stopPropagation(); setMarkerDropdown(markerDropdown === f.id ? null : f.id); }}
                               style={{
-                                background: m.bg, color: m.color, border: 'none', borderRadius: '20px',
+                                background: m.bg, color: m.color, border: 'none', borderRadius: '999px',
                                 padding: '4px 12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                                 whiteSpace: 'nowrap', transition: 'all 0.2s'
                               }}
@@ -383,8 +383,8 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                             {markerDropdown === f.id && (
                               <div style={{
                                 position: 'absolute', top: '100%', left: 0, marginTop: '4px', zIndex: 100,
-                                background: '#1e1e2e', border: '1px solid var(--border-glass)', borderRadius: '8px',
-                                padding: '4px', minWidth: '150px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+                                background: 'var(--bg-card)', border: '1px solid var(--line-strong)', borderRadius: 'var(--radius-md)',
+                                padding: '4px', minWidth: '150px', boxShadow: 'var(--shadow-pop)'
                               }}>
                                 {MARKERS.map(mk => (
                                   <button
@@ -392,12 +392,12 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                                     onClick={e => { e.stopPropagation(); updateMarker(f.id, mk.value); }}
                                     style={{
                                       display: 'block', width: '100%', padding: '8px 12px', border: 'none',
-                                      background: f.marker === mk.value ? 'rgba(255,255,255,0.08)' : 'transparent',
+                                      background: f.marker === mk.value ? 'var(--bg-elevated)' : 'transparent',
                                       color: mk.color, textAlign: 'left', cursor: 'pointer', borderRadius: '4px',
                                       fontSize: '0.8rem', fontWeight: 500
                                     }}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                                    onMouseLeave={e => (e.currentTarget.style.background = f.marker === mk.value ? 'rgba(255,255,255,0.08)' : 'transparent')}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = f.marker === mk.value ? 'var(--bg-elevated)' : 'transparent')}
                                   >
                                     ● {mk.label}
                                   </button>
@@ -406,15 +406,15 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                             )}
                           </div>
                         </td>
-                        <td style={{ ...tdStyle, fontWeight: 600, fontFamily: 'monospace' }}>{f.numero_documento}</td>
+                        <td style={{ ...tdStyle, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{f.numero_documento}</td>
                         <td style={tdStyle}>{new Date(f.data_documento).toLocaleDateString('it-IT')}</td>
                         <td style={tdStyle}>{f.fornitore_nome}</td>
                         <td style={tdStyle}>{f.location_nome}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>€{f.totale_imponibile.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>{f.n_righe}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€{f.totale_imponibile.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{f.n_righe}</td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                           {f.n_anomalie > 0 ? (
-                            <span style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', padding: '2px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 }}>
+                            <span style={{ background: 'var(--crit-bg)', color: 'var(--crit)', padding: '2px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                               {f.n_anomalie}
                             </span>
                           ) : (
@@ -427,7 +427,7 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                       </tr>
                       {isExpanded && (
                         <tr key={`${f.id}-detail`}>
-                          <td colSpan={9} style={{ padding: 0, background: 'rgba(0,0,0,0.15)' }}>
+                          <td colSpan={9} style={{ padding: 0, background: 'var(--bg-inset)' }}>
                             <div style={{ padding: '20px 24px' }}>
                               <h4 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Package size={16} /> Dettaglio Prodotti
@@ -437,9 +437,9 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                               ) : righe.length === 0 ? (
                                 <div style={{ color: 'var(--text-secondary)', padding: '12px' }}>Nessuna riga trovata.</div>
                               ) : (
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                                   <thead>
-                                    <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                                    <tr style={{ borderBottom: '1px solid var(--line)' }}>
                                       <th style={{ ...thStyle, fontSize: '0.75rem' }}>#</th>
                                       <th style={{ ...thStyle, fontSize: '0.75rem' }}>Descrizione</th>
                                       <th style={{ ...thStyle, fontSize: '0.75rem' }}>Codice</th>
@@ -452,39 +452,39 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                                   </thead>
                                   <tbody>
                                     {righe.map(r => (
-                                      <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: r.anomalia_id ? 'rgba(239,68,68,0.08)' : 'transparent' }}>
+                                      <tr key={r.id} style={{ borderBottom: '1px solid var(--line)', background: r.anomalia_id ? 'var(--crit-bg)' : 'transparent' }}>
                                         <td style={{ ...tdStyle, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.numero_linea}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem' }}>{r.descrizione_fornitore_raw || '—'}</td>
-                                        <td style={{ ...tdStyle, fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{r.codice_fornitore_raw || '—'}</td>
-                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right' }}>
+                                        <td style={{ ...tdStyle, fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{r.codice_fornitore_raw || '—'}</td>
+                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                                           <div>€{Number(r.prezzo_netto_normalizzato).toFixed(2)}</div>
                                           {r.netto_rientro !== undefined && r.netto_rientro !== null && Number(r.netto_rientro) !== Number(r.prezzo_netto_normalizzato) && (
                                             <div style={{
-                                              fontSize: '0.72rem', color: '#10b981', fontWeight: 600, marginTop: '2px',
+                                              fontSize: '0.72rem', color: 'var(--ok)', fontWeight: 600, marginTop: '2px',
                                               display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px'
                                             }}>
                                               <span>Net: €{Number(r.netto_rientro).toFixed(2)}</span>
-                                              <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', padding: '1px 5px', borderRadius: '10px' }}>
+                                              <span style={{ fontSize: '0.65rem', background: 'var(--ok-bg)', padding: '1px 5px', borderRadius: '999px' }}>
                                                 {r.pfa_tipo === 'fisso' ? `-${Number(r.pfa_valore).toFixed(2)}€` : `-${(Number(r.pfa_valore)*100).toFixed(0)}%`}
                                               </span>
                                             </div>
                                           )}
                                         </td>
-                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right' }}>{Number(r.quantita).toFixed(2)}</td>
-                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontWeight: 600 }}>€{Number(r.prezzo_netto_normalizzato * r.quantita).toFixed(2)}</td>
+                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{Number(r.quantita).toFixed(2)}</td>
+                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€{Number(r.prezzo_netto_normalizzato * r.quantita).toFixed(2)}</td>
                                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                                           <span style={{
-                                            padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600,
-                                            background: r.stato_matching === 'matched' ? 'rgba(16,185,129,0.15)' : r.stato_matching === 'in_parking' ? 'rgba(245,158,11,0.15)' : 'rgba(107,114,128,0.15)',
-                                            color: r.stato_matching === 'matched' ? '#10b981' : r.stato_matching === 'in_parking' ? '#f59e0b' : '#6b7280',
+                                            padding: '2px 8px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600,
+                                            background: r.stato_matching === 'matched' ? 'var(--ok-bg)' : r.stato_matching === 'in_parking' ? 'var(--warn-bg)' : 'var(--bg-elevated)',
+                                            color: r.stato_matching === 'matched' ? 'var(--ok)' : r.stato_matching === 'in_parking' ? 'var(--warn)' : 'var(--text-muted)',
                                           }}>
                                             {r.stato_matching}
                                           </span>
                                         </td>
                                         <td style={{ ...tdStyle, textAlign: 'center', minWidth: '190px' }}>
                                           {r.anomalia_id ? (
-                                            <div style={{ color: '#fca5a5', fontSize: '0.75rem', lineHeight: 1.45 }}>
-                                              <div style={{ fontWeight: 700, color: '#ef4444' }}>Scostamento €{Number(r.delta_totale || 0).toFixed(2)}</div>
+                                            <div style={{ color: 'var(--crit)', fontSize: '0.75rem', lineHeight: 1.45, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                                              <div style={{ fontWeight: 700, color: 'var(--crit)' }}>Scostamento €{Number(r.delta_totale || 0).toFixed(2)}</div>
                                               <div>Pattuito €{Number(r.prezzo_listino_snapshot || 0).toFixed(2)} · Fatturato €{Number(r.prezzo_fatturato_snapshot || 0).toFixed(2)}</div>
                                               <div>+€{Number(r.delta_prezzo || 0).toFixed(2)} per unità</div>
                                             </div>

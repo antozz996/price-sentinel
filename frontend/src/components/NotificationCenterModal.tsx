@@ -138,8 +138,7 @@ export default function NotificationCenterModal({
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.82)',
-      backdropFilter: 'blur(8px)',
+      background: 'var(--bg-overlay)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -150,38 +149,38 @@ export default function NotificationCenterModal({
         width: '100%',
         maxWidth: '820px',
         maxHeight: '90vh',
-        background: '#13131c',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        borderRadius: '16px',
+        background: 'var(--bg-card)',
+        border: '1px solid var(--line-strong)',
+        borderRadius: 'var(--radius-lg)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        boxShadow: '0 25px 60px rgba(0, 0, 0, 0.9)'
+        boxShadow: 'var(--shadow-pop)'
       }}>
         {/* Modal Header */}
         <div style={{
           padding: '20px 24px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: '1px solid var(--line)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: 'rgba(255, 255, 255, 0.02)'
+          background: 'var(--bg-inset)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               width: '40px',
               height: '40px',
-              borderRadius: '10px',
-              background: 'rgba(59, 130, 246, 0.15)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent-bg)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--accent-blue)'
+              color: 'var(--accent-text)'
             }}>
               <Bell size={20} />
             </div>
             <div>
-              <h3 style={{ margin: 0, color: 'white', fontSize: '1.2rem' }}>Centro Notifiche & Attività</h3>
+              <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem' }}>Centro Notifiche & Attività</h3>
               <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
                 Monitora in tempo reale gli ordini effettuati e le segnalazioni dei responsabili di settore
               </p>
@@ -194,7 +193,7 @@ export default function NotificationCenterModal({
               onClick={loadAllNotifications}
               disabled={loading}
               className="btn"
-              style={{ padding: '6px 12px', fontSize: '0.78rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '4px' }}
+              style={{ padding: '6px 12px', fontSize: '0.78rem', background: 'var(--bg-elevated)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: '4px' }}
             >
               <RefreshCw size={13} className={loading ? 'spinner' : ''} /> Aggiorna
             </button>
@@ -209,7 +208,7 @@ export default function NotificationCenterModal({
         </div>
 
         {/* Tab Navigation */}
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '0 24px', background: 'rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--line)', padding: '0 24px', background: 'var(--bg-inset)' }}>
           <button
             type="button"
             onClick={() => setActiveTab('orders')}
@@ -217,8 +216,8 @@ export default function NotificationCenterModal({
               padding: '14px 20px',
               background: 'transparent',
               border: 'none',
-              borderBottom: activeTab === 'orders' ? '2px solid var(--accent-blue)' : '2px solid transparent',
-              color: activeTab === 'orders' ? 'white' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'orders' ? '2px solid var(--accent)' : '2px solid transparent',
+              color: activeTab === 'orders' ? 'var(--text-primary)' : 'var(--text-secondary)',
               fontWeight: activeTab === 'orders' ? 700 : 500,
               fontSize: '0.9rem',
               cursor: 'pointer',
@@ -231,11 +230,13 @@ export default function NotificationCenterModal({
             <span>Nuovi Ordini Emessi</span>
             <span style={{
               padding: '2px 7px',
-              borderRadius: '10px',
-              background: 'rgba(59, 130, 246, 0.2)',
-              color: '#60a5fa',
+              borderRadius: '999px',
+              background: 'var(--accent-bg)',
+              color: 'var(--accent-text)',
               fontSize: '0.72rem',
-              fontWeight: 800
+              fontWeight: 700,
+              fontFamily: 'var(--font-mono)',
+              fontVariantNumeric: 'tabular-nums'
             }}>
               {orders.length}
             </span>
@@ -248,8 +249,8 @@ export default function NotificationCenterModal({
               padding: '14px 20px',
               background: 'transparent',
               border: 'none',
-              borderBottom: activeTab === 'feedbacks' ? '2px solid #ef4444' : '2px solid transparent',
-              color: activeTab === 'feedbacks' ? 'white' : 'var(--text-secondary)',
+              borderBottom: activeTab === 'feedbacks' ? '2px solid var(--crit)' : '2px solid transparent',
+              color: activeTab === 'feedbacks' ? 'var(--text-primary)' : 'var(--text-secondary)',
               fontWeight: activeTab === 'feedbacks' ? 700 : 500,
               fontSize: '0.9rem',
               cursor: 'pointer',
@@ -263,11 +264,13 @@ export default function NotificationCenterModal({
             {feedbacks.length > 0 && (
               <span style={{
                 padding: '2px 7px',
-                borderRadius: '10px',
-                background: '#ef4444',
-                color: 'white',
+                borderRadius: '999px',
+                background: 'var(--crit)',
+                color: 'var(--text-on-accent)',
                 fontSize: '0.72rem',
-                fontWeight: 800
+                fontWeight: 700,
+                fontFamily: 'var(--font-mono)',
+                fontVariantNumeric: 'tabular-nums'
               }}>
                 {feedbacks.length}
               </span>
@@ -285,8 +288,8 @@ export default function NotificationCenterModal({
           ) : activeTab === 'orders' ? (
             orders.length === 0 ? (
               <div style={{ padding: '50px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <CheckCircle2 size={36} style={{ margin: '0 auto 10px', opacity: 0.4, color: '#10b981' }} />
-                <h4 style={{ margin: '0 0 4px', color: 'white' }}>Nessun ordine recente</h4>
+                <CheckCircle2 size={36} style={{ margin: '0 auto 10px', opacity: 0.4, color: 'var(--ok)' }} />
+                <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Nessun ordine recente</h4>
                 <p style={{ margin: 0, fontSize: '0.85rem' }}>Non ci sono ordini registrati nelle ultime ore.</p>
               </div>
             ) : (
@@ -295,9 +298,9 @@ export default function NotificationCenterModal({
                   key={o.id}
                   style={{
                     padding: '16px 18px',
-                    borderRadius: '12px',
-                    background: 'rgba(255, 255, 255, 0.02)',
-                    border: '1px solid var(--border-glass)',
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--line)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '10px',
@@ -308,32 +311,32 @@ export default function NotificationCenterModal({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 800, color: 'var(--primary-color)', fontSize: '1rem' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--accent-text)', fontSize: '1rem' }}>
                           Ordine #{o.id}
                         </span>
                         <span style={{
                           padding: '2px 8px',
-                          borderRadius: '6px',
-                          background: o.settore === 'Beverage' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                          color: o.settore === 'Beverage' ? '#60a5fa' : '#34d399',
+                          borderRadius: 'var(--radius-sm)',
+                          background: o.settore === 'Beverage' ? 'var(--accent-bg)' : 'var(--ok-bg)',
+                          color: o.settore === 'Beverage' ? 'var(--accent-text)' : 'var(--ok)',
                           fontSize: '0.72rem',
                           fontWeight: 700
                         }}>
                           {o.settore}
                         </span>
                         <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>➔</span>
-                        <strong style={{ color: 'white', fontSize: '0.95rem' }}>{o.fornitore_nome}</strong>
+                        <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem' }}>{o.fornitore_nome}</strong>
                       </div>
 
                       {/* Explicit Author & Location details */}
                       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginTop: '6px', fontSize: '0.8rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#93c5fa' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--accent-text)' }}>
                           <User size={13} />
-                          <span>Emesso da: <strong style={{ color: 'white' }}>{o.user_nome}</strong></span>
+                          <span>Emesso da: <strong style={{ color: 'var(--text-primary)' }}>{o.user_nome}</strong></span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)' }}>
                           <Building2 size={13} />
-                          <span>Sede: <strong style={{ color: 'white' }}>{o.location_nome}</strong></span>
+                          <span>Sede: <strong style={{ color: 'var(--text-primary)' }}>{o.location_nome}</strong></span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)' }}>
                           <Calendar size={13} />
@@ -346,7 +349,7 @@ export default function NotificationCenterModal({
                     <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
                       <div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Importo Totale</div>
-                        <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--status-green)' }}>
+                        <div style={{ fontWeight: 600, fontSize: '1.1rem', color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           € {o.spesa_totale.toFixed(2)}
                         </div>
                       </div>
@@ -370,8 +373,8 @@ export default function NotificationCenterModal({
           ) : (
             feedbacks.length === 0 ? (
               <div style={{ padding: '50px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <CheckCircle2 size={36} style={{ margin: '0 auto 10px', opacity: 0.4, color: '#10b981' }} />
-                <h4 style={{ margin: '0 0 4px', color: 'white' }}>Nessuna segnalazione critica</h4>
+                <CheckCircle2 size={36} style={{ margin: '0 auto 10px', opacity: 0.4, color: 'var(--ok)' }} />
+                <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Nessuna segnalazione critica</h4>
                 <p style={{ margin: 0, fontSize: '0.85rem' }}>Tutti i prodotti del listino hanno gradimento positivo.</p>
               </div>
             ) : (
@@ -380,9 +383,9 @@ export default function NotificationCenterModal({
                   key={f.id}
                   style={{
                     padding: '16px',
-                    borderRadius: '12px',
-                    background: 'rgba(239, 68, 68, 0.04)',
-                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'var(--crit-bg)',
+                    border: '1px solid var(--crit-border)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '10px'
@@ -391,13 +394,13 @@ export default function NotificationCenterModal({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '0.75rem', fontWeight: 800 }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--crit-bg)', color: 'var(--crit)', fontSize: '0.75rem', fontWeight: 700 }}>
                           👎 SEGNALATO DA ESCLUDERE
                         </span>
-                        <h4 style={{ margin: 0, color: 'white', fontSize: '1rem' }}>{f.product_name}</h4>
+                        <h4 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1rem' }}>{f.product_name}</h4>
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                        SKU: <code>{f.sku_interno || 'N/D'}</code> • Settore: {f.category || 'Generico'} • Segnalato da: <strong style={{ color: 'white' }}>{f.user_nome}</strong>
+                        SKU: <code>{f.sku_interno || 'N/D'}</code> • Settore: {f.category || 'Generico'} • Segnalato da: <strong style={{ color: 'var(--text-primary)' }}>{f.user_nome}</strong>
                       </div>
                     </div>
 
@@ -407,7 +410,7 @@ export default function NotificationCenterModal({
                   </div>
 
                   {f.motivo && (
-                    <div style={{ padding: '8px 12px', borderRadius: '6px', background: 'rgba(0,0,0,0.2)', color: '#fca5a5', fontSize: '0.8rem', fontWeight: 600 }}>
+                    <div style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-inset)', color: 'var(--crit)', fontSize: '0.8rem', fontWeight: 600 }}>
                       Motivo: {f.motivo}
                     </div>
                   )}
@@ -418,13 +421,13 @@ export default function NotificationCenterModal({
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px', marginTop: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid var(--line)', paddingTop: '10px', marginTop: '4px' }}>
                     <button
                       type="button"
                       disabled={resolvingId === f.id}
                       onClick={() => handleResolveFeedback(f.id, 'archiviato', false)}
                       className="btn"
-                      style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--border-glass)' }}
+                      style={{ padding: '6px 12px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--line)' }}
                     >
                       Archivia Segnalazione
                     </button>
@@ -434,7 +437,7 @@ export default function NotificationCenterModal({
                       disabled={resolvingId === f.id}
                       onClick={() => handleResolveFeedback(f.id, 'escluso', true)}
                       className="btn"
-                      style={{ padding: '6px 14px', fontSize: '0.75rem', background: '#ef4444', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      style={{ padding: '6px 14px', fontSize: '0.75rem', background: 'var(--crit)', color: 'var(--text-on-accent)', border: 'none', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
                       <ShieldAlert size={13} /> Disattiva dal Listino
                     </button>
@@ -446,7 +449,7 @@ export default function NotificationCenterModal({
         </div>
 
         {/* Modal Footer */}
-        <div style={{ padding: '14px 24px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.3)' }}>
+        <div style={{ padding: '14px 24px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-inset)' }}>
           <button
             type="button"
             onClick={() => {
@@ -454,7 +457,7 @@ export default function NotificationCenterModal({
               onViewReviews();
             }}
             className="btn"
-            style={{ fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             Vai alla Pagina Recensioni Prodotti <ArrowRight size={13} />
           </button>
@@ -463,7 +466,7 @@ export default function NotificationCenterModal({
             type="button"
             onClick={onClose}
             className="btn"
-            style={{ fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)' }}
+            style={{ fontSize: '0.8rem', background: 'var(--bg-elevated)', border: '1px solid var(--line)' }}
           >
             Chiudi
           </button>

@@ -598,8 +598,8 @@ export default function SettingsPage() {
   }
 
   const cardStyle: React.CSSProperties = {
-    padding: '24px', borderRadius: '12px',
-    background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)'
+    padding: '24px', borderRadius: 'var(--radius-lg)',
+    background: 'var(--bg-card)', border: '1px solid var(--line)'
   };
 
   return (
@@ -607,9 +607,9 @@ export default function SettingsPage() {
 
       {message && (
         <div style={{
-          padding: '12px 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px',
-          background: message.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-          color: message.type === 'success' ? '#10b981' : '#ef4444'
+          padding: '12px 16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '10px',
+          background: message.type === 'success' ? 'var(--ok-bg)' : 'var(--crit-bg)',
+          color: message.type === 'success' ? 'var(--ok)' : 'var(--crit)'
         }}>
           {message.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
           {message.text}
@@ -629,7 +629,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSaveCompanySettings} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', alignItems: 'flex-end', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
+        <form onSubmit={handleSaveCompanySettings} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', alignItems: 'flex-end', background: 'var(--bg-inset)', padding: '16px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--line)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Nome Azienda / Gruppo</label>
             <input
@@ -638,7 +638,7 @@ export default function SettingsPage() {
               placeholder="es. Price Sentinel / Playa Group"
               value={companyName}
               onChange={e => setCompanyName(e.target.value)}
-              style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+              style={{ padding: '9px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
             />
           </div>
 
@@ -649,7 +649,7 @@ export default function SettingsPage() {
               placeholder="es. Audit & Purchasing Platform"
               value={companySubtitle}
               onChange={e => setCompanySubtitle(e.target.value)}
-              style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+              style={{ padding: '9px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
             />
           </div>
 
@@ -660,7 +660,7 @@ export default function SettingsPage() {
               placeholder="es. supporto@tuogruppo.it"
               value={companySupportEmail}
               onChange={e => setCompanySupportEmail(e.target.value)}
-              style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+              style={{ padding: '9px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
             />
           </div>
 
@@ -671,7 +671,7 @@ export default function SettingsPage() {
                 type="text"
                 value={companyCurrency}
                 onChange={e => setCompanyCurrency(e.target.value)}
-                style={{ padding: '9px 12px', textAlign: 'center', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '9px 12px', textAlign: 'center', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
               />
             </div>
 
@@ -699,14 +699,14 @@ export default function SettingsPage() {
             Inserisci le P.IVA del tuo gruppo aziendale. Le fatture XML caricate che hanno queste P.IVA come Ricevente/Cessionario verranno importate ed associate alla sede.
           </p>
 
-          <form onSubmit={handleCreateLocation} style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+          <form onSubmit={handleCreateLocation} style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-inset)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <input
                 type="text"
                 placeholder="Nome Struttura..."
                 value={locNome}
                 onChange={e => setLocNome(e.target.value)}
-                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
               />
               <input
                 type="text"
@@ -714,19 +714,19 @@ export default function SettingsPage() {
                 placeholder="Partita IVA (11 cifre)..."
                 value={locPiva}
                 onChange={e => setLocPiva(e.target.value)}
-                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
               />
             </div>
             <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <select
                 value={locTipo}
                 onChange={e => setLocTipo(e.target.value)}
-                style={{ flex: 1, padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ flex: 1, padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
               >
-                <option value="balneare" style={{ background: '#13131c' }}>Tipologia: Balneare / Eventi</option>
-                <option value="ristorante" style={{ background: '#13131c' }}>Tipologia: Ristorante / Food</option>
-                <option value="discoteca" style={{ background: '#13131c' }}>Tipologia: Discoteca / Club</option>
-                <option value="evento" style={{ background: '#13131c' }}>Tipologia: Evento / Altro</option>
+                <option value="balneare" style={{ background: 'var(--bg-card)' }}>Tipologia: Balneare / Eventi</option>
+                <option value="ristorante" style={{ background: 'var(--bg-card)' }}>Tipologia: Ristorante / Food</option>
+                <option value="discoteca" style={{ background: 'var(--bg-card)' }}>Tipologia: Discoteca / Club</option>
+                <option value="evento" style={{ background: 'var(--bg-card)' }}>Tipologia: Evento / Altro</option>
               </select>
               <button
                 type="submit"
@@ -743,23 +743,23 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
             {locations.map(loc => (
               editingLocId === loc.id ? (
-                <div key={loc.id} style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div key={loc.id} style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px 16px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
                   <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                     <input 
                       type="text"
                       value={editLocNome}
                       onChange={e => setEditLocNome(e.target.value)}
-                      style={{ flex: 2, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '4px', color: 'white', fontSize: '0.8rem' }}
+                      style={{ flex: 2, padding: '6px 10px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
                     />
                     <select 
                       value={editLocTipo}
                       onChange={e => setEditLocTipo(e.target.value)}
-                      style={{ flex: 1, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '4px', color: 'white', fontSize: '0.8rem', outline: 'none' }}
+                      style={{ flex: 1, padding: '6px 10px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.8rem', outline: 'none' }}
                     >
-                      <option value="balneare" style={{ background: '#13131c' }}>Balneare</option>
-                      <option value="ristorante" style={{ background: '#13131c' }}>Ristorante</option>
-                      <option value="discoteca" style={{ background: '#13131c' }}>Discoteca</option>
-                      <option value="evento" style={{ background: '#13131c' }}>Evento</option>
+                      <option value="balneare" style={{ background: 'var(--bg-card)' }}>Balneare</option>
+                      <option value="ristorante" style={{ background: 'var(--bg-card)' }}>Ristorante</option>
+                      <option value="discoteca" style={{ background: 'var(--bg-card)' }}>Discoteca</option>
+                      <option value="evento" style={{ background: 'var(--bg-card)' }}>Evento</option>
                     </select>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -768,7 +768,7 @@ export default function SettingsPage() {
                       <button 
                         onClick={() => setEditingLocId(null)}
                         className="btn"
-                        style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--border-glass)' }}
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--line)' }}
                       >
                         Annulla
                       </button>
@@ -783,13 +783,13 @@ export default function SettingsPage() {
                   </div>
                 </div>
               ) : (
-                <div key={loc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                <div key={loc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{loc.nome_struttura}</div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>P.IVA: {loc.piva_riferimento}</div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '4px', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', textTransform: 'capitalize' }}>
+                    <span style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--accent-bg)', color: 'var(--accent-text)', textTransform: 'capitalize' }}>
                       {loc.tipologia}
                     </span>
                     
@@ -809,7 +809,7 @@ export default function SettingsPage() {
 
                     <button 
                       onClick={() => handleDeleteLocation(loc.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--crit)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
                       title="Elimina sede"
                       onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                       onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
@@ -832,14 +832,14 @@ export default function SettingsPage() {
             Aggiungi i fornitori abilitati del gruppo Ho.Re.Ca. Le fatture XML che hanno come Cedente/Prestatore queste P.IVA verranno catalogate in automatico.
           </p>
 
-          <form onSubmit={handleCreateFornitore} style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.01)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)' }}>
+          <form onSubmit={handleCreateFornitore} style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-inset)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <input
                 type="text"
                 placeholder="Ragione Sociale..."
                 value={fornNome}
                 onChange={e => setFornNome(e.target.value)}
-                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
                 required
               />
               <input
@@ -847,7 +847,7 @@ export default function SettingsPage() {
                 placeholder="P.IVA Fornitore..."
                 value={fornPiva}
                 onChange={e => setFornPiva(e.target.value)}
-                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
                 required
               />
             </div>
@@ -857,14 +857,14 @@ export default function SettingsPage() {
                 placeholder="Email Contatto (Opzionale)..."
                 value={fornEmail}
                 onChange={e => setFornEmail(e.target.value)}
-                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
               />
               <input
                 type="tel"
                 placeholder="Tel / WhatsApp (es. +39 340...)..."
                 value={fornTelefono}
                 onChange={e => setFornTelefono(e.target.value)}
-                style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem' }}
+                style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -882,16 +882,16 @@ export default function SettingsPage() {
           {/* List Fornitori */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '260px', overflowY: 'auto', paddingRight: '4px' }}>
             {fornitori.map(f => (
-              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.02)', gap: '10px' }}>
+              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)', gap: '10px' }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <span>{f.nome_azienda}</span>
                     {f.telefono_contatto ? (
-                      <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '999px', background: 'var(--ok-bg)', color: 'var(--ok)', border: '1px solid var(--ok-border)', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                         <MessageSquare size={11} /> {f.telefono_contatto}
                       </span>
                     ) : (
-                      <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
                         (Nessun tel/WA)
                       </span>
                     )}
@@ -905,7 +905,7 @@ export default function SettingsPage() {
                   <button
                     onClick={() => handleOpenEditFornitore(f)}
                     className="btn"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', padding: '5px 9px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{ background: 'var(--bg-elevated)', border: '1px solid var(--line)', padding: '5px 9px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                     title="Modifica recapiti e telefono WhatsApp"
                   >
                     <Pencil size={13} /> Modifica
@@ -917,14 +917,14 @@ export default function SettingsPage() {
                     title={f.attivo_whitelist ? "Disattiva whitelist" : "Attiva whitelist"}
                   >
                     {f.attivo_whitelist ? (
-                      <ToggleRight size={26} color="#10b981" />
+                      <ToggleRight size={26} color="var(--ok)" />
                     ) : (
-                      <ToggleLeft size={26} color="#6b7280" />
+                      <ToggleLeft size={26} color="var(--text-muted)" />
                     )}
                   </button>
                   <button 
                     onClick={() => handleDeleteFornitore(f.id)}
-                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--crit)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'opacity 0.2s', opacity: 0.8 }}
                     title="Archivia fornitore"
                     onMouseEnter={e => e.currentTarget.style.opacity = '1'}
                     onMouseLeave={e => e.currentTarget.style.opacity = '0.8'}
@@ -947,7 +947,7 @@ export default function SettingsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
           <div style={cardStyle}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>Servizio</div>
-            <div style={{ fontWeight: 600, color: dbStats?.status === 'healthy' ? '#10b981' : '#ef4444' }}>
+            <div style={{ fontWeight: 600, color: dbStats?.status === 'healthy' ? 'var(--ok)' : 'var(--crit)' }}>
               {dbStats?.status === 'healthy' ? '● Online' : '● Offline'}
             </div>
           </div>
@@ -960,7 +960,7 @@ export default function SettingsPage() {
             <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{dbStats?.environment || '—'}</div>
           </div>
         </div>
-        <button className="btn" onClick={() => loadData()} style={{ marginTop: '16px', gap: '8px', background: 'transparent', border: '1px solid var(--border-glass)' }}>
+        <button className="btn" onClick={() => loadData()} style={{ marginTop: '16px', gap: '8px', background: 'transparent', border: '1px solid var(--line)' }}>
           <RefreshCw size={14} /> Aggiorna Stato
         </button>
       </div>
@@ -995,8 +995,8 @@ export default function SettingsPage() {
             const isFood = u.ruolo_dettagliato === 'responsabile_food';
             const isMgr = u.ruolo_dettagliato === 'manager_sede';
 
-            const roleBadgeBg = isAdm ? 'rgba(239,68,68,0.15)' : isBev ? 'rgba(59,130,246,0.15)' : isMat ? 'rgba(16,185,129,0.15)' : isFood ? 'rgba(245,158,11,0.15)' : 'rgba(168,85,247,0.15)';
-            const roleBadgeColor = isAdm ? '#ef4444' : isBev ? '#60a5fa' : isMat ? '#34d399' : isFood ? '#fbbf24' : '#c084fc';
+            const roleBadgeBg = isAdm ? 'var(--crit-bg)' : isBev ? 'var(--accent-bg)' : isMat ? 'var(--ok-bg)' : isFood ? 'var(--warn-bg)' : 'var(--info-bg)';
+            const roleBadgeColor = isAdm ? 'var(--crit)' : isBev ? 'var(--accent-text)' : isMat ? 'var(--ok)' : isFood ? 'var(--warn)' : 'var(--info)';
             const roleLabel = isAdm ? '👑 Amministratore' : isBev ? '🍹 Resp. Beverage' : isMat ? '📦 Resp. Materiali' : isFood ? '🍽️ Resp. Food' : isMgr ? '🏢 Store Manager' : '👤 Operatore';
 
             return (
@@ -1009,7 +1009,7 @@ export default function SettingsPage() {
                   justifyContent: 'space-between',
                   gap: '16px',
                   padding: '16px 20px',
-                  border: u.attivo ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(239,68,68,0.2)',
+                  border: u.attivo ? '1px solid var(--line)' : '1px solid var(--crit-border)',
                   opacity: u.attivo ? 1 : 0.6
                 }}
               >
@@ -1023,7 +1023,7 @@ export default function SettingsPage() {
                     justifyContent: 'center',
                     background: roleBadgeBg,
                     color: roleBadgeColor,
-                    fontWeight: 800,
+                    fontWeight: 700,
                     fontSize: '1rem'
                   }}>
                     {u.nome_completo ? u.nome_completo[0].toUpperCase() : u.email[0].toUpperCase()}
@@ -1031,12 +1031,12 @@ export default function SettingsPage() {
 
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ fontSize: '0.95rem', color: 'white' }}>
+                      <strong style={{ fontSize: '0.95rem', color: 'var(--text-primary)' }}>
                         {u.nome_completo || u.email.split('@')[0]}
                       </strong>
                       <span style={{
                         padding: '2px 8px',
-                        borderRadius: '6px',
+                        borderRadius: '999px',
                         fontSize: '0.72rem',
                         fontWeight: 700,
                         background: roleBadgeBg,
@@ -1055,7 +1055,7 @@ export default function SettingsPage() {
                       {u.settore_abilitato && (
                         <>
                           <span>•</span>
-                          <span style={{ color: '#93c5fd', fontWeight: 600 }}>
+                          <span style={{ color: 'var(--accent-text)', fontWeight: 600 }}>
                             {u.settore_abilitato === 'all'
                               ? '🌐 Tutti i settori'
                               : u.settore_abilitato.split(',').map(s => {
@@ -1081,9 +1081,9 @@ export default function SettingsPage() {
                     title={u.attivo ? "Disattiva account" : "Attiva account"}
                   >
                     {u.attivo ? (
-                      <ToggleRight size={28} color="#10b981" />
+                      <ToggleRight size={28} color="var(--ok)" />
                     ) : (
-                      <ToggleLeft size={28} color="#6b7280" />
+                      <ToggleLeft size={28} color="var(--text-muted)" />
                     )}
                   </button>
 
@@ -1091,7 +1091,7 @@ export default function SettingsPage() {
                     type="button"
                     onClick={() => handleOpenEditUser(u)}
                     className="btn"
-                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)', padding: '6px 10px', fontSize: '0.8rem' }}
+                    style={{ background: 'var(--bg-elevated)', border: '1px solid var(--line)', padding: '6px 10px', fontSize: '0.8rem' }}
                   >
                     <Pencil size={14} /> Modifica
                   </button>
@@ -1100,7 +1100,7 @@ export default function SettingsPage() {
                     type="button"
                     onClick={() => handleDeleteUser(u.id)}
                     className="btn"
-                    style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', padding: '6px 10px', fontSize: '0.8rem' }}
+                    style={{ background: 'var(--crit-bg)', border: '1px solid var(--crit-border)', color: 'var(--crit)', padding: '6px 10px', fontSize: '0.8rem' }}
                     title="Elimina utente"
                   >
                     <Trash2 size={13} />
@@ -1120,15 +1120,14 @@ export default function SettingsPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0,0,0,0.75)',
-          backdropFilter: 'blur(6px)',
+          background: 'var(--bg-overlay)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 9999,
           padding: '20px'
         }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '540px', padding: '28px', borderRadius: '16px', border: '1px solid var(--border-glass)', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '540px', padding: '28px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--line)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <User size={20} color="var(--accent-blue)" /> {editingUserId ? "Modifica Operatore" : "Nuovo Operatore di Settore"}
             </h3>
@@ -1142,7 +1141,7 @@ export default function SettingsPage() {
                   placeholder="Es. Mario Rossi"
                   value={userNome}
                   onChange={e => setUserNome(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1154,7 +1153,7 @@ export default function SettingsPage() {
                   placeholder="Es. beverage.playa@pricesentinel.it"
                   value={userEmail}
                   onChange={e => setUserEmail(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1168,7 +1167,7 @@ export default function SettingsPage() {
                   placeholder={editingUserId ? "••••••••" : "Almeno 6 caratteri"}
                   value={userPassword}
                   onChange={e => setUserPassword(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1184,7 +1183,7 @@ export default function SettingsPage() {
                     else if (val === 'responsabile_food') setUserSettori(['Food']);
                     else if (val === 'admin' || val === 'manager_sede') setUserSettori(['Beverage', 'Materiali di consumo', 'Food']);
                   }}
-                  style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 >
                   <option value="responsabile_beverage">🍹 Responsabile Beverage</option>
                   <option value="responsabile_materiali">📦 Responsabile Materiali</option>
@@ -1195,9 +1194,9 @@ export default function SettingsPage() {
               </div>
 
               {/* Multi-Sector Checkboxes */}
-              <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glass)' }}>
+              <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)', border: '1px solid var(--line)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <label style={{ fontSize: '0.82rem', color: 'white', fontWeight: 700 }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-primary)', fontWeight: 700 }}>
                     Settori Merci Abilitati (Spunta i settori) *
                   </label>
                   <button
@@ -1222,9 +1221,9 @@ export default function SettingsPage() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {[
-                    { id: 'Beverage', label: 'Beverage', icon: '🍹', desc: 'Vini, distillati, birre, analcolici e sciroppi', color: '#60a5fa' },
-                    { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', desc: 'Packaging, monouso, sacchetti e detergenti', color: '#10b981' },
-                    { id: 'Food', label: 'Food', icon: '🍽️', desc: 'Alimentari, freschi, secchi e surgelati', color: '#f59e0b' }
+                    { id: 'Beverage', label: 'Beverage', icon: '🍹', desc: 'Vini, distillati, birre, analcolici e sciroppi', color: '#7cb0ff' },
+                    { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', desc: 'Packaging, monouso, sacchetti e detergenti', color: '#4cc38a' },
+                    { id: 'Food', label: 'Food', icon: '🍽️', desc: 'Alimentari, freschi, secchi e surgelati', color: '#e8b04a' }
                   ].map(cat => {
                     const isChecked = userSettori.includes(cat.id);
                     return (
@@ -1242,9 +1241,9 @@ export default function SettingsPage() {
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           padding: '10px 14px',
-                          borderRadius: '8px',
-                          border: isChecked ? `1.5px solid ${cat.color}` : '1px solid var(--border-glass)',
-                          background: isChecked ? `${cat.color}15` : 'rgba(0,0,0,0.2)',
+                          borderRadius: 'var(--radius-md)',
+                          border: isChecked ? `1px solid ${cat.color}` : '1px solid var(--line)',
+                          background: isChecked ? `${cat.color}15` : 'var(--bg-inset)',
                           cursor: 'pointer',
                           transition: 'all 0.15s'
                         }}
@@ -1252,7 +1251,7 @@ export default function SettingsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <span style={{ fontSize: '1.2rem' }}>{cat.icon}</span>
                           <div>
-                            <div style={{ fontWeight: 700, color: isChecked ? 'white' : 'var(--text-secondary)', fontSize: '0.86rem' }}>
+                            <div style={{ fontWeight: 700, color: isChecked ? 'var(--text-primary)' : 'var(--text-secondary)', fontSize: '0.86rem' }}>
                               {cat.label}
                             </div>
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
@@ -1283,7 +1282,7 @@ export default function SettingsPage() {
                 <select
                   value={userLocationId}
                   onChange={e => setUserLocationId(e.target.value === '' ? '' : Number(e.target.value))}
-                  style={{ width: '100%', padding: '10px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 >
                   <option value="">Tutte le sedi (Accesso Globale)</option>
                   {locations.map(loc => (
@@ -1299,7 +1298,7 @@ export default function SettingsPage() {
                   type="button"
                   onClick={() => setShowUserModal(false)}
                   className="btn"
-                  style={{ background: 'transparent', border: '1px solid var(--border-glass)' }}
+                  style={{ background: 'transparent', border: '1px solid var(--line)' }}
                 >
                   Annulla
                 </button>
@@ -1324,8 +1323,7 @@ export default function SettingsPage() {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(6px)',
+          background: 'var(--bg-overlay)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -1335,14 +1333,14 @@ export default function SettingsPage() {
           <div className="glass-panel" style={{
             width: '100%',
             maxWidth: '520px',
-            background: '#181824',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '16px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--line-strong)',
+            borderRadius: 'var(--radius-lg)',
             padding: '28px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)'
+            boxShadow: 'var(--shadow-pop)'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', color: 'white' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.2rem', color: 'var(--text-primary)' }}>
                 <Building2 size={22} color="var(--primary-color)" /> Modifica Fornitore & WhatsApp
               </h3>
               <button
@@ -1361,7 +1359,7 @@ export default function SettingsPage() {
                   type="text"
                   value={editFornNome}
                   onChange={e => setEditFornNome(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                   required
                 />
               </div>
@@ -1372,7 +1370,7 @@ export default function SettingsPage() {
                   type="text"
                   value={editFornPiva}
                   onChange={e => setEditFornPiva(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                   required
                 />
               </div>
@@ -1384,12 +1382,12 @@ export default function SettingsPage() {
                   placeholder="es. ordini@fornitore.it"
                   value={editFornEmail}
                   onChange={e => setEditFornEmail(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#10b981', fontWeight: 600, marginBottom: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--ok)', fontWeight: 600, marginBottom: '4px' }}>
                   <Phone size={14} /> Numero di Telefono / WhatsApp per Ordini
                 </label>
                 <input
@@ -1397,7 +1395,7 @@ export default function SettingsPage() {
                   placeholder="Es. +39 340 1234567 oppure 3401234567"
                   value={editFornTelefono}
                   onChange={e => setEditFornTelefono(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', color: 'white' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--ok-bg)', border: '1px solid var(--ok-border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
                   Quando i responsabili elaborano un ordine, il pulsante <strong>"Invia su WhatsApp"</strong> aprirà direttamente la chat con questo numero precompilando l'ordine.
@@ -1409,7 +1407,7 @@ export default function SettingsPage() {
                   type="button"
                   onClick={() => setShowEditFornModal(false)}
                   className="btn"
-                  style={{ background: 'transparent', border: '1px solid var(--border-glass)' }}
+                  style={{ background: 'transparent', border: '1px solid var(--line)' }}
                 >
                   Annulla
                 </button>
@@ -1438,9 +1436,9 @@ export default function SettingsPage() {
 
         {pwdMessage && (
           <div style={{
-            padding: '10px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px',
-            background: pwdMessage.type === 'success' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)',
-            color: pwdMessage.type === 'success' ? '#10b981' : '#ef4444',
+            padding: '10px 14px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '10px',
+            background: pwdMessage.type === 'success' ? 'var(--ok-bg)' : 'var(--crit-bg)',
+            color: pwdMessage.type === 'success' ? 'var(--ok)' : 'var(--crit)',
             fontSize: '0.85rem'
           }}>
             {pwdMessage.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
@@ -1465,10 +1463,10 @@ export default function SettingsPage() {
                   width: '100%',
                   boxSizing: 'border-box',
                   padding: '10px 12px 10px 36px',
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem'
                 }}
               />
@@ -1491,10 +1489,10 @@ export default function SettingsPage() {
                   width: '100%',
                   boxSizing: 'border-box',
                   padding: '10px 12px 10px 36px',
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem'
                 }}
               />
@@ -1517,10 +1515,10 @@ export default function SettingsPage() {
                   width: '100%',
                   boxSizing: 'border-box',
                   padding: '10px 12px 10px 36px',
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem'
                 }}
               />
@@ -1554,7 +1552,7 @@ export default function SettingsPage() {
         <h3 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <User size={20} /> Account Corrente
         </h3>
-        <button className="btn" onClick={handleLogout} style={{ background: 'rgba(239,68,68,0.15)', border: 'none', color: '#ef4444', gap: '8px' }}>
+        <button className="btn" onClick={handleLogout} style={{ background: 'var(--crit-bg)', border: 'none', color: 'var(--crit)', gap: '8px' }}>
           Disconnetti
         </button>
       </div>

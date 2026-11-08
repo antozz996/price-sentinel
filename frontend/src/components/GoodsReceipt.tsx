@@ -306,7 +306,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
       {/* Header Banner */}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h2 style={{ margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '10px', color: 'white' }}>
+          <h2 style={{ margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-primary)' }}>
             <PackageCheck size={26} color="var(--primary-color)" /> Ricezione & Scarico Merci
           </h2>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
@@ -318,45 +318,45 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
           className="btn"
           onClick={loadOrders}
           disabled={loading || loadingDetail}
-          style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           <RefreshCw size={14} className={(loading || loadingDetail) ? 'spinner' : ''} /> Aggiorna
         </button>
       </div>
 
       {errorMsg && (
-        <div style={{ padding: '12px 18px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', fontWeight: 600, fontSize: '0.85rem' }}>
+        <div style={{ padding: '12px 18px', borderRadius: 'var(--radius-md)', background: 'var(--crit-bg)', border: '1px solid var(--crit-border)', color: 'var(--crit)', fontWeight: 600, fontSize: '0.85rem' }}>
           {errorMsg}
         </div>
       )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid #f59e0b' }}>
+        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid var(--warn)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             In Attesa di Scarico
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#f59e0b', margin: '4px 0' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.7rem', fontWeight: 600, color: 'var(--warn)', margin: '4px 0' }}>
             {kpiStats.daRicevere}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Ordini da validare all'arrivo</div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid #10b981' }}>
+        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid var(--ok)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Ricevuti Conformi
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#10b981', margin: '4px 0' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.7rem', fontWeight: 600, color: 'var(--ok)', margin: '4px 0' }}>
             {kpiStats.conformi}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Quantità e colli perfetti</div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid #ef4444' }}>
+        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid var(--crit)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Con Riserva / Parziali
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ef4444', margin: '4px 0' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.7rem', fontWeight: 600, color: 'var(--crit)', margin: '4px 0' }}>
             {kpiStats.conRiserva}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Colli mancanti o danneggiati</div>
@@ -366,7 +366,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Valore Totale Ordini
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: 'white', margin: '4px 0' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.7rem', fontWeight: 600, color: 'var(--text-primary)', margin: '4px 0' }}>
             € {kpiStats.spesaTotale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tutti i reparti gestiti</div>
@@ -382,7 +382,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
             placeholder="Cerca per ID ordine, fornitore, sede..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            style={{ width: '100%', padding: '9px 12px 9px 36px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+            style={{ width: '100%', padding: '9px 12px 9px 36px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
           />
         </div>
 
@@ -390,7 +390,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
         <select
           value={selectedStatus}
           onChange={e => setSelectedStatus(e.target.value)}
-          style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+          style={{ padding: '9px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
         >
           <option value="all">Tutti gli stati ricezione</option>
           <option value="da_ricevere">⏳ In attesa di scarico</option>
@@ -403,7 +403,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
         <select
           value={selectedSector}
           onChange={e => setSelectedSector(e.target.value)}
-          style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+          style={{ padding: '9px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
         >
           <option value="all">Tutti i settori</option>
           {uniqueSectors.map(s => (
@@ -415,7 +415,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
         <select
           value={selectedLocation}
           onChange={e => setSelectedLocation(e.target.value)}
-          style={{ padding: '9px 12px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+          style={{ padding: '9px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
         >
           <option value="all">Tutte le sedi</option>
           {uniqueLocations.map(([id, name]) => (
@@ -438,14 +438,14 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
         ) : filteredOrders.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
             <Boxes size={36} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
-            <h4 style={{ margin: '0 0 4px', color: 'white' }}>Nessun ordine trovato</h4>
+            <h4 style={{ margin: '0 0 4px', color: 'var(--text-primary)' }}>Nessun ordine trovato</h4>
             <p style={{ margin: 0, fontSize: '0.85rem' }}>Nessun ordine corrisponde ai filtri di ricerca applicati.</p>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+            <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
               <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)' }}>
+                <tr style={{ background: 'var(--bg-inset)', borderBottom: '1px solid var(--line)', color: 'var(--text-secondary)' }}>
                   <th style={{ padding: '14px 16px' }}>ID</th>
                   <th style={{ padding: '14px 16px' }}>Sede Destinazione</th>
                   <th style={{ padding: '14px 16px' }}>Fornitore</th>
@@ -467,28 +467,28 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                     <tr
                       key={o.id}
                       style={{
-                        borderBottom: '1px solid rgba(255,255,255,0.03)',
+                        borderBottom: '1px solid var(--line)',
                         transition: 'background 0.2s',
-                        background: isRiserva ? 'rgba(239, 68, 68, 0.04)' : (isDaRicevere ? 'rgba(245, 158, 11, 0.02)' : 'transparent')
+                        background: isRiserva ? 'var(--crit-bg)' : (isDaRicevere ? 'var(--warn-bg)' : 'transparent')
                       }}
                       className="table-row-hover"
                     >
-                      <td style={{ padding: '14px 16px', fontWeight: 800, color: 'var(--primary-color)' }}>
+                      <td style={{ padding: '14px 16px', fontWeight: 700, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)' }}>
                         #{o.id}
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <div style={{ fontWeight: 600, color: 'white' }}>{o.location_nome}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{o.location_nome}</div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Emesso da: {o.user_nome || 'Operatore'}</div>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <strong style={{ color: 'white' }}>{o.fornitore_nome}</strong>
+                        <strong style={{ color: 'var(--text-primary)' }}>{o.fornitore_nome}</strong>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <span style={{
                           padding: '3px 8px',
-                          borderRadius: '6px',
-                          background: o.settore === 'Beverage' ? 'rgba(59, 130, 246, 0.15)' : (o.settore === 'Materiali di consumo' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'),
-                          color: o.settore === 'Beverage' ? '#60a5fa' : (o.settore === 'Materiali di consumo' ? '#34d399' : '#fbbf24'),
+                          borderRadius: '999px',
+                          background: o.settore === 'Beverage' ? 'var(--accent-bg)' : (o.settore === 'Materiali di consumo' ? 'var(--ok-bg)' : 'var(--warn-bg)'),
+                          color: o.settore === 'Beverage' ? 'var(--accent-text)' : (o.settore === 'Materiali di consumo' ? 'var(--ok)' : 'var(--warn)'),
                           fontSize: '0.75rem',
                           fontWeight: 700
                         }}>
@@ -496,15 +496,15 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                         </span>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <div style={{ color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <div style={{ color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Calendar size={13} color="var(--text-secondary)" />
                           {o.data_consegna || 'N/D'}
                         </div>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
-                        <span style={{ fontWeight: 700, color: 'white' }}>{o.totale_colli}</span> colli
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{o.totale_colli}</span> colli
                         {!isDaRicevere && (
-                          <span style={{ color: isConforme ? '#10b981' : '#f59e0b', fontSize: '0.75rem', marginLeft: '6px', fontWeight: 600 }}>
+                          <span style={{ color: isConforme ? 'var(--ok)' : 'var(--warn)', fontSize: '0.75rem', marginLeft: '6px', fontWeight: 600 }}>
                             (scaricati: {o.totale_colli_ricevuti})
                           </span>
                         )}
@@ -514,15 +514,15 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         {isDaRicevere ? (
-                          <span style={{ padding: '3px 9px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ padding: '3px 9px', borderRadius: '999px', background: 'var(--warn-bg)', color: 'var(--warn)', border: '1px solid var(--warn-border)', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                             <Clock size={11} /> Da Ricevere
                           </span>
                         ) : isConforme ? (
-                          <span style={{ padding: '3px 9px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ padding: '3px 9px', borderRadius: '999px', background: 'var(--ok-bg)', color: 'var(--ok)', border: '1px solid var(--ok-border)', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                             <CheckCircle2 size={11} /> Conforme
                           </span>
                         ) : (
-                          <span style={{ padding: '3px 9px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ padding: '3px 9px', borderRadius: '999px', background: 'var(--crit-bg)', color: 'var(--crit)', border: '1px solid var(--crit-border)', fontSize: '0.75rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                             <AlertTriangle size={11} /> Con Riserva
                           </span>
                         )}
@@ -537,8 +537,8 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '6px',
-                            background: isDaRicevere ? undefined : 'rgba(255,255,255,0.05)',
-                            border: isDaRicevere ? undefined : '1px solid var(--border-glass)'
+                            background: isDaRicevere ? undefined : 'var(--bg-elevated)',
+                            border: isDaRicevere ? undefined : '1px solid var(--line)'
                           }}
                         >
                           <PackageCheck size={14} />
@@ -562,8 +562,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.82)',
-          backdropFilter: 'blur(8px)',
+          background: 'var(--bg-overlay)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -574,31 +573,31 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
             width: '100%',
             maxWidth: '900px',
             maxHeight: '90vh',
-            background: '#13131c',
-            border: '1px solid rgba(255, 255, 255, 0.12)',
-            borderRadius: '16px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--line-strong)',
+            borderRadius: 'var(--radius-lg)',
             padding: '28px',
             display: 'flex',
             flexDirection: 'column',
             gap: '18px',
             overflowY: 'auto',
-            boxShadow: '0 25px 60px rgba(0, 0, 0, 0.9)'
+            boxShadow: 'var(--shadow-pop)'
           }}>
             {/* Modal Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--line)', paddingBottom: '14px' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <PackageCheck size={26} color="var(--primary-color)" />
-                  <h3 style={{ margin: 0, color: 'white', fontSize: '1.25rem' }}>
+                  <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.25rem' }}>
                     Check Scarico Merci — Ordine #{activeOrder.id}
                   </h3>
-                  <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontSize: '0.75rem', fontWeight: 800 }}>
+                  <span style={{ padding: '3px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--accent-bg)', color: 'var(--accent-text)', fontSize: '0.75rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                     {activeOrder.settore}
                   </span>
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <span>Sede: <strong style={{ color: 'white' }}>{activeOrder.location_nome}</strong></span>
-                  <span>• Fornitore: <strong style={{ color: 'white' }}>{activeOrder.fornitore_nome}</strong></span>
+                  <span>Sede: <strong style={{ color: 'var(--text-primary)' }}>{activeOrder.location_nome}</strong></span>
+                  <span>• Fornitore: <strong style={{ color: 'var(--text-primary)' }}>{activeOrder.fornitore_nome}</strong></span>
                   {activeOrder.fornitore_telefono && <span>• 📞 {activeOrder.fornitore_telefono}</span>}
                   <span>• Consegna richiesta: <strong>{activeOrder.data_consegna || 'N/D'}</strong></span>
                 </div>
@@ -614,22 +613,22 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
             </div>
 
             {receiptSuccessMsg && (
-              <div style={{ padding: '12px 16px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', fontSize: '0.85rem', fontWeight: 600 }}>
+              <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', border: '1px solid var(--ok-border)', color: 'var(--ok)', fontSize: '0.85rem', fontWeight: 600 }}>
                 {receiptSuccessMsg}
               </div>
             )}
 
             {/* Quick Action Button: Tutto Conforme */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: '10px', border: '1px solid var(--border-glass)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-inset)', padding: '12px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               <div>
-                <div style={{ fontWeight: 700, color: 'white', fontSize: '0.88rem' }}>Controllo Veloce Scarico</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.88rem' }}>Controllo Veloce Scarico</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Se tutti i colli scaricati corrispondono esattamente alla bolla/ordine, valida con 1 click.</div>
               </div>
               <button
                 type="button"
                 onClick={handleSetAllConforme}
                 className="btn btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.8rem', background: '#10b981', borderColor: '#10b981' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.8rem', background: 'var(--ok)', borderColor: 'var(--ok)' }}
               >
                 <CheckCircle2 size={15} /> Tutto Conforme al 100%
               </button>
@@ -650,9 +649,9 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                     key={r.id}
                     style={{
                       padding: '14px 16px',
-                      borderRadius: '10px',
-                      background: isDiscrepant ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255,255,255,0.02)',
-                      border: isDiscrepant ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid var(--border-glass)',
+                      borderRadius: 'var(--radius-md)',
+                      background: isDiscrepant ? 'var(--crit-bg)' : 'var(--bg-inset)',
+                      border: isDiscrepant ? '1px solid var(--crit-border)' : '1px solid var(--line)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '10px',
@@ -661,13 +660,13 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
                       <div>
-                        <div style={{ fontWeight: 700, color: 'white', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <span>{r.descrizione}</span>
                           {(r.stato_ottimizzazione === 'omaggio' || r.prezzo_inserito === 0 || (r as any).is_omaggio) && (
                             <span style={{
-                              padding: '2px 8px', borderRadius: '6px',
-                              background: 'rgba(16, 185, 129, 0.25)', color: '#34d399',
-                              fontSize: '0.72rem', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.4)'
+                              padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                              background: 'var(--ok-bg)', color: 'var(--ok)',
+                              fontSize: '0.72rem', fontWeight: 700, border: '1px solid var(--ok-border)'
                             }}>
                               🎁 OMAGGIO (Promo 5+1)
                             </span>
@@ -682,17 +681,17 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Ordinati</div>
-                          <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white' }}>
+                          <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                             {r.quantita} <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{r.uom}</span>
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(0,0,0,0.3)', padding: '4px 8px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--bg-inset)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--line)' }}>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginRight: '4px' }}>Scaricati:</span>
                           <button
                             type="button"
                             onClick={() => handleLineQtyChange(r.id, r.quantita, lineState.qty - 1)}
-                            style={{ width: '26px', height: '26px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 800 }}
+                            style={{ width: '26px', height: '26px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 700 }}
                           >
                             -
                           </button>
@@ -702,13 +701,13 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                             step="any"
                             value={lineState.qty}
                             onChange={e => handleLineQtyChange(r.id, r.quantita, parseFloat(e.target.value) || 0)}
-                            style={{ width: '55px', textAlign: 'center', background: 'transparent', border: 'none', color: isDiscrepant ? '#f87171' : '#34d399', fontWeight: 800, fontSize: '0.95rem', outline: 'none' }}
+                            style={{ width: '55px', textAlign: 'center', background: 'transparent', border: 'none', color: isDiscrepant ? 'var(--crit)' : 'var(--ok)', fontWeight: 700, fontSize: '0.95rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', outline: 'none' }}
                           />
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginRight: '4px' }}>{r.uom}</span>
                           <button
                             type="button"
                             onClick={() => handleLineQtyChange(r.id, r.quantita, lineState.qty + 1)}
-                            style={{ width: '26px', height: '26px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', border: 'none', color: 'white', cursor: 'pointer', fontWeight: 800 }}
+                            style={{ width: '26px', height: '26px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontWeight: 700 }}
                           >
                             +
                           </button>
@@ -717,13 +716,13 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                     </div>
 
                     {/* Line Status Buttons & Notes */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderTop: '1px solid var(--line)', paddingTop: '8px' }}>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {[
-                          { id: 'conforme', label: 'Conforme ✅', color: '#10b981' },
-                          { id: 'parziale', label: 'Parziale ⚠️', color: '#f59e0b' },
-                          { id: 'mancante', label: 'Mancante ❌', color: '#ef4444' },
-                          { id: 'danneggiato', label: 'Danneggiato 📦💥', color: '#ec4899' },
+                          { id: 'conforme', label: 'Conforme ✅', color: '#4cc38a' },
+                          { id: 'parziale', label: 'Parziale ⚠️', color: '#e8b04a' },
+                          { id: 'mancante', label: 'Mancante ❌', color: '#f0716a' },
+                          { id: 'danneggiato', label: 'Danneggiato 📦💥', color: '#a48bf0' },
                         ].map(st => {
                           const active = lineState.status === st.id;
                           return (
@@ -733,11 +732,11 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                               onClick={() => handleLineStatusChange(r.id, st.id)}
                               style={{
                                 padding: '4px 10px',
-                                borderRadius: '6px',
+                                borderRadius: 'var(--radius-sm)',
                                 fontSize: '0.72rem',
-                                fontWeight: active ? 800 : 500,
-                                background: active ? `${st.color}22` : 'rgba(255,255,255,0.02)',
-                                border: active ? `1px solid ${st.color}` : '1px solid rgba(255,255,255,0.05)',
+                                fontWeight: active ? 700 : 500,
+                                background: active ? `${st.color}22` : 'var(--bg-inset)',
+                                border: active ? `1px solid ${st.color}` : '1px solid var(--line)',
                                 color: active ? st.color : 'var(--text-secondary)',
                                 cursor: 'pointer'
                               }}
@@ -753,7 +752,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                         placeholder="Note riga (es. bottiglia sbeccata, collo bagnato)..."
                         value={lineState.note}
                         onChange={e => handleLineNoteChange(r.id, e.target.value)}
-                        style={{ flex: '1 1 200px', padding: '5px 10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.75rem' }}
+                        style={{ flex: '1 1 200px', padding: '5px 10px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.75rem' }}
                       />
                     </div>
                   </div>
@@ -762,7 +761,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
             </div>
 
             {/* Global Receipt Outcome & Notes */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '14px', background: 'rgba(0,0,0,0.25)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-glass)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '14px', background: 'var(--bg-inset)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
                   Esito Globale Consegna
@@ -770,7 +769,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                 <select
                   value={globalReceiptStatus}
                   onChange={e => setGlobalReceiptStatus(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: '#181824', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
                 >
                   <option value="ricevuto_conforme">✅ Ricevuto Conforme al 100%</option>
                   <option value="ricevuto_parziale">⚠️ Ricevuto Parziale (Mancano alcuni colli)</option>
@@ -787,7 +786,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                   placeholder="Es. Consegnato da corriere Mario Rossi, riserva firmata su DDT cartaceo..."
                   value={globalReceiptNotes}
                   onChange={e => setGlobalReceiptNotes(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: '#181824', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+                  style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
                 />
               </div>
             </div>
@@ -798,7 +797,7 @@ export default function GoodsReceipt({ userProfile }: { userProfile?: UserProfil
                 type="button"
                 onClick={() => setActiveOrder(null)}
                 className="btn"
-                style={{ background: 'transparent', border: '1px solid var(--border-glass)' }}
+                style={{ background: 'transparent', border: '1px solid var(--line)' }}
               >
                 Annulla
               </button>

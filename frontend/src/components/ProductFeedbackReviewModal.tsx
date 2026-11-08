@@ -99,8 +99,7 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.8)',
-      backdropFilter: 'blur(8px)',
+      background: 'var(--bg-overlay)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -113,9 +112,9 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
-        borderRadius: '16px',
+        borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border-glass)',
-        boxShadow: '0 25px 50px rgba(0, 0, 0, 0.6)',
+        boxShadow: 'var(--shadow-pop)',
         overflow: 'hidden'
       }}>
         {/* Modal Header */}
@@ -125,23 +124,23 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: 'rgba(255, 255, 255, 0.02)'
+          background: 'var(--bg-inset)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
               width: '38px',
               height: '38px',
-              borderRadius: '10px',
-              background: 'rgba(239, 68, 68, 0.15)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--crit-bg)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ef4444'
+              color: 'var(--crit)'
             }}>
               <AlertTriangle size={20} />
             </div>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'white' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text-primary)' }}>
                 Segnalazioni & Feedback Prodotti dai Responsabili
               </h3>
               <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -158,7 +157,7 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
               color: 'var(--text-secondary)',
               cursor: 'pointer',
               padding: '6px',
-              borderRadius: '8px'
+              borderRadius: 'var(--radius-md)'
             }}
           >
             <X size={20} />
@@ -169,9 +168,9 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
         {actionMessage && (
           <div style={{
             padding: '12px 24px',
-            background: 'rgba(16, 185, 129, 0.15)',
-            borderBottom: '1px solid rgba(16, 185, 129, 0.3)',
-            color: '#34d399',
+            background: 'var(--ok-bg)',
+            borderBottom: '1px solid var(--ok-border)',
+            color: 'var(--ok)',
             fontSize: '0.85rem',
             display: 'flex',
             alignItems: 'center',
@@ -191,8 +190,8 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
             </div>
           ) : feedbacks.length === 0 ? (
             <div style={{ padding: '50px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              <CheckCircle2 size={42} color="#10b981" style={{ margin: '0 auto 12px', opacity: 0.8 }} />
-              <h4 style={{ margin: '0 0 6px', color: 'white' }}>Nessuna segnalazione pendente</h4>
+              <CheckCircle2 size={42} color="var(--ok)" style={{ margin: '0 auto 12px', opacity: 0.8 }} />
+              <h4 style={{ margin: '0 0 6px', color: 'var(--text-primary)' }}>Nessuna segnalazione pendente</h4>
               <p style={{ fontSize: '0.85rem', margin: 0 }}>
                 I responsabili di settore non hanno inviato nuovi feedback negativi sui prodotti in catalogo.
               </p>
@@ -203,9 +202,9 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
                 key={item.id}
                 style={{
                   padding: '16px 20px',
-                  borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--crit-border)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'flex-start',
@@ -215,15 +214,15 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
               >
                 <div style={{ flex: 1, minWidth: '260px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <strong style={{ fontSize: '1rem', color: 'white' }}>
+                    <strong style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>
                       {item.order_name || item.canonical_name}
                     </strong>
                     <span style={{
                       padding: '2px 8px',
-                      borderRadius: '6px',
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      color: '#ef4444',
-                      fontWeight: 800,
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--crit-bg)',
+                      color: 'var(--crit)',
+                      fontWeight: 700,
                       fontSize: '0.72rem'
                     }}>
                       👎 FEEDBACK NO
@@ -231,9 +230,9 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
                     {item.category && (
                       <span style={{
                         padding: '2px 8px',
-                        borderRadius: '6px',
-                        background: 'rgba(59, 130, 246, 0.12)',
-                        color: '#93c5fd',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'var(--accent-bg)',
+                        color: 'var(--accent-text)',
                         fontSize: '0.72rem',
                         fontWeight: 600
                       }}>
@@ -251,7 +250,7 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                     <span>SKU: <code>{item.sku_interno || 'N/D'}</code></span>
                     <span>•</span>
-                    <span>Segnalato da: <strong style={{ color: 'white' }}>{item.user_nome}</strong> ({item.user_ruolo})</span>
+                    <span>Segnalato da: <strong style={{ color: 'var(--text-primary)' }}>{item.user_nome}</strong> ({item.user_ruolo})</span>
                     <span>•</span>
                     <span>{new Date(item.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
@@ -260,12 +259,12 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
                   <div style={{
                     marginTop: '10px',
                     padding: '10px 12px',
-                    borderRadius: '8px',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--line)',
                     fontSize: '0.85rem'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f87171', fontWeight: 700 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--crit)', fontWeight: 700 }}>
                       <MessageSquare size={13} />
                       Motivo: {item.motivo || 'Nessun motivo specificato'}
                     </div>
@@ -285,9 +284,9 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
                     onClick={() => handleResolve(item.id, 'escludi_prodotto', item.order_name || item.canonical_name)}
                     className="btn"
                     style={{
-                      background: 'rgba(239, 68, 68, 0.15)',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
-                      color: '#ef4444',
+                      background: 'var(--crit-bg)',
+                      border: '1px solid var(--crit-border)',
+                      color: 'var(--crit)',
                       padding: '8px 12px',
                       fontSize: '0.82rem',
                       fontWeight: 700,
@@ -306,9 +305,9 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
                     onClick={() => handleResolve(item.id, 'archivia', item.order_name || item.canonical_name)}
                     className="btn"
                     style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
+                      background: 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      color: 'white',
+                      color: 'var(--text-primary)',
                       padding: '8px 12px',
                       fontSize: '0.82rem',
                       display: 'flex',
@@ -332,7 +331,7 @@ export default function ProductFeedbackReviewModal({ isOpen, onClose, onFeedback
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: 'rgba(255, 255, 255, 0.02)'
+          background: 'var(--bg-inset)'
         }}>
           <button
             onClick={loadPendingFeedbacks}

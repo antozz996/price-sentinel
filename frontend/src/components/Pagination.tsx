@@ -37,7 +37,7 @@ export default function Pagination({ limit, offset, total, onChange }: Paginatio
       justifyContent: 'space-between',
       marginTop: '24px',
       paddingTop: '20px',
-      borderTop: '1px solid var(--border-glass)',
+      borderTop: '1px solid var(--line)',
       flexWrap: 'wrap',
       gap: '16px',
       fontSize: '0.85rem',
@@ -50,10 +50,10 @@ export default function Pagination({ limit, offset, total, onChange }: Paginatio
           value={limit}
           onChange={handleLimitChange}
           style={{
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-glass)',
-            borderRadius: 'var(--border-radius-sm)',
-            color: 'white',
+            background: 'var(--bg-inset)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-primary)',
             padding: '6px 12px',
             outline: 'none',
             fontSize: '0.85rem',
@@ -107,7 +107,7 @@ export default function Pagination({ limit, offset, total, onChange }: Paginatio
 
       {/* Info Stats */}
       <div style={{ fontWeight: 500 }}>
-        Visualizzate <span style={{ color: 'var(--text-primary)' }}>{startItem}-{endItem}</span> di <span style={{ color: 'var(--text-primary)' }}>{total}</span> voci
+        Visualizzate <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{startItem}-{endItem}</span> di <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{total}</span> voci
       </div>
     </div>
   );

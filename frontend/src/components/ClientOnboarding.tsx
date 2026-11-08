@@ -262,13 +262,13 @@ export default function ClientOnboarding() {
       
       {/* Alert Notices */}
       {error && (
-        <div style={{ padding: '12px 16px', borderRadius: '8px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--crit-bg)', color: 'var(--crit)', border: '1px solid var(--crit-border)', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <TriangleAlert size={18} />
           <span>{error}</span>
         </div>
       )}
       {notice && (
-        <div style={{ padding: '12px 16px', borderRadius: '8px', background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--ok)', border: '1px solid var(--ok-border)', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <CheckCircle2 size={18} />
           <span>{notice}</span>
         </div>
@@ -277,32 +277,32 @@ export default function ClientOnboarding() {
       {/* KPI Stats Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         <div className="glass-panel" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(59,130,246,0.15)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: 'var(--radius-md)', background: 'var(--accent-bg)', color: 'var(--accent-text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Building2 size={22} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Sedi Aziendali</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '2px' }}>{locations.length}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600, marginTop: '2px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{locations.length}</div>
           </div>
         </div>
 
         <div className="glass-panel" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(16,185,129,0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--ok)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <FileText size={22} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Fatture Totali Sede Attiva</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '2px' }}>{readiness?.invoices || 0}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600, marginTop: '2px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{readiness?.invoices || 0}</div>
           </div>
         </div>
 
         <div className="glass-panel" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: '44px', height: '44px', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--warn)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Users size={22} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Utenti & Manager</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 700, marginTop: '2px' }}>{readiness?.users || 0}</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600, marginTop: '2px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{readiness?.users || 0}</div>
           </div>
         </div>
       </div>
@@ -311,13 +311,13 @@ export default function ClientOnboarding() {
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
         {/* Navigation Tabs & Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--line)', paddingBottom: '16px' }}>
           <div style={{ display: 'flex', gap: '12px' }}>
             <button
               onClick={() => setActiveSubTab('sedi')}
               style={{
                 padding: '10px 18px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
                 cursor: 'pointer',
                 fontWeight: 600,
@@ -325,8 +325,8 @@ export default function ClientOnboarding() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: activeSubTab === 'sedi' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.05)',
-                color: 'white',
+                background: activeSubTab === 'sedi' ? 'var(--accent)' : 'var(--bg-elevated)',
+                color: activeSubTab === 'sedi' ? 'var(--text-on-accent)' : 'var(--text-primary)',
               }}
             >
               <Store size={16} />
@@ -337,7 +337,7 @@ export default function ClientOnboarding() {
               onClick={() => setActiveSubTab('thresholds')}
               style={{
                 padding: '10px 18px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 border: 'none',
                 cursor: 'pointer',
                 fontWeight: 600,
@@ -345,8 +345,8 @@ export default function ClientOnboarding() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: activeSubTab === 'thresholds' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.05)',
-                color: 'white',
+                background: activeSubTab === 'thresholds' ? 'var(--accent)' : 'var(--bg-elevated)',
+                color: activeSubTab === 'thresholds' ? 'var(--text-on-accent)' : 'var(--text-primary)',
               }}
             >
               <Sliders size={16} />
@@ -370,9 +370,9 @@ export default function ClientOnboarding() {
               disabled={busy}
               title="Ricarica dati"
               style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--radius-md)',
                 padding: '9px 12px',
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
@@ -415,17 +415,17 @@ export default function ClientOnboarding() {
                       flexDirection: 'column',
                       justifyContent: 'space-between',
                       gap: '16px',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      background: selectedLocationId === loc.id ? 'rgba(59,130,246,0.06)' : 'rgba(255,255,255,0.02)',
-                      borderLeft: selectedLocationId === loc.id ? '4px solid #3b82f6' : '1px solid rgba(255,255,255,0.08)',
+                      border: '1px solid var(--line)',
+                      background: selectedLocationId === loc.id ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                      borderLeft: selectedLocationId === loc.id ? '4px solid var(--accent)' : '1px solid var(--line)',
                     }}
                   >
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'white' }}>{loc.nome_struttura}</div>
+                          <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>{loc.nome_struttura}</div>
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                            P.IVA Cessionario: <strong style={{ color: 'white' }}>{loc.piva_riferimento}</strong>
+                            P.IVA Cessionario: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{loc.piva_riferimento}</strong>
                           </div>
                         </div>
 
@@ -433,9 +433,9 @@ export default function ClientOnboarding() {
                           style={{
                             fontSize: '0.72rem',
                             padding: '3px 8px',
-                            borderRadius: '10px',
-                            background: 'rgba(59,130,246,0.15)',
-                            color: '#3b82f6',
+                            borderRadius: '999px',
+                            background: 'var(--accent-bg)',
+                            color: 'var(--accent-text)',
                             fontWeight: 700,
                             textTransform: 'uppercase',
                           }}
@@ -446,7 +446,7 @@ export default function ClientOnboarding() {
                     </div>
 
                     {/* Card Actions */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid var(--line)' }}>
                       <button
                         type="button"
                         onClick={() => {
@@ -456,7 +456,7 @@ export default function ClientOnboarding() {
                         style={{
                           background: 'none',
                           border: 'none',
-                          color: '#0ea5e9',
+                          color: 'var(--accent-text)',
                           cursor: 'pointer',
                           padding: 0,
                           fontSize: '0.8rem',
@@ -473,9 +473,9 @@ export default function ClientOnboarding() {
                             onClick={() => openModal(loc)}
                             title="Modifica Sede"
                             style={{
-                              background: 'rgba(255,255,255,0.05)',
-                              border: '1px solid var(--border-glass)',
-                              borderRadius: '6px',
+                              background: 'var(--bg-elevated)',
+                              border: '1px solid var(--line)',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '5px 8px',
                               color: 'var(--text-secondary)',
                               cursor: 'pointer',
@@ -488,11 +488,11 @@ export default function ClientOnboarding() {
                             onClick={() => handleDeleteLocation(loc)}
                             title="Elimina Sede"
                             style={{
-                              background: 'rgba(239,68,68,0.1)',
-                              border: '1px solid rgba(239,68,68,0.2)',
-                              borderRadius: '6px',
+                              background: 'var(--crit-bg)',
+                              border: '1px solid var(--crit-border)',
+                              borderRadius: 'var(--radius-sm)',
                               padding: '5px 8px',
-                              color: '#ef4444',
+                              color: 'var(--crit)',
                               cursor: 'pointer',
                             }}
                           >
@@ -525,10 +525,10 @@ export default function ClientOnboarding() {
                 disabled={profile?.ruolo !== 'admin'}
                 style={{
                   padding: '9px 14px',
-                  background: '#13131c',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.9rem',
                   fontWeight: 600,
                   minWidth: '240px',
@@ -545,18 +545,18 @@ export default function ClientOnboarding() {
             {readiness && (
               <>
                 {/* Progress Card */}
-                <div style={{ padding: '16px 20px', borderRadius: '10px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.25)' }}>
+                <div style={{ padding: '16px 20px', borderRadius: 'var(--radius-lg)', background: 'var(--accent-bg)', border: '1px solid var(--accent-border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Stato Operativo Sede</div>
-                      <h3 style={{ margin: '2px 0 0', fontSize: '1.2rem', color: 'white' }}>{readiness.location_name}</h3>
+                      <h3 style={{ margin: '2px 0 0', fontSize: '1.2rem', color: 'var(--text-primary)' }}>{readiness.location_name}</h3>
                     </div>
-                    <strong style={{ fontSize: '1.5rem', color: '#60a5fa' }}>
+                    <strong style={{ fontSize: '1.5rem', color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
                       {completed} / {steps.length}
                     </strong>
                   </div>
-                  <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${steps.length ? (completed / steps.length) * 100 : 0}%`, background: '#3b82f6', transition: 'width 0.3s ease' }} />
+                  <div style={{ height: '8px', borderRadius: '999px', background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${steps.length ? (completed / steps.length) * 100 : 0}%`, background: 'var(--accent)', transition: 'width 0.3s ease' }} />
                   </div>
                 </div>
 
@@ -567,17 +567,17 @@ export default function ClientOnboarding() {
                       key={name}
                       style={{
                         padding: '14px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border-glass)',
-                        background: 'rgba(255,255,255,0.02)',
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--line)',
+                        background: 'var(--bg-inset)',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '6px',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {done ? <CheckCircle2 size={16} color="#34d399" /> : <Circle size={16} color="#94a3b8" />}
-                        <strong style={{ fontSize: '0.85rem', color: 'white' }}>{name}</strong>
+                        {done ? <CheckCircle2 size={16} color="var(--ok)" /> : <Circle size={16} color="var(--text-secondary)" />}
+                        <strong style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{name}</strong>
                       </div>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{detail}</span>
                     </div>
@@ -586,7 +586,7 @@ export default function ClientOnboarding() {
 
                 {/* Form Soglie Esplicite */}
                 {settings && (
-                  <div style={{ padding: '20px', borderRadius: '10px', border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.02)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ padding: '20px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)', background: 'var(--bg-inset)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
                       <h4 style={{ margin: '0 0 4px', fontSize: '1rem', fontWeight: 700 }}>Soglie di Riconciliazione & Tolleranze Prezzo</h4>
                       <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -603,7 +603,7 @@ export default function ClientOnboarding() {
                           step="0.01"
                           value={settings.price_tolerance_absolute}
                           onChange={e => setSettings({ ...settings, price_tolerance_absolute: e.target.value })}
-                          style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                          style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
                         />
                       </label>
 
@@ -615,7 +615,7 @@ export default function ClientOnboarding() {
                           step="0.1"
                           value={settings.price_tolerance_percent}
                           onChange={e => setSettings({ ...settings, price_tolerance_percent: e.target.value })}
-                          style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                          style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
                         />
                       </label>
 
@@ -627,7 +627,7 @@ export default function ClientOnboarding() {
                           step="0.01"
                           value={settings.important_anomaly_threshold}
                           onChange={e => setSettings({ ...settings, important_anomaly_threshold: e.target.value })}
-                          style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                          style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
                         />
                       </label>
 
@@ -639,7 +639,7 @@ export default function ClientOnboarding() {
                           max="90"
                           value={settings.stalled_reconciliation_days}
                           onChange={e => setSettings({ ...settings, stalled_reconciliation_days: Number(e.target.value) })}
-                          style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                          style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
                         />
                       </label>
 
@@ -651,17 +651,17 @@ export default function ClientOnboarding() {
                           max="180"
                           value={settings.missing_credit_note_days}
                           onChange={e => setSettings({ ...settings, missing_credit_note_days: Number(e.target.value) })}
-                          style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                          style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}
                         />
                       </label>
 
                       <div style={{ display: 'flex', alignItems: 'center', paddingTop: '18px' }}>
-                        <label style={{ display: 'flex', gap: '10px', alignItems: 'center', cursor: 'pointer', fontSize: '0.85rem', color: 'white' }}>
+                        <label style={{ display: 'flex', gap: '10px', alignItems: 'center', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-primary)' }}>
                           <input
                             type="checkbox"
                             checked={settings.notifications_enabled}
                             onChange={e => setSettings({ ...settings, notifications_enabled: e.target.checked })}
-                            style={{ width: '16px', height: '16px', accentColor: '#3b82f6' }}
+                            style={{ width: '16px', height: '16px', accentColor: 'var(--accent)' }}
                           />
                           Notifiche & Avvisi Operativi Attivi
                         </label>
@@ -696,7 +696,7 @@ export default function ClientOnboarding() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.75)',
+            background: 'var(--bg-overlay)',
             zIndex: 1100,
             display: 'flex',
             alignItems: 'center',
@@ -713,7 +713,8 @@ export default function ClientOnboarding() {
               display: 'flex',
               flexDirection: 'column',
               gap: '20px',
-              border: '1px solid rgba(255,255,255,0.15)',
+              border: '1px solid var(--line-strong)',
+              boxShadow: 'var(--shadow-pop)',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -740,10 +741,10 @@ export default function ClientOnboarding() {
                   onChange={e => setFormNome(e.target.value)}
                   style={{
                     padding: '11px',
-                    background: 'rgba(0,0,0,0.25)',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                   }}
                 />
               </label>
@@ -759,11 +760,11 @@ export default function ClientOnboarding() {
                   onChange={e => setFormPiva(e.target.value.replace(/\D/g, ''))}
                   style={{
                     padding: '11px',
-                    background: 'rgba(0,0,0,0.25)',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
-                    fontFamily: 'monospace',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'var(--font-mono)',
                     letterSpacing: '1px',
                   }}
                 />
@@ -776,10 +777,10 @@ export default function ClientOnboarding() {
                   onChange={e => setFormTipo(e.target.value as any)}
                   style={{
                     padding: '11px',
-                    background: '#13131c',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                   }}
                 >
                   <option value="balneare">Stabilimento Balneare</option>

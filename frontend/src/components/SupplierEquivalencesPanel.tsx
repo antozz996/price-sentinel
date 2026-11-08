@@ -59,7 +59,7 @@ function SupplierPicker({
     <div style={{ minWidth: 250, flex: 1 }}>
       <strong style={{ fontSize: 12 }}>{label}</strong>
       {selected && (
-        <div style={{ color: '#60a5fa', margin: '7px 0', fontSize: 13 }}>
+        <div style={{ color: 'var(--accent-text)', margin: '7px 0', fontSize: 13 }}>
           Selezionato: {selected.name} #{selected.id}
         </div>
       )}
@@ -247,11 +247,11 @@ export default function SupplierEquivalencesPanel() {
         <Link2 size={14} /> Approva equivalenza
       </button>
       {message && (
-        <p style={{ color: '#4ade80' }}>
+        <p style={{ color: 'var(--ok)' }}>
           <CheckCircle2 size={14} /> {message}
         </p>
       )}
-      {error && <p style={{ color: '#f87171' }}>{error}</p>}
+      {error && <p style={{ color: 'var(--crit)' }}>{error}</p>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 18 }}>
         {rows.map((row) => (

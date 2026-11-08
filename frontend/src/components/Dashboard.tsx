@@ -87,28 +87,28 @@ export default function Dashboard() {
     { 
       title: 'Euro Recuperati (NC)', 
       value: `€ ${Number(kpi?.euro_recuperati || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <TrendingUp color="#10b981" size={20} />, 
+      icon: <TrendingUp color="var(--ok)" size={20} />, 
       bg: 'var(--status-green-bg)',
       subtitle: 'Contestazioni risolte con successo'
     },
     { 
       title: 'In Reclamo', 
       value: `€ ${Number(kpi?.euro_in_contestazione || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <ShieldCheck color="#3b82f6" size={20} />, 
-      bg: 'rgba(59, 130, 246, 0.1)',
+      icon: <ShieldCheck color="var(--accent-text)" size={20} />, 
+      bg: 'rgba(79, 143, 247, 0.1)',
       subtitle: 'Contenziosi aperti con i fornitori'
     },
     { 
       title: 'Spreco Mensile Rilevato', 
       value: `€ ${Number(kpi?.euro_a_rischio || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <AlertCircle color="#ef4444" size={20} />, 
+      icon: <AlertCircle color="var(--crit)" size={20} />, 
       bg: 'var(--status-red-bg)',
       subtitle: 'Rincari da verificare questo mese'
     },
     { 
       title: 'Attesa Validazione', 
       value: `€ ${Number(kpi?.euro_attesa_manager || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <BarChart3 color="#f59e0b" size={20} />, 
+      icon: <BarChart3 color="var(--warn)" size={20} />, 
       bg: 'var(--status-yellow-bg)',
       subtitle: 'Anomalie pendenti dai manager'
     },
@@ -119,14 +119,14 @@ export default function Dashboard() {
       {/* KPI Cards Grid */}
       <div className="dashboard-kpi-grid">
         {cards.map((card, i) => (
-          <div key={i} className="glass-panel hover-glow" style={{ position: 'relative', overflow: 'hidden', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)', cursor: 'default' }}>
+          <div key={i} className="glass-panel ds-kpi" style={{ position: 'relative', overflow: 'hidden', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px', transition: 'var(--transition-fast)', cursor: 'default' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: card.bg.replace('0.1', '1').replace('bg', 'color') }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{card.title}</span>
-              <div style={{ padding: '8px', borderRadius: '10px', background: card.bg, backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{card.icon}</div>
+              <span className="ds-kpi-label">{card.title}</span>
+              <div style={{ padding: '8px', borderRadius: 'var(--radius-sm)', background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{card.icon}</div>
             </div>
             <div>
-              <div style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.5px', marginBottom: '2px', wordBreak: 'break-word' }}>{card.value}</div>
+              <div className="ds-kpi-value" style={{ fontSize: '1.6rem', marginBottom: '2px', wordBreak: 'break-word' }}>{card.value}</div>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>{card.subtitle}</span>
             </div>
           </div>
@@ -140,18 +140,18 @@ export default function Dashboard() {
         <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <Award color="var(--accent-blue)" size={20} />
+              <Award color="var(--accent-text)" size={20} />
               <h4 style={{ margin: 0, fontWeight: 600, fontSize: '1rem' }}>Classifica Efficienza Acquisti</h4>
             </div>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '12px', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', border: '1px solid var(--line)', padding: '4px 8px', borderRadius: '999px', whiteSpace: 'nowrap' }}>
               Target: &lt; 5% Min Storico
             </span>
           </div>
 
           <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-            <table style={{ width: '100%', minWidth: '420px', borderCollapse: 'collapse' }}>
+            <table className="ds-table" style={{ width: '100%', minWidth: '420px', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: '0.78rem', textAlign: 'left' }}>
+                <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--text-secondary)', fontSize: '0.78rem', textAlign: 'left' }}>
                   <th style={{ padding: '10px 8px', width: '60px' }}>Rank</th>
                   <th style={{ padding: '10px 8px' }}>Locale</th>
                   <th style={{ padding: '10px 8px' }}>Acquisti Ottimali</th>
@@ -167,7 +167,7 @@ export default function Dashboard() {
                   </tr>
                 ) : (
                   leaderboard.map((item) => (
-                    <tr key={item.location_id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.88rem' }}>
+                    <tr key={item.location_id} style={{ borderBottom: '1px solid var(--line)', fontSize: '0.88rem' }}>
                       <td style={{ padding: '12px 8px', fontWeight: 'bold' }}>
                         <span style={{ fontSize: '1.1rem' }}>{item.medal}</span>
                       </td>
@@ -177,15 +177,15 @@ export default function Dashboard() {
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: item.score >= 80 ? '#10b981' : (item.score >= 50 ? '#f59e0b' : '#ef4444') }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.95rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: item.score >= 80 ? 'var(--ok)' : (item.score >= 50 ? 'var(--warn)' : 'var(--crit)') }}>
                             {item.score.toFixed(1)}%
                           </span>
-                          <div style={{ width: '80px', height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                          <div style={{ width: '80px', height: '6px', background: 'var(--bg-elevated)', borderRadius: '3px', overflow: 'hidden', border: '1px solid var(--line)' }}>
                             <div style={{ 
                               width: `${item.score}%`, 
                               height: '100%', 
-                              background: item.score >= 80 ? 'linear-gradient(90deg, #059669, #10b981)' : (item.score >= 50 ? 'linear-gradient(90deg, #d97706, #f59e0b)' : 'linear-gradient(90deg, #dc2626, #ef4444)'),
-                              boxShadow: item.score >= 80 ? '0 0 10px rgba(16, 185, 129, 0.5)' : 'none',
+                              background: item.score >= 80 ? 'var(--ok)' : (item.score >= 50 ? 'var(--warn)' : 'var(--crit)'),
+                              boxShadow: 'none',
                               borderRadius: '3px'
                             }}/>
                           </div>
@@ -203,20 +203,20 @@ export default function Dashboard() {
         <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <Target color="#ef4444" size={20} />
+              <Target color="var(--crit)" size={20} />
               <h4 style={{ margin: 0, fontWeight: 600, fontSize: '1rem' }}>Impatto Sprechi Proiettato</h4>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.02))', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '18px 20px', borderRadius: '14px', position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 0 20px rgba(239, 68, 68, 0.05)' }}>
+              <div style={{ background: 'var(--crit-bg)', border: '1px solid var(--crit-border)', padding: '18px 20px', borderRadius: 'var(--radius-lg)', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', right: '-20px', top: '-20px', opacity: 0.05, transform: 'scale(2)' }}>
-                  <AlertCircle size={100} color="#ef4444" />
+                  <AlertCircle size={100} color="var(--crit)" />
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'rgba(239, 68, 68, 0.9)', fontWeight: 700, letterSpacing: '0.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', display: 'inline-block', boxShadow: '0 0 10px #ef4444' }}></span>
+                <div style={{ fontSize: '0.75rem', color: 'var(--crit)', fontWeight: 700, letterSpacing: '0.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--crit)', display: 'inline-block' }}></span>
                   VALORE A RISCHIO RILEVATO
                 </div>
-                <div style={{ fontSize: '2rem', fontWeight: 800, color: '#ef4444', letterSpacing: '-0.5px', textShadow: '0 0 20px rgba(239, 68, 68, 0.3)', wordBreak: 'break-word' }}>
+                <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--crit)', letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', wordBreak: 'break-word' }}>
                   € {Number(openRiskAmount).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.4 }}>
@@ -231,7 +231,7 @@ export default function Dashboard() {
                 </div>
                 <div className="glass-panel" style={{ padding: '12px 14px', flex: '1 1 140px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Verifica risparmio</span>
-                  <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--ok)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     Dati in verifica <ArrowUpRight size={15}/>
                   </span>
                 </div>
@@ -239,8 +239,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Percent size={14} color="var(--accent-blue)" style={{ flexShrink: 0 }} />
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--line)', paddingTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Percent size={14} color="var(--accent-text)" style={{ flexShrink: 0 }} />
             <span>Il risparmio effettivo sarà disponibile dopo la verifica degli acquisti e dei listini.</span>
           </div>
         </div>
@@ -251,18 +251,18 @@ export default function Dashboard() {
       <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <TrendingUp color="#ef4444" size={20} />
+            <TrendingUp color="var(--crit)" size={20} />
             <h4 style={{ margin: 0, fontWeight: 600, fontSize: '1rem' }}>Analisi Varianza & Sprechi (Perdite)</h4>
           </div>
-          <span style={{ fontSize: '0.72rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '4px 10px', borderRadius: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <span className="ds-pill crit" style={{ fontSize: '0.72rem', padding: '4px 10px', borderRadius: '999px', fontWeight: 600, whiteSpace: 'nowrap' }}>
             Top Prodotti Fuori-Prezzo
           </span>
         </div>
 
         <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table style={{ width: '100%', minWidth: '560px', borderCollapse: 'collapse' }}>
+          <table className="ds-table" style={{ width: '100%', minWidth: '560px', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-secondary)', fontSize: '0.78rem', textAlign: 'left' }}>
+              <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--text-secondary)', fontSize: '0.78rem', textAlign: 'left' }}>
                 <th style={{ padding: '10px 8px' }}>Prodotto</th>
                 <th style={{ padding: '10px 8px' }}>Fornitore</th>
                 <th style={{ padding: '10px 8px', textAlign: 'center' }}>N. Acquisti</th>
@@ -280,7 +280,7 @@ export default function Dashboard() {
                 </tr>
               ) : (
                 varianceLoss.map((item) => (
-                  <tr key={item.sku_interno} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.88rem' }}>
+                  <tr key={item.sku_interno} style={{ borderBottom: '1px solid var(--line)', fontSize: '0.88rem' }}>
                     <td style={{ padding: '12px 8px', fontWeight: 500 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span>{item.prodotto_nome}</span>
@@ -288,24 +288,24 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td style={{ padding: '12px 8px', color: 'var(--text-secondary)' }}>{item.fornitore_nome}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>{item.numero_acquisti}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right', color: '#10b981', fontWeight: 500 }}>
+                    <td style={{ padding: '12px 8px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{item.numero_acquisti}</td>
+                    <td style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--ok)', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       € {item.prezzo_minimo.toFixed(2)}
                     </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'right', color: '#ef4444' }}>
+                    <td style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       € {item.prezzo_medio.toFixed(2)}
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#ef4444', textShadow: '0 0 10px rgba(239,68,68,0.2)' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           -€ {item.spreco_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
-                        <div style={{ width: '100px', height: '5px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        <div style={{ width: '100px', height: '5px', background: 'var(--crit-bg)', borderRadius: '3px', overflow: 'hidden', border: '1px solid var(--crit-border)' }}>
                           <div style={{ 
                             width: `${Math.min(100, (item.spreco_totale / (Math.max(...varianceLoss.map(v => v.spreco_totale)) || 1)) * 100)}%`, 
                             height: '100%', 
-                            background: 'linear-gradient(90deg, #dc2626, #ef4444)',
-                            boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)',
+                            background: 'var(--crit)',
+                            boxShadow: 'none',
                             borderRadius: '3px'
                           }}/>
                         </div>

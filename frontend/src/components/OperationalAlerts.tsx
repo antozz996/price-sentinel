@@ -34,10 +34,10 @@ type Run = {
 }
 
 const card: React.CSSProperties = {
-  border: '1px solid var(--border-glass)',
-  borderRadius: 13,
+  border: '1px solid var(--line)',
+  borderRadius: 'var(--radius-lg)',
   padding: 16,
-  background: 'rgba(255,255,255,.025)',
+  background: 'var(--bg-card)',
 }
 
 export default function OperationalAlerts() {
@@ -105,11 +105,11 @@ export default function OperationalAlerts() {
       </div>
     </div>
     {busy&&<div style={{color:'var(--text-secondary)'}}><Loader2 size={15}/> Elaborazione…</div>}
-    {error&&<div style={{...card,borderColor:'rgba(239,68,68,.4)',color:'#f87171'}}><AlertTriangle size={16}/> {error}</div>}
-    {notice&&<div style={{...card,borderColor:'rgba(16,185,129,.4)',color:'#34d399'}}><CheckCircle2 size={16}/> {notice}</div>}
+    {error&&<div style={{...card,borderColor:'var(--crit-border)',color:'var(--crit)'}}><AlertTriangle size={16}/> {error}</div>}
+    {notice&&<div style={{...card,borderColor:'var(--ok-border)',color:'var(--ok)'}}><CheckCircle2 size={16}/> {notice}</div>}
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:10}}>
-      <div style={card}><small>Critici aperti</small><strong style={{display:'block',fontSize:25,color:critical?'#f87171':'#34d399'}}>{critical}</strong></div>
-      <div style={card}><small>Avvisi aperti</small><strong style={{display:'block',fontSize:25,color:warning?'#fbbf24':'#34d399'}}>{warning}</strong></div>
+      <div style={card}><small>Critici aperti</small><strong style={{display:'block',fontSize:25,fontFamily:'var(--font-mono)',fontVariantNumeric:'tabular-nums',fontWeight:600,color:critical?'var(--crit)':'var(--ok)'}}>{critical}</strong></div>
+      <div style={card}><small>Avvisi aperti</small><strong style={{display:'block',fontSize:25,fontFamily:'var(--font-mono)',fontVariantNumeric:'tabular-nums',fontWeight:600,color:warning?'var(--warn)':'var(--ok)'}}>{warning}</strong></div>
       <div style={card}><small>Ultimo controllo</small><strong style={{display:'block',marginTop:8}}>{lastRun?.status||'automatico / non eseguito qui'}</strong></div>
     </div>
     <div style={{display:'flex',gap:8}}>
@@ -117,10 +117,10 @@ export default function OperationalAlerts() {
       <button className={`btn ${filter==='resolved'?'btn-primary':''}`} onClick={()=>setFilter('resolved')}>Risolti</button>
     </div>
     <div style={{display:'grid',gap:10}}>
-      {!visible.length&&<div style={card}><BellRing size={28} color="#34d399"/><h3>Nessun avviso</h3><p style={{color:'var(--text-secondary)'}}>Non risultano condizioni operative da gestire in questa vista.</p></div>}
-      {visible.map(item=><article key={item.id} style={{...card,borderColor:item.severity==='critical'?'rgba(239,68,68,.35)':item.severity==='warning'?'rgba(245,158,11,.35)':'rgba(59,130,246,.3)'}}>
+      {!visible.length&&<div style={card}><BellRing size={28} color="var(--ok)"/><h3>Nessun avviso</h3><p style={{color:'var(--text-secondary)'}}>Non risultano condizioni operative da gestire in questa vista.</p></div>}
+      {visible.map(item=><article key={item.id} style={{...card,borderColor:item.severity==='critical'?'var(--crit-border)':item.severity==='warning'?'var(--warn-border)':'var(--accent-border)'}}>
         <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
-          <div><small style={{color:item.severity==='critical'?'#f87171':item.severity==='warning'?'#fbbf24':'#60a5fa'}}>{item.severity.toUpperCase()} · {item.alert_type}</small><h3 style={{margin:'5px 0'}}>{item.title}</h3><p style={{margin:0,color:'var(--text-secondary)'}}>{item.message}</p></div>
+          <div><small style={{color:item.severity==='critical'?'var(--crit)':item.severity==='warning'?'var(--warn)':'var(--accent-text)'}}>{item.severity.toUpperCase()} · {item.alert_type}</small><h3 style={{margin:'5px 0'}}>{item.title}</h3><p style={{margin:0,color:'var(--text-secondary)'}}>{item.message}</p></div>
           {item.status==='open'&&<button className="btn" onClick={()=>void acknowledge(item.id)}><CheckCircle2 size={14}/> Preso in carico</button>}
         </div>
         <small style={{display:'block',marginTop:10,color:'var(--text-secondary)'}}>Ultimo rilevamento: {new Date(item.last_detected_at).toLocaleString('it-IT')} · {item.entity_type} {item.entity_id}</small>
