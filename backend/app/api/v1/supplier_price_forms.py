@@ -280,9 +280,11 @@ async def submit_public_form(
         saved_offers = []
         seen_offer_ids: set[str] = set()
         for index, offer in enumerate(offers):
-            # Brand is optional: fresh produce has none.
-            if offer.prezzo is None or not (offer.unita_misura or "").strip() or not (offer.dicitura_fornitore or "").strip() or offer.quantita_confezione is None:
-                raise HTTPException(status_code=422, detail=f"Completa dicitura, quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
+            # Brand and supplier wording are optional (fresh produce): wording falls back to our description.
+            if not (offer.dicitura_fornitore or "").strip():
+                offer.dicitura_fornitore = item.descrizione[:255]
+            if offer.prezzo is None or not (offer.unita_misura or "").strip() or offer.quantita_confezione is None:
+                raise HTTPException(status_code=422, detail=f"Completa quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
             brand = (offer.marca or "").strip() or None
             unit = _normalized_unit(offer.unita_misura)
             if request.request_type == "new_listino" and offer.conferma_prezzo:
