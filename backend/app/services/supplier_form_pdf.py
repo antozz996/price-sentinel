@@ -1,8 +1,6 @@
 """Supplier-facing PDF of a submitted or approved price form, shareable on WhatsApp.
 
-Read-only: it renders what the supplier sent. The percentage change is shown only
-when the previous price had a comparable unit; a price per kg is never compared
-with a price per piece.
+Read-only: it renders what the supplier sent, next to the previous agreed price.
 """
 
 from dataclasses import dataclass, field
@@ -74,17 +72,6 @@ def per_unit(price: Decimal, quantity: Decimal | None, unit: str | None) -> tupl
     return price / (quantity * factor), base
 
 
-def change_percent(new: PdfOffer, item: PdfItem) -> Decimal | None:
-    """Change vs the previous price, only when both prices refer to the same base unit."""
-    if item.previous_price is None or item.previous_price <= 0:
-        return None
-    old = per_unit(item.previous_price, item.previous_quantity, item.previous_unit)
-    current = per_unit(new.price, new.quantity, new.unit)
-    if not old or not current or old[1] != current[1]:
-        return None
-    return ((current[0] - old[0]) / old[0] * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-
-
 def _format(quantity: Decimal | None, unit: str | None) -> str:
     if not unit:
         return "—"
@@ -138,10 +125,9 @@ def generate_supplier_form_pdf(form: PdfForm) -> bytes:
     ]
 
     confirmation = form.request_type == "confirmation"
-    header = ["Prodotto", "Formato", "Prezzo", "Prezzo unitario"] + (["Precedente", "Var. %"] if confirmation else [])
+    header = ["Prodotto", "Formato", "Prezzo", "Prezzo unitario"] + (["Precedente"] if confirmation else [])
     rows: list[list] = [header]
     not_handled: list[str] = []
-    uncomparable = False
     for item in sorted(form.items, key=lambda i: i.description.casefold()):
         if item.not_handled:
             not_handled.append(item.description)
@@ -152,18 +138,14 @@ def generate_supplier_form_pdf(form: PdfForm) -> bytes:
                    _format(offer.quantity, offer.unit), money(offer.price), unit_text]
             if confirmation:
                 if index or item.previous_price is None:
-                    row += ["—", "—"]
+                    row.append("—")
                 else:
                     previous = money(item.previous_price) + (
                         f" / {_format(item.previous_quantity, item.previous_unit)}" if item.previous_unit else "")
-                    change = change_percent(offer, item)
-                    if change is None:
-                        uncomparable = True
-                    row += [Paragraph(escape(previous), cell),
-                            "—" if change is None else ("=" if change == 0 else f"{change:+.1f}%".replace(".", ","))]
+                    row.append(Paragraph(escape(previous), cell))
             rows.append(row)
 
-    widths = [58, 20, 22, 28, 32, 14] if confirmation else [80, 30, 30, 42]
+    widths = [66, 22, 24, 30, 40] if confirmation else [80, 30, 30, 42]
     table = Table(rows, colWidths=[w * mm for w in widths], repeatRows=1)
     style = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1d4ed8")),
@@ -176,17 +158,12 @@ def generate_supplier_form_pdf(form: PdfForm) -> bytes:
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
         ("PADDING", (0, 0), (-1, -1), 4),
     ]
-    if confirmation:
-        style.append(("ALIGN", (5, 1), (5, -1), "RIGHT"))
     table.setStyle(TableStyle(style))
     story.append(table if len(rows) > 1 else Paragraph("Nessun prodotto quotato.", body))
 
-    notes = ["Il prezzo si riferisce al formato indicato; il prezzo unitario è calcolato per 1 KG, 1 L "
-             "o per singola unità della confezione."]
-    if confirmation and uncomparable:
-        notes.append("Var. % “—”: il prezzo precedente non aveva un’unità di misura confrontabile, "
-                     "quindi la variazione non è calcolabile.")
-    story += [Spacer(1, 3 * mm)] + [Paragraph(escape(n), small) for n in notes]
+    note = ("Il prezzo si riferisce al formato indicato; il prezzo unitario è calcolato per 1 KG, 1 L "
+            "o per singola unità della confezione.")
+    story += [Spacer(1, 3 * mm), Paragraph(escape(note), small)]
     if not_handled:
         story += [Spacer(1, 5 * mm), Paragraph(f"<b>Prodotti non trattati ({len(not_handled)})</b>", body),
                   Paragraph(escape(", ".join(sorted(not_handled, key=str.casefold))), cell)]
