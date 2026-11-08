@@ -45,7 +45,7 @@ class FakeDbSession:
         self.aliases = aliases
         self.listini = listini or []
 
-    async def get(self, model, key):
+    async def get(self, model, key, **_kwargs):
         if model == Location and key == self.location.id:
             return self.location
         if model == Product and key in self.products:
