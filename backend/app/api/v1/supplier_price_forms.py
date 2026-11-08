@@ -602,10 +602,14 @@ async def get_supplier_catalog(
         )
         .order_by(ListinoMaster.sku_interno)
     )).scalars().all()
-    # Same rule as order resolution: once a product has approved offers from this
-    # supplier, the older generic row (no offer) is superseded and not re-asked.
-    offer_skus = {row.sku_interno for row in rows if row.supplier_product_alias_id}
-    rows = [row for row in rows if row.supplier_product_alias_id or row.sku_interno not in offer_skus]
+    # Once a product has approved offers from this supplier, rows from older
+    # imports (generic or with a non-offer alias) are superseded and not re-asked.
+    offer_alias_ids = set((await db.scalars(select(SupplierProductAlias.id).where(
+        SupplierProductAlias.id.in_({row.supplier_product_alias_id for row in rows if row.supplier_product_alias_id}),
+        SupplierProductAlias.source == "normalized_sheet_offer",
+    ))).all()) if rows else set()
+    offer_skus = {row.sku_interno for row in rows if row.supplier_product_alias_id in offer_alias_ids}
+    rows = [row for row in rows if row.supplier_product_alias_id in offer_alias_ids or row.sku_interno not in offer_skus]
     formats = await _offer_formats(db, supplier_id, rows)
 
     categories_by_sku: dict[str, tuple[str | None, str | None]] = {}
@@ -671,6 +675,31 @@ async def pending_supplier_form_notifications(
         SupplierPriceFormRequest.status == "submitted"
     ))
     return {"pending_count": int(count or 0)}
+
+
+async def _close_confirmed_rows(db: AsyncSession, request: SupplierPriceFormRequest, new_ids: set[int]) -> None:
+    """A confirmation response replaces the rows it was asked about.
+
+    Rows from older imports keep their own alias, so without closing them the old
+    price would stay active next to the approved offers. Rows that are themselves
+    one of the offers in this response (unchanged price) stay open. Products the
+    supplier marked "non trattato" are left untouched for the buyer to review.
+    """
+    asked_ids = {item.listino_id for item in request.items if item.listino_id and not item.non_trattato} - new_ids
+    if not asked_ids:
+        return
+    offer_ids = {offer["id_offerta"] for item in request.items for offer in item.offerte_inviate or []}
+    cutoff = request.validita_inviata_da - timedelta(days=1)
+    rows = (await db.execute(
+        select(ListinoMaster, SupplierProductAlias.supplier_code)
+        .outerjoin(SupplierProductAlias, SupplierProductAlias.id == ListinoMaster.supplier_product_alias_id)
+        .where(ListinoMaster.id.in_(asked_ids))
+    )).all()
+    for row, offer_code in rows:
+        if offer_code in offer_ids:
+            continue
+        if row.data_scadenza is None or row.data_scadenza > cutoff:
+            row.data_scadenza = max(cutoff, row.data_inizio_validita)
 
 
 @router.post("/{request_id}/approve", summary="Approva e integra la risposta nel listino V2")
@@ -751,6 +780,8 @@ async def approve_form_request(
         ))).scalars().all()
         for row in approved_rows:
             row.data_scadenza = request.validita_inviata_a
+    if request.request_type == "confirmation":
+        await _close_confirmed_rows(db, request, set(result.get("listino_ids") or []))
     request.status = "approved"
     await db.commit()
     return {"id": request.id, "status": request.status, "result": result}

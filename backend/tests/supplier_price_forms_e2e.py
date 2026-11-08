@@ -195,50 +195,6 @@ async def run() -> None:
                                          headers=admin_headers)
         check("notification clears after approval",
               pending_after.status_code == 200 and pending_after.json()["pending_count"] == 0)
-
-        # An older generic row (no offer) for the same product must not be re-asked,
-        # and the approved offers must be shown with their real format, not "conf".
-        with psycopg2.connect(DSN) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("insert into listino_master(fornitore_id,sku_interno,descrizione,prezzo_pattuito,"
-                               "data_inizio_validita) values (1,'CI-SKU-FORM','Synthetic beverage',9.99,%s)",
-                               (start - timedelta(days=10),))
-        catalog = await client.get("/api/v1/supplier-price-forms/catalog/1", headers=admin_headers)
-        catalog_rows = [row for row in catalog.json() if row["sku_interno"] == "CI-SKU-FORM"]
-        check("catalog shows only the approved offers with their real format",
-              catalog.status_code == 200
-              and sorted(row["unita_misura"] for row in catalog_rows) == ["2 BT", "BT"]
-              and all(row["prezzo_pattuito"] != "9.9900" for row in catalog_rows))
-        confirmation = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers, json={
-            "supplier_id": 1, "request_type": "confirmation",
-            "listino_ids": [row["id"] for row in catalog_rows]})
-        check("admin creates a confirmation form from approved offers", confirmation.status_code == 201)
-        confirmation_token = confirmation.json()["token"]
-        confirmation_public = (await client.get(
-            f"/api/v1/supplier-price-forms/public/{confirmation_token}")).json()
-        formats = sorted((item["quantita_corrente"], item["unita_corrente"], item["dicitura_corrente"])
-                         for item in confirmation_public["items"])
-        check("confirmation form carries quantity, unit and wording of each offer",
-              formats == [("1.000", "BT", "Bottiglia sintetica CI"),
-                          ("2.000", "BT", "Bottiglie sintetiche CI in coppia")])
-
-        def confirm_all(quantity_override: str | None) -> dict:
-            return {"validita_inviata_da": start.isoformat(), "answers": [{
-                "item_id": item["id"], "non_trattato": False, "offerte": [{
-                    "prezzo": item["prezzo_corrente"], "unita_misura": item["unita_corrente"],
-                    "marca": item["brand_corrente"], "dicitura_fornitore": item["dicitura_corrente"],
-                    "quantita_confezione": quantity_override or item["quantita_corrente"],
-                    "conferma_prezzo": True}]} for item in confirmation_public["items"]]}
-
-        wrong_quantity = await client.post(
-            f"/api/v1/supplier-price-forms/public/{confirmation_token}/submit", json=confirm_all("3"))
-        check("a confirmation with a different quantity is refused", wrong_quantity.status_code == 422)
-        confirmed = await client.post(
-            f"/api/v1/supplier-price-forms/public/{confirmation_token}/submit", json=confirm_all(None))
-        check("supplier confirms the agreed offers as prefilled", confirmed.status_code == 200)
-        removed = await client.delete(
-            f"/api/v1/supplier-price-forms/{confirmation.json()['request']['id']}", headers=admin_headers)
-        check("the confirmation test form is removed", removed.status_code == 200)
         resolved = await client.post("/api/v1/product-identity/orders/resolve-item", headers=admin_headers,
                                      json={"query": "CI-SKU-FORM", "requested_qty": 2})
         check("both formats remain separate in order suggestions", resolved.status_code == 200 and
@@ -258,6 +214,70 @@ async def run() -> None:
             "bundles": draft.json()["fornitori_ordini"],
         })
         check("chosen format and price survive order validation", order.status_code == 200)
+
+        # Next round: a confirmation form from the catalog. A row from an older import
+        # must not be re-asked, offers show their real format (not "conf"), and
+        # approving the response closes the older row it replaces.
+        with psycopg2.connect(DSN) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("insert into listino_master(fornitore_id,sku_interno,descrizione,prezzo_pattuito,"
+                               "data_inizio_validita) values (1,'CI-SKU-FORM','Synthetic beverage',9.99,%s) "
+                               "returning id", (start - timedelta(days=10),))
+                legacy_id = cursor.fetchone()[0]
+        catalog = await client.get("/api/v1/supplier-price-forms/catalog/1", headers=admin_headers)
+        catalog_rows = [row for row in catalog.json() if row["sku_interno"] == "CI-SKU-FORM"]
+        check("catalog shows only the approved offers with their real format",
+              catalog.status_code == 200
+              and sorted(row["unita_misura"] for row in catalog_rows) == ["2 BT", "BT"]
+              and legacy_id not in [row["id"] for row in catalog_rows])
+        confirmation = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers, json={
+            "supplier_id": 1, "request_type": "confirmation",
+            "listino_ids": [row["id"] for row in catalog_rows] + [legacy_id]})
+        check("admin creates a confirmation form", confirmation.status_code == 201)
+        confirmation_token = confirmation.json()["token"]
+        confirmation_items = (await client.get(
+            f"/api/v1/supplier-price-forms/public/{confirmation_token}")).json()["items"]
+        offer_items = [item for item in confirmation_items if item["quantita_corrente"]]
+        legacy_item = next(item for item in confirmation_items if not item["quantita_corrente"])
+        check("confirmation form carries quantity, unit and wording of each offer",
+              sorted((i["quantita_corrente"], i["unita_corrente"], i["dicitura_corrente"]) for i in offer_items)
+              == [("1.000", "BT", "Bottiglia sintetica CI"), ("2.000", "BT", "Bottiglie sintetiche CI in coppia")])
+        check("a row without a known format asks for the unit", legacy_item["unita_corrente"] is None)
+
+        def confirm_all(quantity_override: str | None) -> dict:
+            answers = [{"item_id": item["id"], "non_trattato": False, "offerte": [{
+                "prezzo": item["prezzo_corrente"], "unita_misura": item["unita_corrente"],
+                "marca": item["brand_corrente"], "dicitura_fornitore": item["dicitura_corrente"],
+                "quantita_confezione": quantity_override or item["quantita_corrente"],
+                "conferma_prezzo": True}]} for item in offer_items]
+            answers.append({"item_id": legacy_item["id"], "non_trattato": False, "offerte": [{
+                "prezzo": "20.0000", "unita_misura": "BT", "dicitura_fornitore": "Cassa sintetica CI da 6",
+                "quantita_confezione": "6"}]})
+            return {"validita_inviata_da": start.isoformat(), "answers": answers}
+
+        wrong_quantity = await client.post(
+            f"/api/v1/supplier-price-forms/public/{confirmation_token}/submit", json=confirm_all("3"))
+        check("a confirmation with a different quantity is refused", wrong_quantity.status_code == 422)
+        confirmed = await client.post(
+            f"/api/v1/supplier-price-forms/public/{confirmation_token}/submit", json=confirm_all(None))
+        check("supplier confirms the agreed offers as prefilled", confirmed.status_code == 200)
+        confirmation_approval = await client.post(
+            f"/api/v1/supplier-price-forms/{confirmation.json()['request']['id']}/approve", headers=admin_headers)
+        check("approval keeps confirmed offers and adds the new one",
+              confirmation_approval.status_code == 200
+              and confirmation_approval.json()["result"]["created"] == 1
+              and confirmation_approval.json()["result"]["unchanged"] == 2)
+        with psycopg2.connect(DSN) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select data_scadenza from listino_master where id=%s", (legacy_id,))
+                legacy_end = cursor.fetchone()[0]
+                cursor.execute("select count(*) from listino_master where fornitore_id=1 and sku_interno='CI-SKU-FORM' "
+                               "and supplier_product_alias_id is not null and (data_scadenza is null or data_scadenza>=%s)",
+                               (start,))
+                open_offers = cursor.fetchone()[0]
+        check("the replaced older row is closed the day before the new validity",
+              legacy_end == start - timedelta(days=1))
+        check("confirmed and new offers stay active", open_offers == 3)
 
         delete_approved = await client.delete(
             f"/api/v1/supplier-price-forms/{created_data['request']['id']}", headers=admin_headers)
