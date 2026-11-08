@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { lazyPage, PageErrorBoundary, rememberActiveTab, restoreTabAfterUpdate } from './lazyPage'
 import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -213,6 +213,7 @@ export default function App() {
     currency_symbol: '€',
   });
 
+  const isSettingsTab = activeTab === 'settings';
   useEffect(() => {
     fetch(`${API_BASE}/settings/company/`)
       .then(r => (r.ok ? r.json() : null))
@@ -220,12 +221,17 @@ export default function App() {
         if (d && d.company_name) setCompanySettings(d);
       })
       .catch(() => {});
-  }, [activeTab]);
+  // Branding is near-static: load once, and again when entering/leaving Settings (where it can be saved).
+  }, [isSettingsTab]);
+
+  // The polling interval is created once; read the latest profile through a ref so admin counters work.
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
 
   const loadNotificationStats = async () => {
     if (document.hidden) return;
     try {
-      const isAdm = profile?.ruolo === 'admin';
+      const isAdm = profileRef.current?.ruolo === 'admin';
       const promises: Promise<Response>[] = [
         fetch(`${API_BASE}/ordini/notifications/feed?limit=10`, { headers: getHeaders() })
       ];
@@ -272,11 +278,21 @@ export default function App() {
     if (isAuth) {
       loadNotificationStats();
       const interval = setInterval(loadNotificationStats, 60000);
-      return () => clearInterval(interval);
+      const onVisible = () => { if (!document.hidden) loadNotificationStats(); };
+      document.addEventListener('visibilitychange', onVisible);
+      return () => {
+        clearInterval(interval);
+        document.removeEventListener('visibilitychange', onVisible);
+      };
     }
   // Authentication changes are the only intended polling lifecycle trigger.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuth]);
+
+  // Refresh counters once the profile (and therefore the admin role) is known.
+  useEffect(() => {
+    if (isAuth && profile?.ruolo) loadNotificationStats();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.ruolo]);
 
   // Login form states
   const [email, setEmail] = useState('')

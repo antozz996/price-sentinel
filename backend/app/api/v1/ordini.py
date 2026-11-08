@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_, or_, case
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload, selectinload
 
 from app.database import get_db
 from app.api.deps import require_admin, get_current_user
@@ -30,6 +31,16 @@ from app.models.utenti import Utente
 from app.services.normalization import normalize_text
 
 router = APIRouter()
+
+# Avoid cascading selectin loads (Fornitore/Location -> fatture -> righe -> anomalie).
+_FORNITORE_LIGHT = (noload(Fornitore.listini), noload(Fornitore.fatture), noload(Fornitore.alias))
+_LOCATION_LIGHT = (noload(Location.utenti), noload(Location.fatture))
+_ORDINE_LIGHT = (
+    selectinload(Ordine.fornitore).options(*_FORNITORE_LIGHT),
+    selectinload(Ordine.location).options(*_LOCATION_LIGHT),
+    selectinload(Ordine.user).noload(Utente.location),
+    selectinload(Ordine.ricevuto_da).noload(Utente.location),
+)
 
 
 def _variant_label(alias: SupplierProductAlias) -> str:
@@ -264,7 +275,7 @@ async def ottimizza_ordine(
 
         if active_contract:
             # Recupera dettagli fornitore
-            fornitore_stmt = select(Fornitore).where(Fornitore.id == active_contract.fornitore_id)
+            fornitore_stmt = select(Fornitore).options(*_FORNITORE_LIGHT).where(Fornitore.id == active_contract.fornitore_id)
             fornitore_res = await db.execute(fornitore_stmt)
             fornitore = fornitore_res.scalar_one()
 
@@ -443,7 +454,7 @@ async def crea_ordine(
     Esegue l'ottimizzazione e suddivide gli articoli del carrello,
     generando e salvando a database un documento d'ordine per ciascun fornitore coinvolto.
     """
-    location = await db.get(Location, data.location_id)
+    location = await db.get(Location, data.location_id, options=_LOCATION_LIGHT)
     if location is None:
         raise HTTPException(status_code=404, detail="Sede non trovata")
     _require_order_location_access(_admin, location)
@@ -618,13 +629,13 @@ async def elabora_ordine_settore(
     _user: Utente = Depends(get_current_user),
 ) -> SectorOrderDraftResponse:
     # 1. Recupera la location
-    loc = await db.get(Location, data.location_id)
+    loc = await db.get(Location, data.location_id, options=_LOCATION_LIGHT)
     if not loc:
         raise HTTPException(status_code=404, detail="Location selezionata non trovata")
     _require_order_location_access(_user, loc, data.settore)
 
     # 2. Recupera tutti i fornitori per lookup
-    fornitori_db = (await db.scalars(select(Fornitore))).all()
+    fornitori_db = (await db.scalars(select(Fornitore).options(*_FORNITORE_LIGHT))).all()
     fornitori_map = {f.id: f for f in fornitori_db}
 
     # 3. Raggruppamento per fornitore
@@ -903,7 +914,7 @@ async def salva_ordini_settore(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user),
 ):
-    location = await db.get(Location, data.location_id)
+    location = await db.get(Location, data.location_id, options=_LOCATION_LIGHT)
     if location is None:
         raise HTTPException(status_code=404, detail="Sede non trovata")
     _require_order_location_access(_user, location, data.settore)
@@ -920,7 +931,7 @@ async def salva_ordini_settore(
         if bundle.fornitore_id in seen_suppliers or not bundle.items:
             raise HTTPException(status_code=422, detail="Fornitore duplicato o ordine vuoto")
         seen_suppliers.add(bundle.fornitore_id)
-        supplier = await db.get(Fornitore, bundle.fornitore_id)
+        supplier = await db.get(Fornitore, bundle.fornitore_id, options=_FORNITORE_LIGHT)
         if not supplier or not supplier.attivo_whitelist or supplier.archived_at is not None:
             raise HTTPException(status_code=422, detail="Fornitore non disponibile")
         product_by_id: dict[int, Product] = {}
@@ -1092,7 +1103,7 @@ async def list_ordini(
     _user: Utente = Depends(get_current_user),
 ):
     """Restituisce la lista filtrata e paginata del Registro Ordini."""
-    stmt = select(Ordine).order_by(Ordine.id.desc())
+    stmt = select(Ordine).options(*_ORDINE_LIGHT).order_by(Ordine.id.desc())
 
     # Mandatory tenant scope — never fall back to all orders.
     if getattr(_user, "tenant_id", None) is None:
@@ -1174,7 +1185,7 @@ async def get_ordine_detail(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user),
 ):
-    ordine = await db.get(Ordine, ordine_id)
+    ordine = await db.get(Ordine, ordine_id, options=_ORDINE_LIGHT)
     if not ordine:
         raise HTTPException(status_code=404, detail="Ordine non trovato")
 
@@ -1292,7 +1303,7 @@ async def get_order_notifications(
     """
     if getattr(user, "tenant_id", None) is None:
         raise HTTPException(status_code=403, detail="Azienda non configurata")
-    stmt = select(Ordine).where(Ordine.tenant_id == user.tenant_id)
+    stmt = select(Ordine).options(*_ORDINE_LIGHT).where(Ordine.tenant_id == user.tenant_id)
     if user.ruolo != "admin":
         if user.location_id is None:
             raise HTTPException(status_code=403, detail="Sede non configurata")
@@ -1543,7 +1554,7 @@ async def genera_richiesta_prezzo_settore(
     # Recupera nome sede se location_id fornito
     location_name = "Tutte le Sedi / Direzione Acquisti"
     if data.location_id:
-        loc = await db.get(Location, data.location_id)
+        loc = await db.get(Location, data.location_id, options=_LOCATION_LIGHT)
         if not loc:
             raise HTTPException(status_code=404, detail="Sede non trovata")
         _require_order_location_access(user, loc, category_str)
@@ -1551,7 +1562,7 @@ async def genera_richiesta_prezzo_settore(
         location_name = loc.nome_struttura + (f" ({loc_addr})" if loc_addr else "")
 
     # 1. Recupera tutti i fornitori attivi non archiviati
-    suppliers_query = select(Fornitore).where(Fornitore.archived_at.is_(None)).order_by(Fornitore.nome_azienda)
+    suppliers_query = select(Fornitore).options(*_FORNITORE_LIGHT).where(Fornitore.archived_at.is_(None)).order_by(Fornitore.nome_azienda)
     all_suppliers = (await db.scalars(suppliers_query)).all()
 
     # 2. Recupera capabilities

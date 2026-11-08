@@ -40,7 +40,7 @@ class MockDbSession:
         self.added = []
         self._next_id = 500
 
-    async def get(self, model, key):
+    async def get(self, model, key, **_kwargs):
         if model == Location and self.location and key == self.location.id:
             return self.location
         if model == Product and key in self.products:

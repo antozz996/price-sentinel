@@ -8,7 +8,7 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy import case, select, func, and_, or_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_current_user_from_query
@@ -248,7 +248,7 @@ async def get_fattura(
     current_user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Fattura).where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
+    query = select(Fattura).options(noload(Fattura.righe)).where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
 
     # Manager vede solo la propria location
     if current_user.ruolo.value == "manager":
@@ -274,7 +274,7 @@ async def list_righe_fattura(
     db: AsyncSession = Depends(get_db),
 ):
     # Verifica accesso alla fattura
-    fattura_query = select(Fattura).where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
+    fattura_query = select(Fattura).options(noload(Fattura.righe)).where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
     if current_user.ruolo.value == "manager":
         if current_user.location_id is None:
             raise HTTPException(status_code=403, detail="Account manager non associato a una sede")
@@ -286,6 +286,7 @@ async def list_righe_fattura(
 
     result = await db.execute(
         select(RigaFattura)
+        .options(noload(RigaFattura.anomalie))
         .where(RigaFattura.fattura_id == fattura_id)
         .order_by(RigaFattura.numero_linea)
     )
@@ -411,13 +412,18 @@ async def get_fattura_html(
     db: AsyncSession = Depends(get_db),
 ):
     import html
-    from sqlalchemy.orm import selectinload
 
     # Recupera la fattura con join su Fornitore e Location
     query = (
         select(Fattura)
-        .options(selectinload(Fattura.fornitore), selectinload(Fattura.location))
-        .where(Fattura.id == fattura_id)
+        .options(
+            noload(Fattura.righe),
+            selectinload(Fattura.fornitore).options(
+                noload(Fornitore.listini), noload(Fornitore.fatture), noload(Fornitore.alias)
+            ),
+            selectinload(Fattura.location).options(noload(Location.utenti), noload(Location.fatture)),
+        )
+        .where(Fattura.id == fattura_id, invoice_tenant_filter(current_user))
     )
     if current_user.ruolo.value == "manager":
         if current_user.location_id is None:
@@ -435,6 +441,7 @@ async def get_fattura_html(
     # Carica le righe di dettaglio
     righe_res = await db.execute(
         select(RigaFattura)
+        .options(noload(RigaFattura.anomalie))
         .where(RigaFattura.fattura_id == fattura_id)
         .order_by(RigaFattura.numero_linea)
     )
