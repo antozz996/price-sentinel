@@ -1,4 +1,4 @@
-﻿"""Run existing E2E modules against individually isolated, disposable CI DBs.
+"""Run existing E2E modules against individually isolated, disposable CI DBs.
 
 This runner is intentionally unusable on Hetzner or local production: it
 requires GitHub-hosted Actions environment, a loopback PostgreSQL service and
@@ -132,7 +132,7 @@ def execute_case(name: str, admin_dsn: str) -> bool:
             timeout=120,
         )
         if bootstrap.returncode:
-            print(f"FAIL: {name} â€” disposable schema bootstrap failed", flush=True)
+            print(f"FAIL: {name} — disposable schema bootstrap failed", flush=True)
             return False
 
     if name in ("onboarding_settings", "automation_alerts"):
@@ -146,7 +146,7 @@ def execute_case(name: str, admin_dsn: str) -> bool:
             timeout=150,
         )
         if setup.returncode:
-            print(f"FAIL: {name} â€” synthetic dispute fixture setup failed", flush=True)
+            print(f"FAIL: {name} — synthetic dispute fixture setup failed", flush=True)
             return False
 
     print(f"RUN: {name} against its independent CI-only disposable DB", flush=True)
@@ -182,7 +182,7 @@ def execute_case(name: str, admin_dsn: str) -> bool:
                     pass
                 time.sleep(0.25)
             if not healthy:
-                print("FAIL: liquidstock_inbound â€” disposable loopback API did not start", flush=True)
+                print("FAIL: liquidstock_inbound — disposable loopback API did not start", flush=True)
                 return False
         result = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "tests" / test_file)],
@@ -192,7 +192,7 @@ def execute_case(name: str, admin_dsn: str) -> bool:
             timeout=150,
         )
     except subprocess.TimeoutExpired:
-        print(f"FAIL: {name} â€” timeout after 150 seconds", flush=True)
+        print(f"FAIL: {name} — timeout after 150 seconds", flush=True)
         return False
     finally:
         if server is not None:
