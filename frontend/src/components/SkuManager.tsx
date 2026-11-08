@@ -70,10 +70,10 @@ export default function SkuManager() {
       {message && (
         <div style={{ 
           padding: '16px', 
-          borderRadius: '12px', 
+          borderRadius: 'var(--radius-lg)', 
           background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
-          color: message.type === 'success' ? '#10b981' : '#ef4444',
-          border: `1px solid ${message.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`
+          color: message.type === 'success' ? 'var(--ok)' : 'var(--crit)',
+          border: `1px solid ${message.type === 'success' ? 'var(--ok-border)' : 'var(--crit-bg)'}`
         }}>
           {message.text}
         </div>
@@ -82,7 +82,7 @@ export default function SkuManager() {
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)' }}>
+            <div style={{ padding: '10px', borderRadius: 'var(--radius-lg)', background: 'var(--accent-bg)', color: 'var(--accent-blue)' }}>
               <Tag size={24} />
             </div>
             <div>
@@ -101,22 +101,22 @@ export default function SkuManager() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
-                width: '100%', padding: '10px 12px 10px 38px', borderRadius: '8px',
-                border: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.03)',
-                color: 'white', outline: 'none', boxSizing: 'border-box'
+                width: '100%', padding: '10px 12px 10px 38px', borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-glass)', background: 'var(--bg-inset)',
+                color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box'
               }}
             />
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
+          <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
-                <th style={{ padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Codice SKU Interno</th>
-                <th style={{ padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Nome Prodotto (Riferimento)</th>
-                <th style={{ padding: '16px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Volumi Acquisto</th>
-                <th style={{ padding: '16px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Azioni</th>
+              <tr style={{ background: 'var(--bg-inset)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
+                <th style={{ padding: '16px', borderBottom: '1px solid var(--line)' }}>Codice SKU Interno</th>
+                <th style={{ padding: '16px', borderBottom: '1px solid var(--line)' }}>Nome Prodotto (Riferimento)</th>
+                <th style={{ padding: '16px', textAlign: 'center', borderBottom: '1px solid var(--line)' }}>Volumi Acquisto</th>
+                <th style={{ padding: '16px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>Azioni</th>
               </tr>
             </thead>
             <tbody>
@@ -126,7 +126,7 @@ export default function SkuManager() {
                 <tr><td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>Nessuno SKU trovato.</td></tr>
               ) : (
                 filteredSkus.map(s => (
-                  <tr key={s.sku_interno} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)', transition: 'background 0.2s' }}>
+                  <tr key={s.sku_interno} style={{ borderBottom: '1px solid var(--line)', transition: 'background 0.2s' }}>
                     <td style={{ padding: '16px', fontWeight: 600 }}>
                       {editingSku === s.sku_interno ? (
                         <input
@@ -135,20 +135,20 @@ export default function SkuManager() {
                           onChange={e => setNewSkuName(e.target.value)}
                           autoFocus
                           style={{
-                            width: '100%', padding: '8px', borderRadius: '6px',
-                            border: '1px solid var(--accent-blue)', background: 'rgba(255,255,255,0.1)',
-                            color: 'white', outline: 'none', boxSizing: 'border-box'
+                            width: '100%', padding: '8px', borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--accent-blue)', background: 'var(--bg-elevated)',
+                            color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box'
                           }}
                         />
                       ) : (
-                        <span style={{ color: 'var(--accent-blue)', background: 'rgba(59, 130, 246, 0.1)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.9rem' }}>
+                        <span style={{ color: 'var(--accent-blue)', background: 'var(--accent-bg)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.9rem' }}>
                           {s.sku_interno}
                         </span>
                       )}
                     </td>
                     <td style={{ padding: '16px', color: 'var(--text-secondary)' }}>{s.nome_prodotto || 'N/A'}</td>
                     <td style={{ padding: '16px', textAlign: 'center' }}>
-                      <span style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem' }}>
+                      <span style={{ background: 'var(--bg-elevated)', padding: '4px 10px', borderRadius: 'var(--radius-lg)', fontSize: '0.8rem' }}>
                         {s.total_acquisti} acquisti
                       </span>
                     </td>
@@ -158,7 +158,7 @@ export default function SkuManager() {
                           <button 
                             onClick={() => handleRename(s.sku_interno)}
                             disabled={submitting}
-                            style={{ background: '#10b981', color: 'white', border: 'none', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            style={{ background: 'var(--ok)', color: 'var(--text-primary)', border: 'none', padding: '6px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                             title="Salva"
                           >
                             <Check size={16} />
@@ -166,7 +166,7 @@ export default function SkuManager() {
                           <button 
                             onClick={() => setEditingSku(null)}
                             disabled={submitting}
-                            style={{ background: 'rgba(255,255,255,0.1)', color: 'white', border: 'none', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            style={{ background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: 'none', padding: '6px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
                             title="Annulla"
                           >
                             <X size={16} />
@@ -175,8 +175,8 @@ export default function SkuManager() {
                       ) : (
                         <button 
                           onClick={() => { setEditingSku(s.sku_interno); setNewSkuName(s.sku_interno); }}
-                          style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', transition: 'all 0.2s' }}
-                          onMouseEnter={e => { e.currentTarget.style.color = 'white'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                          style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--line)', padding: '6px 12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', transition: 'all 0.2s' }}
+                          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-elevated)'; }}
                           onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'transparent'; }}
                         >
                           <Edit2 size={14} /> Rinomina

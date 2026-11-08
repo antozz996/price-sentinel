@@ -172,8 +172,8 @@ export default function ExcludedProducts() {
           padding: '16px',
           borderRadius: '12px',
           background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
-          color: message.type === 'success' ? '#10b981' : '#ef4444',
-          border: `1px solid ${message.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+          color: message.type === 'success' ? 'var(--ok)' : 'var(--crit)',
+          border: `1px solid ${message.type === 'success' ? 'var(--ok-border)' : 'var(--crit-border)'}`,
           fontSize: '0.9rem'
         }}>
           {message.text}
@@ -184,7 +184,7 @@ export default function ExcludedProducts() {
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', zIndex: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ padding: '10px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--status-red)' }}>
+            <div style={{ padding: '10px', borderRadius: '12px', background: 'var(--crit-bg)', color: 'var(--status-red)' }}>
               <EyeOff size={24} />
             </div>
             <div>
@@ -202,6 +202,7 @@ export default function ExcludedProducts() {
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
             <input
               type="text"
+              className="ds-input"
               placeholder="Cerca e spunta prodotti da escludere..."
               value={searchQuery}
               onChange={(e) => {
@@ -213,10 +214,10 @@ export default function ExcludedProducts() {
                 width: '100%',
                 boxSizing: 'border-box',
                 padding: '12px 12px 12px 38px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
+                background: 'var(--bg-inset)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
                 outline: 'none',
                 fontSize: '0.9rem',
                 transition: 'var(--transition-smooth)'
@@ -232,11 +233,10 @@ export default function ExcludedProducts() {
                 marginTop: '6px',
                 maxHeight: '250px',
                 overflowY: 'auto',
-                background: 'rgba(15, 15, 23, 0.98)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid var(--border-glass)',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--line)',
                 borderRadius: '8px',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                boxShadow: 'var(--shadow-pop)',
                 zIndex: 999
               }}>
                 {filteredAvailable.length > 0 ? (
@@ -249,12 +249,12 @@ export default function ExcludedProducts() {
                         style={{
                           padding: '10px 14px',
                           cursor: 'pointer',
-                          borderBottom: '1px solid rgba(255,255,255,0.03)',
+                          borderBottom: '1px solid var(--line)',
                           transition: 'background 0.2s',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '12px',
-                          background: isSelected ? 'rgba(239, 68, 68, 0.05)' : 'transparent'
+                          background: isSelected ? 'var(--crit-bg)' : 'transparent'
                         }}
                         className="dropdown-item-hover"
                       >
@@ -265,10 +265,10 @@ export default function ExcludedProducts() {
                           style={{ cursor: 'pointer', accentColor: 'var(--status-red)' }}
                         />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                          <span style={{ fontWeight: 500, fontSize: '0.9rem', color: isSelected ? 'white' : 'var(--text-secondary)' }}>
+                          <span style={{ fontWeight: 500, fontSize: '0.9rem', color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
                             {s.nome_prodotto || 'Prodotto senza nome'}
                           </span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>SKU: {s.sku_interno}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>SKU: {s.sku_interno}</span>
                         </div>
                       </div>
                     );
@@ -305,7 +305,7 @@ export default function ExcludedProducts() {
 
         {/* Selected products tags to exclude */}
         {selectedToExclude.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '8px', padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-glass)', borderRadius: '8px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '8px', padding: '12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: '8px' }}>
             {selectedToExclude.map(item => (
               <div
                 key={`to-ex-${item.sku_interno}`}
@@ -313,12 +313,12 @@ export default function ExcludedProducts() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  background: 'var(--crit-bg)',
+                  border: '1px solid var(--crit-border)',
                   borderRadius: '999px',
                   padding: '6px 14px',
                   fontSize: '0.85rem',
-                  color: 'white'
+                  color: 'var(--text-primary)'
                 }}
               >
                 <span style={{ fontWeight: 500 }}>{item.nome_prodotto || item.sku_interno}</span>
@@ -335,7 +335,7 @@ export default function ExcludedProducts() {
                     justifyContent: 'center',
                     padding: 0
                   }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
                   onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
                 >
                   <X size={14} />
@@ -361,9 +361,9 @@ export default function ExcludedProducts() {
               style={{
                 padding: '8px 16px',
                 fontSize: '0.85rem',
-                backgroundColor: 'rgba(16, 185, 129, 0.2)',
-                borderColor: 'rgba(16, 185, 129, 0.3)',
-                color: '#10b981',
+                backgroundColor: 'var(--ok-bg)',
+                borderColor: 'var(--ok-border)',
+                color: 'var(--ok)',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px'
@@ -380,7 +380,7 @@ export default function ExcludedProducts() {
             <Loader2 size={24} className="animate-spin" style={{ marginRight: '8px' }} /> Caricamento blacklist...
           </div>
         ) : excludedList.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--border-glass)', borderRadius: '12px' }}>
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-inset)', border: '1px dashed var(--line)', borderRadius: '12px' }}>
             <Eye size={36} style={{ marginBottom: '8px', opacity: 0.3 }} />
             <p style={{ margin: 0, fontSize: '0.9rem' }}>Nessun prodotto è attualmente escluso dal sistema.</p>
           </div>
@@ -388,7 +388,7 @@ export default function ExcludedProducts() {
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-glass)', textAlign: 'left' }}>
+                <tr style={{ borderBottom: '1px solid var(--line)', textAlign: 'left' }}>
                   <th style={{ padding: '12px 10px', width: '40px' }}>
                     <input
                       type="checkbox"
@@ -413,7 +413,7 @@ export default function ExcludedProducts() {
                     minute: '2-digit'
                   });
                   return (
-                    <tr key={`ex-${item.sku_interno}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }} className="table-row-hover">
+                    <tr key={`ex-${item.sku_interno}`} style={{ borderBottom: '1px solid var(--line)' }} className="table-row-hover">
                       <td style={{ padding: '12px 10px' }}>
                         <input
                           type="checkbox"
@@ -422,16 +422,16 @@ export default function ExcludedProducts() {
                           style={{ cursor: 'pointer' }}
                         />
                       </td>
-                      <td style={{ padding: '12px 10px', fontFamily: 'monospace', fontWeight: 600 }}>{item.sku_interno}</td>
+                      <td style={{ padding: '12px 10px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{item.sku_interno}</td>
                       <td style={{ padding: '12px 10px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{dateStr}</td>
                       <td style={{ padding: '12px 10px', textAlign: 'right' }}>
                         <button
                           onClick={() => handleSingleRestore(item.sku_interno)}
                           disabled={submitting}
                           style={{
-                            background: 'rgba(16, 185, 129, 0.1)',
-                            border: '1px solid rgba(16, 185, 129, 0.2)',
-                            color: '#10b981',
+                            background: 'var(--ok-bg)',
+                            border: '1px solid var(--ok-border)',
+                            color: 'var(--ok)',
                             padding: '6px 12px',
                             borderRadius: '6px',
                             fontSize: '0.8rem',

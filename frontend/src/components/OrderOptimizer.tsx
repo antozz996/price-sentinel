@@ -239,16 +239,16 @@ export default function OrderOptimizer() {
             onChange={e => setSelectedLocation(Number(e.target.value) || '')}
             style={{
               padding: '8px 12px',
-              borderRadius: '8px',
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid var(--border-glass)',
-              color: 'white',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--line)',
+              color: 'var(--text-primary)',
               outline: 'none',
               fontSize: '0.85rem'
             }}
           >
             {locations.map(loc => (
-              <option key={loc.id} value={loc.id} style={{ background: '#13131c' }}>
+              <option key={loc.id} value={loc.id} style={{ background: 'var(--bg-card)' }}>
                 {loc.nome_struttura}
               </option>
             ))}
@@ -266,15 +266,15 @@ export default function OrderOptimizer() {
             <button
               onClick={handleAddRow}
               className="btn"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px', background: 'rgba(255,255,255,0.05)', border: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 12px', background: 'var(--bg-elevated)', border: 'none' }}
             >
               <Plus size={14} /> Aggiungi Articolo
             </button>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
+              <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
                 <th style={{ padding: '12px' }}>Cerca Prodotto / Descrizione Libera</th>
                 <th style={{ padding: '12px', width: '120px' }}>Quantità</th>
                 <th style={{ padding: '12px', width: '180px' }}>Prezzo Manuale (Opzionale)</th>
@@ -284,7 +284,7 @@ export default function OrderOptimizer() {
             </thead>
             <tbody>
               {basket.map((row, index) => (
-                <tr key={index} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                <tr key={index} style={{ borderBottom: '1px solid var(--line)' }}>
                   <td style={{ padding: '10px 6px' }}>
                     <div style={{ position: 'relative' }}>
                       <input
@@ -297,10 +297,10 @@ export default function OrderOptimizer() {
                           width: '100%',
                           boxSizing: 'border-box',
                           padding: '10px 10px 10px 12px',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.03)',
-                          border: '1px solid var(--border-glass)',
-                          color: 'white',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--bg-inset)',
+                          border: '1px solid var(--line)',
+                          color: 'var(--text-primary)',
                           outline: 'none',
                           fontSize: '0.85rem'
                         }}
@@ -327,13 +327,14 @@ export default function OrderOptimizer() {
                         width: '100%',
                         boxSizing: 'border-box',
                         padding: '10px',
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid var(--border-glass)',
-                        borderRadius: '8px',
-                        color: 'white',
+                        background: 'var(--bg-inset)',
+                        border: '1px solid var(--line)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
                         outline: 'none',
                         fontSize: '0.85rem',
-                        textAlign: 'center'
+                        textAlign: 'center',
+                        fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums'
                       }}
                     />
                   </td>
@@ -349,13 +350,14 @@ export default function OrderOptimizer() {
                         width: '100%',
                         boxSizing: 'border-box',
                         padding: '10px',
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid var(--border-glass)',
-                        borderRadius: '8px',
-                        color: 'white',
+                        background: 'var(--bg-inset)',
+                        border: '1px solid var(--line)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
                         outline: 'none',
                         fontSize: '0.85rem',
-                        textAlign: 'right'
+                        textAlign: 'right',
+                        fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums'
                       }}
                     />
                   </td>
@@ -371,7 +373,7 @@ export default function OrderOptimizer() {
                     <button
                       onClick={() => handleRemoveRow(index)}
                       disabled={basket.length <= 1}
-                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '6px' }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--crit)', cursor: 'pointer', padding: '6px' }}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -398,13 +400,13 @@ export default function OrderOptimizer() {
 
       {/* Success or Error banners */}
       {error && (
-        <div style={{ padding: '16px', borderRadius: '8px', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid rgba(239,68,68,0.2)' }}>
+        <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid var(--crit-border)' }}>
           {error}
         </div>
       )}
 
       {successMsg && (
-        <div style={{ padding: '16px', borderRadius: '8px', background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--ok)', border: '1px solid var(--ok-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CheckCircle2 size={18} />
           {successMsg}
         </div>
@@ -418,22 +420,22 @@ export default function OrderOptimizer() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
             <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Spesa Totale Blindata (Prezzi Concordati)</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#10b981' }}>
+              <span style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                 € {optResult.sintesi.spesa_totale_blindata.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
               </span>
             </div>
             
             <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Risparmio Spot Ottenuto</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 +€ {optResult.sintesi.risparmio_preventivo_stimato.toLocaleString('it-IT', { minimumFractionDigits: 2 })}
-                <CheckCircle2 size={20} color="#10b981" />
+                <CheckCircle2 size={20} color="var(--ok)" />
               </span>
             </div>
 
             <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anomalie Preventive Rilevate</span>
-              <span style={{ fontSize: '1.5rem', fontWeight: 700, color: optResult.sintesi.numero_anomalie > 0 ? '#ef4444' : 'var(--text-primary)' }}>
+              <span style={{ fontSize: '1.5rem', fontWeight: 600, color: optResult.sintesi.numero_anomalie > 0 ? 'var(--crit)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                 {optResult.sintesi.numero_anomalie}
               </span>
             </div>
@@ -443,14 +445,14 @@ export default function OrderOptimizer() {
           {optResult.sintesi.numero_anomalie > 0 && (
             <div style={{
               padding: '16px',
-              borderRadius: '8px',
-              background: 'rgba(239,68,68,0.06)',
-              border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--crit-bg)',
+              border: '1px solid var(--crit-border)',
               display: 'flex',
               flexDirection: 'column',
               gap: '10px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontWeight: 600, fontSize: '0.9rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--crit)', fontWeight: 600, fontSize: '0.9rem' }}>
                 <AlertTriangle size={18} />
                 <span>ATTENZIONE: Rilevate {optResult.sintesi.numero_anomalie} anomalie di prezzo preventive!</span>
               </div>
@@ -459,7 +461,7 @@ export default function OrderOptimizer() {
                   <li key={aIdx}>{avviso}</li>
                 ))}
               </ul>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: '#f59e0b', fontWeight: 500, marginTop: '4px' }}>
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--warn)', fontWeight: 500, marginTop: '4px' }}>
                 * Nota: L'invio dell'ordine registrerà queste discrepanze preventive a database per il successivo auditing.
               </p>
             </div>
@@ -473,9 +475,9 @@ export default function OrderOptimizer() {
             </h4>
 
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
+                  <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
                     <th style={{ padding: '12px' }}>Prodotto</th>
                     <th style={{ padding: '12px', textAlign: 'center' }}>Q.tà</th>
                     <th style={{ padding: '12px' }}>Fornitore Consigliato</th>
@@ -486,14 +488,14 @@ export default function OrderOptimizer() {
                 </thead>
                 <tbody>
                   {optResult.righe_ottimizzate.map((riga, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.85rem' }}>
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--line)', fontSize: '0.85rem' }}>
                       <td style={{ padding: '12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: 600 }}>{riga.sku_interno}</span>
+                          <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{riga.sku_interno}</span>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{riga.descrizione}</span>
                         </div>
                       </td>
-                      <td style={{ padding: '12px', textAlign: 'center' }}>{riga.quantita}</td>
+                      <td style={{ padding: '12px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{riga.quantita}</td>
                       <td style={{ padding: '12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                           <span style={{ fontWeight: 500 }}>{riga.fornitore_nome}</span>
@@ -504,20 +506,20 @@ export default function OrderOptimizer() {
                           )}
                         </div>
                       </td>
-                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                      <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         € {riga.prezzo_ottimale.toFixed(2)}
                       </td>
-                      <td style={{ padding: '12px', textAlign: 'right', color: riga.is_anomalia ? '#ef4444' : 'var(--text-primary)' }}>
+                      <td style={{ padding: '12px', textAlign: 'right', color: riga.is_anomalia ? 'var(--crit)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         € {riga.prezzo_inserito.toFixed(2)}
                       </td>
                       <td style={{ padding: '12px', textAlign: 'center' }}>
                         {riga.tipo_regola === 'concordato' ? (
                           <span style={{ 
                             fontSize: '0.7rem', 
-                            color: '#10b981', 
-                            background: 'rgba(16,185,129,0.1)', 
+                            color: 'var(--ok)', 
+                            background: 'var(--ok-bg)', 
                             padding: '4px 8px', 
-                            borderRadius: '12px', 
+                            borderRadius: '999px', 
                             fontWeight: 600 
                           }}>
                             CONTRATTO BLINDATO
@@ -525,10 +527,10 @@ export default function OrderOptimizer() {
                         ) : riga.tipo_regola === 'spot_ottimale' ? (
                           <span style={{ 
                             fontSize: '0.7rem', 
-                            color: 'var(--accent-blue)', 
-                            background: 'rgba(59,130,246,0.1)', 
+                            color: 'var(--accent-text)', 
+                            background: 'var(--accent-bg)', 
                             padding: '4px 8px', 
-                            borderRadius: '12px', 
+                            borderRadius: '999px', 
                             fontWeight: 600 
                           }}>
                             MIGLIOR PREZZO SPOT
@@ -537,9 +539,9 @@ export default function OrderOptimizer() {
                           <span style={{ 
                             fontSize: '0.7rem', 
                             color: 'var(--text-secondary)', 
-                            background: 'rgba(255,255,255,0.05)', 
+                            background: 'var(--bg-elevated)', 
                             padding: '4px 8px', 
-                            borderRadius: '12px', 
+                            borderRadius: '999px', 
                             fontWeight: 600 
                           }}>
                             SPOT FUORI LISTINO
@@ -557,7 +559,7 @@ export default function OrderOptimizer() {
                 onClick={handleCheckout}
                 disabled={submittingOrder}
                 className="btn btn-primary"
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#10b981', borderColor: '#10b981' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--ok)', borderColor: 'var(--ok)' }}
               >
                 <CheckCircle2 size={16} />
                 {submittingOrder ? 'Emissione ordini...' : 'Conferma e Invia Ordini Ottimizzati'}

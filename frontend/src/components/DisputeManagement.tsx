@@ -97,9 +97,9 @@ type Dashboard = {
 }
 
 const panel: React.CSSProperties = {
-  border: '1px solid var(--border-glass)',
-  borderRadius: 14,
-  background: 'rgba(255,255,255,.025)',
+  border: '1px solid var(--line)',
+  borderRadius: 'var(--radius-lg)',
+  background: 'var(--bg-card)',
   padding: 18,
 }
 
@@ -125,8 +125,8 @@ function Badge({ status }: {status:string}) {
   const bad = ['rejected', 'cancelled'].includes(status)
   return <span style={{
     display:'inline-flex',padding:'4px 8px',borderRadius:99,fontSize:10,fontWeight:700,
-    color:good?'#34d399':bad?'#f87171':'#60a5fa',
-    background:good?'rgba(16,185,129,.12)':bad?'rgba(239,68,68,.12)':'rgba(59,130,246,.12)',
+    color:good?'var(--ok)':bad?'var(--crit)':'var(--accent-text)',
+    background:good?'var(--ok-bg)':bad?'var(--crit-bg)':'var(--accent-bg)',
   }}>{label[status] || status}</span>
 }
 
@@ -377,30 +377,30 @@ export default function DisputeManagement() {
       </div>
     </div>
     {busy&&<div style={{display:'flex',gap:8,color:'var(--text-secondary)'}}><Loader2 size={16} className="spin"/> Aggiornamento…</div>}
-    {error&&<div style={{...panel,borderColor:'rgba(239,68,68,.4)',color:'#f87171'}}><AlertTriangle size={16}/> {error}</div>}
-    {notice&&<div style={{...panel,borderColor:'rgba(16,185,129,.35)',color:'#34d399'}}><CheckCircle2 size={16}/> {notice}</div>}
+    {error&&<div style={{...panel,borderColor:'var(--crit-border)',color:'var(--crit)'}}><AlertTriangle size={16}/> {error}</div>}
+    {notice&&<div style={{...panel,borderColor:'var(--ok-border)',color:'var(--ok)'}}><CheckCircle2 size={16}/> {notice}</div>}
     {dashboard&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10}}>
       {[
         ['Anomalie',dashboard.total_anomalies],['Contestato',money(dashboard.total_contested)],
         ['Riconosciuto',money(dashboard.total_recognized)],['Recuperato',money(dashboard.total_recovered)],
         ['Da recuperare',money(dashboard.total_outstanding)],['Pratiche aperte',dashboard.open_cases],
         ['Scadute',dashboard.overdue_cases],['NC mancanti',dashboard.missing_credit_notes],
-      ].map(([name,value])=><div key={String(name)} style={panel}><small style={{color:'var(--text-secondary)'}}>{name}</small><strong style={{display:'block',fontSize:22,marginTop:7}}>{value}</strong></div>)}
+      ].map(([name,value])=><div key={String(name)} style={panel}><small style={{color:'var(--text-secondary)'}}>{name}</small><strong style={{display:'block',fontSize:22,marginTop:7,fontFamily:'var(--font-mono)',fontVariantNumeric:'tabular-nums',fontWeight:600}}>{value}</strong></div>)}
     </div>}
-    {showCreate&&<div style={{...panel,borderColor:'rgba(59,130,246,.45)'}}>
+    {showCreate&&<div style={{...panel,borderColor:'var(--accent-border)'}}>
       <h3>Nuova contestazione</h3>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-        <input placeholder="Titolo pratica" value={title} onChange={event=>setTitle(event.target.value)} style={{flex:'1 1 260px'}}/>
+        <input className="ds-input" placeholder="Titolo pratica" value={title} onChange={event=>setTitle(event.target.value)} style={{flex:'1 1 260px'}}/>
         <input type="date" value={dueDate} onChange={event=>setDueDate(event.target.value)}/>
       </div>
       <div style={{maxHeight:300,overflow:'auto',display:'grid',gap:7}}>
         {candidates.length===0&&<p style={{color:'var(--text-secondary)'}}>Nessuna anomalia disponibile.</p>}
         {candidates.map(item=>{
           const key=`${item.source}:${item.id}`;const checked=candidateIds.includes(key)
-          return <label key={key} style={{padding:10,border:'1px solid var(--border-glass)',borderRadius:9,display:'flex',gap:9,cursor:'pointer',background:checked?'rgba(59,130,246,.12)':'',alignItems:'center'}}>
+          return <label key={key} style={{padding:10,border:'1px solid var(--border-glass)',borderRadius:'var(--radius-md)',display:'flex',gap:9,cursor:'pointer',background:checked?'var(--accent-bg)':'',alignItems:'center'}}>
             <input type="checkbox" checked={checked} onChange={()=>toggleCandidate(item)}/>
             <span style={{flex:1}}><strong>{item.description||item.reason}</strong><small style={{display:'block',color:'var(--text-secondary)'}}>{item.source} · sede {item.location_id} · fornitore {item.supplier_id}</small></span>
-            <input aria-label={`Importo ${item.description||item.reason}`} type="number" min=".01" step=".01" value={claimAmounts[key]??item.amount??''} onClick={event=>event.stopPropagation()} onChange={event=>setClaimAmounts(current=>({...current,[key]:event.target.value}))} style={{width:115}}/>
+            <input className="ds-input" aria-label={`Importo ${item.description||item.reason}`} type="number" min=".01" step=".01" value={claimAmounts[key]??item.amount??''} onClick={event=>event.stopPropagation()} onChange={event=>setClaimAmounts(current=>({...current,[key]:event.target.value}))} style={{width:115,fontFamily:'var(--font-mono)',fontVariantNumeric:'tabular-nums'}}/>
           </label>
         })}
       </div>
@@ -413,22 +413,22 @@ export default function DisputeManagement() {
       <div style={{...panel,display:'grid',gap:8}}>
         <h3 style={{marginTop:0}}>Pratiche</h3>
         {cases.length===0&&<p style={{color:'var(--text-secondary)'}}>Nessuna contestazione. Crea la prima dalle anomalie validate.</p>}
-        {cases.map(item=><button key={item.id} onClick={()=>{setSelected(item);setCommunication(null);setCommunicationBody('')}} style={{textAlign:'left',padding:12,borderRadius:10,border:selected?.id===item.id?'1px solid #3b82f6':'1px solid var(--border-glass)',background:'rgba(255,255,255,.025)',color:'white'}}>
+        {cases.map(item=><button key={item.id} onClick={()=>{setSelected(item);setCommunication(null);setCommunicationBody('')}} style={{textAlign:'left',padding:12,borderRadius:'var(--radius-md)',border:selected?.id===item.id?'1px solid var(--accent)':'1px solid var(--line)',background:selected?.id===item.id?'var(--accent-bg)':'var(--bg-inset)',color:'var(--text-primary)'}}>
           <strong>{item.case_code}</strong><div style={{fontSize:12,margin:'5px 0'}}>{item.title}</div>
           <small style={{color:'var(--text-secondary)'}}>{item.supplier_name||`Fornitore ${item.supplier_id}`} · {money(item.unrecovered_amount)}</small><div style={{marginTop:7}}><Badge status={item.status}/></div>
         </button>)}
       </div>
-      {!selected?<div style={panel}><WalletCards size={32} color="#60a5fa"/><h3>Seleziona una pratica</h3><p style={{color:'var(--text-secondary)'}}>Qui gestirai comunicazioni, risposte e recuperi senza modificare le fatture originali.</p></div>:
+      {!selected?<div style={panel}><WalletCards size={32} color="var(--accent-text)"/><h3>Seleziona una pratica</h3><p style={{color:'var(--text-secondary)'}}>Qui gestirai comunicazioni, risposte e recuperi senza modificare le fatture originali.</p></div>:
       <div style={{display:'grid',gap:14}}>
         <div style={panel}>
-          <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><div><small style={{color:'#60a5fa'}}>{selected.case_code} · v{selected.version}</small><h2 style={{margin:'5px 0'}}>{selected.title}</h2><span>{selected.location_name} · {selected.supplier_name}</span></div><Badge status={selected.status}/></div>
+          <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><div><small style={{color:'var(--accent-text)',fontFamily:'var(--font-mono)'}}>{selected.case_code} · v{selected.version}</small><h2 style={{margin:'5px 0'}}>{selected.title}</h2><span>{selected.location_name} · {selected.supplier_name}</span></div><Badge status={selected.status}/></div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginTop:15}}>
-            {[['Richiesto',selected.requested_amount],['Riconosciuto',selected.recognized_amount],['Recuperato',selected.recovered_amount],['Residuo',selected.unrecovered_amount]].map(([name,value])=><div key={name}><small style={{color:'var(--text-secondary)'}}>{name}</small><strong style={{display:'block'}}>{money(value)}</strong></div>)}
+            {[['Richiesto',selected.requested_amount],['Riconosciuto',selected.recognized_amount],['Recuperato',selected.recovered_amount],['Residuo',selected.unrecovered_amount]].map(([name,value])=><div key={name}><small style={{color:'var(--text-secondary)'}}>{name}</small><strong style={{display:'block',fontFamily:'var(--font-mono)',fontVariantNumeric:'tabular-nums'}}>{money(value)}</strong></div>)}
           </div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:16}}>
             {selected.status==='draft'&&<button className="btn btn-primary" onClick={()=>transition('ready_to_send')}><CheckCircle2 size={14}/> Rendi pronta</button>}
             <button className="btn" onClick={()=>void downloadPdf()}><Download size={14}/> PDF</button>
-            {!['closed','cancelled'].includes(selected.status)&&<button className="btn" style={{color:'#f87171'}} onClick={()=>{const reason=prompt('Motivo obbligatorio (minimo 8 caratteri)');if(reason)transition('cancelled',reason)}}>Annulla</button>}
+            {!['closed','cancelled'].includes(selected.status)&&<button className="btn" style={{color:'var(--crit)'}} onClick={()=>{const reason=prompt('Motivo obbligatorio (minimo 8 caratteri)');if(reason)transition('cancelled',reason)}}>Annulla</button>}
             {['recovered','rejected','partially_recovered','credit_note_expected'].includes(selected.status)&&<button className="btn" onClick={()=>{const reason=prompt('Motivo di chiusura (minimo 8 caratteri)');if(reason)transition('closed',reason)}}>Chiudi pratica</button>}
           </div>
         </div>
@@ -436,7 +436,7 @@ export default function DisputeManagement() {
         {!['closed','cancelled'].includes(selected.status)&&<div style={panel}>
           <h3>Comunicazione al fornitore</h3><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
             <select value={channel} onChange={event=>setChannel(event.target.value as typeof channel)}><option value="email">Email</option><option value="whatsapp">WhatsApp</option><option value="copy">Solo copia</option></select>
-            <input placeholder={channel==='email'?'Email fornitore':'Numero con prefisso internazionale'} value={recipient} onChange={event=>setRecipient(event.target.value)} style={{flex:'1 1 260px'}}/>
+            <input className="ds-input" placeholder={channel==='email'?'Email fornitore':'Numero con prefisso internazionale'} value={recipient} onChange={event=>setRecipient(event.target.value)} style={{flex:'1 1 260px'}}/>
             <button className="btn" onClick={()=>prepareCommunication()}><FilePlus2 size={14}/> Prepara</button>
           </div>
           {communication&&<div style={{marginTop:12,display:'grid',gap:8}}><textarea rows={9} value={communicationBody} onChange={event=>setCommunicationBody(event.target.value)}/>{communicationBody!==communication.body_snapshot&&<button className="btn" onClick={()=>prepareCommunication(communicationBody)} disabled={!communicationBody.trim()}><FilePlus2 size={14}/> Salva nuova versione del messaggio</button>}<div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button className="btn" onClick={()=>void copyMessage()} disabled={communicationBody!==communication.body_snapshot}><Clipboard size={14}/> Copia</button>{channel!=='copy'&&<button className="btn" onClick={()=>void openCommunication()} disabled={communicationBody!==communication.body_snapshot}>{channel==='email'?<Mail size={14}/>:<MessageCircle size={14}/>} Apri</button>}<button className="btn btn-primary" onClick={()=>void communicationEvent('confirmed')} disabled={communicationBody!==communication.body_snapshot}><Send size={14}/> Conferma invio manuale</button></div><small style={{color:'var(--text-secondary)'}}>Stato: {communication.status}. L’apertura non costituisce prova di consegna. Le modifiche creano una nuova versione immutabile.</small></div>}

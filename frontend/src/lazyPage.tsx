@@ -68,8 +68,8 @@ export class PageErrorBoundary extends Component<PageErrorBoundaryProps, { faile
   render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div role="alert" style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-secondary, #cbd5e1)' }}>
-        <h3 style={{ margin: '0 0 8px', color: 'white' }}>Impossibile aprire questa sezione</h3>
+      <div role="alert" style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)' }}>Impossibile aprire questa sezione</h3>
         <p style={{ margin: '0 0 16px' }}>Controlla la connessione e ricarica la pagina.</p>
         <button type="button" className="btn" onClick={() => window.location.reload()}>
           Ricarica la pagina

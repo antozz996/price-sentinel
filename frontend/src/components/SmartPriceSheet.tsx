@@ -78,7 +78,7 @@ type SupplierSectorResponse = {
 }
 
 const panel: React.CSSProperties = { padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }
-const input: React.CSSProperties = { padding: '10px 12px', background: 'rgba(255,255,255,.035)', color: 'white', border: '1px solid var(--border-glass)', borderRadius: 8 }
+const input: React.CSSProperties = { padding: '10px 12px', background: 'var(--bg-inset)', color: 'var(--text-primary)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' }
 const tabs = [
   { id: 'matrix', label: 'Matrice', icon: Table2 },
   { id: 'paste', label: 'Foglio prezzi', icon: ClipboardPaste },
@@ -157,9 +157,9 @@ function columnLabel(index: number): string {
 
 const MACRO_CATEGORIES = [
   // Keep this selector limited to the sectors used by the active purchasing workflow.
-  { id: 'Beverage', label: 'Beverage', icon: '🍹', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', border: '#3b82f6' },
-  { id: 'Food', label: 'Food', icon: '🍽️', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: '#f59e0b' },
-  { id: 'Materiali', label: 'Materiali di consumo', icon: '📦', color: '#10b981', bg: 'rgba(16,185,129,0.15)', border: '#10b981' },
+  { id: 'Beverage', label: 'Beverage', icon: '🍹', color: 'var(--accent-text)', bg: 'var(--accent-bg)', border: 'var(--accent)' },
+  { id: 'Food', label: 'Food', icon: '🍽️', color: 'var(--warn)', bg: 'var(--warn-bg)', border: 'var(--warn)' },
+  { id: 'Materiali', label: 'Materiali di consumo', icon: '📦', color: 'var(--ok)', bg: 'var(--ok-bg)', border: 'var(--ok)' },
 ] as const
 
 type MacroCategory = typeof MACRO_CATEGORIES[number]['id']
@@ -598,29 +598,29 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     const autoSuppliersCount = preview.supplier_mapping.filter(m => m.method === 'auto_create').length
     const isReady = preview.can_commit && preview.errors.length === 0
     return (
-      <div className="glass-panel" style={{ ...panel, border: `1px solid ${preview.errors.length ? '#ef4444' : '#10b981'}`, background: preview.errors.length ? 'rgba(239,68,68,0.03)' : 'rgba(16,185,129,0.03)' }}>
+      <div className="glass-panel" style={{ ...panel, border: `1px solid ${preview.errors.length ? 'var(--crit)' : 'var(--ok)'}`, background: preview.errors.length ? 'var(--crit-bg)' : 'var(--ok-bg)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <strong>Anteprima modifiche</strong>
             {isReady ? (
-              <span style={{ fontSize: 12, background: 'rgba(16,185,129,0.18)', color: '#6ee7b7', border: '1px solid #10b981', padding: '3px 10px', borderRadius: 12, fontWeight: 700 }}>
+              <span style={{ fontSize: 12, background: 'var(--ok-bg)', color: 'var(--ok)', border: '1px solid var(--ok)', padding: '3px 10px', borderRadius: '999px', fontWeight: 700 }}>
                 ✅ Elaborazione completata al 100% · Pronto per la conferma
               </span>
             ) : (
-              <span style={{ fontSize: 12, background: 'rgba(239,68,68,0.18)', color: '#fca5a5', border: '1px solid #ef4444', padding: '3px 10px', borderRadius: 12, fontWeight: 700 }}>
+              <span style={{ fontSize: 12, background: 'var(--crit-bg)', color: 'var(--crit)', border: '1px solid var(--crit)', padding: '3px 10px', borderRadius: '999px', fontWeight: 700 }}>
                 ⚠️ Errori da risolvere prima di confermare
               </span>
             )}
           </div>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
             {preview.counts.create} prezzi nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi
-            {autoCreateCount > 0 && <span style={{ color: '#60a5fa', fontWeight: 600 }}> · {autoCreateCount} nuovi prodotti da creare</span>}
-            {autoSuppliersCount > 0 && <span style={{ color: '#a78bfa', fontWeight: 600 }}> · {autoSuppliersCount} nuovi fornitori provvisori</span>}
+            {autoCreateCount > 0 && <span style={{ color: 'var(--accent-text)', fontWeight: 600 }}> · {autoCreateCount} nuovi prodotti da creare</span>}
+            {autoSuppliersCount > 0 && <span style={{ color: 'var(--info)', fontWeight: 600 }}> · {autoSuppliersCount} nuovi fornitori provvisori</span>}
             {' · '}{preview.counts.errors > 0 ? `${preview.counts.errors} errori` : 'Nessun errore'}
           </span>
         </div>
         {preview.errors.map((item, index) => (
-          <div key={index} style={{ color: '#fca5a5', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div key={index} style={{ color: 'var(--crit)', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <span>Riga {item.row || '—'}: {item.message}</span>
             {item.type === 'supplier_scope' && item.supplier_id && item.category && <button className="btn" onClick={() => {
               setSectorSupplierId(item.supplier_id || '')
@@ -649,16 +649,16 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             </select>
           </label>
         ))}
-        {!!preview.order_name_changes?.length && <div style={{ padding: 12, borderRadius: 8, background: 'rgba(59,130,246,.08)', fontSize: 13 }}>
+        {!!preview.order_name_changes?.length && <div style={{ padding: 12, borderRadius: 8, background: 'var(--accent-bg)', fontSize: 13 }}>
           <strong>Nomi rapidi da aggiornare</strong>
-          {preview.order_name_changes.map(item => <div key={item.product_id} style={{ color: 'var(--text-secondary)', marginTop: 5 }}>{item.canonical_name}: {item.old_order_name || 'nessuno'} → <b style={{ color: 'white' }}>{item.new_order_name}</b></div>)}
+          {preview.order_name_changes.map(item => <div key={item.product_id} style={{ color: 'var(--text-secondary)', marginTop: 5 }}>{item.canonical_name}: {item.old_order_name || 'nessuno'} → <b style={{ color: 'var(--text-primary)' }}>{item.new_order_name}</b></div>)}
         </div>}
         {(preview.errors.length > 0) && <button className="btn" onClick={createPastePreview}>Ricalcola anteprima</button>}
         <div style={{ maxHeight: 280, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead><tr><th style={{ textAlign: 'left' }}>Prodotto</th><th>Fornitore</th><th>UoM</th><th>Prima</th><th>Dopo</th><th>Esito</th></tr></thead>
             <tbody>{preview.changes.slice(0, 300).map((item, index) => <tr key={index}>
-              <td style={{ padding: 8 }}>{item.product_name}</td><td style={{ textAlign: 'center' }}>{item.supplier_name}</td><td style={{ textAlign: 'center', fontWeight: 600, color: '#60a5fa' }}>{item.uom}</td><td style={{ textAlign: 'center' }}>{money(item.old_price)}</td><td style={{ textAlign: 'center' }}>{money(item.new_price)}</td><td style={{ textAlign: 'center' }}>{item.action}</td>
+              <td style={{ padding: 8 }}>{item.product_name}</td><td style={{ textAlign: 'center' }}>{item.supplier_name}</td><td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--accent-text)' }}>{item.uom}</td><td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(item.old_price)}</td><td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(item.new_price)}</td><td style={{ textAlign: 'center' }}>{item.action}</td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -676,10 +676,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
     <div className="glass-panel" style={{ padding: '4px 12px', display: 'flex', gap: 6, overflowX: 'auto' }}>
-      {tabs.filter(tab => isAdmin || tab.id === 'matrix' || tab.id === 'history').map(tab => { const Icon = tab.icon; return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setPreview(null); setError(null) }} style={{ padding: '13px 16px', border: 0, borderBottom: activeTab === tab.id ? '2px solid var(--accent-blue)' : '2px solid transparent', background: 'transparent', color: activeTab === tab.id ? 'white' : 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}><Icon size={17} />{tab.label}</button> })}
+      {tabs.filter(tab => isAdmin || tab.id === 'matrix' || tab.id === 'history').map(tab => { const Icon = tab.icon; return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setPreview(null); setError(null) }} style={{ padding: '13px 16px', border: 0, borderBottom: activeTab === tab.id ? '2px solid var(--accent-blue)' : '2px solid transparent', background: 'transparent', color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}><Icon size={17} />{tab.label}</button> })}
     </div>
-    {error && <div className="glass-panel" style={{ padding: 14, color: '#fca5a5' }}><AlertTriangle size={16} /> {error}</div>}
-    {notice && <div className="glass-panel" style={{ padding: 14, color: '#6ee7b7' }}><Check size={16} /> {notice}</div>}
+    {error && <div className="glass-panel" style={{ padding: 14, color: 'var(--crit)' }}><AlertTriangle size={16} /> {error}</div>}
+    {notice && <div className="glass-panel" style={{ padding: 14, color: 'var(--ok)' }}><Check size={16} /> {notice}</div>}
 
     {activeTab === 'matrix' && <>
       <div className="glass-panel" style={panel}>
@@ -707,10 +707,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 style={{
                   padding: '4px 12px',
                   fontSize: 12,
-                  borderRadius: 20,
-                  background: selectedMatrixCategory === 'all' ? 'var(--primary-color)' : 'rgba(255,255,255,0.05)',
-                  color: selectedMatrixCategory === 'all' ? 'white' : 'var(--text-secondary)',
-                  border: selectedMatrixCategory === 'all' ? '1px solid var(--primary-color)' : '1px solid var(--border-glass)'
+                  borderRadius: '999px',
+                  background: selectedMatrixCategory === 'all' ? 'var(--primary-color)' : 'var(--bg-elevated)',
+                  color: selectedMatrixCategory === 'all' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+                  border: selectedMatrixCategory === 'all' ? '1px solid var(--primary-color)' : '1px solid var(--line)'
                 }}
               >
                 Tutte ({totalAll})
@@ -734,10 +734,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 style={{
                   padding: '4px 12px',
                   fontSize: 12,
-                  borderRadius: 20,
-                  background: isSelected ? cat.bg : 'rgba(255,255,255,0.05)',
+                  borderRadius: '999px',
+                  background: isSelected ? cat.bg : 'var(--bg-elevated)',
                   color: isSelected ? cat.color : 'var(--text-secondary)',
-                  border: isSelected ? `1px solid ${cat.border}` : '1px solid var(--border-glass)',
+                  border: isSelected ? `1px solid ${cat.border}` : '1px solid var(--line)',
                   fontWeight: isSelected ? 600 : 400
                 }}
               >
@@ -762,10 +762,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
               style={{
                 padding: '3px 10px',
                 fontSize: 11,
-                borderRadius: 16,
-                background: selectedMatrixSubcategory === 'all' ? 'var(--accent-blue, #3b82f6)' : 'rgba(255,255,255,0.04)',
-                color: selectedMatrixSubcategory === 'all' ? 'white' : 'var(--text-secondary)',
-                border: selectedMatrixSubcategory === 'all' ? '1px solid var(--accent-blue, #3b82f6)' : '1px solid var(--border-glass)'
+                borderRadius: '999px',
+                background: selectedMatrixSubcategory === 'all' ? 'var(--accent)' : 'var(--bg-inset)',
+                color: selectedMatrixSubcategory === 'all' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+                border: selectedMatrixSubcategory === 'all' ? '1px solid var(--accent)' : '1px solid var(--line)'
               }}
             >
               Tutte
@@ -786,10 +786,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   style={{
                     padding: '3px 10px',
                     fontSize: 11,
-                    borderRadius: 16,
-                    background: isSubSelected ? 'rgba(59,130,246,0.25)' : 'rgba(255,255,255,0.03)',
-                    color: isSubSelected ? '#60a5fa' : 'var(--text-secondary)',
-                    border: isSubSelected ? '1px solid #3b82f6' : '1px solid var(--border-glass)',
+                    borderRadius: '999px',
+                    background: isSubSelected ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                    color: isSubSelected ? 'var(--accent-text)' : 'var(--text-secondary)',
+                    border: isSubSelected ? '1px solid var(--accent)' : '1px solid var(--line)',
                     fontWeight: isSubSelected ? 600 : 400
                   }}
                 >
@@ -801,9 +801,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         )}
 
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({visibleSuppliers.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{(matrix?.suppliers || []).map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
-        {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead style={{ position: 'sticky', top: 0, background: '#11111a', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
-          <tbody>{(matrix?.rows || []).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--border-glass)' }}>
+        {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table className="ds-table" style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-inset)', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
+          <tbody>{(matrix?.rows || []).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--line)' }}>
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
               {row.order_name && <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.canonical_name}</div>}
@@ -811,8 +811,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 <span>{row.sku_interno || 'SKU mancante'}</span>
                 <span>·</span>
                 <span style={{
-                  color: row.category === 'Food' ? '#f59e0b' : row.category === 'Materiali' ? '#10b981' : '#60a5fa',
-                  background: row.category === 'Food' ? 'rgba(245,158,11,0.1)' : row.category === 'Materiali' ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                  color: row.category === 'Food' ? 'var(--warn)' : row.category === 'Materiali' ? 'var(--ok)' : 'var(--accent-text)',
+                  background: row.category === 'Food' ? 'var(--warn-bg)' : row.category === 'Materiali' ? 'var(--ok-bg)' : 'var(--accent-bg)',
                   padding: '1px 6px',
                   borderRadius: 4,
                   fontSize: 10,
@@ -822,19 +822,19 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 </span>
                 {row.subcategory && (
                   <span style={{
-                    color: '#a78bfa',
-                    background: 'rgba(167,139,250,0.1)',
+                    color: 'var(--info)',
+                    background: 'var(--info-bg)',
                     padding: '1px 6px',
                     borderRadius: 4,
                     fontSize: 10,
                     fontWeight: 500,
-                    border: '1px solid rgba(167,139,250,0.2)'
+                    border: '1px solid var(--info-border)'
                   }}>
                     {row.subcategory}
                   </span>
                 )}
               </div>
-              {row.requires_manual_selection && <small style={{ color: '#fbbf24' }}>Scelta manuale richiesta</small>}
+              {row.requires_manual_selection && <small style={{ color: 'var(--warn)' }}>Scelta manuale richiesta</small>}
             </td>
             {visibleSuppliers.map(supplier => {
               const offer = row.offers[String(supplier.id)]
@@ -844,20 +844,20 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
               const isOtherWhenForced = row.policy?.selection_mode === 'manual' && row.policy?.preferred_supplier_id !== supplier.id
 
               let borderStyle = '1px solid transparent'
-              let bgStyle = 'rgba(255,255,255,.025)'
-              let textColor = 'white'
+              let bgStyle = 'var(--bg-inset)'
+              let textColor = 'var(--text-primary)'
 
               if (isForced) {
-                borderStyle = '2px solid #f59e0b'
-                bgStyle = 'rgba(245,158,11,0.15)'
-                textColor = '#fde68a'
+                borderStyle = '2px solid var(--warn)'
+                bgStyle = 'var(--warn-bg)'
+                textColor = 'var(--warn)'
               } else if (isAutoRecommended) {
-                borderStyle = '1px solid #10b981'
-                bgStyle = 'rgba(16,185,129,.10)'
-                textColor = '#6ee7b7'
+                borderStyle = '1px solid var(--ok)'
+                bgStyle = 'var(--ok-bg)'
+                textColor = 'var(--ok)'
               }
 
-              return <td key={supplier.id} style={{ textAlign: 'center', padding: 8, opacity: offer && !offer.eligible ? .55 : 1, background: !relevant ? 'rgba(255,255,255,.012)' : 'transparent' }}>
+              return <td key={supplier.id} style={{ textAlign: 'center', padding: 8, opacity: offer && !offer.eligible ? .55 : 1, background: !relevant ? 'var(--bg-inset)' : 'transparent' }}>
                 {relevant ? <button
                   disabled={!isAdmin}
                   onClick={() => {
@@ -878,18 +878,18 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                     flexDirection: 'column',
                     alignItems: 'center',
                     gap: 3,
-                    boxShadow: isForced ? '0 0 12px rgba(245,158,11,0.25)' : 'none'
+                    boxShadow: 'none'
                   }}
                 >
                   {offer ? <>
-                    <strong>{money(offer.price)}</strong>
+                    <strong style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(offer.price)}</strong>
                     <div style={{ fontSize: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                       {isForced ? (
-                        <span style={{ color: '#fbbf24', fontWeight: 700, background: 'rgba(0,0,0,0.4)', padding: '1px 5px', borderRadius: 4 }}>
+                        <span style={{ color: 'var(--warn)', fontWeight: 700, background: 'var(--bg-inset)', padding: '1px 5px', borderRadius: 4 }}>
                           ⭐ SCELTO {row.policy?.reason ? `· ${row.policy.reason}` : ''}
                         </span>
                       ) : isAutoRecommended ? (
-                        <span style={{ color: '#6ee7b7', fontWeight: 600 }}>✓ CONSIGLIATO</span>
+                        <span style={{ color: 'var(--ok)', fontWeight: 600 }}>✓ CONSIGLIATO</span>
                       ) : isOtherWhenForced ? (
                         <span style={{ color: 'var(--text-secondary)' }}>alternativo</span>
                       ) : (
@@ -897,7 +897,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                       )}
                     </div>
                   </> : <>{isAdmin && <Pencil size={13} />} {isAdmin ? 'inserisci' : '—'}</>}
-                </button> : <span title="Fornitore fuori dal settore del prodotto" style={{ color: '#5f6574', fontSize: 11 }}>fuori settore</span>}
+                </button> : <span title="Fornitore fuori dal settore del prodotto" style={{ color: 'var(--text-muted)', fontSize: 11 }}>fuori settore</span>}
               </td>
             })}
           </tr>)}</tbody>
@@ -906,18 +906,18 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       {editing && (
-        <div className="glass-panel" style={{ ...panel, border: '1px solid #3b82f6', background: 'rgba(15,23,42,0.95)', boxShadow: '0 20px 40px rgba(0,0,0,0.6)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-glass)', paddingBottom: 12 }}>
+        <div className="glass-panel" style={{ ...panel, border: '1px solid var(--accent-border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-pop)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--line)', paddingBottom: 12 }}>
             <div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 1 }}>Configurazione Prodotto & Fornitore</div>
-              <h3 style={{ margin: '4px 0 0', fontSize: 17 }}>{editing.product.canonical_name} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>con</span> <span style={{ color: '#60a5fa' }}>{editing.supplier.name}</span></h3>
+              <h3 style={{ margin: '4px 0 0', fontSize: 17 }}>{editing.product.canonical_name} <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>con</span> <span style={{ color: 'var(--accent-text)' }}>{editing.supplier.name}</span></h3>
             </div>
             <button className="btn" onClick={() => setEditing(null)}>Chiudi</button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
             {/* Sezione 1: Modifica Prezzo */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid var(--border-glass)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--line)' }}>
               <strong>💰 Aggiorna Prezzo Listino</strong>
               <div style={{ display: 'flex', gap: 10 }}>
                 <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
@@ -933,11 +933,11 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             </div>
 
             {/* Sezione 2: Forza Acquisto & Etichetta */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'rgba(245,158,11,0.03)', borderRadius: 8, border: '1px solid rgba(245,158,11,0.2)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, background: 'var(--warn-bg)', borderRadius: 8, border: '1px solid var(--warn-border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ color: '#f59e0b' }}>⭐ Forza Acquisto & Etichetta</strong>
+                <strong style={{ color: 'var(--warn)' }}>⭐ Forza Acquisto & Etichetta</strong>
                 {editing.product.policy?.selection_mode === 'manual' && editing.product.policy?.preferred_supplier_id === editing.supplier.id && (
-                  <span style={{ fontSize: 11, background: 'rgba(245,158,11,0.2)', color: '#fbbf24', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>ATTUALMENTE FORZATO</span>
+                  <span style={{ fontSize: 11, background: 'var(--warn-bg)', color: 'var(--warn)', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>ATTUALMENTE FORZATO</span>
                 )}
               </div>
               <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>
@@ -959,7 +959,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                     type="button"
                     className="btn"
                     onClick={() => setForceLabel(preset)}
-                    style={{ fontSize: 11, padding: '4px 8px', background: 'rgba(255,255,255,0.04)' }}
+                    style={{ fontSize: 11, padding: '4px 8px', background: 'var(--bg-inset)' }}
                   >
                     {preset}
                   </button>
@@ -970,7 +970,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   type="button"
                   className="btn"
                   onClick={() => handleSetForcedSupplier(editing.product.product_id, editing.supplier.id, forceLabel)}
-                  style={{ background: '#f59e0b', color: '#111', fontWeight: 700, border: 'none', padding: '8px 14px' }}
+                  style={{ background: 'var(--warn)', color: 'var(--bg-app)', fontWeight: 700, border: 'none', padding: '8px 14px' }}
                 >
                   ⭐ Forza Acquisto da {editing.supplier.name}
                 </button>
@@ -979,7 +979,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                     type="button"
                     className="btn"
                     onClick={() => handleSetForcedSupplier(editing.product.product_id, null, null)}
-                    style={{ color: '#fca5a5' }}
+                    style={{ color: 'var(--crit)' }}
                   >
                     🔄 Ripristina Automatico
                   </button>
@@ -997,8 +997,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     {activeTab === 'paste' && <>
       <div className="glass-panel" style={{ ...panel, gap: 14 }}>
         {/* 3 Category Sheets Switcher */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '12px 14px', background: 'rgba(255,255,255,0.025)', borderRadius: 10, border: '1px solid var(--border-glass)', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'white', marginRight: 4 }}>Seleziona Foglio da compilare:</span>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '12px 14px', background: 'var(--bg-inset)', borderRadius: 10, border: '1px solid var(--line)', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginRight: 4 }}>Seleziona Foglio da compilare:</span>
           {MACRO_CATEGORIES.map(cat => {
             const isSelected = activeCategorySheet === cat.id
             const rowCount = categorySheets[cat.id]?.slice(1).filter(r => r[1]?.trim() || r[0]?.trim()).length || 0
@@ -1017,9 +1017,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 style={{
                   padding: '8px 16px',
                   borderRadius: 8,
-                  border: isSelected ? `2px solid ${cat.border}` : '1px solid rgba(255,255,255,0.08)',
-                  background: isSelected ? cat.bg : 'rgba(255,255,255,0.03)',
-                  color: isSelected ? 'white' : 'var(--text-secondary)',
+                  border: isSelected ? `2px solid ${cat.border}` : '1px solid var(--line)',
+                  background: isSelected ? cat.bg : 'var(--bg-inset)',
+                  color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                   cursor: 'pointer',
                   fontSize: 13,
                   fontWeight: isSelected ? 700 : 500,
@@ -1027,12 +1027,12 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   alignItems: 'center',
                   gap: 8,
                   transition: 'all 0.2s ease',
-                  boxShadow: isSelected ? `0 0 16px ${cat.bg}` : 'none'
+                  boxShadow: 'none'
                 }}
               >
                 <span style={{ fontSize: 16 }}>{cat.icon}</span>
                 <span>Foglio <b>{cat.label}</b></span>
-                {rowCount > 0 && <span style={{ fontSize: 11, background: 'rgba(0,0,0,0.35)', padding: '2px 7px', borderRadius: 10, color: cat.color }}>{rowCount} righe</span>}
+                {rowCount > 0 && <span style={{ fontSize: 11, background: 'var(--bg-inset)', padding: '2px 7px', borderRadius: 10, color: cat.color }}>{rowCount} righe</span>}
               </button>
             )
           })}
@@ -1040,7 +1040,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
         {/* Subcategories Selector for Active Sheet */}
         {subcategoriesForActiveSheet.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 14px', background: 'rgba(0,0,0,0.2)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--bg-inset)', borderRadius: 8, border: '1px solid var(--line)', alignItems: 'center' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Sottocategoria da compilare:</span>
             <button
               type="button"
@@ -1053,9 +1053,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
               style={{
                 padding: '5px 12px',
                 borderRadius: 6,
-                border: activeSubcategorySheet === 'all' ? '1px solid var(--accent-blue, #3b82f6)' : '1px solid rgba(255,255,255,0.08)',
-                background: activeSubcategorySheet === 'all' ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
-                color: activeSubcategorySheet === 'all' ? 'white' : 'var(--text-secondary)',
+                border: activeSubcategorySheet === 'all' ? '1px solid var(--accent)' : '1px solid var(--line)',
+                background: activeSubcategorySheet === 'all' ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                color: activeSubcategorySheet === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 fontSize: 12,
                 fontWeight: activeSubcategorySheet === 'all' ? 600 : 400
@@ -1080,9 +1080,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   style={{
                     padding: '5px 12px',
                     borderRadius: 6,
-                    border: isSubSelected ? '1px solid #a78bfa' : '1px solid rgba(255,255,255,0.08)',
-                    background: isSubSelected ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.03)',
-                    color: isSubSelected ? '#ddd6fe' : 'var(--text-secondary)',
+                    border: isSubSelected ? '1px solid var(--info)' : '1px solid var(--line)',
+                    background: isSubSelected ? 'var(--info-bg)' : 'var(--bg-inset)',
+                    color: isSubSelected ? 'var(--info)' : 'var(--text-secondary)',
                     cursor: 'pointer',
                     fontSize: 12,
                     fontWeight: isSubSelected ? 600 : 400,
@@ -1092,7 +1092,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   }}
                 >
                   <span>{sub.nome}</span>
-                  {count > 0 && <span style={{ fontSize: 10, background: 'rgba(0,0,0,0.4)', padding: '1px 5px', borderRadius: 8, color: '#a78bfa' }}>{count}</span>}
+                  {count > 0 && <span style={{ fontSize: 10, background: 'var(--bg-inset)', padding: '1px 5px', borderRadius: 8, color: 'var(--info)' }}>{count}</span>}
                 </button>
               )
             })}
@@ -1103,11 +1103,11 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <div>
             <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Foglio Prezzi</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? '#f59e0b' : activeCategorySheet === 'Materiali' ? '#10b981' : '#60a5fa', background: activeCategorySheet === 'Food' ? 'rgba(245,158,11,0.12)' : activeCategorySheet === 'Materiali' ? 'rgba(16,185,129,0.12)' : 'rgba(59,130,246,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--border-glass)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: activeCategorySheet === 'Food' ? 'var(--warn)' : activeCategorySheet === 'Materiali' ? 'var(--ok)' : 'var(--accent-text)', background: activeCategorySheet === 'Food' ? 'var(--warn-bg)' : activeCategorySheet === 'Materiali' ? 'var(--ok-bg)' : 'var(--accent-bg)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--line)' }}>
                 Settore: {MACRO_CATEGORIES.find(category => category.id === activeCategorySheet)?.label || activeCategorySheet}
               </span>
               {activeSubcategorySheet !== 'all' && (
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#a78bfa', background: 'rgba(167,139,250,0.12)', padding: '2px 10px', borderRadius: 6, border: '1px solid rgba(167,139,250,0.3)' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--info)', background: 'var(--info-bg)', padding: '2px 10px', borderRadius: 6, border: '1px solid var(--info-border)' }}>
                   Sottocategoria: {activeSubcategorySheet}
                 </span>
               )}
@@ -1122,21 +1122,21 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </div>
 
-        <div style={{ border: '1px solid var(--border-glass)', borderRadius: 10, overflow: 'auto', maxHeight: '58vh', background: 'rgba(5,7,14,.55)' }}>
+        <div style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'auto', maxHeight: '58vh', background: 'var(--bg-card)' }}>
           <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: 'max-content', minWidth: '100%', fontSize: 13 }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
               <tr>
-                <th style={{ width: 44, minWidth: 44, height: 28, position: 'sticky', left: 0, zIndex: 7, background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745' }} />
-                {sheet[0]?.map((_, columnIndex) => <th key={columnIndex} style={{ minWidth: columnIndex === 0 ? 170 : columnIndex === 1 ? 260 : columnIndex === 2 ? 110 : 150, height: 28, padding: '0 8px', textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #343745', fontWeight: 600 }}>{columnLabel(columnIndex)}</th>)}
+                <th style={{ width: 44, minWidth: 44, height: 28, position: 'sticky', left: 0, zIndex: 7, background: 'var(--bg-inset)', borderRight: '1px solid var(--line-strong)', borderBottom: '1px solid var(--line-strong)' }} />
+                {sheet[0]?.map((_, columnIndex) => <th key={columnIndex} style={{ minWidth: columnIndex === 0 ? 170 : columnIndex === 1 ? 260 : columnIndex === 2 ? 110 : 150, height: 28, padding: '0 8px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-inset)', borderRight: '1px solid var(--line-strong)', borderBottom: '1px solid var(--line-strong)', fontWeight: 600 }}>{columnLabel(columnIndex)}</th>)}
               </tr>
             </thead>
             <tbody>
               {sheet.map((row, rowIndex) => <tr key={rowIndex}>
-                <th style={{ width: 44, minWidth: 44, height: 36, position: 'sticky', left: 0, zIndex: 4, textAlign: 'center', color: '#9ca3af', background: '#171923', borderRight: '1px solid #343745', borderBottom: '1px solid #292c37', fontWeight: 500 }}>{rowIndex + 1}</th>
+                <th style={{ width: 44, minWidth: 44, height: 36, position: 'sticky', left: 0, zIndex: 4, textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-inset)', borderRight: '1px solid var(--line-strong)', borderBottom: '1px solid var(--line)', fontWeight: 500 }}>{rowIndex + 1}</th>
                 {row.map((cell, columnIndex) => {
                   const eligible = isSheetCellEligible(rowIndex, columnIndex)
                   const width = columnIndex === 0 ? 170 : columnIndex === 1 ? 260 : columnIndex === 2 ? 110 : 150
-                  return <td key={columnIndex} style={{ padding: 0, minWidth: width, borderRight: '1px solid #292c37', borderBottom: '1px solid #292c37', background: !eligible ? 'rgba(70,70,80,.16)' : rowIndex === 0 ? 'rgba(59,130,246,.10)' : columnIndex < 3 ? 'rgba(255,255,255,.025)' : 'transparent' }}>
+                  return <td key={columnIndex} style={{ padding: 0, minWidth: width, borderRight: '1px solid var(--line)', borderBottom: '1px solid var(--line)', background: !eligible ? 'var(--bg-app)' : rowIndex === 0 ? 'var(--accent-bg)' : columnIndex < 3 ? 'var(--bg-inset)' : 'transparent' }}>
                     <input
                       aria-label={`Cella ${columnLabel(columnIndex)}${rowIndex + 1}`}
                       value={cell}
@@ -1145,8 +1145,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                       onChange={event => updateSheetCell(rowIndex, columnIndex, event.target.value)}
                       onPaste={event => pasteIntoSheet(event, rowIndex, columnIndex)}
                       placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale' : columnIndex === 2 ? 'Unità di misura' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale del prodotto' : columnIndex === 2 ? 'Es. Pz, Lt, Kg' : eligible ? '—' : 'fuori settore'}
-                      style={{ width: '100%', minWidth: width, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: eligible ? 'white' : '#5f6574', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex < 3 ? 600 : 400, textAlign: columnIndex > 2 && rowIndex > 0 ? 'right' : 'left', cursor: eligible ? 'text' : 'not-allowed' }}
-                      onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px #3b82f6' }}
+                      style={{ width: '100%', minWidth: width, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: eligible ? 'var(--text-primary)' : 'var(--text-muted)', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex < 3 ? 600 : 400, textAlign: columnIndex > 2 && rowIndex > 0 ? 'right' : 'left', cursor: eligible ? 'text' : 'not-allowed' }}
+                      onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px var(--accent)' }}
                       onBlur={event => { event.currentTarget.style.boxShadow = 'none' }}
                     />
                   </td>
@@ -1165,9 +1165,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', paddingTop: 4 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Validità <input type="date" style={input} value={effectiveDate} onChange={event => setEffectiveDate(event.target.value)} /></label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>Unità fallback (nuovi) <input style={{ ...input, width: 90 }} value={defaultUom} onChange={event => setDefaultUom(event.target.value)} placeholder="Pz" /></label>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer', background: autoCreateProducts ? 'rgba(59,130,246,.12)' : 'rgba(255,255,255,.03)', padding: '9px 12px', borderRadius: 8, border: autoCreateProducts ? '1px solid #3b82f6' : '1px solid var(--border-glass)', alignSelf: 'flex-end' }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer', background: autoCreateProducts ? 'var(--accent-bg)' : 'var(--bg-inset)', padding: '9px 12px', borderRadius: 8, border: autoCreateProducts ? '1px solid var(--accent)' : '1px solid var(--line)', alignSelf: 'flex-end' }}>
             <input type="checkbox" checked={autoCreateProducts} onChange={e => setAutoCreateProducts(e.target.checked)} />
-            <span style={{ color: autoCreateProducts ? '#93c5fd' : 'inherit' }}>✨ <b>Crea automaticamente</b> prodotti mancanti</span>
+            <span style={{ color: autoCreateProducts ? 'var(--accent-text)' : 'inherit' }}>✨ <b>Crea automaticamente</b> prodotti mancanti</span>
           </label>
           <button className="btn btn-primary" disabled={(!hasSheetPrices && !hasOrderNames) || loading} onClick={createPastePreview} style={{ alignSelf: 'flex-end' }}><ClipboardPaste size={16} /> Controlla modifiche</button>
           <span style={{ color: 'var(--text-secondary)', fontSize: 12, maxWidth: 350 }}>
@@ -1199,10 +1199,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             { mode: 'enabled', label: 'Abilitato' },
             { mode: 'disabled', label: 'Escluso' },
           ]
-          return <div key={sector.category} style={{ padding: 14, border: '1px solid var(--border-glass)', borderRadius: 10, background: 'rgba(255,255,255,.018)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          return <div key={sector.category} style={{ padding: 14, border: '1px solid var(--line)', borderRadius: 10, background: 'var(--bg-inset)', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
               <strong>{sector.category}</strong>
-              <span style={{ fontSize: 11, color: sector.effective_enabled ? '#6ee7b7' : '#9ca3af' }}>{sector.effective_enabled ? 'VISIBILE' : 'NASCOSTO'}</span>
+              <span style={{ fontSize: 11, color: sector.effective_enabled ? 'var(--ok)' : 'var(--text-secondary)' }}>{sector.effective_enabled ? 'VISIBILE' : 'NASCOSTO'}</span>
             </div>
             {sector.mode === 'auto' && <small style={{ color: 'var(--text-secondary)' }}>Decisione automatica: {sector.inferred ? 'dati commerciali trovati' : 'nessun dato trovato'}</small>}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -1219,6 +1219,6 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       </div>}
     </div>}
 
-    {activeTab === 'history' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 16 }}><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Versioni prezzo</h3><div style={{ maxHeight: 520, overflow: 'auto' }}>{historyRows.map(item => <div key={item.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border-glass)', fontSize: 13 }}><strong>{item.description}</strong> · {item.supplier_name}<div style={{ color: 'var(--text-secondary)' }}>{money(item.price)} / {item.uom} · {item.valid_from} → {item.valid_to || 'attivo'}</div></div>)}</div></div><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Audit regole</h3><div style={{ maxHeight: 300, overflow: 'auto' }}>{auditRows.map((item, index) => <div key={`${item.entity_type}-${item.entity_id}-${index}`} style={{ padding: '10px 0', borderBottom: '1px solid var(--border-glass)', fontSize: 13 }}>{item.entity_type} #{item.entity_id} · {item.action}<div style={{ color: 'var(--text-secondary)' }}>{new Date(item.occurred_at).toLocaleString('it-IT')} · utente #{item.actor_id}</div></div>)}</div><h3>Scostamenti policy ({deviations.length})</h3>{deviations.slice(0, 20).map(item => <div key={item.id} style={{ color: '#fbbf24', fontSize: 13, padding: '8px 0' }}><div>{item.deviation_type}: {item.reason} · <b>{item.status}</b></div>{item.status === 'open' && <div style={{ display: 'flex', gap: 8, marginTop: 6 }}><button className="btn" onClick={() => updateDeviation(item.id, 'acknowledged')}>Presa in carico</button><button className="btn" onClick={() => updateDeviation(item.id, 'accepted_exception')}>Accetta eccezione</button></div>}</div>)}</div></div>}
+    {activeTab === 'history' && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(360px,1fr))', gap: 16 }}><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Versioni prezzo</h3><div style={{ maxHeight: 520, overflow: 'auto' }}>{historyRows.map(item => <div key={item.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--line)', fontSize: 13 }}><strong>{item.description}</strong> · {item.supplier_name}<div style={{ color: 'var(--text-secondary)' }}>{money(item.price)} / {item.uom} · {item.valid_from} → {item.valid_to || 'attivo'}</div></div>)}</div></div><div className="glass-panel" style={panel}><h3 style={{ margin: 0 }}>Audit regole</h3><div style={{ maxHeight: 300, overflow: 'auto' }}>{auditRows.map((item, index) => <div key={`${item.entity_type}-${item.entity_id}-${index}`} style={{ padding: '10px 0', borderBottom: '1px solid var(--line)', fontSize: 13 }}>{item.entity_type} #{item.entity_id} · {item.action}<div style={{ color: 'var(--text-secondary)' }}>{new Date(item.occurred_at).toLocaleString('it-IT')} · utente #{item.actor_id}</div></div>)}</div><h3>Scostamenti policy ({deviations.length})</h3>{deviations.slice(0, 20).map(item => <div key={item.id} style={{ color: 'var(--warn)', fontSize: 13, padding: '8px 0' }}><div>{item.deviation_type}: {item.reason} · <b>{item.status}</b></div>{item.status === 'open' && <div style={{ display: 'flex', gap: 8, marginTop: 6 }}><button className="btn" onClick={() => updateDeviation(item.id, 'acknowledged')}>Presa in carico</button><button className="btn" onClick={() => updateDeviation(item.id, 'accepted_exception')}>Accetta eccezione</button></div>}</div>)}</div></div>}
   </div>
 }

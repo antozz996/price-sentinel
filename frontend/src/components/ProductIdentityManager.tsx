@@ -616,7 +616,7 @@ export default function ProductIdentityManager() {
             background: 'none',
             border: 'none',
             borderBottom: activeSubTab === 'products' ? '2px solid var(--accent-blue)' : '2px solid transparent',
-            color: activeSubTab === 'products' ? 'white' : 'var(--text-secondary)',
+            color: activeSubTab === 'products' ? 'var(--text-primary)' : 'var(--text-secondary)',
             padding: '10px 16px',
             cursor: 'pointer',
             fontWeight: 600,
@@ -635,7 +635,7 @@ export default function ProductIdentityManager() {
             background: 'none',
             border: 'none',
             borderBottom: activeSubTab === 'candidates' ? '2px solid var(--accent-blue)' : '2px solid transparent',
-            color: activeSubTab === 'candidates' ? 'white' : 'var(--text-secondary)',
+            color: activeSubTab === 'candidates' ? 'var(--text-primary)' : 'var(--text-secondary)',
             padding: '10px 16px',
             cursor: 'pointer',
             fontWeight: 600,
@@ -654,7 +654,7 @@ export default function ProductIdentityManager() {
             background: 'none',
             border: 'none',
             borderBottom: activeSubTab === 'import' ? '2px solid var(--accent-blue)' : '2px solid transparent',
-            color: activeSubTab === 'import' ? 'white' : 'var(--text-secondary)',
+            color: activeSubTab === 'import' ? 'var(--text-primary)' : 'var(--text-secondary)',
             padding: '10px 16px',
             cursor: 'pointer',
             fontWeight: 600,
@@ -669,7 +669,7 @@ export default function ProductIdentityManager() {
       </div>
 
       {error && (
-        <div style={{ background: 'var(--status-red-bg)', color: 'var(--status-red)', padding: '16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ background: 'var(--status-red-bg)', color: 'var(--status-red)', padding: '16px', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <ShieldAlert size={20} />
           <span>{error}</span>
         </div>
@@ -725,10 +725,10 @@ export default function ProductIdentityManager() {
                     width: '100%',
                     boxSizing: 'border-box',
                     padding: '10px 12px 10px 38px',
-                    background: 'rgba(255,255,255,0.03)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                     outline: 'none',
                     fontSize: '0.9rem'
                   }}
@@ -740,17 +740,17 @@ export default function ProductIdentityManager() {
                 onChange={e => setCategoryFilter(e.target.value)}
                 style={{
                   padding: '10px 16px',
-                  background: 'rgba(255,255,255,0.03)',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   cursor: 'pointer'
                 }}
               >
-                <option value="" style={{ background: '#13131c' }}>Tutte le Categorie</option>
+                <option value="" style={{ background: 'var(--bg-card)' }}>Tutte le Categorie</option>
                 {availableCategories.map(category => (
-                  <option key={category} value={category} style={{ background: '#13131c' }}>{category}</option>
+                  <option key={category} value={category} style={{ background: 'var(--bg-card)' }}>{category}</option>
                 ))}
               </select>
             </div>
@@ -760,9 +760,9 @@ export default function ProductIdentityManager() {
               flexDirection: 'column',
               gap: '14px',
               padding: '16px',
-              border: '1px solid rgba(59,130,246,0.25)',
-              borderRadius: '10px',
-              background: 'rgba(59,130,246,0.06)'
+              border: '1px solid var(--accent-border)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent-bg)'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 <div>
@@ -794,7 +794,7 @@ export default function ProductIdentityManager() {
                   <select
                     value={bulkCategoryAction}
                     onChange={e => setBulkCategoryAction(e.target.value as 'keep' | 'set' | 'clear')}
-                    style={{ padding: '9px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                   >
                     <option value="keep">Non modificare</option>
                     <option value="set">Imposta</option>
@@ -811,7 +811,7 @@ export default function ProductIdentityManager() {
                     value={bulkCategory}
                     onChange={e => setBulkCategory(e.target.value)}
                     placeholder="Es. beverage"
-                    style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                   />
                   <datalist id="bulk-category-options">
                     {availableCategories.map(category => <option key={category} value={category} />)}
@@ -822,7 +822,7 @@ export default function ProductIdentityManager() {
                   <select
                     value={bulkSubcategoryAction}
                     onChange={e => setBulkSubcategoryAction(e.target.value as 'keep' | 'set' | 'clear')}
-                    style={{ padding: '9px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                   >
                     <option value="keep">Non modificare</option>
                     <option value="set">Imposta</option>
@@ -839,7 +839,7 @@ export default function ProductIdentityManager() {
                     value={bulkSubcategory}
                     onChange={e => setBulkSubcategory(e.target.value)}
                     placeholder="Es. bibite gassate"
-                    style={{ padding: '9px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                    style={{ padding: '9px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                   />
                   <datalist id="bulk-subcategory-options">
                     {availableSubcategories.map(subcategory => <option key={subcategory} value={subcategory} />)}
@@ -860,10 +860,10 @@ export default function ProductIdentityManager() {
               {bulkMessage && (
                 <div style={{
                   padding: '9px 11px',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   fontSize: '0.82rem',
                   color: bulkMessage.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
-                  background: bulkMessage.type === 'success' ? 'rgba(16,185,129,0.08)' : 'var(--status-red-bg)'
+                  background: bulkMessage.type === 'success' ? 'var(--ok-bg)' : 'var(--status-red-bg)'
                 }}>
                   {bulkMessage.text}
                 </div>
@@ -907,7 +907,7 @@ export default function ProductIdentityManager() {
                         onClick={() => setSelectedProduct(p)}
                         style={{ 
                           cursor: 'pointer', 
-                          background: selectedProduct?.id === p.id ? 'rgba(59, 130, 246, 0.08)' : '',
+                          background: selectedProduct?.id === p.id ? 'var(--accent-bg)' : '',
                           borderLeft: selectedProduct?.id === p.id ? '3px solid var(--accent-blue)' : ''
                         }}
                       >
@@ -921,9 +921,9 @@ export default function ProductIdentityManager() {
                           />
                         </td>
                         <td><code style={{ color: 'var(--accent-blue)' }}>{p.sku_interno || 'N/D'}</code></td>
-                        <td style={{ fontWeight: 600 }}>{p.canonical_name}{p.order_name && <div style={{ color: '#6ee7b7', fontSize: '0.72rem', marginTop: 3 }}>Nome informale: {p.order_name}</div>}</td>
+                        <td style={{ fontWeight: 600 }}>{p.canonical_name}{p.order_name && <div style={{ color: 'var(--ok)', fontSize: '0.72rem', marginTop: 3 }}>Nome informale: {p.order_name}</div>}</td>
                         <td>
-                          <span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)' }}>
+                          <span className="badge" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
                             {p.category || 'Senza categoria'}
                           </span>
                           {p.subcategory && <div style={{ marginTop: '4px', color: 'var(--text-secondary)', fontSize: '0.72rem' }}>{p.subcategory}</div>}
@@ -994,7 +994,7 @@ export default function ProductIdentityManager() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {aliases.map(a => (
-                  <div key={a.id} className="glass-panel" style={{ padding: '16px', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div key={a.id} className="glass-panel" style={{ padding: '16px', background: 'var(--bg-inset)', border: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.raw_description}</span>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1011,9 +1011,9 @@ export default function ProductIdentityManager() {
                     </div>
 
                     <span className="badge" style={{ 
-                      background: a.status === 'approved' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      background: a.status === 'approved' ? 'var(--ok-bg)' : 'var(--crit-bg)',
                       color: a.status === 'approved' ? 'var(--status-green)' : 'var(--status-red)',
-                      border: a.status === 'approved' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)'
+                      border: a.status === 'approved' ? '1px solid var(--ok-border)' : '1px solid var(--crit-border)'
                     }}>
                       {a.status}
                     </span>
@@ -1021,7 +1021,7 @@ export default function ProductIdentityManager() {
                 ))}
 
                 {aliases.length === 0 && (
-                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '40px', background: 'rgba(255,255,255,0.01)', borderRadius: '10px' }}>
+                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '40px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-md)' }}>
                     Nessun alias censito per questo prodotto.
                   </div>
                 )}
@@ -1044,13 +1044,13 @@ export default function ProductIdentityManager() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
             {[
               ['Decisioni reali', workQueue?.summary.work_items || 0, 'var(--accent-blue)'],
-              ['Righe risolte insieme', workQueue?.summary.invoice_lines || 0, 'white'],
+              ['Righe risolte insieme', workQueue?.summary.invoice_lines || 0, 'var(--text-primary)'],
               ['Nuovi prodotti probabili', workQueue?.summary.probable_new_products || 0, 'var(--status-orange)'],
               ['Suggerimenti affidabili', workQueue?.summary.reliable_suggestions || 0, 'var(--status-green)']
             ].map(([label, value, color]) => (
-              <div key={String(label)} style={{ padding: '14px', borderRadius: '10px', background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border-glass)' }}>
+              <div key={String(label)} style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{label}</div>
-                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: String(color), marginTop: '3px' }}>{value}</div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: String(color), marginTop: '3px' }}>{value}</div>
               </div>
             ))}
           </div>
@@ -1063,7 +1063,7 @@ export default function ProductIdentityManager() {
                 placeholder="Cerca descrizione, codice o fornitore..."
                 value={candidateSearch}
                 onChange={e => setCandidateSearch(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 38px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', outline: 'none' }}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px 10px 38px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)', outline: 'none' }}
               />
             </div>
             {queueSuppliers.length > 1 && (
@@ -1072,17 +1072,17 @@ export default function ProductIdentityManager() {
                 onChange={e => setQueueSupplierFilter(e.target.value)}
                 style={{
                   padding: '9px 12px',
-                  background: 'rgba(255,255,255,0.05)',
+                  background: 'var(--bg-elevated)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   fontSize: '0.85rem'
                 }}
               >
-                <option value="" style={{ background: '#13131c' }}>Tutti i fornitori ({queueSuppliers.length})</option>
+                <option value="" style={{ background: 'var(--bg-card)' }}>Tutti i fornitori ({queueSuppliers.length})</option>
                 {queueSuppliers.map(sup => (
-                  <option key={sup} value={sup} style={{ background: '#13131c' }}>
+                  <option key={sup} value={sup} style={{ background: 'var(--bg-card)' }}>
                     {sup}
                   </option>
                 ))}
@@ -1124,9 +1124,9 @@ export default function ProductIdentityManager() {
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: '8px',
-                  background: selectedWorkKeys.length > 0 ? 'rgba(59, 130, 246, 0.15)' : undefined,
+                  background: selectedWorkKeys.length > 0 ? 'var(--accent-bg)' : undefined,
                   borderColor: selectedWorkKeys.length > 0 ? 'var(--accent-blue)' : undefined,
-                  color: selectedWorkKeys.length > 0 ? 'var(--accent-blue)' : 'white'
+                  color: selectedWorkKeys.length > 0 ? 'var(--accent-blue)' : 'var(--text-primary)'
                 }}
               >
                 <input
@@ -1144,7 +1144,7 @@ export default function ProductIdentityManager() {
           </div>
 
           {bulkNotice && (
-            <div style={{ padding: '12px 16px', borderRadius: '8px', background: 'rgba(16,185,129,0.12)', color: 'var(--status-green)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--status-green)', border: '1px solid var(--ok-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>{bulkNotice}</span>
               <button type="button" onClick={() => setBulkNotice(null)} style={{ background: 'transparent', border: 'none', color: 'var(--status-green)', cursor: 'pointer' }}>✕</button>
             </div>
@@ -1157,19 +1157,19 @@ export default function ProductIdentityManager() {
               top: '10px',
               zIndex: 100,
               padding: '14px 20px',
-              background: 'rgba(15, 23, 42, 0.95)',
+              background: 'var(--bg-card)',
               border: '1px solid var(--accent-blue)',
-              borderRadius: '12px',
+              borderRadius: 'var(--radius-lg)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               gap: '16px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
-              backdropFilter: 'blur(10px)',
+              boxShadow: 'var(--shadow-pop)',
+
               animation: 'fadeIn 0.2s ease-in-out'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 700, color: 'white', fontSize: '0.95rem' }}>
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
                   ⚡ {selectedWorkKeys.length} prodotti selezionati
                 </span>
                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
@@ -1195,12 +1195,12 @@ export default function ProductIdentityManager() {
                     padding: '9px 20px',
                     fontSize: '0.9rem',
                     fontWeight: 700,
-                    background: 'linear-gradient(135deg, #10b981, #059669)',
-                    borderColor: '#10b981',
+                    background: 'var(--ok)',
+                    borderColor: 'var(--ok)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)'
+                    boxShadow: 'none'
                   }}
                 >
                   {bulkResolving ? <Loader2 className="spinner" size={16} /> : <Check size={16} />}
@@ -1211,7 +1211,7 @@ export default function ProductIdentityManager() {
           )}
 
           {(workQueue?.summary.weak_candidates_hidden || 0) > 0 && (
-            <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(16,185,129,0.07)', color: 'var(--status-green)', fontSize: '0.8rem' }}>
+            <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--status-green)', fontSize: '0.8rem' }}>
               <strong>{workQueue?.summary.weak_candidates_hidden}</strong> falsi suggerimenti sotto soglia nascosti automaticamente.
             </div>
           )}
@@ -1225,8 +1225,8 @@ export default function ProductIdentityManager() {
                   style={{ 
                     padding: '18px', 
                     border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)', 
-                    borderRadius: '12px', 
-                    background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255,255,255,0.018)', 
+                    borderRadius: 'var(--radius-lg)', 
+                    background: isSelected ? 'var(--accent-bg)' : 'var(--bg-inset)', 
                     display: 'grid', 
                     gridTemplateColumns: 'auto minmax(0, 1fr) auto', 
                     gap: '16px', 
@@ -1251,7 +1251,7 @@ export default function ProductIdentityManager() {
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 750, fontSize: '1rem' }}>{item.raw_description}</span>
-                      <span className="badge" style={{ background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)' }}>
+                      <span className="badge" style={{ background: 'var(--accent-bg)', color: 'var(--accent-blue)' }}>
                         {item.occurrence_count} {item.occurrence_count === 1 ? 'riga' : 'righe'} · {item.invoice_count} {item.invoice_count === 1 ? 'fattura' : 'fatture'}
                       </span>
                     </div>
@@ -1263,12 +1263,12 @@ export default function ProductIdentityManager() {
                     </div>
 
                     {item.best_candidate ? (
-                      <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(16,185,129,0.07)', color: 'var(--status-green)', fontSize: '0.82rem' }}>
+                      <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--status-green)', fontSize: '0.82rem' }}>
                         <Check size={14} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
                         Possibile corrispondenza: <strong>{item.best_candidate.canonical_name}</strong> · {item.best_candidate.score.toFixed(0)}%
                       </div>
                     ) : (
-                      <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: '8px', background: 'rgba(245,158,11,0.07)', color: 'var(--status-orange)', fontSize: '0.82rem' }}>
+                      <div style={{ marginTop: '11px', padding: '9px 11px', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--status-orange)', fontSize: '0.82rem' }}>
                         Nessuna corrispondenza affidabile: probabile nuovo prodotto. I suggerimenti casuali non vengono mostrati.
                       </div>
                     )}
@@ -1295,7 +1295,7 @@ export default function ProductIdentityManager() {
             })}
 
             {filteredWorkItems.length === 0 && (
-              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '60px', background: 'rgba(255,255,255,0.01)', borderRadius: '12px' }}>
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '60px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-lg)' }}>
                 Nessun prodotto da classificare con i filtri selezionati.
               </div>
             )}
@@ -1321,11 +1321,11 @@ export default function ProductIdentityManager() {
                   required
                   value={importSupplierId}
                   onChange={e => setImportSupplierId(e.target.value)}
-                  style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ padding: '12px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                 >
-                  <option value="" style={{ background: '#13131c' }}>-- Seleziona Fornitore --</option>
+                  <option value="" style={{ background: 'var(--bg-card)' }}>-- Seleziona Fornitore --</option>
                   {suppliers.map(s => (
-                    <option key={s.id} value={s.id} style={{ background: '#13131c' }}>
+                    <option key={s.id} value={s.id} style={{ background: 'var(--bg-card)' }}>
                       {s.nome_azienda} (ID: {s.id})
                     </option>
                   ))}
@@ -1339,7 +1339,7 @@ export default function ProductIdentityManager() {
                   type="file"
                   accept=".xlsx"
                   onChange={e => setImportFile(e.target.files?.[0] || null)}
-                  style={{ padding: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                  style={{ padding: '12px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1351,12 +1351,12 @@ export default function ProductIdentityManager() {
                   onChange={e => setImportDryRun(e.target.checked)}
                   style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)' }}
                 />
-                <label htmlFor="importDryRunCheckbox" style={{ fontSize: '0.85rem', color: 'white', fontWeight: 500, cursor: 'pointer' }}>
+                <label htmlFor="importDryRunCheckbox" style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500, cursor: 'pointer' }}>
                   Modalità prova / dry run (simulazione)
                 </label>
               </div>
 
-              <div style={{ padding: '12px', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '8px', background: 'rgba(59,130,246,0.06)' }}>
+              <div style={{ padding: '12px', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', background: 'var(--accent-bg)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
                   <input
                     type="checkbox"
@@ -1365,7 +1365,7 @@ export default function ProductIdentityManager() {
                     onChange={e => setCreateMissingProducts(e.target.checked)}
                     style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: 'var(--accent-blue)' }}
                   />
-                  <label htmlFor="createMissingProductsCheckbox" style={{ fontSize: '0.85rem', color: 'white', fontWeight: 600, cursor: 'pointer' }}>
+                  <label htmlFor="createMissingProductsCheckbox" style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 600, cursor: 'pointer' }}>
                     Primo listino: crea i prodotti mancanti
                     <span style={{ display: 'block', marginTop: '5px', color: 'var(--text-secondary)', fontWeight: 400, lineHeight: 1.4 }}>
                       Usa il nome esatto del fornitore. Prezzo unitario e confezione restano separati; nessun abbinamento simile viene approvato automaticamente.
@@ -1390,7 +1390,7 @@ export default function ProductIdentityManager() {
               </button>
               
               {importError && (
-                <div style={{ background: 'var(--status-red-bg)', color: 'var(--status-red)', padding: '12px', borderRadius: '8px', fontSize: '0.85rem' }}>
+                <div style={{ background: 'var(--status-red-bg)', color: 'var(--status-red)', padding: '12px', borderRadius: 'var(--radius-md)', fontSize: '0.85rem' }}>
                   {importError}
                 </div>
               )}
@@ -1401,36 +1401,36 @@ export default function ProductIdentityManager() {
                 <>
                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Risultato Elaborazione</h4>
                   {importResult.dry_run && (
-                    <div style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '10px 14px', borderRadius: '8px', color: '#60a5fa', fontSize: '0.85rem', fontWeight: 500 }}>
+                    <div style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', padding: '10px 14px', borderRadius: 'var(--radius-md)', color: 'var(--accent-text)', fontSize: '0.85rem', fontWeight: 500 }}>
                       <strong>SIMULAZIONE ATTIVA:</strong> Nessun record è stato realmente modificato o creato nel database.
                     </div>
                   )}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                    <div style={{ background: 'var(--bg-inset)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Righe Lette</span>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{importResult.righe_totali_lette}</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{importResult.righe_totali_lette}</div>
                     </div>
-                    <div style={{ background: 'rgba(0, 200, 100, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(0, 200, 100, 0.1)' }}>
+                    <div style={{ background: 'var(--ok-bg)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--ok-border)' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--status-green)' }}>Righe Importate (Matched)</span>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-green)' }}>{importResult.righe_importate}</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--status-green)' }}>{importResult.righe_importate}</div>
                     </div>
-                    <div style={{ background: 'rgba(255, 200, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 200, 0, 0.1)' }}>
-                      <span style={{ fontSize: '0.8rem', color: '#ffb700' }}>Match Candidates (Parking Area)</span>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffb700' }}>{importResult.match_candidates_creati}</div>
+                    <div style={{ background: 'var(--warn-bg)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--warn-border)' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--warn)' }}>Match Candidates (Parking Area)</span>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--warn)' }}>{importResult.match_candidates_creati}</div>
                     </div>
-                    <div style={{ background: 'rgba(255, 0, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 0, 0, 0.1)' }}>
+                    <div style={{ background: 'var(--crit-bg)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--crit-border)' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--status-red)' }}>Righe Scartate/Errori</span>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--status-red)' }}>{importResult.righe_scartate}</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--status-red)' }}>{importResult.righe_scartate}</div>
                     </div>
-                    <div style={{ background: 'rgba(59,130,246,0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59,130,246,0.15)' }}>
-                      <span style={{ fontSize: '0.8rem', color: '#60a5fa' }}>
+                    <div style={{ background: 'var(--accent-bg)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-border)' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--accent-text)' }}>
                         Prodotti {importResult.dry_run ? 'da creare (simulati)' : 'creati'}
                       </span>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#60a5fa' }}>{importResult.prodotti_creati || 0}</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--accent-text)' }}>{importResult.prodotti_creati || 0}</div>
                     </div>
-                    <div style={{ background: 'rgba(59,130,246,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59,130,246,0.1)' }}>
+                    <div style={{ background: 'var(--accent-bg)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-border)' }}>
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Prodotti esatti riutilizzati</span>
-                      <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{importResult.prodotti_riutilizzati || 0}</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{importResult.prodotti_riutilizzati || 0}</div>
                     </div>
                   </div>
 
@@ -1443,16 +1443,16 @@ export default function ProductIdentityManager() {
                   </div>
 
                   {importResult.match_candidates_creati > 0 && importResult.dry_run && (
-                    <div style={{ background: 'rgba(255, 200, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 200, 0, 0.1)' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#ffb700' }}>
+                    <div style={{ background: 'var(--warn-bg)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--warn-border)' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--warn)' }}>
                         Simulazione: nessun candidato è stato salvato. Per il primo listino attiva “crea i prodotti mancanti” e ripeti prima la prova.
                       </span>
                     </div>
                   )}
 
                   {importResult.match_candidates_creati > 0 && !importResult.dry_run && (
-                    <div style={{ background: 'rgba(255, 200, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255, 200, 0, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#ffb700' }}>Ci sono {importResult.match_candidates_creati} nuovi candidati da abbinare manualmente.</span>
+                    <div style={{ background: 'var(--warn-bg)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--warn-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--warn)' }}>Ci sono {importResult.match_candidates_creati} nuovi candidati da abbinare manualmente.</span>
                       <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
                         fetchCandidates();
                         setActiveSubTab('candidates');
@@ -1463,7 +1463,7 @@ export default function ProductIdentityManager() {
                   )}
                 </>
               ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem', textAlign: 'center', border: '1px dashed var(--border-glass)', borderRadius: '12px', padding: '40px' }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem', textAlign: 'center', border: '1px dashed var(--border-glass)', borderRadius: 'var(--radius-lg)', padding: '40px' }}>
                   Seleziona un fornitore e carica il file Excel per avviare l'importazione.
                 </div>
               )}
@@ -1481,10 +1481,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'all' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'all' ? 'var(--accent-blue)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'all' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'all' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1496,10 +1496,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'new_product' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'new_product' ? 'var(--accent-blue)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'new_product' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'new_product' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1511,10 +1511,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'matched' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'matched' ? 'var(--accent-blue)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'matched' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'matched' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1526,10 +1526,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'parking' ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'parking' ? 'var(--accent-blue)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'parking' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'parking' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1541,10 +1541,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'errors' ? 'var(--status-red)' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'errors' ? 'var(--status-red)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'errors' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'errors' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1556,10 +1556,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'low_score' ? '#ff9900' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'low_score' ? 'var(--warn)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'low_score' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'low_score' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1571,10 +1571,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'no_price' ? '#9d4edd' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'no_price' ? 'var(--info)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'no_price' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'no_price' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1586,10 +1586,10 @@ export default function ProductIdentityManager() {
                     style={{
                       padding: '4px 10px',
                       fontSize: '0.75rem',
-                      background: previewFilter === 'no_pack' ? '#06d6a0' : 'rgba(255,255,255,0.05)',
+                      background: previewFilter === 'no_pack' ? 'var(--ok)' : 'var(--bg-elevated)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '6px',
-                      color: previewFilter === 'no_pack' ? 'white' : 'var(--text-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: previewFilter === 'no_pack' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                       cursor: 'pointer'
                     }}
                   >
@@ -1597,10 +1597,10 @@ export default function ProductIdentityManager() {
                   </button>
                 </div>
               </div>
-              <div style={{ overflowX: 'auto', border: '1px solid var(--border-glass)', borderRadius: '8px' }}>
+              <div style={{ overflowX: 'auto', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
-                    <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border-glass)', textAlign: 'left' }}>
+                    <tr style={{ background: 'var(--bg-inset)', borderBottom: '1px solid var(--border-glass)', textAlign: 'left' }}>
                       <th style={{ padding: '10px' }}>Riga</th>
                       <th style={{ padding: '10px' }}>Codice</th>
                       <th style={{ padding: '10px' }}>Descrizione</th>
@@ -1631,20 +1631,20 @@ export default function ProductIdentityManager() {
                         <td style={{ padding: '10px', color: 'var(--text-secondary)' }}>{p.uom} (x{p.pack_qty})</td>
                         <td style={{ padding: '10px' }}>
                           {p.match_status === 'new_product' ? (
-                            <span style={{ color: '#60a5fa', background: 'rgba(59,130,246,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                            <span style={{ color: 'var(--accent-text)', background: 'var(--accent-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
                               Nuovo prodotto ({p.matched_sku})
                             </span>
                           ) : ['auto_match', 'exact_product'].includes(p.match_status) ? (
-                            <span style={{ color: 'var(--status-green)', background: 'rgba(0, 200, 100, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }} title={p.match_reason === 'existing_alias' ? 'Matched via existing alias' : 'Matched via score threshold'}>
+                            <span style={{ color: 'var(--status-green)', background: 'var(--ok-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }} title={p.match_reason === 'existing_alias' ? 'Matched via existing alias' : 'Matched via score threshold'}>
                               Auto ({p.matched_sku}) {p.score ? `(Score ${p.score.toFixed(0)}%)` : ''}
                             </span>
                           ) : (
-                            <span style={{ color: '#ffb700', background: 'rgba(255, 200, 0, 0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                            <span style={{ color: 'var(--warn)', background: 'var(--warn-bg)', padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
                               Parking (Score {p.score.toFixed(0)}%)
                             </span>
                           )}
                         </td>
-                        <td style={{ padding: '10px', color: p.price_outcome === 'created' ? 'var(--status-green)' : p.price_outcome === 'updated' ? '#ffb700' : 'var(--text-secondary)' }}>
+                        <td style={{ padding: '10px', color: p.price_outcome === 'created' ? 'var(--status-green)' : p.price_outcome === 'updated' ? 'var(--warn)' : 'var(--text-secondary)' }}>
                           {p.price_outcome || '-'}
                         </td>
                       </tr>
@@ -1656,7 +1656,7 @@ export default function ProductIdentityManager() {
           )}
 
           {importResult?.errori_parsing?.length > 0 && (
-            <div style={{ border: '1px solid rgba(255,0,0,0.2)', background: 'rgba(255,0,0,0.02)', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ border: '1px solid var(--crit-border)', background: 'var(--crit-bg)', borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <h4 style={{ margin: 0, color: 'var(--status-red)', fontSize: '0.9rem', fontWeight: 600 }}>Errori e Segnalazioni</h4>
               <div style={{ maxHeight: '150px', overflowY: 'auto', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {importResult.errori_parsing.map((err: string, idx: number) => (
@@ -1670,8 +1670,8 @@ export default function ProductIdentityManager() {
 
       {/* MODAL: Smart work queue resolution */}
       {selectedWorkItem && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto', padding: '28px', display: 'flex', flexDirection: 'column', gap: '18px', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--bg-overlay)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div className="glass-panel" style={{ width: '100%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto', padding: '28px', display: 'flex', flexDirection: 'column', gap: '18px', border: '1px solid var(--line-strong)' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: '1.2rem' }}>
                 {resolutionMode === 'create_canonical' && 'Crea prodotto e memorizza alias'}
@@ -1679,7 +1679,7 @@ export default function ProductIdentityManager() {
                 {resolutionMode === 'ignore' && 'Ignora questo articolo'}
               </h3>
               <p style={{ margin: '7px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-                <strong style={{ color: 'white' }}>{selectedWorkItem.raw_description}</strong><br />
+                <strong style={{ color: 'var(--text-primary)' }}>{selectedWorkItem.raw_description}</strong><br />
                 Una sola conferma risolverà {selectedWorkItem.occurrence_count} {selectedWorkItem.occurrence_count === 1 ? 'riga' : 'righe'} e insegnerà il riconoscimento per il futuro.
               </p>
             </div>
@@ -1695,7 +1695,7 @@ export default function ProductIdentityManager() {
                       maxLength={255}
                       value={quickProductForm.canonical_name}
                       onChange={e => setQuickProductForm({ ...quickProductForm, canonical_name: e.target.value })}
-                      style={{ padding: '11px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                      style={{ padding: '11px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                     />
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1707,7 +1707,7 @@ export default function ProductIdentityManager() {
                         value={quickProductForm.category}
                         onChange={e => setQuickProductForm({ ...quickProductForm, category: e.target.value })}
                         placeholder="Es. monouso, pulizia, beverage"
-                        style={{ padding: '11px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                        style={{ padding: '11px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                       />
                       <datalist id="quick-product-categories">
                         {availableCategories.map(category => <option key={category} value={category} />)}
@@ -1720,7 +1720,7 @@ export default function ProductIdentityManager() {
                         maxLength={100}
                         value={quickProductForm.subcategory}
                         onChange={e => setQuickProductForm({ ...quickProductForm, subcategory: e.target.value })}
-                        style={{ padding: '11px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                        style={{ padding: '11px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                       />
                     </label>
                   </div>
@@ -1729,7 +1729,7 @@ export default function ProductIdentityManager() {
                     <select
                       value={quickProductForm.comparison_unit}
                       onChange={e => setQuickProductForm({ ...quickProductForm, comparison_unit: e.target.value })}
-                      style={{ padding: '11px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                      style={{ padding: '11px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                     >
                       <option value="Pz">Pezzo (Pz)</option>
                       <option value="Ct">Cartone (Ct)</option>
@@ -1778,7 +1778,7 @@ export default function ProductIdentityManager() {
                           }
                         }}
                         placeholder="Nome canonico o SKU..."
-                        style={{ width: '100%', boxSizing: 'border-box', padding: '11px 11px 11px 35px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white' }}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '11px 11px 11px 35px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                       />
                     </div>
                   </label>
@@ -1796,9 +1796,9 @@ export default function ProductIdentityManager() {
                         minHeight: '120px',
                         maxHeight: '220px',
                         overflowY: 'auto',
-                        background: '#13131c',
-                        border: `1px solid ${selectedExistingProductId ? '#3b82f6' : 'var(--border-glass)'}`,
-                        borderRadius: '8px',
+                        background: 'var(--bg-card)',
+                        border: `1px solid ${selectedExistingProductId ? 'var(--accent)' : 'var(--border-glass)'}`,
+                        borderRadius: 'var(--radius-md)',
                       }}
                     >
                       {matchingExistingProducts.length === 0 && (
@@ -1821,22 +1821,22 @@ export default function ProductIdentityManager() {
                               padding: '9px 14px',
                               cursor: 'pointer',
                               fontSize: '0.85rem',
-                              background: isSelected ? 'rgba(59,130,246,0.35)' : 'transparent',
-                              color: isSelected ? 'white' : '#e2e8f0',
+                              background: isSelected ? 'var(--accent-bg)' : 'transparent',
+                              color: isSelected ? 'var(--text-primary)' : 'var(--text-primary)',
                               fontWeight: isSelected ? 600 : 400,
-                              borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
+                              borderLeft: isSelected ? '3px solid var(--accent)' : '3px solid transparent',
                               transition: 'background 0.1s',
                               userSelect: 'none',
                             }}
                             onMouseEnter={e => {
-                              if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.06)'
+                              if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-elevated)'
                             }}
                             onMouseLeave={e => {
                               if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'transparent'
                             }}
                           >
                             {product.canonical_name}
-                            {(!product.brand || !product.comparison_unit) && <span style={{ color: '#fbbf24', marginLeft: 6, fontSize: '0.72rem' }}>· da completare: {[!product.brand ? 'marca' : '', !product.comparison_unit ? 'unità' : ''].filter(Boolean).join(', ')}</span>}
+                            {(!product.brand || !product.comparison_unit) && <span style={{ color: 'var(--warn)', marginLeft: 6, fontSize: '0.72rem' }}>· da completare: {[!product.brand ? 'marca' : '', !product.comparison_unit ? 'unità' : ''].filter(Boolean).join(', ')}</span>}
                             {product.sku_interno
                               ? <span style={{ color: 'var(--text-secondary)', marginLeft: '6px', fontWeight: 400 }}>· {product.sku_interno}</span>
                               : null}
@@ -1847,7 +1847,7 @@ export default function ProductIdentityManager() {
                     {selectedExistingProductId && (() => {
                       const sel = products.find(p => String(p.id) === selectedExistingProductId)
                       return sel
-                        ? <div style={{ fontSize: '0.75rem', color: '#3b82f6', marginTop: '3px' }}>✓ Selezionato: {sel.canonical_name}</div>
+                        ? <div style={{ fontSize: '0.75rem', color: 'var(--accent-text)', marginTop: '3px' }}>✓ Selezionato: {sel.canonical_name}</div>
                         : null
                     })()}
                   </div>
@@ -1855,13 +1855,13 @@ export default function ProductIdentityManager() {
               )}
 
               {resolutionMode === 'ignore' && (
-                <div style={{ padding: '13px', borderRadius: '8px', background: 'rgba(245,158,11,0.08)', color: 'var(--status-orange)', fontSize: '0.85rem' }}>
+                <div style={{ padding: '13px', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--status-orange)', fontSize: '0.85rem' }}>
                   Le {selectedWorkItem.occurrence_count} righe saranno contrassegnate come “nessun match”. Non verrà creato alcun prodotto o alias.
                 </div>
               )}
 
               {resolutionError && (
-                <div style={{ padding: '10px', borderRadius: '8px', background: 'var(--status-red-bg)', color: 'var(--status-red)', fontSize: '0.82rem' }}>
+                <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--status-red-bg)', color: 'var(--status-red)', fontSize: '0.82rem' }}>
                   {resolutionError}
                 </div>
               )}
@@ -1882,8 +1882,8 @@ export default function ProductIdentityManager() {
 
       {/* MODAL: Add/Edit Product */}
       {showProductModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="glass-panel" style={{ width: '90%', maxWidth: '600px', padding: '30px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'var(--bg-overlay)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="glass-panel" style={{ width: '90%', maxWidth: '600px', padding: '30px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid var(--line-strong)', boxShadow: 'var(--shadow-pop)' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>
               {editingProduct ? 'Modifica Prodotto Canonico' : 'Nuovo Prodotto Canonico'}
             </h3>
@@ -1897,7 +1897,7 @@ export default function ProductIdentityManager() {
                   placeholder="es. BICCHIERE_CAFFE"
                   value={productForm.sku_interno}
                   onChange={e => setProductForm({ ...productForm, sku_interno: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1909,7 +1909,7 @@ export default function ProductIdentityManager() {
                   placeholder="es. Bicchiere caffè"
                   value={productForm.canonical_name}
                   onChange={e => setProductForm({ ...productForm, canonical_name: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1921,7 +1921,7 @@ export default function ProductIdentityManager() {
                   placeholder="es. GUANTI, BICCHIERI ACQUA, GELATO LATTE"
                   value={productForm.order_name}
                   onChange={e => setProductForm({ ...productForm, order_name: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1931,7 +1931,7 @@ export default function ProductIdentityManager() {
                   type="text"
                   value={productForm.brand}
                   onChange={e => setProductForm({ ...productForm, brand: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1940,11 +1940,11 @@ export default function ProductIdentityManager() {
                 <select
                   value={productForm.category}
                   onChange={e => setProductForm({ ...productForm, category: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 >
-                  <option value="Food" style={{ background: '#13131c' }}>Food</option>
-                  <option value="Beverage" style={{ background: '#13131c' }}>Beverage</option>
-                  <option value="Materiali di consumo" style={{ background: '#13131c' }}>Materiali di consumo</option>
+                  <option value="Food" style={{ background: 'var(--bg-card)' }}>Food</option>
+                  <option value="Beverage" style={{ background: 'var(--bg-card)' }}>Beverage</option>
+                  <option value="Materiali di consumo" style={{ background: 'var(--bg-card)' }}>Materiali di consumo</option>
                 </select>
               </div>
 
@@ -1955,7 +1955,7 @@ export default function ProductIdentityManager() {
                   placeholder="es. 80"
                   value={productForm.volume_ml}
                   onChange={e => setProductForm({ ...productForm, volume_ml: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1966,7 +1966,7 @@ export default function ProductIdentityManager() {
                   placeholder="es. 500"
                   value={productForm.weight_g}
                   onChange={e => setProductForm({ ...productForm, weight_g: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1976,7 +1976,7 @@ export default function ProductIdentityManager() {
                   type="number"
                   value={productForm.unit_count}
                   onChange={e => setProductForm({ ...productForm, unit_count: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -1985,15 +1985,15 @@ export default function ProductIdentityManager() {
                 <select
                   value={productForm.comparison_unit}
                   onChange={e => setProductForm({ ...productForm, comparison_unit: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 >
-                  <option value="Pz" style={{ background: '#13131c' }}>Pezzo (Pz)</option>
-                  <option value="Lt" style={{ background: '#13131c' }}>Litro (Lt)</option>
-                  <option value="Kg" style={{ background: '#13131c' }}>Chilogrammo (Kg)</option>
-                  <option value="Bt" style={{ background: '#13131c' }}>Bottiglia (Bt)</option>
-                  <option value="Ct" style={{ background: '#13131c' }}>Cartone (Ct)</option>
-                  <option value="Box" style={{ background: '#13131c' }}>Box / Cassa</option>
-                  <option value="CP" style={{ background: '#13131c' }}>Coppia (CP)</option>
+                  <option value="Pz" style={{ background: 'var(--bg-card)' }}>Pezzo (Pz)</option>
+                  <option value="Lt" style={{ background: 'var(--bg-card)' }}>Litro (Lt)</option>
+                  <option value="Kg" style={{ background: 'var(--bg-card)' }}>Chilogrammo (Kg)</option>
+                  <option value="Bt" style={{ background: 'var(--bg-card)' }}>Bottiglia (Bt)</option>
+                  <option value="Ct" style={{ background: 'var(--bg-card)' }}>Cartone (Ct)</option>
+                  <option value="Box" style={{ background: 'var(--bg-card)' }}>Box / Cassa</option>
+                  <option value="CP" style={{ background: 'var(--bg-card)' }}>Coppia (CP)</option>
                 </select>
               </div>
 
@@ -2008,8 +2008,8 @@ export default function ProductIdentityManager() {
 
       {/* MODAL: Add Alias */}
       {showAliasModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="glass-panel" style={{ width: '90%', maxWidth: '500px', padding: '30px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'var(--bg-overlay)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="glass-panel" style={{ width: '90%', maxWidth: '500px', padding: '30px', display: 'flex', flexDirection: 'column', gap: '20px', border: '1px solid var(--line-strong)' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>Crea Alias Fornitore</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>Mappa una descrizione fornitore a questo prodotto canonico.</p>
 
@@ -2023,7 +2023,7 @@ export default function ProductIdentityManager() {
                   placeholder="ID del fornitore"
                   value={aliasForm.supplier_id}
                   onChange={e => setAliasForm({ ...aliasForm, supplier_id: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -2034,7 +2034,7 @@ export default function ProductIdentityManager() {
                   placeholder="Codice del fornitore"
                   value={aliasForm.supplier_code}
                   onChange={e => setAliasForm({ ...aliasForm, supplier_code: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -2046,7 +2046,7 @@ export default function ProductIdentityManager() {
                   placeholder="Es. BICCHIERE CAFFE BIANCO x100"
                   value={aliasForm.raw_description}
                   onChange={e => setAliasForm({ ...aliasForm, raw_description: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -2057,7 +2057,7 @@ export default function ProductIdentityManager() {
                   placeholder="Es. 100"
                   value={aliasForm.pack_qty}
                   onChange={e => setAliasForm({ ...aliasForm, pack_qty: e.target.value })}
-                  style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white' }}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 />
               </div>
 

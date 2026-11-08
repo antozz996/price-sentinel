@@ -373,11 +373,11 @@ export default function ManualUpload({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           <div style={{ 
-            border: '2px dashed var(--border-glass)', 
+            border: '2px dashed var(--line)', 
             padding: '48px', 
-            borderRadius: 'var(--border-radius-md)', 
+            borderRadius: 'var(--radius-md)', 
             textAlign: 'center',
-            background: files.length > 0 ? 'rgba(16, 185, 129, 0.05)' : 'transparent',
+            background: files.length > 0 ? 'var(--ok-bg)' : 'transparent',
             transition: 'all 0.3s ease'
           }}>
             <input 
@@ -410,22 +410,22 @@ export default function ManualUpload({
               onChange={(e) => setNote(e.target.value)}
               placeholder="es. Fatture settimana 14-20 Aprile..."
               style={{ 
-                width: '100%', padding: '12px', background: 'rgba(255,255,255,0.05)', 
-                border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)', 
-                color: 'white', minHeight: '80px', outline: 'none' 
+                width: '100%', padding: '12px', background: 'var(--bg-inset)', 
+                border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', 
+                color: 'var(--text-primary)', minHeight: '80px', outline: 'none' 
               }}
             />
           </div>
 
           {error && (
-            <div style={{ padding: '16px', background: 'var(--status-red-bg)', color: 'var(--status-red)', borderRadius: 'var(--border-radius-md)', display: 'flex', gap: '12px' }}>
+            <div style={{ padding: '16px', background: 'var(--status-red-bg)', color: 'var(--status-red)', borderRadius: 'var(--radius-md)', display: 'flex', gap: '12px' }}>
               <AlertCircle size={20} />
               <span>{error}</span>
             </div>
           )}
 
           {adminNotice && (
-            <div style={{ padding: '16px', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.25)', borderRadius: 'var(--border-radius-md)', display: 'flex', gap: '12px' }}>
+            <div style={{ padding: '16px', background: 'var(--accent-bg)', color: 'var(--accent-text)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', display: 'flex', gap: '12px' }}>
               <Info size={20} />
               <span>{adminNotice}</span>
             </div>
@@ -434,9 +434,9 @@ export default function ManualUpload({
           {summary && (
             <div style={{
               padding: '20px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: 'var(--border-radius-md)',
-              border: '1px solid var(--border-glass)',
+              background: 'var(--bg-inset)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--line)',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px'
@@ -446,19 +446,19 @@ export default function ManualUpload({
               </h4>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', textAlign: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{summary.elaborati}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.2rem', fontWeight: 600 }}>{summary.elaborati}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Processati</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--status-yellow)' }}>{summary.gia_presenti}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.2rem', fontWeight: 600, color: 'var(--status-yellow)' }}>{summary.gia_presenti}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Duplicati</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--status-red)' }}>{summary.anomalie_generate}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.2rem', fontWeight: 600, color: 'var(--status-red)' }}>{summary.anomalie_generate}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Anomalie</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: (summary.righe_parking || 0) > 0 ? 'var(--status-yellow)' : 'var(--text-secondary)' }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: '1.2rem', fontWeight: 600, color: (summary.righe_parking || 0) > 0 ? 'var(--status-yellow)' : 'var(--text-secondary)' }}>
                     {summary.righe_parking || 0}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Fuori Listino</div>
@@ -469,9 +469,9 @@ export default function ManualUpload({
               {summary.righe_parking !== undefined && summary.righe_parking > 0 && (
                 <div style={{
                   padding: '14px 18px',
-                  borderRadius: '8px',
-                  background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(59, 130, 246, 0.15))',
-                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--warn-bg)',
+                  border: '1px solid var(--warn-border)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -482,7 +482,7 @@ export default function ManualUpload({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <AlertCircle size={22} color="var(--status-yellow)" />
                     <div>
-                      <strong style={{ color: 'white', fontSize: '0.9rem' }}>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>
                         {summary.righe_parking} {summary.righe_parking === 1 ? 'prodotto fuori listino rilevato' : 'prodotti fuori listino rilevati'}
                       </strong>
                       <p style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '2px 0 0' }}>
@@ -495,17 +495,16 @@ export default function ManualUpload({
                       onClick={() => onNavigate('unlistedproducts')}
                       style={{
                         padding: '8px 16px',
-                        background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                        background: 'var(--accent)',
                         border: 'none',
-                        borderRadius: '6px',
-                        color: 'white',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-on-accent)',
                         fontWeight: 600,
                         fontSize: '0.85rem',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                        gap: '6px'
                       }}
                     >
                       Gestisci nella Pagina Dedicata ➔
@@ -519,16 +518,16 @@ export default function ManualUpload({
           {uploading && (
             <div style={{
               padding: '16px 20px',
-              background: 'rgba(15, 23, 42, 0.75)',
-              border: '1px solid rgba(59, 130, 246, 0.3)',
-              borderRadius: 'var(--border-radius-md)',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--accent-border)',
+              borderRadius: 'var(--radius-md)',
               display: 'flex',
               flexDirection: 'column',
               gap: '10px'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
-                <span style={{ fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Loader2 className="spinner" size={16} color="#38bdf8" />
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Loader2 className="spinner" size={16} color="var(--accent-text)" />
                   {uploadStep === 'uploading'
                     ? `Fase 1/4: trasferimento di ${files.length} ${files.length === 1 ? 'file' : 'file'}`
                     : uploadStep === 'extracting'
@@ -537,7 +536,7 @@ export default function ManualUpload({
                         ? `Fase 3/4: analisi XML e matching (${processedFiles}/${totalFiles})`
                         : 'Fase 4/4: salvataggio e finalizzazione'}
                 </span>
-                <span style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.9rem' }}>
+                <span style={{ fontWeight: 600, color: 'var(--accent-text)', fontSize: '0.9rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                   {overallProgress}%
                 </span>
               </div>
@@ -546,18 +545,17 @@ export default function ManualUpload({
               <div style={{
                 width: '100%',
                 height: '10px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                borderRadius: '5px',
+                background: 'var(--bg-elevated)',
+                borderRadius: '999px',
                 overflow: 'hidden',
                 position: 'relative'
               }}>
                 <div style={{
                   height: '100%',
                   width: `${overallProgress}%`,
-                  background: 'linear-gradient(90deg, #3b82f6, #10b981, #38bdf8)',
-                  borderRadius: '5px',
-                  transition: 'width 0.3s ease',
-                  boxShadow: '0 0 12px rgba(56, 189, 248, 0.5)'
+                  background: 'var(--accent)',
+                  borderRadius: '999px',
+                  transition: 'width 0.3s ease'
                 }} />
               </div>
 
@@ -569,10 +567,10 @@ export default function ManualUpload({
                   ['4', 'Finalizzazione', uploadStep === 'done']
                 ].map(([number, label, complete]) => (
                   <div key={String(number)} style={{
-                    padding: '8px', borderRadius: '7px',
-                    border: `1px solid ${complete ? 'rgba(16,185,129,.45)' : 'rgba(148,163,184,.18)'}`,
-                    color: complete ? '#6ee7b7' : 'var(--text-secondary)',
-                    background: complete ? 'rgba(16,185,129,.08)' : 'rgba(255,255,255,.02)'
+                    padding: '8px', borderRadius: 'var(--radius-sm)',
+                    border: `1px solid ${complete ? 'var(--ok-border)' : 'var(--line)'}`,
+                    color: complete ? 'var(--ok)' : 'var(--text-secondary)',
+                    background: complete ? 'var(--ok-bg)' : 'var(--bg-inset)'
                   }}>
                     <strong style={{ marginRight: '5px' }}>{complete ? '✓' : number}.</strong>{label}
                   </div>
@@ -581,10 +579,10 @@ export default function ManualUpload({
 
               {liveProgress && (
                 <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  <span>Elaborati: <strong style={{ color: 'white' }}>{liveProgress.file_elaborati}</strong></span>
-                  <span>Duplicati: <strong style={{ color: '#fbbf24' }}>{liveProgress.gia_presenti}</strong></span>
-                  <span>Errori: <strong style={{ color: liveProgress.errori_formato ? '#f87171' : '#6ee7b7' }}>{liveProgress.errori_formato}</strong></span>
-                  <span>Anomalie: <strong style={{ color: liveProgress.anomalie_generate ? '#fbbf24' : '#6ee7b7' }}>{liveProgress.anomalie_generate}</strong></span>
+                  <span>Elaborati: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>{liveProgress.file_elaborati}</strong></span>
+                  <span>Duplicati: <strong style={{ color: 'var(--warn)', fontFamily: 'var(--font-mono)' }}>{liveProgress.gia_presenti}</strong></span>
+                  <span>Errori: <strong style={{ color: liveProgress.errori_formato ? 'var(--crit)' : 'var(--ok)', fontFamily: 'var(--font-mono)' }}>{liveProgress.errori_formato}</strong></span>
+                  <span>Anomalie: <strong style={{ color: liveProgress.anomalie_generate ? 'var(--warn)' : 'var(--ok)', fontFamily: 'var(--font-mono)' }}>{liveProgress.anomalie_generate}</strong></span>
                 </div>
               )}
 
@@ -618,9 +616,9 @@ export default function ManualUpload({
       <div className="glass-panel" style={{ padding: '24px' }}>
         
         {/* Scansione manuale delle sospese */}
-        <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+        <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--line)', paddingBottom: '20px' }}>
           <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <ShieldAlert size={20} color="#f59e0b" /> Fatture in Sospeso
+            <ShieldAlert size={20} color="var(--warn)" /> Fatture in Sospeso
           </h3>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
             Hai caricato file in passato prima di censire i fornitori? Rielaborali subito per sbloccarli.
@@ -631,8 +629,8 @@ export default function ManualUpload({
             onClick={handleReprocessParked}
             style={{ 
               width: '100%', gap: '8px', 
-              background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)',
-              color: '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center',
+              background: 'var(--warn-bg)', border: '1px solid var(--warn-border)',
+              color: 'var(--warn)', display: 'flex', justifyContent: 'center', alignItems: 'center',
               fontWeight: 600, fontSize: '0.85rem', padding: '10px 0', cursor: 'pointer', transition: 'all 0.2s'
             }}
           >
@@ -642,7 +640,7 @@ export default function ManualUpload({
         </div>
 
         {/* Le associazioni economiche richiedono sempre revisione esplicita. */}
-        {isAdmin && onNavigate && <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
+        {isAdmin && onNavigate && <div style={{ marginBottom: '24px', borderBottom: '1px solid var(--line)', paddingBottom: '20px' }}>
           <h3 style={{ marginBottom: '12px' }}>Prodotti fuori listino</h3>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: '1.4' }}>
             Controlla suggerimenti, categorie e nuovi prodotti prima di registrarli.
@@ -665,7 +663,7 @@ export default function ManualUpload({
           {history.length === 0 && <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Nessun upload recente.</p>}
           {history.map(item => (
             <div key={item.id} style={{ 
-              padding: '12px', borderBottom: '1px solid var(--border-glass)', 
+              padding: '12px', borderBottom: '1px solid var(--line)', 
               display: 'flex', flexDirection: 'column', gap: '4px' 
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
@@ -681,7 +679,7 @@ export default function ManualUpload({
           ))}
         </div>
 
-        <div style={{ marginTop: '24px', padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', display: 'flex', gap: '10px' }}>
+        <div style={{ marginTop: '24px', padding: '12px', background: 'var(--accent-bg)', borderRadius: 'var(--radius-md)', display: 'flex', gap: '10px' }}>
           <Info size={16} color="var(--accent)" style={{ flexShrink: 0 }} />
           <p style={{ fontSize: '0.75rem', lineHeight: '1.4' }}>
             I duplicati vengono ignorati automaticamente grazie al controllo dell'hash univoco.
@@ -693,19 +691,19 @@ export default function ManualUpload({
       {isAdmin && showModal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-          background: 'rgba(5, 5, 10, 0.85)', backdropFilter: 'blur(8px)',
+          background: 'var(--bg-overlay)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
           padding: '20px', boxSizing: 'border-box'
         }}>
           <div className="glass-panel" style={{
             width: '100%', maxWidth: '650px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.08)', position: 'relative'
+            boxShadow: 'var(--shadow-pop)', border: '1px solid var(--line)', position: 'relative'
           }}>
             
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <ShieldAlert size={26} color="#f59e0b" />
+                <ShieldAlert size={26} color="var(--warn)" />
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>Rilevate Nuove Intestazioni!</h3>
                   <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
@@ -720,7 +718,7 @@ export default function ManualUpload({
 
             {/* Success notification inside modal */}
             {regSuccessMessage && (
-              <div style={{ padding: '10px 14px', borderRadius: '6px', background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', background: 'var(--ok-bg)', color: 'var(--ok)', border: '1px solid var(--ok-border)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <CheckCircle2 size={14} />
                 <span>{regSuccessMessage}</span>
               </div>
@@ -730,7 +728,7 @@ export default function ManualUpload({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto', paddingRight: '4px' }}>
               
               {unregisteredFornitori.length === 0 && unregisteredLocations.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '24px', color: '#10b981', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--ok)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                   <CheckCircle2 size={36} />
                   <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Tutti i soggetti sono stati registrati con successo!</span>
                 </div>
@@ -739,7 +737,7 @@ export default function ManualUpload({
               {/* Unregistered Suppliers list */}
               {unregisteredFornitori.map(forn => (
                 <div key={forn.partita_iva} style={{
-                  padding: '16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+                  padding: '16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)', border: '1px solid var(--line)',
                   display: 'flex', flexDirection: 'column', gap: '12px'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary-color)' }}>
@@ -753,12 +751,12 @@ export default function ManualUpload({
                         type="text"
                         value={editSupplierNames[forn.partita_iva] || ''}
                         onChange={e => setEditSupplierNames({ ...editSupplierNames, [forn.partita_iva]: e.target.value })}
-                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
+                        style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                       />
                     </div>
                     <div style={{ width: '140px' }}>
                       <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Partita IVA:</span>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 600, padding: '8px 0' }}>{forn.partita_iva}</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, padding: '8px 0', fontFamily: 'var(--font-mono)' }}>{forn.partita_iva}</div>
                     </div>
                   </div>
 
@@ -778,10 +776,10 @@ export default function ManualUpload({
               {/* Unregistered Locations list */}
               {unregisteredLocations.map(loc => (
                 <div key={loc.partita_iva} style={{
-                  padding: '16px', borderRadius: '10px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)',
+                  padding: '16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)', border: '1px solid var(--line)',
                   display: 'flex', flexDirection: 'column', gap: '12px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-blue)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent)' }}>
                     <MapPin size={16} /> Nuova P.IVA Gruppo (Sede Ricevente)
                   </div>
                   
@@ -792,7 +790,7 @@ export default function ManualUpload({
                         type="text"
                         value={editLocationNames[loc.partita_iva] || ''}
                         onChange={e => setEditLocationNames({ ...editLocationNames, [loc.partita_iva]: e.target.value })}
-                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
+                        style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' }}
                       />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -800,12 +798,12 @@ export default function ManualUpload({
                       <select
                         value={locationTypes[loc.partita_iva] || 'balneare'}
                         onChange={e => setLocationTypes({ ...locationTypes, [loc.partita_iva]: e.target.value })}
-                        style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.85rem', width: '100%' }}
+                        style={{ padding: '8px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem', width: '100%' }}
                       >
-                        <option value="balneare" style={{ background: '#13131c' }}>Balneare / Eventi</option>
-                        <option value="ristorante" style={{ background: '#13131c' }}>Ristorante / Food</option>
-                        <option value="discoteca" style={{ background: '#13131c' }}>Discoteca / Club</option>
-                        <option value="evento" style={{ background: '#13131c' }}>Evento / Altro</option>
+                        <option value="balneare" style={{ background: 'var(--bg-card)' }}>Balneare / Eventi</option>
+                        <option value="ristorante" style={{ background: 'var(--bg-card)' }}>Ristorante / Food</option>
+                        <option value="discoteca" style={{ background: 'var(--bg-card)' }}>Discoteca / Club</option>
+                        <option value="evento" style={{ background: 'var(--bg-card)' }}>Evento / Altro</option>
                       </select>
                     </div>
                   </div>
@@ -816,7 +814,7 @@ export default function ManualUpload({
                       onClick={() => handleRegisterLocation(loc.partita_iva)}
                       disabled={registeringKey === loc.partita_iva}
                       className="btn btn-primary"
-                      style={{ padding: '6px 16px', fontSize: '0.8rem', height: '32px', background: 'var(--accent-blue)', borderColor: 'var(--accent-blue)' }}
+                      style={{ padding: '6px 16px', fontSize: '0.8rem', height: '32px', background: 'var(--accent)', borderColor: 'var(--accent)' }}
                     >
                       {registeringKey === loc.partita_iva ? 'Registrazione...' : 'Crea e Associa Sede'}
                     </button>
@@ -827,11 +825,11 @@ export default function ManualUpload({
             </div>
 
             {/* Footer Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px', marginTop: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--line)', paddingTop: '16px', marginTop: '4px' }}>
               <button
                 onClick={() => setShowModal(false)}
                 className="btn"
-                style={{ padding: '8px 20px', fontSize: '0.85rem', background: 'transparent', border: '1px solid var(--border-glass)' }}
+                style={{ padding: '8px 20px', fontSize: '0.85rem', background: 'transparent', border: '1px solid var(--line)' }}
               >
                 Chiudi Procedura Wizard
               </button>

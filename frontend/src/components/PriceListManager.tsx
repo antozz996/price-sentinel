@@ -324,7 +324,7 @@ export default function PriceListManager() {
         </div>
 
         {/* Tabs per tipologia di listino */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-glass)', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--line)', marginBottom: '24px' }}>
           <button
             onClick={() => { setActiveTab('extract'); setMessage(null); setFile(null); }}
             style={{
@@ -333,7 +333,7 @@ export default function PriceListManager() {
               background: 'none',
               border: 'none',
               borderBottom: activeTab === 'extract' ? '2px solid var(--accent-blue)' : 'none',
-              color: activeTab === 'extract' ? 'white' : 'var(--text-secondary)',
+              color: activeTab === 'extract' ? 'var(--text-primary)' : 'var(--text-secondary)',
               fontWeight: 600,
               cursor: 'pointer',
               fontSize: '0.88rem',
@@ -344,7 +344,7 @@ export default function PriceListManager() {
               gap: '6px'
             }}
           >
-            <Sparkles size={15} style={{ color: '#f59e0b' }} />
+            <Sparkles size={15} style={{ color: 'var(--warn)' }} />
             Estrai da Fatture
           </button>
           <button
@@ -355,7 +355,7 @@ export default function PriceListManager() {
               background: 'none',
               border: 'none',
               borderBottom: activeTab === 'standard' ? '2px solid var(--accent-blue)' : 'none',
-              color: activeTab === 'standard' ? 'white' : 'var(--text-secondary)',
+              color: activeTab === 'standard' ? 'var(--text-primary)' : 'var(--text-secondary)',
               fontWeight: 600,
               cursor: 'pointer',
               fontSize: '0.88rem',
@@ -372,7 +372,7 @@ export default function PriceListManager() {
               background: 'none',
               border: 'none',
               borderBottom: activeTab === 'multi' ? '2px solid var(--accent-blue)' : 'none',
-              color: activeTab === 'multi' ? 'white' : 'var(--text-secondary)',
+              color: activeTab === 'multi' ? 'var(--text-primary)' : 'var(--text-secondary)',
               fontWeight: 600,
               cursor: 'pointer',
               fontSize: '0.88rem',
@@ -387,9 +387,9 @@ export default function PriceListManager() {
           
           {activeTab === 'extract' && (
             <>
-              <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ border: '1px solid var(--line)', padding: '20px', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <Sparkles size={18} style={{ color: '#f59e0b' }} />
+                  <Sparkles size={18} style={{ color: 'var(--warn)' }} />
                   <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Estrai Listino Prezzi da Fatture Caricate</h4>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
@@ -403,7 +403,7 @@ export default function PriceListManager() {
                 <select 
                   value={extractSupplier} 
                   onChange={(e) => { setExtractSupplier(e.target.value); setExtractedData(null); }}
-                  style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)', color: 'white', outline: 'none' }}
+                  style={{ width: '100%', padding: '12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                 >
                   <option value="">-- Scegli fornitore per estrazione --</option>
                   {fornitori.map(f => (
@@ -421,10 +421,10 @@ export default function PriceListManager() {
                     onClick={() => { setPriceStrategy('latest'); setExtractedData(null); }}
                     style={{
                       padding: '10px',
-                      borderRadius: '8px',
-                      border: priceStrategy === 'latest' ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                      background: priceStrategy === 'latest' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
-                      color: priceStrategy === 'latest' ? '#3b82f6' : 'white',
+                      borderRadius: 'var(--radius-md)',
+                      border: priceStrategy === 'latest' ? '1px solid var(--accent-blue)' : '1px solid var(--line)',
+                      background: priceStrategy === 'latest' ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                      color: priceStrategy === 'latest' ? 'var(--accent-text)' : 'var(--text-primary)',
                       cursor: 'pointer',
                       fontSize: '0.82rem',
                       fontWeight: priceStrategy === 'latest' ? 600 : 400,
@@ -440,10 +440,10 @@ export default function PriceListManager() {
                     onClick={() => { setPriceStrategy('min'); setExtractedData(null); }}
                     style={{
                       padding: '10px',
-                      borderRadius: '8px',
-                      border: priceStrategy === 'min' ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                      background: priceStrategy === 'min' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
-                      color: priceStrategy === 'min' ? '#3b82f6' : 'white',
+                      borderRadius: 'var(--radius-md)',
+                      border: priceStrategy === 'min' ? '1px solid var(--accent-blue)' : '1px solid var(--line)',
+                      background: priceStrategy === 'min' ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                      color: priceStrategy === 'min' ? 'var(--accent-text)' : 'var(--text-primary)',
                       cursor: 'pointer',
                       fontSize: '0.82rem',
                       fontWeight: priceStrategy === 'min' ? 600 : 400,
@@ -459,10 +459,10 @@ export default function PriceListManager() {
                     onClick={() => { setPriceStrategy('avg'); setExtractedData(null); }}
                     style={{
                       padding: '10px',
-                      borderRadius: '8px',
-                      border: priceStrategy === 'avg' ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                      background: priceStrategy === 'avg' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.02)',
-                      color: priceStrategy === 'avg' ? '#3b82f6' : 'white',
+                      borderRadius: 'var(--radius-md)',
+                      border: priceStrategy === 'avg' ? '1px solid var(--accent-blue)' : '1px solid var(--line)',
+                      background: priceStrategy === 'avg' ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                      color: priceStrategy === 'avg' ? 'var(--accent-text)' : 'var(--text-primary)',
                       cursor: 'pointer',
                       fontSize: '0.82rem',
                       fontWeight: priceStrategy === 'avg' ? 600 : 400,
@@ -488,25 +488,25 @@ export default function PriceListManager() {
               {/* Risultato Estrazione */}
               {extractedData && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--accent-bg)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)' }}>
                     <div>
-                      <div style={{ fontWeight: 600, color: 'white', fontSize: '0.9rem' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>
                         {extractedData.total_items} articoli estrapolati per {extractedData.fornitore_nome}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
                         Criterio attivo: <strong>{extractedData.price_strategy.toUpperCase()}</strong>
                       </div>
                     </div>
-                    <span style={{ fontSize: '0.85rem', color: '#3b82f6', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--accent-text)', fontWeight: 700, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       ✓ Solo analisi
                     </span>
                   </div>
 
                   {/* Tabella Anteprima */}
-                  <div style={{ maxHeight: '260px', overflowY: 'auto', border: '1px solid var(--border-glass)', borderRadius: '8px' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', textAlign: 'left' }}>
-                      <thead style={{ background: '#101018', position: 'sticky', top: 0, zIndex: 1 }}>
-                        <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                  <div style={{ maxHeight: '260px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
+                    <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', textAlign: 'left' }}>
+                      <thead style={{ background: 'var(--bg-inset)', position: 'sticky', top: 0, zIndex: 1 }}>
+                        <tr style={{ borderBottom: '1px solid var(--line)' }}>
                           <th style={{ padding: '8px 12px' }}>Articolo</th>
                           <th style={{ padding: '8px 10px', textAlign: 'right' }}>Prezzo fatturato (€)</th>
                           <th style={{ padding: '8px 8px', textAlign: 'center' }}>UoM</th>
@@ -515,18 +515,18 @@ export default function PriceListManager() {
                       </thead>
                       <tbody>
                         {extractedData.items.map((it, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                          <tr key={idx} style={{ borderBottom: '1px solid var(--line)' }}>
                             <td style={{ padding: '8px 12px' }}>
-                              <div style={{ fontWeight: 500, color: 'white' }}>{it.descrizione}</div>
+                              <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{it.descrizione}</div>
                               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SKU: {it.sku_interno}</div>
                             </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                               € {it.prezzo_pattuito.toFixed(4)}
                             </td>
                             <td style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                               {it.unita_misura}
                             </td>
-                            <td style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                            <td style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
                               {it.occorrenze}
                             </td>
                           </tr>
@@ -554,7 +554,7 @@ export default function PriceListManager() {
           {activeTab === 'standard' ? (
             <>
               {/* Step 1: Scarica Template */}
-              <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ border: '1px solid var(--line)', padding: '20px', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h4 style={{ marginBottom: '4px' }}>1. Utilizza il Template</h4>
@@ -572,7 +572,7 @@ export default function PriceListManager() {
                 <select 
                   value={selectedFornitore} 
                   onChange={(e) => setSelectedFornitore(e.target.value)}
-                  style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)', color: 'white', outline: 'none' }}
+                  style={{ width: '100%', padding: '12px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none' }}
                 >
                   <option value="">-- Seleziona un fornitore --</option>
                   {fornitori.map(f => <option key={f.id} value={f.id}>{f.nome_azienda}</option>)}
@@ -580,7 +580,7 @@ export default function PriceListManager() {
               </div>
 
               {/* Step 3: Upload */}
-              <div style={{ border: '2px dashed var(--border-glass)', padding: '40px', textAlign: 'center', borderRadius: 'var(--border-radius-md)', transition: 'var(--transition-smooth)' }}>
+              <div style={{ border: '2px dashed var(--line)', padding: '40px', textAlign: 'center', borderRadius: 'var(--radius-md)', transition: 'var(--transition-smooth)' }}>
                 <input 
                   type="file" 
                   id="fileInput" 
@@ -600,7 +600,7 @@ export default function PriceListManager() {
               {message && (
                 <div style={{ 
                   padding: '12px', 
-                  borderRadius: 'var(--border-radius-md)', 
+                  borderRadius: 'var(--radius-md)', 
                   background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
                   color: message.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
                   display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem'
@@ -614,16 +614,16 @@ export default function PriceListManager() {
                     <div style={{
                       maxHeight: '150px',
                       overflowY: 'auto',
-                      borderTop: '1px solid rgba(239, 68, 68, 0.2)',
+                      borderTop: '1px solid var(--crit-border)',
                       paddingTop: '10px',
                       fontSize: '0.8rem',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '4px',
-                      color: '#fca5a5',
+                      color: 'var(--crit)',
                       textAlign: 'left'
                     }}>
-                      <strong style={{ color: 'white' }}>Dettagli errori:</strong>
+                      <strong style={{ color: 'var(--text-primary)' }}>Dettagli errori:</strong>
                       {validationErrors.map((err, idx) => (
                         <div key={idx}>
                           • Riga {err.row}, Colonna {err.column}: {err.message}
@@ -646,7 +646,7 @@ export default function PriceListManager() {
           ) : (
             <>
               {/* Info Comparativo */}
-              <div style={{ border: '1px solid var(--border-glass)', padding: '20px', borderRadius: 'var(--border-radius-md)', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ border: '1px solid var(--line)', padding: '20px', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)' }}>
                 <h4 style={{ marginBottom: '4px' }}>Come funziona l'importazione comparativa</h4>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0, lineHeight: '1.4' }}>
                   Carica un file Excel con colonne multiple. L’anteprima mostra righe, fornitori e possibili errori senza scrivere dati. Dopo averla verificata potrai confermare esplicitamente l’importazione; i fornitori mancanti saranno creati solo allora.
@@ -654,7 +654,7 @@ export default function PriceListManager() {
               </div>
 
               {/* Step 2: Upload */}
-              <div style={{ border: '2px dashed var(--border-glass)', padding: '40px', textAlign: 'center', borderRadius: 'var(--border-radius-md)', transition: 'var(--transition-smooth)' }}>
+              <div style={{ border: '2px dashed var(--line)', padding: '40px', textAlign: 'center', borderRadius: 'var(--radius-md)', transition: 'var(--transition-smooth)' }}>
                 <input 
                   type="file" 
                   id="fileInputMulti" 
@@ -672,14 +672,14 @@ export default function PriceListManager() {
               </div>
 
               {multiPreview && (
-                <div role="region" aria-label="Anteprima importazione comparativa" style={{ padding: 16, border: '1px solid rgba(59,130,246,.4)', borderRadius: 10, display: 'grid', gap: 10 }}>
+                <div role="region" aria-label="Anteprima importazione comparativa" style={{ padding: 16, border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-lg)', display: 'grid', gap: 10 }}>
                   <strong>Anteprima senza scritture</strong>
                   <span>Righe: {multiPreview.total_rows} · valide: {multiPreview.valid_records} · errori: {multiPreview.errors_count}</span>
-                  {multiPreview.warning && <p role="alert" style={{ color: '#fbbf24', margin: 0 }}>{multiPreview.warning}</p>}
+                  {multiPreview.warning && <p role="alert" style={{ color: 'var(--warn)', margin: 0 }}>{multiPreview.warning}</p>}
                   {multiPreview.expires_at && <small>Autorizzazione valida fino a: {new Date(multiPreview.expires_at).toLocaleString('it-IT')}</small>}
                   <div><b>Fornitori rilevati:</b> {multiPreview.suppliers_detected.length ? multiPreview.suppliers_detected.join(', ') : 'Nessuno'}</div>
-                  <div style={{ overflowX: 'auto', maxHeight: 280, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <div style={{ overflowX: 'auto', maxHeight: 280, border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
+                    <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead><tr>
                         <th style={{ textAlign: 'left', padding: 8 }}>Prodotto</th>
                         <th style={{ textAlign: 'left', padding: 8 }}>U.M.</th>
@@ -692,10 +692,10 @@ export default function PriceListManager() {
                             <small style={{ color: 'var(--text-secondary)' }}>{record.sku_interno}</small>
                           </td>
                           <td style={{ padding: 8 }}>{record.unita_misura}</td>
-                          <td style={{ padding: 8, minWidth: 360 }}>
+                          <td style={{ padding: 8, minWidth: 360, fontVariantNumeric: 'tabular-nums' }}>
                             <div style={{ display: 'grid', gap: 8 }}>
                               {record.confronti.map(offer => (
-                                <div key={offer.fornitore} style={{ padding: 8, border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+                                <div key={offer.fornitore} style={{ padding: 8, border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
                                   <strong>{offer.fornitore}</strong>
                                   <span style={{ marginLeft: 8, color: 'var(--text-secondary)' }}>{offer.stato}</span>
                                   <div>
@@ -731,7 +731,7 @@ export default function PriceListManager() {
               {message && (
                 <div style={{ 
                   padding: '12px', 
-                  borderRadius: 'var(--border-radius-md)', 
+                  borderRadius: 'var(--radius-md)', 
                   background: message.type === 'success' ? 'var(--status-green-bg)' : 'var(--status-red-bg)',
                   color: message.type === 'success' ? 'var(--status-green)' : 'var(--status-red)',
                   display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem'
@@ -745,16 +745,16 @@ export default function PriceListManager() {
                     <div style={{
                       maxHeight: '150px',
                       overflowY: 'auto',
-                      borderTop: '1px solid rgba(239, 68, 68, 0.2)',
+                      borderTop: '1px solid var(--crit-border)',
                       paddingTop: '10px',
                       fontSize: '0.8rem',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '4px',
-                      color: '#fca5a5',
+                      color: 'var(--crit)',
                       textAlign: 'left'
                     }}>
-                      <strong style={{ color: 'white' }}>Dettagli errori:</strong>
+                      <strong style={{ color: 'var(--text-primary)' }}>Dettagli errori:</strong>
                       {validationErrors.map((err, idx) => (
                         <div key={idx}>
                           • Riga {err.row}, Colonna {err.column}: {err.message}
@@ -795,7 +795,7 @@ export default function PriceListManager() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto', maxHeight: '600px' }}>
           {fornitori.map(f => (
-            <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-glass)', borderRadius: 'var(--border-radius-md)' }}>
+            <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
               <div>
                 <div style={{ fontWeight: 600 }}>{f.nome_azienda}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>ID Fornitore: {f.id}</div>

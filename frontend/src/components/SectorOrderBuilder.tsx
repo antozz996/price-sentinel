@@ -157,10 +157,10 @@ interface SectorOrderDraftResponse {
 }
 
 const MACRO_CATEGORIES = [
-  { id: 'all', label: 'Tutti i settori', icon: '🌐', color: '#94a3b8' },
-  { id: 'Beverage', label: 'Beverage', icon: '🍹', color: '#60a5fa' },
-  { id: 'Food', label: 'Food', icon: '🍽️', color: '#f59e0b' },
-  { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: '#10b981' }
+  { id: 'all', label: 'Tutti i settori', icon: '🌐', color: 'var(--text-secondary)' },
+  { id: 'Beverage', label: 'Beverage', icon: '🍹', color: 'var(--accent-text)' },
+  { id: 'Food', label: 'Food', icon: '🍽️', color: 'var(--warn)' },
+  { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: 'var(--ok)' }
 ];
 
 function orderSector(category?: string | null): string {
@@ -1054,9 +1054,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       {isMobileScreen ? (
         <div style={{ 
           padding: '12px 14px', 
-          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
-          border: '1px solid rgba(59, 130, 246, 0.25)',
-          borderRadius: '12px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--accent-border)',
+          borderRadius: 'var(--radius-lg)',
           display: 'flex',
           flexDirection: 'column',
           gap: '8px'
@@ -1071,10 +1071,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               onChange={e => setSelectedLocation(e.target.value ? Number(e.target.value) : '')}
               style={{
                 padding: '7px 10px',
-                background: 'rgba(0,0,0,0.4)',
+                background: 'var(--bg-inset)',
                 border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
                 fontSize: '0.82rem',
                 outline: 'none',
                 width: '100%',
@@ -1082,7 +1082,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               }}
             >
               {locations.map(loc => (
-                <option key={loc.id} value={loc.id} style={{ background: '#13131c' }}>
+                <option key={loc.id} value={loc.id} style={{ background: 'var(--bg-card)' }}>
                   {loc.nome_struttura}
                 </option>
               ))}
@@ -1101,10 +1101,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 onChange={e => setDeliveryDate(e.target.value)}
                 style={{
                   padding: '7px 8px',
-                  background: 'rgba(0,0,0,0.4)',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.8rem',
                   outline: 'none',
                   width: '100%',
@@ -1115,7 +1115,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
             <div style={{ flex: '1 1 56%', display: 'flex', flexDirection: 'column', gap: '3px' }}>
               <label style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <FileText size={12} color="#f59e0b" /> Note
+                <FileText size={12} color="var(--warn)" /> Note
               </label>
               <input
                 type="text"
@@ -1124,10 +1124,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 onChange={e => setOrderNotes(e.target.value)}
                 style={{
                   padding: '7px 10px',
-                  background: 'rgba(0,0,0,0.4)',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.8rem',
                   outline: 'none',
                   width: '100%',
@@ -1140,8 +1140,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       ) : (
         <div className="glass-panel" style={{ 
           padding: '24px 30px', 
-          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%)',
-          border: '1px solid rgba(59, 130, 246, 0.25)',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--accent-border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -1151,15 +1151,15 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ 
-                width: '40px', height: '40px', borderRadius: '10px', 
-                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                width: '40px', height: '40px', borderRadius: 'var(--radius-md)', 
+                background: 'var(--accent)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
+                boxShadow: 'none'
               }}>
-                <ShoppingCart size={22} color="white" />
+                <ShoppingCart size={22} color="var(--text-on-accent)" />
               </div>
               <div>
-                <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
                   Sviluppo Ordini Settore
                 </h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '3px 0 0' }}>
@@ -1181,17 +1181,17 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 onChange={e => setSelectedLocation(e.target.value ? Number(e.target.value) : '')}
                 style={{
                   padding: '8px 12px',
-                  background: 'rgba(0,0,0,0.4)',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem',
                   outline: 'none',
                   minWidth: '180px'
                 }}
               >
                 {locations.map(loc => (
-                  <option key={loc.id} value={loc.id} style={{ background: '#13131c' }}>
+                  <option key={loc.id} value={loc.id} style={{ background: 'var(--bg-card)' }}>
                     {loc.nome_struttura}
                   </option>
                 ))}
@@ -1209,10 +1209,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 onChange={e => setDeliveryDate(e.target.value)}
                 style={{
                   padding: '7px 12px',
-                  background: 'rgba(0,0,0,0.4)',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem',
                   outline: 'none'
                 }}
@@ -1222,7 +1222,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             {/* Optional Order Notes */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <FileText size={13} color="#f59e0b" /> Note Consegna
+                <FileText size={13} color="var(--warn)" /> Note Consegna
               </label>
               <input
                 type="text"
@@ -1231,10 +1231,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 onChange={e => setOrderNotes(e.target.value)}
                 style={{
                   padding: '7px 12px',
-                  background: 'rgba(0,0,0,0.4)',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.85rem',
                   outline: 'none',
                   minWidth: '200px'
@@ -1246,7 +1246,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       )}
 
       {errorMsg && (
-        <div style={{ padding: '14px 18px', borderRadius: '10px', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ padding: '14px 18px', borderRadius: 'var(--radius-md)', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid var(--crit-border)', display: 'flex', gap: '10px', alignItems: 'center' }}>
           <AlertCircle size={18} />
           <span style={{ fontSize: '0.9rem' }}>{errorMsg}</span>
         </div>
@@ -1280,17 +1280,17 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 }}
                 style={{
                   padding: isMobileScreen ? '6px 12px' : '8px 16px',
-                  borderRadius: '30px',
+                  borderRadius: '999px',
                   border: isSelected ? `2px solid ${cat.color}` : '1px solid var(--border-glass)',
-                  background: isSelected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.02)',
-                  color: isSelected ? 'white' : 'var(--text-secondary)',
+                  background: isSelected ? 'var(--bg-elevated)' : 'var(--bg-inset)',
+                  color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                   fontWeight: isSelected ? 700 : 500,
                   fontSize: isMobileScreen ? '0.8rem' : '0.85rem',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  boxShadow: isSelected ? `0 0 15px ${cat.color}33` : 'none',
+                  boxShadow: 'none',
                   transition: 'all 0.2s',
                   flexShrink: 0,
                   whiteSpace: 'nowrap'
@@ -1301,9 +1301,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 <span style={{ 
                   fontSize: '0.72rem', 
                   padding: '2px 6px', 
-                  borderRadius: '10px', 
-                  background: isSelected ? cat.color : 'rgba(255,255,255,0.08)',
-                  color: isSelected ? '#000' : 'inherit',
+                  borderRadius: 'var(--radius-md)', 
+                  background: isSelected ? cat.color : 'var(--bg-elevated)',
+                  color: isSelected ? 'var(--bg-app)' : 'inherit',
                   fontWeight: 700
                 }}>
                   {count}
@@ -1336,10 +1336,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               width: '100%',
               boxSizing: 'border-box',
               padding: '8px 12px 8px 36px',
-              background: 'rgba(255,255,255,0.04)',
+              background: 'var(--bg-inset)',
               border: '1px solid var(--border-glass)',
-              borderRadius: '8px',
-              color: 'white',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--text-primary)',
               fontSize: '0.85rem',
               outline: 'none'
             }}
@@ -1364,10 +1364,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 onChange={e => setSelectedSubcategory(e.target.value)}
                 style={{
                   padding: '6px 10px',
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'var(--bg-inset)',
                   border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.8rem',
                   outline: 'none',
                   cursor: 'pointer',
@@ -1375,9 +1375,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   textOverflow: 'ellipsis'
                 }}
               >
-                <option value="all" style={{ background: '#13131c' }}>Tutte le sottocategorie ({subcategories.length})</option>
+                <option value="all" style={{ background: 'var(--bg-card)' }}>Tutte le sottocategorie ({subcategories.length})</option>
                 {subcategories.map(sub => (
-                  <option key={sub} value={sub} style={{ background: '#13131c' }}>
+                  <option key={sub} value={sub} style={{ background: 'var(--bg-card)' }}>
                     {sub}
                   </option>
                 ))}
@@ -1391,10 +1391,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             onClick={handleOpenAddProduct}
             style={{
               padding: isMobileScreen ? '7px 12px' : '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid rgba(59, 130, 246, 0.45)',
-              background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(139, 92, 246, 0.35) 100%)',
-              color: 'white',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--accent-border)',
+              background: 'var(--accent-bg)',
+              color: 'var(--text-primary)',
               fontSize: '0.82rem',
               fontWeight: 700,
               cursor: 'pointer',
@@ -1402,16 +1402,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               alignItems: 'center',
               justifyContent: isMobileScreen ? 'center' : 'flex-start',
               gap: '6px',
-              boxShadow: '0 0 15px rgba(59, 130, 246, 0.2)',
+              boxShadow: 'none',
               whiteSpace: 'nowrap',
               width: isMobileScreen ? '100%' : 'auto',
               transition: 'all 0.2s'
             }}
             title="Aggiungi nuovo articolo al catalogo e invia richiesta di prezzo ai fornitori del settore"
           >
-            <Plus size={15} color="#93c5fd" />
+            <Plus size={15} color="var(--accent-text)" />
             <span>Nuovo Prodotto / Preventivo</span>
-            <Sparkles size={13} color="#f59e0b" />
+            <Sparkles size={13} color="var(--warn)" />
           </button>
 
           <div style={{ 
@@ -1432,32 +1432,32 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         <div className="glass-panel" style={{
           padding: '16px 20px',
           background: basketStats.waterFreebies > 0 
-            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(5, 150, 105, 0.22) 100%)'
-            : 'linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(37, 99, 235, 0.18) 100%)',
-          border: basketStats.waterFreebies > 0 ? '1px solid #10b981' : '1px solid rgba(59, 130, 246, 0.4)',
+            ? 'var(--ok-bg)'
+            : 'var(--accent-bg)',
+          border: basketStats.waterFreebies > 0 ? '1px solid var(--ok)' : '1px solid var(--accent-border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
           gap: '14px',
-          boxShadow: basketStats.waterFreebies > 0 ? '0 0 25px rgba(16, 185, 129, 0.2)' : 'none'
+          boxShadow: 'none'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{
-              width: '42px', height: '42px', borderRadius: '12px',
-              background: basketStats.waterFreebies > 0 ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
-              color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.25rem', boxShadow: '0 0 15px rgba(0,0,0,0.3)'
+              width: '42px', height: '42px', borderRadius: 'var(--radius-lg)',
+              background: basketStats.waterFreebies > 0 ? 'var(--ok)' : 'var(--accent)',
+              color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.25rem', boxShadow: 'none'
             }}>
               🎁
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span>Promozione Acqua 5+1 (1 Box Omaggio ogni 5 Box)</span>
                 <span style={{
-                  padding: '2px 8px', borderRadius: '6px',
-                  background: basketStats.waterFreebies > 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(59, 130, 246, 0.3)',
-                  color: basketStats.waterFreebies > 0 ? '#a7f3d0' : '#93c5fd',
+                  padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                  background: basketStats.waterFreebies > 0 ? 'var(--ok-bg)' : 'var(--accent-bg)',
+                  color: basketStats.waterFreebies > 0 ? 'var(--ok)' : 'var(--accent-text)',
                   fontSize: '0.75rem', fontWeight: 700
                 }}>
                   {basketStats.totalWaterBoxes} box ordinati
@@ -1466,7 +1466,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '3px' }}>
                 {basketStats.waterFreebies > 0 ? (
                   <>
-                    🎉 Complimenti! Hai maturato <strong style={{ color: '#34d399' }}>{basketStats.waterFreebies} {basketStats.waterFreebies === 1 ? 'box' : 'box'} in OMAGGIO</strong> (€ 0,00)!
+                    🎉 Complimenti! Hai maturato <strong style={{ color: 'var(--ok)' }}>{basketStats.waterFreebies} {basketStats.waterFreebies === 1 ? 'box' : 'box'} in OMAGGIO</strong> (€ 0,00)!
                     {basketStats.totalWaterBoxes % 5 !== 0 && (
                       <span style={{ marginLeft: '4px', opacity: 0.9 }}>
                         (Aggiungi ancora {basketStats.waterMissingForNext} box per sbloccare il prossimo omaggio)
@@ -1475,7 +1475,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   </>
                 ) : (
                   <>
-                    Mancano solo <strong style={{ color: '#60a5fa' }}>{basketStats.waterMissingForNext} {basketStats.waterMissingForNext === 1 ? 'box' : 'box'}</strong> di acqua per ricevere <strong>1 BOX IN OMAGGIO</strong>!
+                    Mancano solo <strong style={{ color: 'var(--accent-text)' }}>{basketStats.waterMissingForNext} {basketStats.waterMissingForNext === 1 ? 'box' : 'box'}</strong> di acqua per ricevere <strong>1 BOX IN OMAGGIO</strong>!
                   </>
                 )}
               </div>
@@ -1490,10 +1490,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 onChange={e => setSelectedWaterFreebieId(Number(e.target.value))}
                 style={{
                   padding: '6px 12px',
-                  background: 'rgba(0,0,0,0.4)',
-                  border: '1px solid #10b981',
-                  borderRadius: '8px',
-                  color: 'white',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--ok)',
+                  borderRadius: 'var(--radius-md)',
+                  color: 'var(--text-primary)',
                   fontSize: '0.82rem',
                   fontWeight: 700,
                   outline: 'none',
@@ -1501,7 +1501,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 }}
               >
                 {basketStats.waterProductsInBasket.map(wp => (
-                  <option key={wp.id} value={wp.id} style={{ background: '#13131c' }}>
+                  <option key={wp.id} value={wp.id} style={{ background: 'var(--bg-card)' }}>
                     {wp.order_name || wp.canonical_name} (Omaggio)
                   </option>
                 ))}
@@ -1520,7 +1520,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
       ) : filteredProducts.length === 0 ? (
         <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
           <Boxes size={40} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-          <h3 style={{ margin: '0 0 6px', color: 'white' }}>Nessun prodotto trovato</h3>
+          <h3 style={{ margin: '0 0 6px', color: 'var(--text-primary)' }}>Nessun prodotto trovato</h3>
           <p style={{ fontSize: '0.85rem', margin: 0 }}>Prova a modificare i filtri di ricerca o il settore selezionato.</p>
         </div>
       ) : (
@@ -1545,14 +1545,14 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 className="sector-order-product-card"
                 style={{
                   padding: isMobileScreen ? '12px 14px' : '16px 18px',
-                  borderRadius: '12px',
+                  borderRadius: 'var(--radius-lg)',
                   border: hasQty ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                  background: hasQty ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                  background: hasQty ? 'var(--accent-bg)' : 'var(--bg-inset)',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   gap: '10px',
-                  boxShadow: hasQty ? '0 0 20px rgba(59, 130, 246, 0.15)' : 'none',
+                  boxShadow: 'none',
                   transition: 'all 0.2s',
                   width: '100%',
                   maxWidth: '100%',
@@ -1565,7 +1565,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 <div style={{ width: '100%', minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 800, fontSize: '0.98rem', color: 'white', lineHeight: '1.3', wordBreak: 'break-word' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--text-primary)', lineHeight: '1.3', wordBreak: 'break-word' }}>
                         {prod.order_name || prod.canonical_name}
                       </div>
                       {prod.order_name && prod.canonical_name !== prod.order_name && (
@@ -1578,11 +1578,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     {hasQty && (
                       <span style={{ 
                         padding: '3px 8px', 
-                        borderRadius: '6px', 
+                        borderRadius: 'var(--radius-sm)', 
                         background: 'var(--accent-blue)', 
-                        color: 'white', 
+                        color: 'var(--text-primary)', 
                         fontSize: '0.75rem', 
-                        fontWeight: 800,
+                        fontWeight: 700,
                         whiteSpace: 'nowrap',
                         flexShrink: 0
                       }}>
@@ -1597,18 +1597,18 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     </span>
                     {prod.subcategory && (
                       <>
-                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
-                        <span style={{ color: '#93c5fd' }}>{prod.subcategory}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>•</span>
+                        <span style={{ color: 'var(--accent-text)' }}>{prod.subcategory}</span>
                       </>
                     )}
                     {isWaterProduct(prod) && (
                       <>
-                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
+                        <span style={{ color: 'var(--text-muted)' }}>•</span>
                         <span style={{ 
-                          color: '#34d399', 
-                          background: 'rgba(16, 185, 129, 0.15)', 
+                          color: 'var(--ok)', 
+                          background: 'var(--ok-bg)', 
                           padding: '1px 6px', 
-                          borderRadius: '4px', 
+                          borderRadius: 'var(--radius-sm)', 
                           fontWeight: 700,
                           fontSize: '0.7rem' 
                         }}>
@@ -1622,9 +1622,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   <div style={{ 
                     marginTop: '8px', 
                     padding: '6px 8px', 
-                    borderRadius: '8px', 
-                    background: 'rgba(0, 0, 0, 0.3)', 
-                    border: isSelectedSup ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: 'var(--radius-md)', 
+                    background: 'var(--bg-inset)', 
+                    border: isSelectedSup ? '1px solid var(--accent-border)' : '1px solid var(--line)',
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center', 
@@ -1671,10 +1671,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                           }));
                         }}
                         style={{
-                          background: isSelectedSup ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                          border: isSelectedSup ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid rgba(255, 255, 255, 0.12)',
-                          borderRadius: '6px',
-                          color: isSelectedSup ? '#93c5fd' : 'white',
+                          background: isSelectedSup ? 'var(--accent-bg)' : 'var(--bg-elevated)',
+                          border: isSelectedSup ? '1px solid var(--accent-border)' : '1px solid var(--line)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: isSelectedSup ? 'var(--accent-text)' : 'var(--text-primary)',
                           fontSize: '0.78rem',
                           fontWeight: 700,
                           padding: '3px 4px',
@@ -1691,16 +1691,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       >
                         {/* Option when no supplier id or default */}
                         {(!effSup.supplier_id || (!productOffers.some(o => o.supplier_id === effSup.supplier_id) && !allSuppliers.some(s => s.id === effSup.supplier_id))) && (
-                          <option value="" style={{ background: '#13131c', color: 'white' }}>
+                          <option value="" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                             {effSup.supplier_name || 'Seleziona fornitore'}
                           </option>
                         )}
 
                         {/* Offers with known prices first */}
                         {(prod.variant_offers?.length || 0) > 0 && (
-                          <optgroup label="Marche e formati approvati · prezzo a confezione" style={{ background: '#13131c', color: '#93c5fd' }}>
+                          <optgroup label="Marche e formati approvati · prezzo a confezione" style={{ background: 'var(--bg-card)', color: 'var(--accent-text)' }}>
                             {prod.variant_offers!.map(off => (
-                              <option key={off.offer_id} value={`off:${off.offer_id}`} style={{ background: '#13131c', color: 'white' }}>
+                              <option key={off.offer_id} value={`off:${off.offer_id}`} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                                 {off.supplier_name} · {off.brand ? off.brand + ' · ' : ''}{off.description} · € {off.price.toFixed(2)}/conf
                                 {off.comparison_price != null && off.comparison_unit ? ` · € ${off.comparison_price.toFixed(2)}/${off.comparison_unit}` : ''}
                               </option>
@@ -1708,9 +1708,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                           </optgroup>
                         )}
                         {legacyProductOffers.length > 0 && (
-                          <optgroup label="Offerte e listini" style={{ background: '#13131c', color: '#93c5fd' }}>
+                          <optgroup label="Offerte e listini" style={{ background: 'var(--bg-card)', color: 'var(--accent-text)' }}>
                             {legacyProductOffers.map(off => (
-                              <option key={off.supplier_id} value={`sup:${off.supplier_id}`} style={{ background: '#13131c', color: 'white' }}>
+                              <option key={off.supplier_id} value={`sup:${off.supplier_id}`} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                                 {off.supplier_name} {off.price > 0 ? `(€ ${off.price.toFixed(2)})` : ''}
                               </option>
                             ))}
@@ -1719,9 +1719,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
                         {/* Other active suppliers */}
                         {allSuppliers.filter(s => !offerSupplierIds.has(s.id)).length > 0 && (
-                          <optgroup label="Tutti i fornitori" style={{ background: '#13131c', color: 'var(--text-secondary)' }}>
+                          <optgroup label="Tutti i fornitori" style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
                             {allSuppliers.filter(s => !offerSupplierIds.has(s.id)).map(sup => (
-                              <option key={sup.id} value={`sup:${sup.id}`} style={{ background: '#13131c', color: 'white' }}>
+                              <option key={sup.id} value={`sup:${sup.id}`} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                                 {sup.nome_azienda}
                               </option>
                             ))}
@@ -1732,11 +1732,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
                     {unitPrice !== null && unitPrice !== undefined ? (
                       <div style={{ textAlign: 'right', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                        <div style={{ fontWeight: 700, color: 'var(--status-green)', fontSize: '0.82rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--status-green)', fontSize: '0.82rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           € {unitPrice.toFixed(2)} <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontWeight: 400 }}>/{getEffectiveUom(prod)}</span>
                         </div>
                         {hasQty && (
-                          <div style={{ fontSize: '0.72rem', color: '#60a5fa', fontWeight: 700 }}>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--accent-text)', fontWeight: 700, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                             Tot: € {lineTotal.toFixed(2)}
                           </div>
                         )}
@@ -1755,10 +1755,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       onClick={() => handleAddPreset(prod.id, -1)}
                       disabled={currentQty <= 0}
                       style={{
-                        width: '34px', height: '34px', minWidth: '34px', flexShrink: 0, borderRadius: '8px',
+                        width: '34px', height: '34px', minWidth: '34px', flexShrink: 0, borderRadius: 'var(--radius-md)',
                         border: '1px solid var(--border-glass)',
-                        background: 'rgba(255,255,255,0.05)',
-                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'var(--bg-elevated)',
+                        color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: currentQty <= 0 ? 'not-allowed' : 'pointer',
                         opacity: currentQty <= 0 ? 0.3 : 1
                       }}
@@ -1780,12 +1780,12 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         boxSizing: 'border-box',
                         padding: '6px 4px',
                         textAlign: 'center',
-                        fontWeight: 800,
+                        fontWeight: 700,
                         fontSize: '1rem',
-                        background: hasQty ? 'rgba(59, 130, 246, 0.15)' : 'rgba(0,0,0,0.3)',
+                        background: hasQty ? 'var(--accent-bg)' : 'var(--bg-inset)',
                         border: hasQty ? '1px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                        borderRadius: '8px',
-                        color: hasQty ? '#60a5fa' : 'white',
+                        borderRadius: 'var(--radius-md)',
+                        color: hasQty ? 'var(--accent-text)' : 'var(--text-primary)',
                         outline: 'none'
                       }}
                     />
@@ -1794,10 +1794,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       type="button"
                       onClick={() => handleAddPreset(prod.id, 1)}
                       style={{
-                        width: '34px', height: '34px', minWidth: '34px', flexShrink: 0, borderRadius: '8px',
+                        width: '34px', height: '34px', minWidth: '34px', flexShrink: 0, borderRadius: 'var(--radius-md)',
                         border: '1px solid var(--border-glass)',
-                        background: 'rgba(59, 130, 246, 0.2)',
-                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'var(--accent-bg)',
+                        color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         cursor: 'pointer'
                       }}
                     >
@@ -1815,18 +1815,18 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         flexShrink: 0,
                         minWidth: '50px',
                         maxWidth: '75px',
-                        borderRadius: '8px',
-                        background: 'rgba(59, 130, 246, 0.15)',
-                        border: '1px solid rgba(59, 130, 246, 0.4)',
-                        color: '#93c5fd',
-                        fontWeight: 800,
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--accent-bg)',
+                        border: '1px solid var(--accent-border)',
+                        color: 'var(--accent-text)',
+                        fontWeight: 700,
                         fontSize: '0.82rem',
                         outline: 'none',
                         cursor: 'pointer'
                       }}
                     >
                       {effSup.offer_id ? <option value="conf">conf</option> : getSectorUoms(prod.category).map(u => (
-                        <option key={u.id} value={u.id} style={{ background: '#13131c', color: 'white' }}>
+                        <option key={u.id} value={u.id} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                           {u.short}
                         </option>
                       ))}
@@ -1845,9 +1845,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                           minWidth: 0,
                           padding: '4px 0',
                           fontSize: '0.75rem',
-                          borderRadius: '6px',
-                          border: '1px solid rgba(255,255,255,0.06)',
-                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--line)',
+                          background: 'var(--bg-inset)',
                           color: 'var(--text-secondary)',
                           cursor: 'pointer'
                         }}
@@ -1864,9 +1864,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                           flexShrink: 0,
                           padding: '4px 8px',
                           fontSize: '0.75rem',
-                          borderRadius: '6px',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          background: 'rgba(239, 68, 68, 0.1)',
+                          borderRadius: 'var(--radius-sm)',
+                          border: '1px solid var(--crit-border)',
+                          background: 'var(--crit-bg)',
                           color: 'var(--status-red)',
                           cursor: 'pointer'
                         }}
@@ -1883,10 +1883,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       onClick={() => handleOpenPriceQuote(prod)}
                       style={{
                         padding: '6px 10px',
-                        borderRadius: '6px',
-                        border: '1px solid rgba(139, 92, 246, 0.35)',
-                        background: 'rgba(139, 92, 246, 0.12)',
-                        color: '#c4b5fd',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--info-border)',
+                        background: 'var(--info-bg)',
+                        color: 'var(--info)',
                         fontSize: '0.72rem',
                         fontWeight: 600,
                         cursor: 'pointer',
@@ -1903,7 +1903,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       }}
                       title="Invia richiesta di quotazione prezzo a tutti i fornitori abilitati nel settore"
                     >
-                      <Send size={11} color="#a78bfa" style={{ flexShrink: 0 }} />
+                      <Send size={11} color="var(--info)" style={{ flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Richiedi Prezzo Fornitori Settore</span>
                     </button>
                   </div>
@@ -1939,14 +1939,12 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             maxWidth: '100vw',
             margin: 0,
             transform: 'none',
-            borderRadius: '16px 16px 0 0',
+            borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
             border: 'none',
-            borderTop: '1px solid rgba(59, 130, 246, 0.35)',
-            background: 'rgba(11, 15, 25, 0.98)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            borderTop: '1px solid var(--accent-border)',
+            background: 'var(--bg-card)',
             padding: '8px 12px calc(8px + env(safe-area-inset-bottom, 12px)) 12px',
-            boxShadow: '0 -10px 35px rgba(0, 0, 0, 0.9), 0 0 20px rgba(59, 130, 246, 0.2)',
+            boxShadow: 'var(--shadow-pop)',
             zIndex: 9999,
             boxSizing: 'border-box'
           } : undefined}
@@ -1955,7 +1953,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           {mobileDetailsOpen && (
             <div className="order-floating-bar-mobile-drawer">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Store size={14} color="var(--accent-blue)" />
                   <span>{selectedLocObj?.nome_struttura || 'Sede di Consegna'}</span>
                 </div>
@@ -1963,9 +1961,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   type="button"
                   onClick={() => setMobileDetailsOpen(false)}
                   style={{
-                    background: 'rgba(255,255,255,0.08)',
+                    background: 'var(--bg-elevated)',
                     border: 'none',
-                    borderRadius: '6px',
+                    borderRadius: 'var(--radius-sm)',
                     color: 'var(--text-secondary)',
                     padding: '4px 8px',
                     fontSize: '0.75rem',
@@ -1981,10 +1979,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               </div>
 
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '3px 8px', borderRadius: '6px' }}>
-                  <Calendar size={12} color="var(--status-green)" /> Consegna: <strong style={{ color: 'white' }}>{deliveryDate}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-inset)', padding: '3px 8px', borderRadius: 'var(--radius-sm)' }}>
+                  <Calendar size={12} color="var(--status-green)" /> Consegna: <strong style={{ color: 'var(--text-primary)' }}>{deliveryDate}</strong>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(59,130,246,0.15)', color: '#93c5fd', padding: '3px 8px', borderRadius: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--accent-bg)', color: 'var(--accent-text)', padding: '3px 8px', borderRadius: 'var(--radius-sm)' }}>
                   <Truck size={12} /> {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'}
                 </div>
               </div>
@@ -1994,11 +1992,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   type="button"
                   onClick={handleResetBasket}
                   style={{
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    background: 'var(--crit-bg)',
+                    border: '1px solid var(--crit-border)',
                     color: 'var(--status-red)',
                     padding: '6px 12px',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     fontSize: '0.78rem',
                     fontWeight: 700,
                     display: 'flex',
@@ -2011,7 +2009,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 </button>
 
                 {basketStats.estimatedTotal > 0 && (
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--status-green)' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--status-green)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                     Spesa: € {basketStats.estimatedTotal.toFixed(2)}
                   </div>
                 )}
@@ -2032,39 +2030,39 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   flex: 1, 
                   minWidth: 0,
                   padding: '4px 6px',
-                  borderRadius: '8px',
-                  background: mobileDetailsOpen ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                  borderRadius: 'var(--radius-md)',
+                  background: mobileDetailsOpen ? 'var(--accent-bg)' : 'transparent',
                   transition: 'background 0.2s'
                 }}
               >
                 <div style={{
-                  width: '34px', height: '34px', borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  width: '34px', height: '34px', borderRadius: 'var(--radius-md)',
+                  background: 'var(--ok)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 0 10px rgba(16, 185, 129, 0.4)',
+                  boxShadow: 'none',
                   flexShrink: 0
                 }}>
-                  <ShoppingCart size={16} color="white" />
+                  <ShoppingCart size={16} color="var(--text-on-accent)" />
                 </div>
                 <div style={{ minWidth: 0, overflow: 'hidden', flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'white', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: '5px' }}>
                     <span>{basketStats.totalItems} prod.</span>
-                    <span style={{ color: '#93c5fd', fontWeight: 600, fontSize: '0.78rem' }}>({basketStats.totalUnits} c.)</span>
+                    <span style={{ color: 'var(--accent-text)', fontWeight: 600, fontSize: '0.78rem' }}>({basketStats.totalUnits} c.)</span>
                     {basketStats.waterFreebies > 0 && (
                       <span style={{ 
-                        background: 'rgba(16, 185, 129, 0.25)', 
-                        color: '#34d399', 
+                        background: 'var(--ok-bg)', 
+                        color: 'var(--ok)', 
                         padding: '1px 4px', 
-                        borderRadius: '4px', 
+                        borderRadius: 'var(--radius-sm)', 
                         fontSize: '0.7rem', 
-                        fontWeight: 800 
+                        fontWeight: 700 
                       }}>
                         +{basketStats.waterFreebies}
                       </span>
                     )}
                   </div>
                   <div style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '1px' }}>
-                    <span style={{ color: 'var(--status-green)', fontWeight: 800 }}>
+                    <span style={{ color: 'var(--status-green)', fontWeight: 700 }}>
                       € {basketStats.estimatedTotal.toFixed(2)}
                     </span>
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.7rem' }}>
@@ -2074,7 +2072,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 </div>
 
                 <div style={{
-                  color: mobileDetailsOpen ? '#93c5fd' : 'var(--text-secondary)',
+                  color: mobileDetailsOpen ? 'var(--accent-text)' : 'var(--text-secondary)',
                   display: 'flex',
                   alignItems: 'center',
                   padding: '2px 4px',
@@ -2092,15 +2090,15 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 style={{
                   padding: '9px 14px',
                   fontSize: '0.85rem',
-                  fontWeight: 800,
-                  background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                  fontWeight: 700,
+                  background: 'var(--accent)',
                   border: 'none',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--radius-md)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '5px',
                   flexShrink: 0,
-                  boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)'
+                  boxShadow: 'none'
                 }}
               >
                 {draftProcessing ? (
@@ -2122,33 +2120,33 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             <div className="order-floating-bar-desktop-only" style={{ width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0, flex: 1 }}>
                 <div style={{
-                  width: '42px', height: '42px', borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  width: '42px', height: '42px', borderRadius: 'var(--radius-lg)',
+                  background: 'var(--ok)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)',
+                  boxShadow: 'none',
                   flexShrink: 0
                 }}>
-                  <ShoppingCart size={20} color="white" />
+                  <ShoppingCart size={20} color="var(--text-on-accent)" />
                 </div>
 
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 800, fontSize: '1rem', color: 'white' }}>
+                    <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
                       Fabbisogno: {basketStats.totalItems} {basketStats.totalItems === 1 ? 'prodotto' : 'prodotti'} ({basketStats.totalUnits} colli)
                     </span>
                     <span style={{ 
-                      padding: '2px 8px', borderRadius: '6px', 
-                      background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', 
+                      padding: '2px 8px', borderRadius: 'var(--radius-sm)', 
+                      background: 'var(--accent-bg)', color: 'var(--accent-text)', 
                       fontSize: '0.75rem', fontWeight: 700 
                     }}>
                       {basketStats.supplierCount} {basketStats.supplierCount === 1 ? 'fornitore' : 'fornitori'} coinvolti
                     </span>
                     {basketStats.waterFreebies > 0 && (
                       <span style={{ 
-                        padding: '2px 8px', borderRadius: '6px', 
-                        background: 'rgba(16, 185, 129, 0.25)', color: '#34d399', 
-                        fontSize: '0.75rem', fontWeight: 800,
-                        border: '1px solid rgba(16, 185, 129, 0.4)'
+                        padding: '2px 8px', borderRadius: 'var(--radius-sm)', 
+                        background: 'var(--ok-bg)', color: 'var(--ok)', 
+                        fontSize: '0.75rem', fontWeight: 700,
+                        border: '1px solid var(--ok-border)'
                       }}>
                         🎁 +{basketStats.waterFreebies} {basketStats.waterFreebies === 1 ? 'box omaggio' : 'box omaggio'}
                       </span>
@@ -2164,7 +2162,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 {basketStats.estimatedTotal > 0 && (
                   <div style={{ textAlign: 'right', marginRight: '4px' }}>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Spesa stimata</div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--status-green)' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--status-green)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       € {basketStats.estimatedTotal.toFixed(2)}
                     </div>
                   </div>
@@ -2187,13 +2185,13 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   style={{
                     padding: '11px 22px',
                     fontSize: '0.92rem',
-                    fontWeight: 800,
-                    background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                    fontWeight: 700,
+                    background: 'var(--accent)',
                     border: 'none',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
-                    boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
+                    boxShadow: 'none'
                   }}
                 >
                   {draftProcessing ? (
@@ -2220,9 +2218,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         <div id="order-resolution-summary" className="glass-panel" style={{ 
           padding: '30px', 
           marginTop: '20px',
-          background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.95) 100%)',
+          background: 'var(--bg-card)',
           border: '1px solid var(--status-green)',
-          boxShadow: '0 0 40px rgba(16, 185, 129, 0.15)'
+          boxShadow: 'none'
         }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '20px' }}>
@@ -2230,7 +2228,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-green)', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 <CheckCircle2 size={18} /> Ordine Elaborato con Successo
               </div>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, margin: '6px 0 0' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '6px 0 0' }}>
                 Buoni d'Ordine Suddivisi per Fornitore ({draftResult.fornitori_ordini.length})
               </h2>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: '4px 0 0' }}>
@@ -2240,14 +2238,14 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Totale Complessivo Ordine</div>
-              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--status-green)' }}>
+              <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--status-green)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                 € {draftResult.totale_complessivo.toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400, color: 'var(--text-secondary)' }}>+ IVA</span>
               </div>
             </div>
           </div>
 
           {saveSuccessMsg && (
-            <div style={{ marginTop: '20px', padding: '16px 20px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.15)', color: 'var(--status-green)', border: '1px solid var(--status-green)', fontWeight: 600 }}>
+            <div style={{ marginTop: '20px', padding: '16px 20px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--status-green)', border: '1px solid var(--status-green)', fontWeight: 600 }}>
               {saveSuccessMsg}
             </div>
           )}
@@ -2262,8 +2260,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   key={bundle.fornitore_id}
                   style={{
                     padding: '24px',
-                    borderRadius: '14px',
-                    background: 'rgba(0, 0, 0, 0.35)',
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -2274,15 +2272,15 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ 
-                        width: '36px', height: '36px', borderRadius: '8px', 
-                        background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa',
+                        width: '36px', height: '36px', borderRadius: 'var(--radius-md)', 
+                        background: 'var(--accent-bg)', color: 'var(--accent-text)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 800, fontSize: '0.9rem'
+                        fontWeight: 700, fontSize: '0.9rem'
                       }}>
                         #{idx + 1}
                       </div>
                       <div>
-                        <h3 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0 }}>
                           {bundle.fornitore_nome}
                         </h3>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
@@ -2294,7 +2292,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Importo Fornitore</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white' }}>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           € {bundle.totale_ordine.toFixed(2)}
                         </div>
                       </div>
@@ -2311,10 +2309,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                             width: '100%',
                             boxSizing: 'border-box',
                             padding: '8px 8px 8px 30px',
-                            background: 'rgba(255,255,255,0.05)',
+                            background: 'var(--bg-elevated)',
                             border: '1px solid var(--border-glass)',
-                            borderRadius: '8px',
-                            color: 'white',
+                            borderRadius: 'var(--radius-md)',
+                            color: 'var(--text-primary)',
                             fontSize: '0.8rem',
                             outline: 'none'
                           }}
@@ -2338,17 +2336,17 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         onClick={() => handleOpenWhatsApp(bundle)}
                         style={{
                           padding: '10px 20px',
-                          borderRadius: '10px',
+                          borderRadius: 'var(--radius-md)',
                           border: 'none',
-                          background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                          color: 'white',
-                          fontWeight: 800,
+                          background: '#25D366',
+                          color: 'var(--text-primary)',
+                          fontWeight: 700,
                           fontSize: '0.9rem',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '8px',
                           cursor: 'pointer',
-                          boxShadow: '0 0 20px rgba(37, 211, 102, 0.4)',
+                          boxShadow: 'none',
                           transition: 'all 0.2s'
                         }}
                       >
@@ -2360,10 +2358,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   </div>
 
                   {/* Items Table */}
-                  <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                  <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                       <thead>
-                        <tr style={{ background: 'rgba(255,255,255,0.03)', textAlign: 'left', color: 'var(--text-secondary)' }}>
+                        <tr style={{ background: 'var(--bg-inset)', textAlign: 'left', color: 'var(--text-secondary)' }}>
                           <th style={{ padding: '10px 14px' }}>Articolo</th>
                           <th style={{ padding: '10px 14px', textAlign: 'center' }}>Codice Fornitore</th>
                           <th style={{ padding: '10px 14px', textAlign: 'center' }}>Quantità</th>
@@ -2375,15 +2373,15 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         {bundle.items.map((it, iIdx) => {
                           const isFreebie = it.is_omaggio || it.prezzo_unitario === 0;
                           return (
-                            <tr key={iIdx} style={{ borderTop: '1px solid rgba(255,255,255,0.04)', background: isFreebie ? 'rgba(16, 185, 129, 0.08)' : 'transparent' }}>
-                              <td style={{ padding: '10px 14px', fontWeight: 600, color: 'white' }}>
+                            <tr key={iIdx} style={{ borderTop: '1px solid var(--line)', background: isFreebie ? 'var(--ok-bg)' : 'transparent' }}>
+                              <td style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                   <span>{it.nome_prodotto}{it.variante ? ` · ${it.variante}` : ''}</span>
                                   {isFreebie && (
                                     <span style={{
-                                      padding: '2px 8px', borderRadius: '6px',
-                                      background: 'rgba(16, 185, 129, 0.25)', color: '#34d399',
-                                      fontSize: '0.72rem', fontWeight: 800, border: '1px solid rgba(16, 185, 129, 0.4)'
+                                      padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                                      background: 'var(--ok-bg)', color: 'var(--ok)',
+                                      fontSize: '0.72rem', fontWeight: 700, border: '1px solid var(--ok-border)'
                                     }}>
                                       🎁 OMAGGIO (Promo 5+1)
                                     </span>
@@ -2393,14 +2391,14 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                               <td style={{ padding: '10px 14px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                                 <code>{it.codice_fornitore?.startsWith('OFF-') || it.codice_fornitore?.startsWith('SG-') ? it.sku_interno || '—' : it.codice_fornitore || it.sku_interno || '—'}</code>
                               </td>
-                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: isFreebie ? '#34d399' : '#60a5fa' }}>
+                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: isFreebie ? 'var(--ok)' : 'var(--accent-text)' }}>
                                 {it.quantita} {it.uom}
                               </td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', color: isFreebie ? '#34d399' : 'var(--text-secondary)' }}>
-                                {isFreebie ? <strong style={{ color: '#34d399' }}>GRATIS (€ 0,00)</strong> : `€ ${it.prezzo_unitario.toFixed(2)}`}
+                              <td style={{ padding: '10px 14px', textAlign: 'right', color: isFreebie ? 'var(--ok)' : 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                                {isFreebie ? <strong style={{ color: 'var(--ok)' }}>GRATIS (€ 0,00)</strong> : `€ ${it.prezzo_unitario.toFixed(2)}`}
                               </td>
-                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: isFreebie ? '#34d399' : 'white' }}>
-                                {isFreebie ? <strong style={{ color: '#34d399' }}>€ 0,00</strong> : `€ ${it.subtotale.toFixed(2)}`}
+                              <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: isFreebie ? 'var(--ok)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                                {isFreebie ? <strong style={{ color: 'var(--ok)' }}>€ 0,00</strong> : `€ ${it.subtotale.toFixed(2)}`}
                               </td>
                             </tr>
                           );
@@ -2410,17 +2408,17 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   </div>
 
                   {/* Preview of the formatted WhatsApp text box */}
-                  <details style={{ background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  <details style={{ background: 'var(--bg-inset)', padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                     <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--accent-blue)' }}>
                       👁️ Mostra anteprima del messaggio formattato
                     </summary>
                     <pre style={{ 
                       marginTop: '10px', 
                       padding: '12px', 
-                      background: '#0d1117', 
-                      borderRadius: '6px', 
+                      background: 'var(--bg-inset)', 
+                      borderRadius: 'var(--radius-sm)', 
                       whiteSpace: 'pre-wrap', 
-                      color: '#a7f3d0', 
+                      color: 'var(--ok)', 
                       fontSize: '0.8rem',
                       fontFamily: 'monospace'
                     }}>
@@ -2466,8 +2464,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-          backdropFilter: 'blur(6px)',
+          backgroundColor: 'var(--bg-overlay)',
           zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
@@ -2475,16 +2472,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           padding: '16px'
         }}>
           <div style={{
-            background: 'linear-gradient(145deg, #182234 0%, #0d1424 100%)',
-            border: '1px solid rgba(59, 130, 246, 0.35)',
-            borderRadius: '16px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--accent-border)',
+            borderRadius: 'var(--radius-lg)',
             width: '100%',
             maxWidth: '650px',
             maxHeight: '92vh',
             overflowY: 'auto',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 35px rgba(59, 130, 246, 0.25)',
+            boxShadow: 'var(--shadow-pop)',
             padding: '24px',
-            color: 'white',
+            color: 'var(--text-primary)',
             display: 'flex',
             flexDirection: 'column',
             gap: '20px'
@@ -2493,15 +2490,15 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
-                  width: '42px', height: '42px', borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+                  width: '42px', height: '42px', borderRadius: 'var(--radius-lg)',
+                  background: 'var(--accent)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)'
+                  boxShadow: 'none'
                 }}>
-                  <Plus size={22} color="white" />
+                  <Plus size={22} color="var(--text-on-accent)" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>
                     Nuovo Prodotto nel Selettore
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -2513,9 +2510,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 type="button"
                 onClick={() => setIsAddProductModalOpen(false)}
                 style={{
-                  background: 'rgba(255,255,255,0.06)',
+                  background: 'var(--bg-elevated)',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   color: 'var(--text-secondary)',
                   padding: '6px',
                   cursor: 'pointer'
@@ -2529,7 +2526,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Product Canonical Name */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#93c5fd' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--accent-text)' }}>
                   Nome Prodotto Completo / Canonico *
                 </label>
                 <input
@@ -2539,10 +2536,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   onChange={e => setNewProductForm({ ...newProductForm, canonical_name: e.target.value })}
                   style={{
                     padding: '10px 14px',
-                    background: 'rgba(0,0,0,0.4)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.9rem',
                     outline: 'none'
                   }}
@@ -2563,10 +2560,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     onChange={e => setNewProductForm({ ...newProductForm, order_name: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none'
                     }}
@@ -2584,10 +2581,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     onChange={e => setNewProductForm({ ...newProductForm, brand: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none'
                     }}
@@ -2597,7 +2594,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
               {/* Category / Settore Pills Selector */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#93c5fd' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-text)' }}>
                   Settore / Categoria di Appartenenza *
                 </label>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -2617,10 +2614,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                         }}
                         style={{
                           padding: '6px 14px',
-                          borderRadius: '20px',
+                          borderRadius: '999px',
                           border: isSel ? `2px solid ${cat.color}` : '1px solid var(--border-glass)',
-                          background: isSel ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.3)',
-                          color: isSel ? 'white' : 'var(--text-secondary)',
+                          background: isSel ? 'var(--bg-elevated)' : 'var(--bg-inset)',
+                          color: isSel ? 'var(--text-primary)' : 'var(--text-secondary)',
                           fontSize: '0.82rem',
                           fontWeight: isSel ? 700 : 500,
                           cursor: 'pointer',
@@ -2651,10 +2648,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     onChange={e => setNewProductForm({ ...newProductForm, subcategory: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none'
                     }}
@@ -2670,10 +2667,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     onChange={e => setNewProductForm({ ...newProductForm, comparison_unit: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: '#93c5fd',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--accent-text)',
                       fontWeight: 700,
                       fontSize: '0.85rem',
                       outline: 'none',
@@ -2681,7 +2678,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     }}
                   >
                     {getSectorUoms(newProductForm.category).map(u => (
-                      <option key={u.id} value={u.id} style={{ background: '#13131c', color: 'white' }}>
+                      <option key={u.id} value={u.id} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                         {u.label}
                       </option>
                     ))}
@@ -2692,7 +2689,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
               {/* Quantity to add to cart & SKU */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#34d399' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--ok)' }}>
                     Quantità Iniziale nel Carrello
                   </label>
                   <input
@@ -2703,10 +2700,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     onChange={e => setNewProductForm({ ...newProductForm, initial_quantity: parseFloat(e.target.value) || '' })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(16, 185, 129, 0.1)',
-                      border: '1px solid rgba(16, 185, 129, 0.4)',
-                      borderRadius: '8px',
-                      color: '#34d399',
+                      background: 'var(--ok-bg)',
+                      border: '1px solid var(--ok-border)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--ok)',
                       fontWeight: 700,
                       fontSize: '0.9rem',
                       outline: 'none'
@@ -2725,10 +2722,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                     onChange={e => setNewProductForm({ ...newProductForm, sku_interno: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none'
                     }}
@@ -2767,17 +2764,17 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 disabled={savingProduct || !newProductForm.canonical_name.trim()}
                 style={{
                   padding: '11px 22px',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--radius-md)',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
-                  color: 'white',
-                  fontWeight: 800,
+                  background: 'var(--accent)',
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
                   fontSize: '0.9rem',
                   cursor: savingProduct || !newProductForm.canonical_name.trim() ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 0 25px rgba(139, 92, 246, 0.4)',
+                  boxShadow: 'none',
                   opacity: savingProduct || !newProductForm.canonical_name.trim() ? 0.6 : 1,
                   transition: 'all 0.2s'
                 }}
@@ -2797,8 +2794,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(8px)',
+          backgroundColor: 'var(--bg-overlay)',
           zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
@@ -2806,16 +2802,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
           padding: '16px'
         }}>
           <div style={{
-            background: 'linear-gradient(145deg, #161e2e 0%, #0c1220 100%)',
-            border: '1px solid rgba(139, 92, 246, 0.4)',
-            borderRadius: '16px',
+            background: 'var(--bg-card)',
+            border: '1px solid var(--info-border)',
+            borderRadius: 'var(--radius-lg)',
             width: '100%',
             maxWidth: '780px',
             maxHeight: '92vh',
             overflowY: 'auto',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 40px rgba(139, 92, 246, 0.3)',
+            boxShadow: 'var(--shadow-pop)',
             padding: '26px',
-            color: 'white',
+            color: 'var(--text-primary)',
             display: 'flex',
             flexDirection: 'column',
             gap: '20px'
@@ -2824,15 +2820,15 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
-                  width: '44px', height: '44px', borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+                  width: '44px', height: '44px', borderRadius: 'var(--radius-lg)',
+                  background: 'var(--info)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 0 20px rgba(139, 92, 246, 0.4)'
+                  boxShadow: 'none'
                 }}>
-                  <Send size={22} color="white" />
+                  <Send size={22} color="var(--text-on-accent)" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700 }}>
                     Richiesta Prezzo Fornitori del Settore
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
@@ -2844,9 +2840,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 type="button"
                 onClick={() => setIsPriceQuoteModalOpen(false)}
                 style={{
-                  background: 'rgba(255,255,255,0.06)',
+                  background: 'var(--bg-elevated)',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   color: 'var(--text-secondary)',
                   padding: '6px',
                   cursor: 'pointer'
@@ -2857,7 +2853,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             </div>
 
             {quoteSuccessMsg && (
-              <div style={{ padding: '12px 16px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--ok)', border: '1px solid var(--ok-border)', display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <CheckCircle2 size={18} />
                 <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{quoteSuccessMsg}</span>
               </div>
@@ -2865,7 +2861,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
             {loadingQuote ? (
               <div style={{ padding: '50px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <RefreshCw className="spinner" size={32} style={{ margin: '0 auto 12px', color: '#8b5cf6' }} />
+                <RefreshCw className="spinner" size={32} style={{ margin: '0 auto 12px', color: 'var(--info)' }} />
                 <div>Individuazione fornitori del settore per "{quoteProductTarget?.canonical_name || 'questo articolo'}" e generazione messaggi di quotazione...</div>
               </div>
             ) : quoteData ? (
@@ -2874,9 +2870,9 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 {/* Target Product Summary Banner */}
                 <div style={{
                   padding: '14px 18px',
-                  borderRadius: '12px',
-                  background: 'rgba(139, 92, 246, 0.12)',
-                  border: '1px solid rgba(139, 92, 246, 0.35)',
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--info-bg)',
+                  border: '1px solid var(--info-border)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -2884,10 +2880,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   gap: '12px'
                 }}>
                   <div>
-                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'white' }}>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                       {quoteData.canonical_name}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', fontSize: '0.78rem', color: '#c4b5fd' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', fontSize: '0.78rem', color: 'var(--info)' }}>
                       <span>Settore: <strong>{quoteData.settore_categoria}</strong></span>
                       {quoteData.sottocategoria && <span>• {quoteData.sottocategoria}</span>}
                       {quoteData.brand && <span>• Brand: {quoteData.brand}</span>}
@@ -2897,29 +2893,29 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
 
                   <div style={{
                     padding: '6px 12px',
-                    borderRadius: '8px',
-                    background: 'rgba(0,0,0,0.3)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--bg-inset)',
+                    border: '1px solid var(--line)',
                     fontSize: '0.78rem',
                     color: 'var(--text-secondary)'
                   }}>
-                    📍 Sede: <strong style={{ color: 'white' }}>{quoteData.location_nome || 'Tutte'}</strong>
+                    📍 Sede: <strong style={{ color: 'var(--text-primary)' }}>{quoteData.location_nome || 'Tutte'}</strong>
                   </div>
                 </div>
 
                 {/* Broadcast Master Action Bar (UNICO TASTO PER TUTTI I FORNITORI) */}
                 <div style={{
                   padding: '16px 20px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--accent-border)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '12px'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Radio size={16} color="#60a5fa" />
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--accent-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Radio size={16} color="var(--accent-text)" />
                       <span>Invia Richiesta di Prezzo a Tutti i Fornitori del Settore ({quoteData.total_fornitori_settore})</span>
                     </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
@@ -2934,22 +2930,22 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       onClick={handleCopyBroadcastQuote}
                       style={{
                         padding: '12px 18px',
-                        borderRadius: '10px',
+                        borderRadius: 'var(--radius-md)',
                         border: '1px solid rgba(37, 211, 102, 0.4)',
-                        background: 'linear-gradient(135deg, rgba(37, 211, 102, 0.2) 0%, rgba(18, 140, 126, 0.3) 100%)',
-                        color: 'white',
-                        fontWeight: 800,
+                        background: 'rgba(37, 211, 102, 0.15)',
+                        color: 'var(--text-primary)',
+                        fontWeight: 700,
                         fontSize: '0.88rem',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '8px',
-                        boxShadow: '0 0 20px rgba(37, 211, 102, 0.25)',
+                        boxShadow: 'none',
                         transition: 'all 0.2s'
                       }}
                     >
-                      {quoteCopied ? <Check size={16} color="#34d399" /> : <Copy size={16} color="#25D366" />}
+                      {quoteCopied ? <Check size={16} color="var(--ok)" /> : <Copy size={16} color="#25D366" />}
                       <span>{quoteCopied ? '✓ Testo Broadcast Copiato!' : '📋 Copia Testo Broadcast WhatsApp'}</span>
                     </button>
 
@@ -2959,23 +2955,23 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                       disabled={quoteData.fornitori_con_email === 0}
                       style={{
                         padding: '12px 18px',
-                        borderRadius: '10px',
-                        border: '1px solid rgba(59, 130, 246, 0.4)',
-                        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(99, 102, 241, 0.35) 100%)',
-                        color: 'white',
-                        fontWeight: 800,
+                        borderRadius: 'var(--radius-md)',
+                        border: '1px solid var(--accent-border)',
+                        background: 'var(--accent-bg)',
+                        color: 'var(--text-primary)',
+                        fontWeight: 700,
                         fontSize: '0.88rem',
                         cursor: quoteData.fornitori_con_email === 0 ? 'not-allowed' : 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '8px',
-                        boxShadow: '0 0 20px rgba(59, 130, 246, 0.25)',
+                        boxShadow: 'none',
                         opacity: quoteData.fornitori_con_email === 0 ? 0.5 : 1,
                         transition: 'all 0.2s'
                       }}
                     >
-                      <Mail size={16} color="#93c5fd" />
+                      <Mail size={16} color="var(--accent-text)" />
                       <span>✉️ Invia a Tutti via Email (BCC/Ccn)</span>
                     </button>
                   </div>
@@ -2989,7 +2985,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   </div>
 
                   {quoteData.fornitori.length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                    <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-inset)', borderRadius: 'var(--radius-md)' }}>
                       Nessun fornitore registrato con recapiti in questa categoria.
                     </div>
                   ) : (
@@ -3003,8 +2999,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                             key={sup.supplier_id}
                             style={{
                               padding: '12px 16px',
-                              borderRadius: '10px',
-                              background: 'rgba(255, 255, 255, 0.03)',
+                              borderRadius: 'var(--radius-md)',
+                              background: 'var(--bg-inset)',
                               border: '1px solid var(--border-glass)',
                               display: 'flex',
                               justifyContent: 'space-between',
@@ -3014,11 +3010,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                             }}
                           >
                             <div>
-                              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span>{sup.supplier_name}</span>
                                 <span style={{
-                                  padding: '1px 6px', borderRadius: '4px',
-                                  background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd',
+                                  padding: '1px 6px', borderRadius: 'var(--radius-sm)',
+                                  background: 'var(--accent-bg)', color: 'var(--accent-text)',
                                   fontSize: '0.7rem', fontWeight: 600
                                 }}>
                                   {sup.capability_reason || 'Settore'}
@@ -3036,10 +3032,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                                     onChange={e => setQuoteSupplierPhones({ ...quoteSupplierPhones, [sup.supplier_id]: e.target.value })}
                                     style={{
                                       padding: '2px 6px',
-                                      background: 'rgba(0,0,0,0.3)',
-                                      border: '1px solid rgba(255,255,255,0.08)',
-                                      borderRadius: '4px',
-                                      color: 'white',
+                                      background: 'var(--bg-inset)',
+                                      border: '1px solid var(--line)',
+                                      borderRadius: 'var(--radius-sm)',
+                                      color: 'var(--text-primary)',
                                       fontSize: '0.75rem',
                                       width: '110px'
                                     }}
@@ -3047,7 +3043,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <Mail size={12} color={hasEmail ? '#60a5fa' : 'var(--text-secondary)'} />
+                                  <Mail size={12} color={hasEmail ? 'var(--accent-text)' : 'var(--text-secondary)'} />
                                   <input
                                     type="text"
                                     placeholder="Nessuna email"
@@ -3055,10 +3051,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                                     onChange={e => setQuoteSupplierEmails({ ...quoteSupplierEmails, [sup.supplier_id]: e.target.value })}
                                     style={{
                                       padding: '2px 6px',
-                                      background: 'rgba(0,0,0,0.3)',
-                                      border: '1px solid rgba(255,255,255,0.08)',
-                                      borderRadius: '4px',
-                                      color: 'white',
+                                      background: 'var(--bg-inset)',
+                                      border: '1px solid var(--line)',
+                                      borderRadius: 'var(--radius-sm)',
+                                      color: 'var(--text-primary)',
                                       fontSize: '0.75rem',
                                       width: '140px'
                                     }}
@@ -3074,10 +3070,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                                 onClick={() => handleOpenSingleSupplierWhatsApp(sup)}
                                 style={{
                                   padding: '7px 12px',
-                                  borderRadius: '8px',
+                                  borderRadius: 'var(--radius-md)',
                                   border: '1px solid rgba(37, 211, 102, 0.4)',
-                                  background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                                  color: 'white',
+                                  background: '#25D366',
+                                  color: 'var(--text-primary)',
                                   fontSize: '0.78rem',
                                   fontWeight: 700,
                                   cursor: 'pointer',
@@ -3097,10 +3093,10 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                                   onClick={() => handleOpenSingleSupplierEmail(sup)}
                                   style={{
                                     padding: '7px 12px',
-                                    borderRadius: '8px',
-                                    border: '1px solid rgba(59, 130, 246, 0.4)',
-                                    background: 'rgba(59, 130, 246, 0.2)',
-                                    color: '#93c5fd',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: '1px solid var(--accent-border)',
+                                    background: 'var(--accent-bg)',
+                                    color: 'var(--accent-text)',
                                     fontSize: '0.78rem',
                                     fontWeight: 700,
                                     cursor: 'pointer',
@@ -3123,17 +3119,17 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 </div>
 
                 {/* Formatted Text Preview */}
-                <details style={{ background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#93c5fd' }}>
+                <details style={{ background: 'var(--bg-inset)', padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--accent-text)' }}>
                     👁️ Mostra anteprima del testo di richiesta quotazione
                   </summary>
                   <pre style={{
                     marginTop: '10px',
                     padding: '12px',
-                    background: '#0d1117',
-                    borderRadius: '6px',
+                    background: 'var(--bg-inset)',
+                    borderRadius: 'var(--radius-sm)',
                     whiteSpace: 'pre-wrap',
-                    color: '#a7f3d0',
+                    color: 'var(--ok)',
                     fontSize: '0.8rem',
                     fontFamily: 'monospace'
                   }}>
@@ -3144,16 +3140,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                 {/* System enrichment note */}
                 <div style={{
                   padding: '10px 14px',
-                  borderRadius: '8px',
-                  background: 'rgba(59, 130, 246, 0.08)',
-                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--accent-bg)',
+                  border: '1px solid var(--accent-border)',
                   fontSize: '0.78rem',
-                  color: '#93c5fd',
+                  color: 'var(--accent-text)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px'
                 }}>
-                  <Sparkles size={16} color="#f59e0b" style={{ flexShrink: 0 }} />
+                  <Sparkles size={16} color="var(--warn)" style={{ flexShrink: 0 }} />
                   <span>
                     Quando i fornitori risponderanno con i loro listini o fatture, i dati verranno incrociati e agganciati in automatico a questo articolo per aggiornare le matrici e ottimizzare i futuri ordini.
                   </span>

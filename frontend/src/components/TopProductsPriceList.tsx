@@ -147,50 +147,50 @@ export default function TopProductsPriceList() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
         
         {/* Card 1: Articoli Rilevati */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid var(--accent-blue)', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)' }}>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid var(--accent)', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--accent-bg)', color: 'var(--accent-text)' }}>
             <Package size={24} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Articoli Listino</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '4px' }}>{products.length}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{products.length}</div>
           </div>
         </div>
 
         {/* Card 2: Spesa Totale Riferimento */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid var(--status-green)', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.1)', color: 'var(--status-green)' }}>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid var(--ok)', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--ok)' }}>
             <Coins size={24} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume Spesa</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '4px' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               € {totalSpend.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
         </div>
 
         {/* Card 3: Quantità Totale */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid #8b5cf6', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid var(--info)', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--info-bg)', color: 'var(--info)' }}>
             <TrendingUp size={24} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quantità Totale</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '4px' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               {totalVolume.toLocaleString('it-IT', { maximumFractionDigits: 0 })}
             </div>
           </div>
         </div>
 
         {/* Card 4: Prezzo Medio Ponderato */}
-        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid #f59e0b', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+        <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderLeft: '4px solid var(--warn)', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ padding: '12px', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--warn)' }}>
             <ShoppingCart size={24} />
           </div>
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Costo Medio Unità</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, marginTop: '4px' }}>
+            <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               € {avgUnitPrice.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
@@ -207,15 +207,15 @@ export default function TopProductsPriceList() {
           {/* Limit selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Numero Prodotti (Top N):</span>
-            <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.02)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+            <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-inset)', padding: '4px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               {[10, 50, 100, 250, 500].map(val => (
                 <button
                   key={val}
                   onClick={() => setLimit(val)}
                   style={{
                     padding: '6px 12px', borderRadius: '6px', border: 'none',
-                    background: limit === val ? 'var(--accent-blue)' : 'transparent',
-                    color: limit === val ? 'white' : 'var(--text-secondary)',
+                    background: limit === val ? 'var(--accent)' : 'transparent',
+                    color: limit === val ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                     fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', outline: 'none',
                     transition: 'all 0.2s'
                   }}
@@ -229,7 +229,7 @@ export default function TopProductsPriceList() {
           {/* Sorting Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', fontWeight: 500 }}><ArrowUpDown size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />Ordina per:</span>
-            <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.02)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+            <div style={{ display: 'flex', gap: '6px', background: 'var(--bg-inset)', padding: '4px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               {[
                 { key: 'quantita', label: 'Volume' },
                 { key: 'spesa', label: 'Spesa' },
@@ -240,8 +240,8 @@ export default function TopProductsPriceList() {
                   onClick={() => setSortBy(opt.key)}
                   style={{
                     padding: '6px 12px', borderRadius: '6px', border: 'none',
-                    background: sortBy === opt.key ? 'var(--accent-blue)' : 'transparent',
-                    color: sortBy === opt.key ? 'white' : 'var(--text-secondary)',
+                    background: sortBy === opt.key ? 'var(--accent)' : 'transparent',
+                    color: sortBy === opt.key ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                     fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', outline: 'none',
                     transition: 'all 0.2s'
                   }}
@@ -265,8 +265,8 @@ export default function TopProductsPriceList() {
               value={dataDa}
               onChange={e => setDataDa(e.target.value)}
               style={{
-                padding: '9px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)',
-                borderRadius: '8px', color: 'white', outline: 'none', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box'
+                padding: '9px 10px', background: 'var(--bg-inset)', border: '1px solid var(--line)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box'
               }}
             />
           </div>
@@ -279,8 +279,8 @@ export default function TopProductsPriceList() {
               value={dataA}
               onChange={e => setDataA(e.target.value)}
               style={{
-                padding: '9px 10px', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)',
-                borderRadius: '8px', color: 'white', outline: 'none', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box'
+                padding: '9px 10px', background: 'var(--bg-inset)', border: '1px solid var(--line)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', outline: 'none', fontSize: '0.9rem', width: '100%', boxSizing: 'border-box'
               }}
             />
           </div>
@@ -294,10 +294,10 @@ export default function TopProductsPriceList() {
             <button
               onClick={() => setSelectedSuppliers([])}
               style={{
-                padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer',
-                border: '1px solid ' + (selectedSuppliers.length === 0 ? 'var(--accent-blue)' : 'transparent'),
-                background: selectedSuppliers.length === 0 ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
-                color: selectedSuppliers.length === 0 ? 'white' : 'var(--text-secondary)',
+                padding: '6px 12px', borderRadius: '999px', fontSize: '0.8rem', cursor: 'pointer',
+                border: '1px solid ' + (selectedSuppliers.length === 0 ? 'var(--accent-border)' : 'transparent'),
+                background: selectedSuppliers.length === 0 ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                color: selectedSuppliers.length === 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
                 fontWeight: 600, transition: 'all 0.2s'
               }}
             >
@@ -310,10 +310,10 @@ export default function TopProductsPriceList() {
                   key={s.id}
                   onClick={() => handleSupplierToggle(s.id)}
                   style={{
-                    padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer',
-                    border: '1px solid ' + (isSelected ? 'var(--accent-blue)' : 'transparent'),
-                    background: isSelected ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
-                    color: isSelected ? 'white' : 'var(--text-secondary)',
+                    padding: '6px 12px', borderRadius: '999px', fontSize: '0.8rem', cursor: 'pointer',
+                    border: '1px solid ' + (isSelected ? 'var(--accent-border)' : 'transparent'),
+                    background: isSelected ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                    color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                     fontWeight: 500, transition: 'all 0.2s'
                   }}
                 >
@@ -331,10 +331,10 @@ export default function TopProductsPriceList() {
             <button
               onClick={() => setSelectedLocations([])}
               style={{
-                padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer',
-                border: '1px solid ' + (selectedLocations.length === 0 ? 'var(--accent-blue)' : 'transparent'),
-                background: selectedLocations.length === 0 ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
-                color: selectedLocations.length === 0 ? 'white' : 'var(--text-secondary)',
+                padding: '6px 12px', borderRadius: '999px', fontSize: '0.8rem', cursor: 'pointer',
+                border: '1px solid ' + (selectedLocations.length === 0 ? 'var(--accent-border)' : 'transparent'),
+                background: selectedLocations.length === 0 ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                color: selectedLocations.length === 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
                 fontWeight: 600, transition: 'all 0.2s'
               }}
             >
@@ -347,10 +347,10 @@ export default function TopProductsPriceList() {
                   key={loc.id}
                   onClick={() => handleLocationToggle(loc.id)}
                   style={{
-                    padding: '6px 12px', borderRadius: '20px', fontSize: '0.8rem', cursor: 'pointer',
-                    border: '1px solid ' + (isSelected ? 'var(--accent-blue)' : 'transparent'),
-                    background: isSelected ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.03)',
-                    color: isSelected ? 'white' : 'var(--text-secondary)',
+                    padding: '6px 12px', borderRadius: '999px', fontSize: '0.8rem', cursor: 'pointer',
+                    border: '1px solid ' + (isSelected ? 'var(--accent-border)' : 'transparent'),
+                    background: isSelected ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                    color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                     fontWeight: 500, transition: 'all 0.2s'
                   }}
                 >
@@ -390,18 +390,18 @@ export default function TopProductsPriceList() {
         </div>
 
         {/* Responsive Table */}
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
+          <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
-                <th style={{ padding: '16px 12px', textAlign: 'center', width: '60px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Pos.</th>
-                <th style={{ padding: '16px 12px', width: '120px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>SKU Interno</th>
-                <th style={{ padding: '16px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Descrizione Prodotto</th>
-                <th style={{ padding: '16px 12px', textAlign: 'center', width: '80px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>U.M.</th>
-                <th style={{ padding: '16px 12px', textAlign: 'right', width: '130px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Quantità Totale</th>
-                <th style={{ padding: '16px 12px', textAlign: 'right', width: '110px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>N. Acquisti</th>
-                <th style={{ padding: '16px 12px', textAlign: 'right', width: '140px', color: 'white', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Prezzo Medio</th>
-                <th style={{ padding: '16px 12px', textAlign: 'right', width: '140px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>Spesa Totale</th>
+              <tr style={{ background: 'var(--bg-inset)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left' }}>
+                <th style={{ padding: '16px 12px', textAlign: 'center', width: '60px', borderBottom: '1px solid var(--line)' }}>Pos.</th>
+                <th style={{ padding: '16px 12px', width: '120px', borderBottom: '1px solid var(--line)' }}>SKU Interno</th>
+                <th style={{ padding: '16px 12px', borderBottom: '1px solid var(--line)' }}>Descrizione Prodotto</th>
+                <th style={{ padding: '16px 12px', textAlign: 'center', width: '80px', borderBottom: '1px solid var(--line)' }}>U.M.</th>
+                <th style={{ padding: '16px 12px', textAlign: 'right', width: '130px', borderBottom: '1px solid var(--line)' }}>Quantità Totale</th>
+                <th style={{ padding: '16px 12px', textAlign: 'right', width: '110px', borderBottom: '1px solid var(--line)' }}>N. Acquisti</th>
+                <th style={{ padding: '16px 12px', textAlign: 'right', width: '140px', color: 'var(--text-primary)', fontWeight: 600, borderBottom: '1px solid var(--line)' }}>Prezzo Medio</th>
+                <th style={{ padding: '16px 12px', textAlign: 'right', width: '140px', borderBottom: '1px solid var(--line)' }}>Spesa Totale</th>
               </tr>
             </thead>
             <tbody>
@@ -430,37 +430,37 @@ export default function TopProductsPriceList() {
                     <tr
                       key={p.sku_interno}
                       style={{
-                        borderBottom: '1px solid rgba(255,255,255,0.02)',
+                        borderBottom: '1px solid var(--line)',
                         transition: 'background 0.2s',
                         cursor: 'default'
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.01)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, color: 'white' }}>
+                      <td style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {rankDisplay}
                       </td>
                       <td style={{ padding: '12px 10px' }}>
-                        <span style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-blue)', padding: '4px 8px', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+                        <span style={{ background: 'var(--accent-bg)', color: 'var(--accent-text)', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
                           {p.sku_interno}
                         </span>
                       </td>
-                      <td style={{ padding: '12px 10px', fontWeight: 500, color: 'rgba(255,255,255,0.9)' }}>
+                      <td style={{ padding: '12px 10px', fontWeight: 500, color: 'var(--text-primary)' }}>
                         {p.descrizione || 'N/A'}
                       </td>
                       <td style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                         {p.unita_misura}
                       </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 500 }}>
+                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {p.quantita_totale.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                       </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', color: 'var(--text-secondary)' }}>
+                      <td style={{ padding: '12px 10px', textAlign: 'right', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {p.numero_acquisti}
                       </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 700, color: '#10b981' }}>
+                      <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         € {p.prezzo_medio.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>
+                      <td style={{ padding: '12px 10px', textAlign: 'right', color: 'var(--text-primary)', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         € {p.spesa_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>

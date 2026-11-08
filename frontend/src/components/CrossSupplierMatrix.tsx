@@ -140,12 +140,12 @@ export default function CrossSupplierMatrix() {
   if (error) {
     return (
       <div style={{ padding: '24px' }}>
-        <div className="glass-panel" style={{ padding: '20px', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+        <div className="glass-panel" style={{ padding: '20px', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid var(--crit-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 600 }}>
             <AlertTriangle size={20} />
             <span>Errore di Caricamento</span>
           </div>
-          <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.7)' }}>{error}</p>
+          <p style={{ margin: '8px 0 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{error}</p>
         </div>
       </div>
     );
@@ -199,23 +199,23 @@ export default function CrossSupplierMatrix() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.8rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981' }}></span>
+              <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', background: 'var(--ok-bg)', border: '1px solid var(--ok)' }}></span>
               <span style={{ color: 'var(--text-secondary)' }}>
-                <strong style={{ color: '#10b981' }}>Miglior Prezzo (Bordo Verde)</strong>: La tariffa più bassa rilevata per lo SKU corrente.
+                <strong style={{ color: 'var(--ok)' }}>Miglior Prezzo (Bordo Verde)</strong>: La tariffa più bassa rilevata per lo SKU corrente.
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid #f59e0b' }}></span>
+              <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', background: 'var(--warn-bg)', border: '1px solid var(--warn)' }}></span>
               <span style={{ color: 'var(--text-secondary)' }}>
-                <strong style={{ color: '#f59e0b' }}>Prezzo con Delta (Arancio)</strong>: Quotazioni più costose rispetto alla miglior scelta (mostra lo spreco unitario ed in %).
+                <strong style={{ color: 'var(--warn)' }}>Prezzo con Delta (Arancio)</strong>: Quotazioni più costose rispetto alla miglior scelta (mostra lo spreco unitario ed in %).
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '0.65rem', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Concordato</span>
+              <span style={{ fontSize: '0.65rem', background: 'var(--accent-bg)', color: 'var(--accent-text)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Concordato</span>
               <span style={{ color: 'var(--text-secondary)' }}>Prezzo fisso bloccato da Listino Master.</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: '0.65rem', background: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Spot</span>
+              <span style={{ fontSize: '0.65rem', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>Spot</span>
               <span style={{ color: 'var(--text-secondary)' }}>Prezzo minimo d'acquisto registrato in fattura.</span>
             </div>
           </div>
@@ -240,7 +240,7 @@ export default function CrossSupplierMatrix() {
                   width: '38px',
                   height: '20px',
                   appearance: 'none',
-                  background: onlyComparable ? 'var(--accent-blue)' : 'rgba(255,255,255,0.1)',
+                  background: onlyComparable ? 'var(--accent-blue)' : 'var(--bg-elevated)',
                   borderRadius: '10px',
                   position: 'relative',
                   outline: 'none',
@@ -251,7 +251,7 @@ export default function CrossSupplierMatrix() {
               <span style={{
                 width: '16px',
                 height: '16px',
-                background: 'white',
+                background: 'var(--text-primary)',
                 borderRadius: '50%',
                 position: 'absolute',
                 left: onlyComparable ? '20px' : '2px',
@@ -275,10 +275,10 @@ export default function CrossSupplierMatrix() {
                 onChange={e => setDataDa(e.target.value)}
                 style={{
                   padding: '8px 12px',
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   fontSize: '0.85rem'
                 }}
@@ -292,10 +292,10 @@ export default function CrossSupplierMatrix() {
                 onChange={e => setDataA(e.target.value)}
                 style={{
                   padding: '8px 12px',
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
-                  color: 'white',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   fontSize: '0.85rem'
                 }}
@@ -306,10 +306,10 @@ export default function CrossSupplierMatrix() {
                 onClick={() => { setDataDa(''); setDataA(''); }}
                 style={{
                   padding: '8px 12px',
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                  borderRadius: '8px',
-                  color: '#fca5a5',
+                  background: 'var(--crit-bg)',
+                  border: '1px solid var(--crit-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--crit)',
                   cursor: 'pointer',
                   fontSize: '0.85rem'
                 }}
@@ -328,11 +328,11 @@ export default function CrossSupplierMatrix() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid var(--border-glass)',
-                color: 'white',
+                background: 'var(--bg-inset)',
+                border: '1px solid var(--line)',
+                color: 'var(--text-primary)',
                 padding: '8px 16px',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 fontSize: '0.85rem',
                 cursor: 'pointer',
                 height: '38px'
@@ -362,21 +362,21 @@ export default function CrossSupplierMatrix() {
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '12px',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px'
+                    boxShadow: 'var(--shadow-pop)',
+                    border: '1px solid var(--line)',
+                    borderRadius: 'var(--radius-md)'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--line)', paddingBottom: '8px', marginBottom: '4px' }}>
                     <button 
                       onClick={() => handleToggleAllSuppliers(true)}
-                      style={{ background: 'none', border: 'none', color: 'var(--accent-blue)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent-text)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
                     >
                       Tutti
                     </button>
                     <button 
                       onClick={() => handleToggleAllSuppliers(false)}
-                      style={{ background: 'none', border: 'none', color: '#fca5a5', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                      style={{ background: 'none', border: 'none', color: 'var(--crit)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
                     >
                       Deseleziona
                     </button>
@@ -414,10 +414,10 @@ export default function CrossSupplierMatrix() {
                 width: '100%',
                 boxSizing: 'border-box',
                 padding: '10px 12px 10px 36px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
+                background: 'var(--bg-inset)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text-primary)',
                 outline: 'none',
                 fontSize: '0.85rem'
               }}
@@ -426,15 +426,15 @@ export default function CrossSupplierMatrix() {
         </div>
 
         {/* Tabella Matrice */}
-        <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
+          <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left', background: 'rgba(255,255,255,0.01)' }}>
+              <tr style={{ borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)', fontSize: '0.8rem', textAlign: 'left', background: 'var(--bg-inset)' }}>
                 <th style={{ padding: '16px 12px', minWidth: '180px' }}>Descrizione / SKU Interno</th>
                 {fornitori.filter(f => selectedSupplierIds.includes(f.id)).map(f => (
                   <th key={f.id} style={{ padding: '16px 12px', textAlign: 'right', minWidth: '150px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-end' }}>
-                      <span style={{ fontWeight: 600, color: 'white', fontSize: '0.85rem' }}>{f.nome_azienda}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.85rem' }}>{f.nome_azienda}</span>
                       <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>P.IVA {f.p_iva}</span>
                     </div>
                   </th>
@@ -457,13 +457,13 @@ export default function CrossSupplierMatrix() {
                   const minPrice = visiblePricesList.length > 0 ? Math.min(...visiblePricesList) : null;
 
                   return (
-                    <tr key={sku} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: '0.85rem', transition: 'background-color 0.15s' }} className="table-row-hover">
+                    <tr key={sku} style={{ borderBottom: '1px solid var(--line)', fontSize: '0.85rem', transition: 'background-color 0.15s' }} className="table-row-hover">
                       
                       {/* Cella SKU / Dettaglio */}
                       <td style={{ padding: '14px 12px', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: 700, color: 'white' }}>{row.descrizione}</span>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{sku}</span>
+                          <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{row.descrizione}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>{sku}</span>
                         </div>
                       </td>
 
@@ -472,7 +472,7 @@ export default function CrossSupplierMatrix() {
                         const priceInfo = row.prezzi[f.id];
                         if (!priceInfo) {
                           return (
-                            <td key={f.id} style={{ padding: '14px 12px', textAlign: 'right', color: 'rgba(255,255,255,0.15)', verticalAlign: 'middle' }}>
+                            <td key={f.id} style={{ padding: '14px 12px', textAlign: 'right', color: 'var(--text-muted)', verticalAlign: 'middle' }}>
                               -
                             </td>
                           );
@@ -490,8 +490,8 @@ export default function CrossSupplierMatrix() {
                               padding: '12px',
                               textAlign: 'right',
                               verticalAlign: 'middle',
-                              background: isMin ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
-                              border: isMin ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid transparent',
+                              background: isMin ? 'var(--ok-bg)' : 'transparent',
+                              border: isMin ? '1px solid var(--ok-border)' : '1px solid transparent',
                               transition: 'background 0.2s',
                               borderRadius: isMin ? '6px' : '0'
                             }}
@@ -502,8 +502,8 @@ export default function CrossSupplierMatrix() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span style={{ 
                                   fontSize: '0.6rem', 
-                                  background: priceInfo.tipo === 'concordato' ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.06)', 
-                                  color: priceInfo.tipo === 'concordato' ? 'var(--accent-blue)' : 'var(--text-secondary)', 
+                                  background: priceInfo.tipo === 'concordato' ? 'var(--accent-bg)' : 'var(--bg-elevated)', 
+                                  color: priceInfo.tipo === 'concordato' ? 'var(--accent-text)' : 'var(--text-secondary)', 
                                   padding: '2px 5px', 
                                   borderRadius: '4px', 
                                   fontWeight: 600,
@@ -511,23 +511,23 @@ export default function CrossSupplierMatrix() {
                                 }}>
                                   {priceInfo.tipo}
                                 </span>
-                                <span style={{ fontWeight: 700, color: isMin ? '#10b981' : '#f59e0b', fontSize: '0.9rem' }}>
+                                <span style={{ fontWeight: 700, color: isMin ? 'var(--ok)' : 'var(--warn)', fontSize: '0.9rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                                   € {price.toFixed(2)}
                                 </span>
                               </div>
 
                               {/* Indicazione Delta o Badge di Miglior Prezzo */}
                               {isMin ? (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#10b981', fontSize: '0.7rem', fontWeight: 600 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', color: 'var(--ok)', fontSize: '0.7rem', fontWeight: 600 }}>
                                   <CheckCircle size={10} />
                                   <span>Miglior Prezzo</span>
                                 </div>
                               ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '1px' }}>
-                                  <span style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 700 }}>
+                                  <span style={{ fontSize: '0.7rem', color: 'var(--crit)', fontWeight: 700, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                                     +€ {deltaUnitario.toFixed(2)}
                                   </span>
-                                  <span style={{ fontSize: '0.65rem', color: 'rgba(255, 255, 255, 0.45)', fontWeight: 500 }}>
+                                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                                     (+{deltaPercent.toFixed(0)}%)
                                   </span>
                                 </div>

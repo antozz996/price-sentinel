@@ -49,11 +49,11 @@ interface LocationItem {
 
 // Preset list of distinct colors for multi-series charting
 const CHART_COLORS = [
-  '#3b82f6', // Bright Blue
-  '#10b981', // Emerald Green
-  '#f59e0b', // Amber/Yellow
-  '#ef4444', // Red/Crimson
-  '#a855f7', // Purple
+  '#4f8ff7', // Bright Blue
+  '#4cc38a', // Emerald Green
+  '#e8b04a', // Amber/Yellow
+  '#f0716a', // Red/Crimson
+  '#a48bf0', // Purple
   '#ec4899', // Pink
 ]
 
@@ -292,14 +292,14 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
           alignItems: 'center',
           justifyContent: 'center',
           color: 'var(--text-secondary)',
-          background: 'rgba(255,255,255,0.01)',
-          borderRadius: '12px',
-          border: '1px dashed var(--border-glass)',
+          background: 'var(--bg-inset)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px dashed var(--line-strong)',
           gap: '16px'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <TrendingUp size={28} style={{ opacity: 0.5, color: 'var(--accent-blue)' }} />
-            <span style={{ fontSize: '0.95rem', fontWeight: 500, color: 'white' }}>
+            <TrendingUp size={28} style={{ opacity: 0.5, color: 'var(--accent-text)' }} />
+            <span style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>
               Nessuna fattura di acquisto registrata per i filtri impostati.
             </span>
           </div>
@@ -315,9 +315,9 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             }}>
               {contractProducts.map(({ product, trend }) => (
                 <div key={product.sku} style={{
-                  background: 'rgba(255,255,255,0.03)',
+                  background: 'var(--bg-card)',
                   border: `1px solid ${product.color}`,
-                  borderRadius: '10px',
+                  borderRadius: 'var(--radius-md)',
                   padding: '12px 18px',
                   display: 'flex',
                   alignItems: 'center',
@@ -326,12 +326,12 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                   flex: '1 1 300px'
                 }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ color: 'white', fontWeight: 600, fontSize: '0.9rem' }}>{product.label}</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '0.9rem' }}>{product.label}</span>
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>SKU: {product.sku}</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Prezzo a Listino</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: product.color }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 600, color: product.color, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       {trend?.prezzo_contratto_corrente?.toFixed(2)} €
                     </span>
                   </div>
@@ -484,12 +484,12 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           style={{
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--border-radius-lg)',
-            border: '1px solid var(--border-glass)',
+            background: 'var(--bg-inset)',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--line)',
             overflow: 'visible',
             cursor: 'crosshair',
-            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.3)'
+            boxShadow: 'none'
           }}
         >
           {/* Horizontal Grid lines */}
@@ -502,7 +502,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                   y1={yCoord}
                   x2={svgWidth - paddingX}
                   y2={yCoord}
-                  stroke="var(--border-glass)"
+                  stroke="var(--line)"
                   strokeWidth="1"
                   strokeDasharray="4 4"
                 />
@@ -529,7 +529,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                   y1={paddingY}
                   x2={xCoord}
                   y2={svgHeight - paddingY}
-                  stroke="var(--border-glass)"
+                  stroke="var(--line)"
                   strokeWidth="1"
                   strokeDasharray="4 4"
                 />
@@ -628,7 +628,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                     cy={pt.y}
                     r="4"
                     fill={p.color}
-                    stroke="var(--bg-secondary)"
+                    stroke="var(--bg-card)"
                     strokeWidth="1.5"
                     style={{ transition: 'r 0.15s ease' }}
                   />
@@ -646,7 +646,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                 y1={paddingY}
                 x2={hoverData.x}
                 y2={svgHeight - paddingY}
-                stroke="rgba(255, 255, 255, 0.3)"
+                stroke="var(--line-strong)"
                 strokeWidth="1"
                 strokeDasharray="3 3"
               />
@@ -667,7 +667,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                       cy={ptY}
                       r="4.5"
                       fill={pt.color}
-                      stroke="white"
+                      stroke="var(--bg-card)"
                       strokeWidth="1.5"
                     />
                   </g>
@@ -689,8 +689,8 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
               width: '300px',
               padding: '16px',
               borderRadius: 'var(--border-radius-md)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              boxShadow: '0 12px 24px rgba(0,0,0,0.6)',
+              border: '1px solid var(--line-strong)',
+              boxShadow: 'var(--shadow-pop)',
               zIndex: 10,
               pointerEvents: 'none',
               transition: 'all 0.1s ease-out'
@@ -701,13 +701,13 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
               alignItems: 'center',
               justifyContent: 'space-between',
               marginBottom: '12px',
-              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              borderBottom: '1px solid var(--line)',
               paddingBottom: '6px'
             }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                 Data Rilevazione
               </span>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'white', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Calendar size={12} /> {formatDateStr(hoverData.dateStr)}
               </span>
             </div>
@@ -721,14 +721,14 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                   <div key={`tooltip-pt-${idx}`} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: pt.color, display: 'inline-block' }}></span>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>
                         {pt.label}
                       </span>
                     </div>
                     <div style={{ paddingLeft: '14px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Prezzo Pagato:</span>
-                        <span style={{ fontWeight: 600, color: '#fff' }}>{pt.price.toFixed(2)} €</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{pt.price.toFixed(2)} €</span>
                       </div>
                       {pt.contractPrice !== null && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
@@ -738,8 +738,9 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                             {deltaStr && (
                               <span style={{
                                 marginLeft: '6px',
-                                color: parseFloat(deltaStr) > 0 ? 'var(--status-red)' : 'var(--status-green)',
-                                fontWeight: 600
+                                color: parseFloat(deltaStr) > 0 ? 'var(--crit)' : 'var(--ok)',
+                                fontWeight: 600,
+                                fontFamily: 'var(--font-mono)'
                               }}>
                                 {parseFloat(deltaStr) > 0 ? `+${deltaStr}%` : `${deltaStr}%`}
                               </span>
@@ -749,11 +750,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                       )}
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.7 }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Fornitore:</span>
-                        <span style={{ color: '#fff' }}>{pt.supplier}</span>
+                        <span style={{ color: 'var(--text-primary)' }}>{pt.supplier}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.7 }}>
                         <span style={{ color: 'var(--text-secondary)' }}>Sede:</span>
-                        <span style={{ color: '#fff' }}>{pt.location}</span>
+                        <span style={{ color: 'var(--text-primary)' }}>{pt.location}</span>
                       </div>
                     </div>
                   </div>
@@ -911,19 +912,19 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             value={selectedSupplier}
             onChange={e => setSelectedSupplier(e.target.value)}
             style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '8px',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius-sm)',
               padding: '10px 12px',
-              color: 'white',
+              color: 'var(--text-primary)',
               outline: 'none',
               fontFamily: 'inherit',
               cursor: 'pointer'
             }}
           >
-            <option value="" style={{ background: 'var(--bg-secondary)', color: 'white' }}>Tutti i fornitori</option>
+            <option value="" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>Tutti i fornitori</option>
             {suppliers.map(s => (
-              <option key={s.id} value={s.id} style={{ background: 'var(--bg-secondary)', color: 'white' }}>
+              <option key={s.id} value={s.id} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                 {s.nome_azienda}
               </option>
             ))}
@@ -936,19 +937,19 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             value={selectedLocation}
             onChange={e => setSelectedLocation(e.target.value)}
             style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '8px',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius-sm)',
               padding: '10px 12px',
-              color: 'white',
+              color: 'var(--text-primary)',
               outline: 'none',
               fontFamily: 'inherit',
               cursor: 'pointer'
             }}
           >
-            <option value="" style={{ background: 'var(--bg-secondary)', color: 'white' }}>Tutte le sedi</option>
+            <option value="" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>Tutte le sedi</option>
             {locations.map(l => (
-              <option key={l.id} value={l.id} style={{ background: 'var(--bg-secondary)', color: 'white' }}>
+              <option key={l.id} value={l.id} style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>
                 {l.nome_struttura}
               </option>
             ))}
@@ -962,11 +963,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             value={startDate}
             onChange={e => setStartDate(e.target.value)}
             style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '8px',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius-sm)',
               padding: '9px 12px',
-              color: 'white',
+              color: 'var(--text-primary)',
               outline: 'none',
               fontFamily: 'inherit'
             }}
@@ -980,11 +981,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             value={endDate}
             onChange={e => setEndDate(e.target.value)}
             style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '8px',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius-sm)',
               padding: '9px 12px',
-              color: 'white',
+              color: 'var(--text-primary)',
               outline: 'none',
               fontFamily: 'inherit'
             }}
@@ -995,7 +996,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
       {/* 2. Product Search & Tags Section */}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', zIndex: 5 }}>
         <h3 style={{ fontSize: '1.1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Search size={18} color="var(--accent-blue)" /> Seleziona Prodotti da Confrontare
+          <Search size={18} color="var(--accent-text)" /> Seleziona Prodotti da Confrontare
         </h3>
         
         {/* Search Input Box */}
@@ -1008,11 +1009,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             onFocus={() => setShowSuggestions(true)}
             style={{
               width: '100%',
-              background: 'rgba(255,255,255,0.02)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '10px',
+              background: 'var(--bg-inset)',
+              border: '1px solid var(--line)',
+              borderRadius: 'var(--radius-sm)',
               padding: '14px 16px',
-              color: 'white',
+              color: 'var(--text-primary)',
               outline: 'none',
               fontSize: '0.95rem',
               transition: 'var(--transition-smooth)'
@@ -1030,8 +1031,8 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
               overflowY: 'auto',
               zIndex: 100,
               padding: '8px 0',
-              boxShadow: '0 15px 30px rgba(0,0,0,0.5)',
-              border: '1px solid rgba(255,255,255,0.08)'
+              boxShadow: 'var(--shadow-pop)',
+              border: '1px solid var(--line-strong)'
             }}>
               {suggestions.map((p: ProductSku, idx: number) => (
                 <div
@@ -1048,7 +1049,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                   className="suggestion-item"
                 >
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'white' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
                       {p.nome_prodotto || p.sku_interno}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1074,13 +1075,13 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
-                  background: 'rgba(255,255,255,0.03)',
+                  background: 'var(--bg-elevated)',
                   border: `1px solid ${p.color}`,
                   borderRadius: '999px',
                   padding: '6px 14px',
                   fontSize: '0.85rem',
-                  color: 'white',
-                  boxShadow: `0 0 10px rgba(${p.color === '#3b82f6' ? '59,130,246' : p.color === '#10b981' ? '16,185,129' : p.color === '#f59e0b' ? '245,158,11' : '239,68,68'}, 0.15)`
+                  color: 'var(--text-primary)',
+                  boxShadow: 'none'
                 }}
               >
                 <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: p.color }}></span>
@@ -1098,7 +1099,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                     padding: 0,
                     borderRadius: '50%'
                   }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
                   onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
                 >
                   <X size={14} />
@@ -1128,10 +1129,10 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
         {error && (
           <div style={{
             padding: '12px 16px',
-            borderRadius: '8px',
-            background: 'var(--status-red-bg)',
-            color: 'var(--status-red)',
-            border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--crit-bg)',
+            color: 'var(--crit)',
+            border: '1px solid var(--crit-border)',
             fontSize: '0.9rem'
           }}>
             {error}
@@ -1169,11 +1170,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                 value={tableSearch}
                 onChange={e => setTableSearch(e.target.value)}
                 style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '8px',
+                  background: 'var(--bg-inset)',
+                  border: '1px solid var(--line)',
+                  borderRadius: 'var(--radius-sm)',
                   padding: '8px 12px',
-                  color: 'white',
+                  color: 'var(--text-primary)',
                   outline: 'none',
                   fontSize: '0.85rem',
                   width: '200px'
@@ -1193,9 +1194,9 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
           {/* Raw Transactions Table */}
           <div style={{ overflowX: 'auto', width: '100%' }}>
             {tableRows.length > 0 ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+              <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-glass)', color: 'var(--text-secondary)' }}>
+                  <tr style={{ borderBottom: '1px solid var(--line)', color: 'var(--text-secondary)' }}>
                     <th style={{ padding: '12px 10px', cursor: 'pointer', fontWeight: 500 }} onClick={() => handleSort('data')}>
                       Data <ArrowUpDown size={12} style={{ marginLeft: '4px', verticalAlign: 'middle' }} />
                     </th>
@@ -1233,11 +1234,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                       : (isNaN(new Date(r.data).getTime()) ? r.data : new Date(r.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }))
                     
                     return (
-                      <tr key={`tr-${idx}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }} className="table-row-hover">
+                      <tr key={`tr-${idx}`} style={{ borderBottom: '1px solid var(--line)', transition: 'var(--transition-fast)' }} className="table-row-hover">
                         <td style={{ padding: '12px 10px', fontWeight: 500 }}>
-                          {isListinoBaseline ? <span style={{ color: 'var(--accent-blue)', fontWeight: 600 }}>A Listino</span> : parsedDate}
+                          {isListinoBaseline ? <span style={{ color: 'var(--accent-text)', fontWeight: 600 }}>A Listino</span> : parsedDate}
                         </td>
-                        <td style={{ padding: '12px 10px', fontFamily: 'monospace', opacity: 0.8 }}>{r.sku}</td>
+                        <td style={{ padding: '12px 10px', fontFamily: 'var(--font-mono)', opacity: 0.8 }}>{r.sku}</td>
                         <td style={{ padding: '12px 10px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: r.color }}></span>
@@ -1246,16 +1247,16 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                         </td>
                         <td style={{ padding: '12px 10px', opacity: 0.85 }}>{r.fornitore}</td>
                         <td style={{ padding: '12px 10px', opacity: 0.85 }}>{r.location}</td>
-                        <td style={{ padding: '12px 10px' }}>{isListinoBaseline ? '-' : r.quantita}</td>
-                        <td style={{ padding: '12px 10px', fontWeight: 600 }}>
+                        <td style={{ padding: '12px 10px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{isListinoBaseline ? '-' : r.quantita}</td>
+                        <td style={{ padding: '12px 10px', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           {isListinoBaseline ? '-' : `${r.prezzo_pagato.toFixed(2)} €`}
                         </td>
-                        <td style={{ padding: '12px 10px' }}>
+                        <td style={{ padding: '12px 10px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           {r.prezzo_contratto ? `${r.prezzo_contratto.toFixed(2)} €` : '-'}
                         </td>
                         <td style={{ padding: '12px 10px' }}>
                           {isListinoBaseline ? (
-                            <span className="badge" style={{ background: 'rgba(59,130,246,0.15)', color: 'var(--accent-blue)', border: '1px solid rgba(59,130,246,0.3)' }}>
+                            <span className="badge" style={{ background: 'var(--accent-bg)', color: 'var(--accent-text)', border: '1px solid var(--accent-border)' }}>
                               Listino Base
                             </span>
                           ) : delta !== null ? (
@@ -1296,17 +1297,17 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
       {/* Dynamic CSS styles for hover effects and suggestions */}
       <style>{`
         .suggestion-item:hover {
-          background: rgba(255, 255, 255, 0.05);
+          background: var(--bg-elevated);
         }
         .table-row-hover:hover {
-          background: rgba(255, 255, 255, 0.015);
+          background: var(--bg-elevated);
         }
         .spinner {
           width: 18px;
           height: 18px;
-          border: 2px solid rgba(255,255,255,0.1);
+          border: 2px solid var(--line-strong);
           border-radius: 50%;
-          border-top-color: var(--accent-blue);
+          border-top-color: var(--accent);
           animation: spin 0.8s linear infinite;
           display: inline-block;
         }

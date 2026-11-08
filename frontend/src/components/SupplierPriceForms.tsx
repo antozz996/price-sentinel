@@ -24,8 +24,8 @@ const formStatusLabel = (status: string) => FORM_STATUS_LABELS[status] ?? status
 type CreatedLink = { supplier: Supplier; url: string; publicPath: string };
 type MatrixResponse = { categories?: Category[]; suppliers?: CapabilitySupplier[] };
 
-const card: CSSProperties = { border: '1px solid var(--border-glass)', borderRadius: 12, padding: 16, background: 'rgba(255,255,255,.025)' };
-const field: CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, color: 'white', background: 'var(--bg-secondary)', border: '1px solid var(--border-glass)', borderRadius: 8 };
+const card: CSSProperties = { border: '1px solid var(--line)', borderRadius: 'var(--radius-lg)', padding: 16, background: 'var(--bg-card)' };
+const field: CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, color: 'var(--text-primary)', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)' };
 const configuredPublicOrigin = ((import.meta as any).env?.VITE_PUBLIC_APP_URL || '').trim().replace(/\/$/, '');
 const localBrowserOrigin = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.origin);
 const isLocalAddress = (value: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value.trim());
@@ -335,7 +335,7 @@ export default function SupplierPriceForms() {
           </select>
         </label> : <div style={{ gridColumn: '1 / -1' }}>
           <strong>Fornitori ({supplierIds.length} selezionati)</strong>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 6, maxHeight: 190, overflow: 'auto', padding: 8, border: '1px solid var(--border-glass)', borderRadius: 8, marginTop: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 6, maxHeight: 190, overflow: 'auto', padding: 8, border: '1px solid var(--line)', borderRadius: 'var(--radius-md)', marginTop: 6 }}>
             {suppliers.map(s => <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={supplierIds.includes(s.id)} onChange={e => { setSupplierIds(current => e.target.checked ? [...current, s.id] : current.filter(id => id !== s.id)); setCreatedLinks([]); }} />
               <span>{s.nome_azienda}</span>
@@ -388,13 +388,13 @@ export default function SupplierPriceForms() {
             {recipientMode === 'suppliers' && <button className="btn" type="button" onClick={toggleVisibleRows} disabled={!visibleRows.length}>{allVisibleSelected ? 'Deseleziona righe visibili' : 'Seleziona righe visibili'}</button>}
           </div>
         </div>
-        {loadingCatalog ? <p>Caricamento listini dei fornitori…</p> : <div style={{ maxHeight: 360, overflow: 'auto', border: '1px solid var(--border-glass)', borderRadius: 8 }}>
+        {loadingCatalog ? <p>Caricamento listini dei fornitori…</p> : <div style={{ maxHeight: 360, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
           {selectedSupplierIds.map(id => {
             const supplier = suppliers.find(s => s.id === id)!;
             const supplierRows = visibleRowsBySupplier[id] || [];
             return <div key={id}>
-              <div style={{ position: 'sticky', top: 0, padding: 9, background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-glass)' }}><strong>{supplier.nome_azienda}</strong> · {supplierRows.length} righe</div>
-              {supplierRows.map(r => <label key={r.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, padding: 10, borderBottom: '1px solid var(--border-glass)', alignItems: 'center' }}>
+              <div style={{ position: 'sticky', top: 0, padding: 9, background: 'var(--bg-inset)', borderBottom: '1px solid var(--line)' }}><strong>{supplier.nome_azienda}</strong> · {supplierRows.length} righe</div>
+              {supplierRows.map(r => <label key={r.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, padding: 10, borderBottom: '1px solid var(--line)', alignItems: 'center' }}>
                 <input type="checkbox" disabled={recipientMode === 'category'} checked={recipientMode === 'category' || (selectedBySupplier[id] || []).includes(r.id)} onChange={() => toggleRow(id, r.id)} />
                 <span>{r.descrizione}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{r.sku_interno}{r.category ? ` · ${r.category}${r.subcategory ? ' / ' + r.subcategory : ''}` : ' · Senza categoria'}</small></span>
                 <span>{requestType === 'new_listino' ? `Da quotare / ${r.unita_misura}` : `€ ${r.prezzo_pattuito} / ${r.unita_misura}`}</span>
@@ -406,28 +406,28 @@ export default function SupplierPriceForms() {
         </div>}
       </div>}
       <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy || loadingCatalog || !selectedSupplierIds.length || !selectedCount || !publicUrlReady || (requestType === 'new_listino' && recipientMode === 'suppliers' && !productCategory)} onClick={createForms}>{busy ? 'Creazione moduli…' : requestType === 'new_listino' ? `Richiedi ${selectedSupplierIds.length > 1 ? 'nuovi listini' : 'nuovo listino'}` : `Crea ${selectedSupplierIds.length > 1 ? 'moduli' : 'link personale'}`}</button>
-      {!publicUrlReady && <p style={{ color: '#fbbf24' }}>Inserisci un indirizzo valido: localhost per test locali oppure un dominio/tunnel pubblico per i fornitori.</p>}
+      {!publicUrlReady && <p style={{ color: 'var(--warn)' }}>Inserisci un indirizzo valido: localhost per test locali oppure un dominio/tunnel pubblico per i fornitori.</p>}
       {createdLinks.map(item => {
         const wa = whatsappUrl(item);
-        return <div key={item.supplier.id} style={{ ...card, marginTop: 14, borderColor: 'rgba(34,197,94,.45)' }}>
+        return <div key={item.supplier.id} style={{ ...card, marginTop: 14, borderColor: 'var(--ok-border)' }}>
           <strong>Link pronto per {item.supplier.nome_azienda}</strong>
           <p style={{ overflowWrap: 'anywhere' }}>{item.url}</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn" type="button" onClick={() => copyLink(item.url)}>Copia link</button>
             {wa && <a className="btn btn-primary" href={wa} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', background: '#25D366', borderColor: '#25D366' }}>WhatsApp · {item.supplier.nome_azienda}</a>}
           </div>
-          {!phoneForWhatsApp(item.supplier.telefono_contatto) && <p style={{ color: '#fbbf24', marginBottom: 0 }}>Numero WhatsApp mancante in anagrafica: copia il link e invialo manualmente.</p>}
-          {isLocalAddress(publicOrigin) && <p style={{ color: '#fbbf24', marginBottom: 0 }}>Link di test locale: si apre solo su questo computer. Imposta un tunnel o dominio pubblico prima di inviarlo al fornitore.</p>}
+          {!phoneForWhatsApp(item.supplier.telefono_contatto) && <p style={{ color: 'var(--warn)', marginBottom: 0 }}>Numero WhatsApp mancante in anagrafica: copia il link e invialo manualmente.</p>}
+          {isLocalAddress(publicOrigin) && <p style={{ color: 'var(--warn)', marginBottom: 0 }}>Link di test locale: si apre solo su questo computer. Imposta un tunnel o dominio pubblico prima di inviarlo al fornitore.</p>}
         </div>;
       })}
-      {notice && <div role="status" style={{ color: '#86efac', marginTop: 10 }}>{notice}</div>}
+      {notice && <div role="status" style={{ color: 'var(--ok)', marginTop: 10 }}>{notice}</div>}
     </section>
 
     <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>Moduli creati</h2><button className="btn" type="button" onClick={loadForms}>Aggiorna</button>
       </div>
-      {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Tipo</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
+      {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Tipo</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
         {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{f.request_type === 'new_listino' ? 'Nuova offerta' : 'Conferma prezzi'}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{formStatusLabel(f.status)}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> <button className="btn" type="button" disabled={busy || f.status === 'approved'} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
       </tbody></table></div> : <p style={{ color: 'var(--text-secondary)' }}>Nessun modulo ancora creato.</p>}
     </section>
@@ -435,18 +435,18 @@ export default function SupplierPriceForms() {
     {detail && <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{formStatusLabel(detail.status)}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
-      {detail.anagrafica_inviata ? <div style={{ ...card, marginBottom: 12, borderColor: 'rgba(251,191,36,.6)' }}>
+      {detail.anagrafica_inviata ? <div style={{ ...card, marginBottom: 12, borderColor: 'var(--warn-border)' }}>
         <strong>Dati aziendali inviati dal fornitore</strong>
         <div>Ragione sociale: {detail.anagrafica_inviata.ragione_sociale}</div>
         <div>Partita IVA: {detail.anagrafica_inviata.partita_iva}</div>
         <div>Telefono per gli ordini: {detail.anagrafica_inviata.telefono_ordini}</div>
         {detail.status === 'submitted' && <small style={{ color: 'var(--text-secondary)' }}>Con l’approvazione questi dati sostituiscono il nome provvisorio nell’anagrafica fornitore.</small>}
-      </div> : detail.requires_supplier_details && <p style={{ color: '#fbbf24' }}>Fornitore nuovo: ragione sociale, partita IVA e telefono arriveranno con la risposta.</p>}
+      </div> : detail.requires_supplier_details && <p style={{ color: 'var(--warn)' }}>Fornitore nuovo: ragione sociale, partita IVA e telefono arriveranno con la risposta.</p>}
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')}${detail.validita_inviata_a ? ` al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : ' fino a nuova approvazione'}` : 'non ancora indicata'}</strong></p>
-      {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12, borderColor: 'rgba(59,130,246,.65)' }}>
+      {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12, borderColor: 'var(--accent-border)' }}>
         <h3 style={{ marginTop: 0 }}>Risposta pronta per la revisione</h3>
         <p style={{ color: 'var(--text-secondary)' }}>Controlla prezzi, marche, formati e unità qui sotto. L’approvazione integra direttamente le offerte nel listino V2: Google Sheet non è necessario.</p>
-        <p style={{ color: '#fbbf24' }}>Più marche o formati restano varianti distinte. I prezzi precedenti vengono conservati nello storico e il nuovo prezzo resta valido fino alla prossima approvazione, salvo la scadenza indicata.</p>
+        <p style={{ color: 'var(--warn)' }}>Più marche o formati restano varianti distinte. I prezzi precedenti vengono conservati nello storico e il nuovo prezzo resta valido fino alla prossima approvazione, salvo la scadenza indicata.</p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void approveForm(detail.id)}>{busy ? 'Integrazione…' : 'Approva e integra nel listino V2'}</button>
           <button type="button" className="btn" disabled={busy} onClick={() => void rejectForm(detail.id)}>Rifiuta risposta</button>
@@ -455,7 +455,7 @@ export default function SupplierPriceForms() {
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
         {detail.request_type !== 'new_listino' && <div>Pattuito: € {i.prezzo_corrente} / {i.unita_corrente || 'unità da completare'}</div>}
-        {i.non_trattato ? <div>Non trattato dal fornitore</div> : i.offerte_inviate?.length ? i.offerte_inviate.map((offer, index) => <div key={offer.id_offerta} style={{ marginTop: 8, padding: 8, borderLeft: '2px solid #60a5fa' }}>
+        {i.non_trattato ? <div>Non trattato dal fornitore</div> : i.offerte_inviate?.length ? i.offerte_inviate.map((offer, index) => <div key={offer.id_offerta} style={{ marginTop: 8, padding: 8, borderLeft: '2px solid var(--accent-text)' }}>
           <strong>Offerta {index + 1}: € {offer.prezzo} per confezione da {offer.quantita_confezione} {offer.unita_misura}</strong>
           <div>{offer.dicitura_fornitore} · Marca: {offer.marca}</div><small>ID offerta: {offer.id_offerta}{offer.nota ? ' · Nota: ' + offer.nota : ''}</small>
         </div>) : <><div>Offerta: {i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' per confezione' : 'in attesa'}</div><div>Dicitura del fornitore: {i.dicitura_inviata || 'da compilare'} · Marca: {i.brand_inviata || 'da compilare'} · Confezione: {i.quantita_inviata || 'da compilare'} {i.unita_inviata || ''}</div></>}
@@ -464,7 +464,7 @@ export default function SupplierPriceForms() {
       {['open','submitted','expired'].includes(detail.status) && <button className="btn" disabled={busy} onClick={() => closeForm(detail.id)}>Chiudi link</button>}
       <p style={{ color: 'var(--text-secondary)' }}>Questo flusso è interamente gestito nell’app. Lo Sheet non è necessario per raccogliere o approvare i prezzi dei fornitori.</p>
     </section>}
-    {error && <div role="alert" style={{ color: '#fca5a5' }}>{error}</div>}
+    {error && <div role="alert" style={{ color: 'var(--crit)' }}>{error}</div>}
   </div>;
 }
 

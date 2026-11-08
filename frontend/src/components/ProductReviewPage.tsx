@@ -245,8 +245,8 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
       {/* Header Banner */}
       <div className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h2 style={{ margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '10px', color: 'white' }}>
-            <Star size={26} color="#facc15" fill="#facc15" /> Recensioni & Qualità Prodotti
+          <h2 style={{ margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-primary)' }}>
+            <Star size={26} color="var(--warn)" fill="var(--warn)" /> Recensioni & Qualità Prodotti
           </h2>
           <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
             Valuta i prodotti ricevuti e segnala articoli con scarsa resa o difetti di packaging per ottimizzare le decisioni di acquisto del gruppo.
@@ -257,7 +257,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
           className="btn"
           onClick={loadProducts}
           disabled={loading}
-          style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '6px' }}
+          style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           <RefreshCw size={14} className={loading ? 'spinner' : ''} /> Aggiorna
         </button>
@@ -265,14 +265,14 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
 
       {/* Toast Notification */}
       {errorMsg && (
-        <div style={{ padding: '12px 18px', borderRadius: '10px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', fontWeight: 600, fontSize: '0.85rem' }}>
+        <div style={{ padding: '12px 18px', borderRadius: '10px', background: 'var(--crit-bg)', border: '1px solid var(--crit-border)', color: 'var(--crit)', fontWeight: 600, fontSize: '0.85rem' }}>
           {errorMsg}
         </div>
       )}
 
       {/* Toast Notification */}
       {successToast && (
-        <div style={{ padding: '12px 18px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ padding: '12px 18px', borderRadius: '10px', background: 'var(--ok-bg)', border: '1px solid var(--ok-border)', color: 'var(--ok)', fontWeight: 600, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CheckCircle2 size={16} /> {successToast}
         </div>
       )}
@@ -283,37 +283,37 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Prodotti a Catalogo
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: 'white', margin: '4px 0' }}>
+          <div style={{ fontSize: '1.7rem', fontWeight: 600, color: 'var(--text-primary)', margin: '4px 0', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
             {kpis.tot}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Reparti assegnati</div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid #10b981' }}>
+        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid var(--ok)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Apprezzati (Voto SI)
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#10b981', margin: '4px 0' }}>
+          <div style={{ fontSize: '1.7rem', fontWeight: 600, color: 'var(--ok)', margin: '4px 0', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
             {kpis.totaleSi}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Gradimento positivo confermato</div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid #ef4444' }}>
+        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid var(--crit)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Segnalazioni Critiche (NO)
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#ef4444', margin: '4px 0' }}>
+          <div style={{ fontSize: '1.7rem', fontWeight: 600, color: 'var(--crit)', margin: '4px 0', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
             {kpis.totaleNo}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Articoli da escludere / sostituire</div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid #facc15' }}>
+        <div className="glass-panel" style={{ padding: '18px 20px', borderLeft: '4px solid var(--warn)' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase' }}>
             Le Mie Recensioni
           </div>
-          <div style={{ fontSize: '1.7rem', fontWeight: 800, color: '#facc15', margin: '4px 0' }}>
+          <div style={{ fontSize: '1.7rem', fontWeight: 600, color: 'var(--warn)', margin: '4px 0', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
             {kpis.recensitiDaMe} / {kpis.tot}
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Prodotti valutati dal tuo account</div>
@@ -333,10 +333,10 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                 onClick={() => setSelectedSector(sec.id)}
                 style={{
                   padding: '9px 18px',
-                  borderRadius: '30px',
-                  border: isSelected ? '2px solid var(--accent-blue)' : '1px solid var(--border-glass)',
-                  background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                  color: isSelected ? 'white' : 'var(--text-secondary)',
+                  borderRadius: '999px',
+                  border: isSelected ? '2px solid var(--accent)' : '1px solid var(--line)',
+                  background: isSelected ? 'var(--accent-bg)' : 'var(--bg-inset)',
+                  color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                   fontWeight: isSelected ? 700 : 500,
                   fontSize: '0.9rem',
                   cursor: 'pointer',
@@ -362,7 +362,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
             placeholder="Cerca prodotto, marca o codice SKU..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            style={{ width: '100%', padding: '9px 12px 9px 36px', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+            style={{ width: '100%', padding: '9px 12px 9px 36px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
           />
         </div>
 
@@ -370,7 +370,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
         <select
           value={reviewFilter}
           onChange={e => setReviewFilter(e.target.value)}
-          style={{ padding: '9px 14px', background: '#13131c', border: '1px solid var(--border-glass)', borderRadius: '8px', color: 'white', fontSize: '0.85rem' }}
+          style={{ padding: '9px 14px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem' }}
         >
           <option value="tutti">Tutti i prodotti</option>
           <option value="da_recensire">⏳ Da recensire da me</option>
@@ -391,8 +391,8 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
         </div>
       ) : filteredProducts.length === 0 ? (
         <div className="glass-panel" style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <ShoppingCart size={42} style={{ margin: '0 auto 14px', opacity: 0.5, color: '#60a5fa' }} />
-          <h3 style={{ margin: '0 0 6px', color: 'white' }}>Nessun prodotto ordinato da recensire</h3>
+          <ShoppingCart size={42} style={{ margin: '0 auto 14px', opacity: 0.5, color: 'var(--accent-text)' }} />
+          <h3 style={{ margin: '0 0 6px', color: 'var(--text-primary)' }}>Nessun prodotto ordinato da recensire</h3>
           <p style={{ fontSize: '0.85rem', margin: '0 auto', maxWidth: '520px', lineHeight: '1.5' }}>
             Puoi recensire solo gli articoli che hai ordinato almeno una volta con il tuo account o per la tua sede.
             Non appena emetterai un ordine in <strong>Sviluppo Ordini Settore</strong>, gli articoli compariranno qui per essere valutati.
@@ -418,8 +418,8 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   gap: '16px',
-                  border: hasMyReview ? '1px solid rgba(250, 204, 21, 0.3)' : '1px solid var(--border-glass)',
-                  background: hasMyReview ? 'rgba(250, 204, 21, 0.02)' : 'rgba(255, 255, 255, 0.02)',
+                  border: hasMyReview ? '1px solid var(--warn-border)' : '1px solid var(--border-glass)',
+                  background: hasMyReview ? 'var(--bg-elevated)' : 'var(--bg-card)',
                   transition: 'all 0.2s'
                 }}
               >
@@ -427,7 +427,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white', lineHeight: '1.3' }}>
+                      <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', lineHeight: '1.3' }}>
                         {prod.order_name || prod.canonical_name}
                       </div>
                       {prod.order_name && prod.canonical_name !== prod.order_name && (
@@ -440,15 +440,15 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                     {/* Overall Stats Pill */}
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontSize: '0.72rem', fontWeight: 800 }}>
+                        <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--ok-bg)', color: 'var(--ok)', fontSize: '0.72rem', fontWeight: 700 }}>
                           👍 {prod.positivi_si}
                         </span>
-                        <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', fontSize: '0.72rem', fontWeight: 800 }}>
+                        <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--crit-bg)', color: 'var(--crit)', fontSize: '0.72rem', fontWeight: 700 }}>
                           👎 {prod.negativi_no}
                         </span>
                       </div>
                       {prod.rating_medio && (
-                        <div style={{ fontSize: '0.75rem', color: '#facc15', fontWeight: 700, marginTop: '2px' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--warn)', fontWeight: 700, marginTop: '2px' }}>
                           ⭐ {prod.rating_medio} / 5
                         </div>
                       )}
@@ -457,7 +457,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
 
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginTop: '8px', fontSize: '0.75rem' }}>
                     {prod.ordinato_da_me && (
-                      <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '6px', background: 'var(--accent-bg)', color: 'var(--accent-text)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                         <ShoppingCart size={11} /> Ordinato {prod.numero_ordini_miei} {prod.numero_ordini_miei === 1 ? 'volta' : 'volte'}
                         {prod.data_ultimo_ordine_mio && ` • Ultimo: ${new Date(prod.data_ultimo_ordine_mio).toLocaleDateString('it-IT')}`}
                       </span>
@@ -467,23 +467,23 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                     </span>
                     {prod.category && (
                       <>
-                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
-                        <span style={{ color: '#93c5fd' }}>{prod.category}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>•</span>
+                        <span style={{ color: 'var(--accent-text)' }}>{prod.category}</span>
                       </>
                     )}
                     {prod.fornitore_abituale && (
                       <>
-                        <span style={{ color: 'rgba(255,255,255,0.2)' }}>•</span>
-                        <span style={{ color: 'var(--text-secondary)' }}>Fornitore: <strong style={{ color: 'white' }}>{prod.fornitore_abituale}</strong></span>
+                        <span style={{ color: 'var(--text-muted)' }}>•</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>Fornitore: <strong style={{ color: 'var(--text-primary)' }}>{prod.fornitore_abituale}</strong></span>
                       </>
                     )}
                   </div>
                 </div>
 
                 {/* Rating Input Box */}
-                <div style={{ background: 'rgba(0, 0, 0, 0.3)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ background: 'var(--bg-inset)', padding: '14px', borderRadius: '10px', border: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'white' }}>Il tuo Gradimento:</span>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-primary)' }}>Il tuo Gradimento:</span>
 
                     {/* SI / NO Big Toggle */}
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -495,11 +495,11 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                         }}
                         style={{
                           padding: '6px 14px',
-                          borderRadius: '8px',
-                          border: currentFb === 'SI' ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
-                          background: currentFb === 'SI' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.02)',
-                          color: currentFb === 'SI' ? '#34d399' : 'var(--text-secondary)',
-                          fontWeight: 800,
+                          borderRadius: 'var(--radius-sm)',
+                          border: currentFb === 'SI' ? '2px solid var(--ok)' : '1px solid var(--line-strong)',
+                          background: currentFb === 'SI' ? 'var(--ok-bg)' : 'var(--bg-inset)',
+                          color: currentFb === 'SI' ? 'var(--ok)' : 'var(--text-secondary)',
+                          fontWeight: 700,
                           fontSize: '0.82rem',
                           cursor: 'pointer',
                           display: 'flex',
@@ -518,11 +518,11 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                         }}
                         style={{
                           padding: '6px 14px',
-                          borderRadius: '8px',
-                          border: currentFb === 'NO' ? '2px solid #ef4444' : '1px solid rgba(255,255,255,0.1)',
-                          background: currentFb === 'NO' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.02)',
-                          color: currentFb === 'NO' ? '#f87171' : 'var(--text-secondary)',
-                          fontWeight: 800,
+                          borderRadius: 'var(--radius-sm)',
+                          border: currentFb === 'NO' ? '2px solid var(--crit)' : '1px solid var(--line-strong)',
+                          background: currentFb === 'NO' ? 'var(--crit-bg)' : 'var(--bg-inset)',
+                          color: currentFb === 'NO' ? 'var(--crit)' : 'var(--text-secondary)',
+                          fontWeight: 700,
                           fontSize: '0.82rem',
                           cursor: 'pointer',
                           display: 'flex',
@@ -548,8 +548,8 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                         >
                           <Star
                             size={18}
-                            color={star <= currentRating ? '#facc15' : 'rgba(255,255,255,0.2)'}
-                            fill={star <= currentRating ? '#facc15' : 'transparent'}
+                            color={star <= currentRating ? 'var(--warn)' : 'var(--text-muted)'}
+                            fill={star <= currentRating ? 'var(--warn)' : 'transparent'}
                           />
                         </button>
                       ))}
@@ -574,9 +574,9 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                               borderRadius: '6px',
                               fontSize: '0.7rem',
                               fontWeight: isSelected ? 700 : 500,
-                              background: isSelected ? (currentFb === 'SI' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)') : 'rgba(255,255,255,0.04)',
-                              border: isSelected ? `1px solid ${currentFb === 'SI' ? '#10b981' : '#ef4444'}` : '1px solid rgba(255,255,255,0.06)',
-                              color: isSelected ? 'white' : 'var(--text-secondary)',
+                              background: isSelected ? (currentFb === 'SI' ? 'var(--ok-bg)' : 'var(--crit-bg)') : 'var(--bg-inset)',
+                              border: isSelected ? `1px solid ${currentFb === 'SI' ? 'var(--ok)' : 'var(--crit)'}` : '1px solid var(--line)',
+                              color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                               cursor: 'pointer'
                             }}
                           >
@@ -593,13 +593,13 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                     value={currentNote}
                     onChange={e => setDraftNote(prev => ({ ...prev, [prod.product_id]: e.target.value }))}
                     rows={2}
-                    style={{ width: '100%', padding: '8px 10px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'white', fontSize: '0.78rem', resize: 'vertical' }}
+                    style={{ width: '100%', padding: '8px 10px', background: 'var(--bg-inset)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.78rem', resize: 'vertical' }}
                   />
 
                   {/* Save Button */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
                     {hasMyReview ? (
-                      <span style={{ fontSize: '0.72rem', color: '#facc15', fontWeight: 600 }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--warn)', fontWeight: 600 }}>
                         ⭐ Hai già recensito questo articolo
                       </span>
                     ) : (
@@ -623,19 +623,19 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
 
                 {/* Recent Reviews from colleagues / Admin Actions */}
                 {prod.recensioni_recenti.length > 0 && (
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: '10px' }}>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', fontWeight: 700, marginBottom: '6px' }}>
                       Ultime recensioni del team ({prod.recensioni_recenti.length}):
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '110px', overflowY: 'auto' }}>
                       {prod.recensioni_recenti.map(r => (
-                        <div key={r.id} style={{ background: 'rgba(255,255,255,0.02)', padding: '6px 8px', borderRadius: '6px', fontSize: '0.72rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div key={r.id} style={{ background: 'var(--bg-inset)', padding: '6px 8px', borderRadius: '6px', fontSize: '0.72rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <div>
-                            <div style={{ fontWeight: 600, color: 'white' }}>
+                            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                               {r.feedback === 'SI' ? '👍' : '👎'} {r.user_nome}
-                              {r.rating && <span style={{ color: '#facc15', marginLeft: '6px' }}>⭐ {r.rating}/5</span>}
+                              {r.rating && <span style={{ color: 'var(--warn)', marginLeft: '6px' }}>⭐ {r.rating}/5</span>}
                             </div>
-                            {r.motivo && <div style={{ color: r.feedback === 'SI' ? '#34d399' : '#f87171', fontWeight: 600 }}>{r.motivo}</div>}
+                            {r.motivo && <div style={{ color: r.feedback === 'SI' ? 'var(--ok)' : 'var(--crit)', fontWeight: 600 }}>{r.motivo}</div>}
                             {r.note && <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', marginTop: '2px' }}>"{r.note}"</div>}
                           </div>
                           <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>
@@ -649,15 +649,15 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
 
                 {/* Admin Quick Deactivation Action */}
                 {isAdmin && prod.negativi_no > 0 && (
-                  <div style={{ borderTop: '1px solid rgba(239, 68, 68, 0.2)', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.72rem', color: '#f87171' }}>
+                  <div style={{ borderTop: '1px solid var(--crit-border)', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--crit)' }}>
                       Segnalato con {prod.negativi_no} voti negativi
                     </span>
                     <button
                       type="button"
                       onClick={() => handleAdminDeactivateProduct(prod.product_id, prod.recensioni_recenti.find(r => r.feedback === 'NO')?.id)}
                       className="btn"
-                      style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      style={{ background: 'var(--crit-bg)', border: '1px solid var(--crit-border)', color: 'var(--crit)', padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
                       <ShieldAlert size={13} /> Disattiva dal Listino
                     </button>

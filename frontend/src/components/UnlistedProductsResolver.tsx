@@ -932,10 +932,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
               <div style={{
-                background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(16, 185, 129, 0.2))',
+                background: 'var(--accent-bg)',
                 padding: '10px',
-                borderRadius: '12px',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--accent-border)',
                 color: 'var(--accent-blue)',
                 display: 'flex',
                 alignItems: 'center',
@@ -962,7 +962,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               alignItems: 'center',
               gap: '8px',
               padding: '10px 16px',
-              background: 'rgba(255, 255, 255, 0.05)',
+              background: 'var(--bg-elevated)',
               border: '1px solid var(--border-glass)',
               borderRadius: 'var(--border-radius-sm)',
               color: 'var(--text-primary)',
@@ -987,28 +987,28 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             paddingTop: '20px',
             borderTop: '1px solid var(--border-glass)'
           }}>
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <div style={{ background: 'var(--bg-inset)', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Voci Fuori Listino</div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: queueData.summary.work_items > 0 ? 'var(--status-yellow)' : 'var(--status-green)', marginTop: '4px' }}>
                 {queueData.summary.work_items}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <div style={{ background: 'var(--bg-inset)', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Righe Fattura Coinvolte</div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
                 {queueData.summary.invoice_lines}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <div style={{ background: 'var(--bg-inset)', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Suggerimenti Intelligenti</div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--accent-blue)', marginTop: '4px' }}>
                 {queueData.summary.reliable_suggestions}
               </div>
             </div>
 
-            <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '14px 18px', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <div style={{ background: 'var(--bg-inset)', padding: '14px 18px', borderRadius: 'var(--radius-md)', border: '1px solid var(--line)' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fornitori con Prodotti Sospesi</div>
               <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-primary)', marginTop: '4px' }}>
                 {suppliersList.length}
@@ -1022,10 +1022,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       {actionSuccess && (
         <div style={{
           padding: '16px 20px',
-          background: 'rgba(16, 185, 129, 0.15)',
-          border: '1px solid rgba(16, 185, 129, 0.3)',
+          background: 'var(--ok-bg)',
+          border: '1px solid var(--ok-border)',
           borderRadius: 'var(--border-radius-md)',
-          color: '#34d399',
+          color: 'var(--ok)',
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
@@ -1042,7 +1042,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         <div style={{
           padding: '16px 20px',
           background: 'var(--status-red-bg)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
+          border: '1px solid var(--crit-border)',
           borderRadius: 'var(--border-radius-md)',
           color: 'var(--status-red)',
           display: 'flex',
@@ -1062,25 +1062,25 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           onClick={() => setActiveMainTab('unlisted')}
           style={{
             padding: '12px 24px',
-            borderRadius: '12px',
-            border: activeMainTab === 'unlisted' ? '1px solid rgba(59, 130, 246, 0.6)' : '1px solid var(--border-glass)',
-            background: activeMainTab === 'unlisted' ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.35) 100%)' : 'rgba(0, 0, 0, 0.3)',
-            color: activeMainTab === 'unlisted' ? 'white' : 'var(--text-secondary)',
-            fontWeight: 800,
+            borderRadius: 'var(--radius-lg)',
+            border: activeMainTab === 'unlisted' ? '1px solid var(--accent-border)' : '1px solid var(--border-glass)',
+            background: activeMainTab === 'unlisted' ? 'var(--accent-bg)' : 'var(--bg-inset)',
+            color: activeMainTab === 'unlisted' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: 700,
             fontSize: '0.92rem',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            boxShadow: activeMainTab === 'unlisted' ? '0 0 20px rgba(59, 130, 246, 0.25)' : 'none',
+            boxShadow: activeMainTab === 'unlisted' ? 'none' : 'none',
             transition: 'all 0.2s'
           }}
         >
-          <Layers size={18} color={activeMainTab === 'unlisted' ? '#93c5fd' : 'currentColor'} />
+          <Layers size={18} color={activeMainTab === 'unlisted' ? 'var(--accent-text)' : 'currentColor'} />
           <span>Voci Fuori Listino da Fatture</span>
           <span style={{
-            padding: '2px 8px', borderRadius: '12px',
-            background: activeMainTab === 'unlisted' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
+            padding: '2px 8px', borderRadius: 'var(--radius-lg)',
+            background: activeMainTab === 'unlisted' ? 'var(--bg-elevated)' : 'var(--bg-elevated)',
             fontSize: '0.78rem'
           }}>
             {queueData?.summary.work_items || 0}
@@ -1095,25 +1095,25 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           }}
           style={{
             padding: '12px 24px',
-            borderRadius: '12px',
+            borderRadius: 'var(--radius-lg)',
             border: activeMainTab === 'standby' ? '1px solid rgba(37, 211, 102, 0.6)' : '1px solid var(--border-glass)',
-            background: activeMainTab === 'standby' ? 'linear-gradient(135deg, rgba(37, 211, 102, 0.22) 0%, rgba(18, 140, 126, 0.35) 100%)' : 'rgba(0, 0, 0, 0.3)',
-            color: activeMainTab === 'standby' ? 'white' : 'var(--text-secondary)',
-            fontWeight: 800,
+            background: activeMainTab === 'standby' ? 'rgba(37, 211, 102, 0.12)' : 'var(--bg-inset)',
+            color: activeMainTab === 'standby' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: 700,
             fontSize: '0.92rem',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            boxShadow: activeMainTab === 'standby' ? '0 0 20px rgba(37, 211, 102, 0.25)' : 'none',
+            boxShadow: activeMainTab === 'standby' ? 'none' : 'none',
             transition: 'all 0.2s'
           }}
         >
-          <Clock size={18} color={activeMainTab === 'standby' ? '#34d399' : 'currentColor'} />
+          <Clock size={18} color={activeMainTab === 'standby' ? 'var(--ok)' : 'currentColor'} />
           <span>💬 Storico Standby Fornitori (Prodotti Nuovi)</span>
           <span style={{
-            padding: '2px 8px', borderRadius: '12px',
-            background: activeMainTab === 'standby' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
+            padding: '2px 8px', borderRadius: 'var(--radius-lg)',
+            background: activeMainTab === 'standby' ? 'var(--bg-elevated)' : 'var(--bg-elevated)',
             fontSize: '0.78rem'
           }}>
             {standbyItems.filter(i => i.status === 'standby').length}
@@ -1137,10 +1137,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               style={{
                 width: '100%',
                 padding: '10px 14px 10px 38px',
-                background: 'rgba(255, 255, 255, 0.04)',
+                background: 'var(--bg-inset)',
                 border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
                 fontSize: '0.9rem',
                 outline: 'none'
               }}
@@ -1157,8 +1157,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 padding: '10px 14px',
                 background: 'var(--bg-secondary)',
                 border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'white',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
                 fontSize: '0.9rem',
                 outline: 'none'
               }}
@@ -1172,15 +1172,15 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         </div>
 
         {/* Status Filter Buttons */}
-        <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+        <div style={{ display: 'flex', gap: '8px', background: 'var(--bg-inset)', padding: '4px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
           <button
             onClick={() => setStatusFilter('all')}
             style={{
               padding: '6px 14px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               border: 'none',
               background: statusFilter === 'all' ? 'var(--accent-blue)' : 'transparent',
-              color: statusFilter === 'all' ? '#fff' : 'var(--text-secondary)',
+              color: statusFilter === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)',
               cursor: 'pointer',
               fontSize: '0.85rem',
               fontWeight: 500,
@@ -1193,10 +1193,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             onClick={() => setStatusFilter('suggested')}
             style={{
               padding: '6px 14px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               border: 'none',
               background: statusFilter === 'suggested' ? 'var(--accent-blue)' : 'transparent',
-              color: statusFilter === 'suggested' ? '#fff' : 'var(--text-secondary)',
+              color: statusFilter === 'suggested' ? 'var(--text-primary)' : 'var(--text-secondary)',
               cursor: 'pointer',
               fontSize: '0.85rem',
               fontWeight: 500,
@@ -1209,10 +1209,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             onClick={() => setStatusFilter('unmatched')}
             style={{
               padding: '6px 14px',
-              borderRadius: '6px',
+              borderRadius: 'var(--radius-sm)',
               border: 'none',
               background: statusFilter === 'unmatched' ? 'var(--accent-blue)' : 'transparent',
-              color: statusFilter === 'unmatched' ? '#fff' : 'var(--text-secondary)',
+              color: statusFilter === 'unmatched' ? 'var(--text-primary)' : 'var(--text-secondary)',
               cursor: 'pointer',
               fontSize: '0.85rem',
               fontWeight: 500,
@@ -1232,12 +1232,12 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           justifyContent: 'space-between',
           gap: '18px',
           flexWrap: 'wrap',
-          border: '1px solid rgba(59, 130, 246, 0.45)',
-          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.13), rgba(16, 185, 129, 0.07))',
+          border: '1px solid var(--accent-border)',
+          background: 'var(--accent-bg)',
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', fontWeight: 700 }}>
-              <Sparkles size={18} color="#60a5fa" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)', fontWeight: 700 }}>
+              <Sparkles size={18} color="var(--accent-text)" />
               Risoluzione intelligente
             </div>
             <div style={{ marginTop: '5px', color: 'var(--text-secondary)', fontSize: '0.84rem' }}>
@@ -1259,17 +1259,17 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       {showSmartPlan && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1000,
-          background: 'rgba(2, 6, 23, 0.82)', backdropFilter: 'blur(7px)',
+          background: 'var(--bg-overlay)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
         }} onClick={() => !bulkResolving && setShowSmartPlan(false)}>
           <div className="glass-panel" style={{
             width: 'min(720px, 100%)', maxHeight: '90vh', overflowY: 'auto', padding: '26px',
-            border: '1px solid rgba(96, 165, 250, 0.45)', background: '#0b1020',
+            border: '1px solid var(--accent-border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-pop)',
           }} onClick={event => event.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
-                  <Sparkles size={22} color="#60a5fa" />
+                  <Sparkles size={22} color="var(--accent-text)" />
                   <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Anteprima del piano</h3>
                 </div>
                 <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '0.88rem' }}>
@@ -1284,27 +1284,27 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', margin: '22px 0' }}>
               <div role="button" tabIndex={0} onClick={() => setSmartPlanTab('safe')} onKeyDown={event => event.key === 'Enter' && setSmartPlanTab('safe')}
-                style={{ padding: '16px', borderRadius: '10px', cursor: 'pointer', border: smartPlanTab === 'safe' ? '2px solid #34d399' : '1px solid rgba(16,185,129,.35)', background: 'rgba(16,185,129,.09)' }}>
-                <div style={{ color: '#6ee7b7', fontSize: '0.78rem', textTransform: 'uppercase' }}>Suggerimenti forti</div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.safeMatches.length}</div>
+                style={{ padding: '16px', borderRadius: 'var(--radius-md)', cursor: 'pointer', border: smartPlanTab === 'safe' ? '2px solid var(--ok)' : '1px solid var(--ok-border)', background: 'var(--ok-bg)' }}>
+                <div style={{ color: 'var(--ok)', fontSize: '0.78rem', textTransform: 'uppercase' }}>Suggerimenti forti</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 700, marginTop: '4px' }}>{smartPlan.safeMatches.length}</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>clicca per vedere · almeno 85%</div>
               </div>
               <div role="button" tabIndex={0} onClick={() => setSmartPlanTab('review')} onKeyDown={event => event.key === 'Enter' && setSmartPlanTab('review')}
-                style={{ padding: '16px', borderRadius: '10px', cursor: 'pointer', border: smartPlanTab === 'review' ? '2px solid #fbbf24' : '1px solid rgba(245,158,11,.35)', background: 'rgba(245,158,11,.09)' }}>
-                <div style={{ color: '#fbbf24', fontSize: '0.78rem', textTransform: 'uppercase' }}>Da controllare</div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.needsReview.length}</div>
+                style={{ padding: '16px', borderRadius: 'var(--radius-md)', cursor: 'pointer', border: smartPlanTab === 'review' ? '2px solid var(--warn)' : '1px solid var(--warn-border)', background: 'var(--warn-bg)' }}>
+                <div style={{ color: 'var(--warn)', fontSize: '0.78rem', textTransform: 'uppercase' }}>Da controllare</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 700, marginTop: '4px' }}>{smartPlan.needsReview.length}</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>clicca per vedere · non modificati</div>
               </div>
               <div role="button" tabIndex={0} onClick={() => setSmartPlanTab('new')} onKeyDown={event => event.key === 'Enter' && setSmartPlanTab('new')}
-                style={{ padding: '16px', borderRadius: '10px', cursor: 'pointer', border: smartPlanTab === 'new' ? '2px solid #60a5fa' : '1px solid rgba(59,130,246,.35)', background: 'rgba(59,130,246,.09)' }}>
-                <div style={{ color: '#93c5fd', fontSize: '0.78rem', textTransform: 'uppercase' }}>Nuovi prodotti</div>
-                <div style={{ fontSize: '1.65rem', fontWeight: 800, marginTop: '4px' }}>{smartPlan.newProducts.length}</div>
+                style={{ padding: '16px', borderRadius: 'var(--radius-md)', cursor: 'pointer', border: smartPlanTab === 'new' ? '2px solid var(--accent-text)' : '1px solid var(--accent-border)', background: 'var(--accent-bg)' }}>
+                <div style={{ color: 'var(--accent-text)', fontSize: '0.78rem', textTransform: 'uppercase' }}>Nuovi prodotti</div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 700, marginTop: '4px' }}>{smartPlan.newProducts.length}</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.76rem' }}>clicca per vedere · dati fattura</div>
               </div>
             </div>
 
-            <div style={{ border: '1px solid var(--border-glass)', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
-              <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,.04)', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+            <div style={{ border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: '14px' }}>
+              <div style={{ padding: '10px 14px', background: 'var(--bg-inset)', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
                 <strong style={{ fontSize: '0.84rem' }}>
                   {smartPlanTab === 'safe' ? 'Suggerimenti forti da approvare' : smartPlanTab === 'review' ? 'Corrispondenze da verificare manualmente' : 'Prodotti senza corrispondenza trovata'}
                 </strong>
@@ -1326,7 +1326,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 </div>
               </div>
               {smartPlanTab === 'new' && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: 'rgba(59,130,246,.08)', cursor: 'pointer', borderTop: '1px solid var(--border-glass)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: 'var(--accent-bg)', cursor: 'pointer', borderTop: '1px solid var(--border-glass)' }}>
                   <input type="checkbox" checked={includeNewProducts} onChange={event => setIncludeNewProducts(event.target.checked)} />
                   <span style={{ fontSize: '0.82rem', fontWeight: 700 }}>Crea in listino questi {smartPlan.newProducts.length} prodotti senza corrispondenza</span>
                 </label>
@@ -1358,7 +1358,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       {item.best_candidate && (
                         <div style={{ marginTop: '5px' }}>
                           {item.alternatives.map((candidate, candidateIndex) => (
-                            <label key={`${item.work_key}-${candidate.product_id}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', color: candidateIndex === 0 ? (smartPlanTab === 'safe' ? '#6ee7b7' : '#fbbf24') : '#94a3b8', fontSize: candidateIndex === 0 ? '0.76rem' : '0.71rem', marginTop: candidateIndex ? '6px' : 0, cursor: 'pointer' }}>
+                            <label key={`${item.work_key}-${candidate.product_id}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '7px', color: candidateIndex === 0 ? (smartPlanTab === 'safe' ? 'var(--ok)' : 'var(--warn)') : 'var(--text-secondary)', fontSize: candidateIndex === 0 ? '0.76rem' : '0.71rem', marginTop: candidateIndex ? '6px' : 0, cursor: 'pointer' }}>
                               <input
                                 type="radio"
                                 name={`candidate-${item.work_key}`}
@@ -1372,13 +1372,13 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         </div>
                       )}
                     </div>
-                    {!item.best_candidate && <div style={{ fontWeight: 800, color: '#93c5fd', whiteSpace: 'nowrap' }}>NUOVO</div>}
+                    {!item.best_candidate && <div style={{ fontWeight: 700, color: 'var(--accent-text)', whiteSpace: 'nowrap' }}>NUOVO</div>}
                   </div>
                 ))}
               </div>
             </div>
 
-            <div style={{ padding: '14px 16px', borderRadius: '9px', background: 'rgba(255,255,255,.035)', color: 'var(--text-secondary)', fontSize: '0.83rem', lineHeight: 1.55 }}>
+            <div style={{ padding: '14px 16px', borderRadius: '9px', background: 'var(--bg-inset)', color: 'var(--text-secondary)', fontSize: '0.83rem', lineHeight: 1.55 }}>
               <strong style={{ color: 'var(--text-primary)' }}>{approvedAssociationKeys.size} associazioni approvate</strong>
               {' · '}{includeNewProducts ? smartPlan.newProducts.length : 0} nuovi prodotti da creare. Le voci non selezionate resteranno da lavorare. I dati mancanti non saranno inventati.
             </div>
@@ -1404,25 +1404,25 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           alignItems: 'center',
           flexWrap: 'wrap',
           gap: '14px',
-          background: 'rgba(255, 255, 255, 0.02)',
+          background: 'var(--bg-inset)',
           border: '1px solid var(--border-glass)'
         }}>
           {/* Left: Select All Checkbox & Count */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'white', fontWeight: 500 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 500 }}>
               <input
                 type="checkbox"
                 checked={selectedKeys.size > 0 && selectedKeys.size === filteredItems.length}
                 onChange={toggleSelectAll}
-                style={{ width: '16px', height: '16px', accentColor: '#3b82f6', cursor: 'pointer' }}
+                style={{ width: '16px', height: '16px', accentColor: 'var(--accent)', cursor: 'pointer' }}
               />
               <span>Seleziona tutti ({filteredItems.length})</span>
             </label>
 
             {selectedKeys.size > 0 && (
               <span style={{
-                background: 'rgba(59, 130, 246, 0.2)',
-                color: '#93c5fd',
+                background: 'var(--accent-bg)',
+                color: 'var(--accent-text)',
                 padding: '2px 8px',
                 borderRadius: '4px',
                 fontSize: '0.8rem',
@@ -1465,10 +1465,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   style={{
                     minWidth: '190px',
                     padding: '8px 12px',
-                    background: 'rgba(15, 23, 42, 0.95)',
-                    border: `1px solid ${bulkNewCategory ? 'rgba(16, 185, 129, 0.55)' : 'rgba(245, 158, 11, 0.55)'}`,
-                    borderRadius: '8px',
-                    color: bulkNewCategory ? '#d1fae5' : '#fbbf24',
+                    background: 'var(--bg-card)',
+                    border: `1px solid ${bulkNewCategory ? 'var(--ok-border)' : 'var(--warn-bg)'}`,
+                    borderRadius: 'var(--radius-md)',
+                    color: bulkNewCategory ? 'var(--ok)' : 'var(--warn)',
                     fontSize: '0.82rem',
                     fontWeight: 600,
                     cursor: 'pointer'
@@ -1489,10 +1489,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     gap: '6px',
                     fontSize: '0.82rem',
                     padding: '8px 14px',
-                    background: 'rgba(16, 185, 129, 0.2)',
-                    border: '1px solid rgba(16, 185, 129, 0.4)',
-                    borderRadius: '8px',
-                    color: '#34d399',
+                    background: 'var(--ok-bg)',
+                    border: '1px solid var(--ok-border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--ok)',
                     fontWeight: 600,
                     cursor: bulkNewCategory ? 'pointer' : 'not-allowed',
                     opacity: bulkNewCategory ? 1 : 0.55
@@ -1509,7 +1509,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     border: '1px solid var(--border-glass)',
                     color: 'var(--text-secondary)',
                     padding: '8px 12px',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius-md)',
                     fontSize: '0.82rem',
                     cursor: 'pointer'
                   }}
@@ -1534,7 +1534,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             width: '64px',
             height: '64px',
             borderRadius: '50%',
-            background: 'rgba(16, 185, 129, 0.1)',
+            background: 'var(--ok-bg)',
             color: 'var(--status-green)',
             display: 'flex',
             alignItems: 'center',
@@ -1557,8 +1557,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 padding: '10px 20px',
                 background: 'var(--accent-blue)',
                 border: 'none',
-                borderRadius: '8px',
-                color: 'white',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
                 fontWeight: 600,
                 cursor: 'pointer',
                 fontSize: '0.9rem'
@@ -1579,11 +1579,11 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 key={item.work_key}
                 className="glass-panel"
                 style={{
-                  border: isExpanded ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-glass)',
+                  border: isExpanded ? '1px solid var(--accent-border)' : '1px solid var(--border-glass)',
                   borderRadius: 'var(--border-radius-md)',
                   overflow: 'hidden',
                   transition: 'var(--transition-smooth)',
-                  boxShadow: isExpanded ? '0 8px 24px rgba(59, 130, 246, 0.15)' : undefined
+                  boxShadow: isExpanded ? 'none' : undefined
                 }}
               >
                 {/* Item Card Header */}
@@ -1596,7 +1596,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       style={{
                         width: '18px',
                         height: '18px',
-                        accentColor: '#3b82f6',
+                        accentColor: 'var(--accent)',
                         cursor: 'pointer',
                         marginTop: '4px'
                       }}
@@ -1610,10 +1610,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
-                          background: 'rgba(59, 130, 246, 0.1)',
+                          background: 'var(--accent-bg)',
                           color: 'var(--accent-blue)',
                           padding: '4px 10px',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '0.8rem',
                           fontWeight: 600
                         }}>
@@ -1623,10 +1623,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
                         {item.supplier_code && (
                           <span style={{
-                            background: 'rgba(255, 255, 255, 0.05)',
+                            background: 'var(--bg-elevated)',
                             color: 'var(--text-secondary)',
                             padding: '4px 8px',
-                            borderRadius: '6px',
+                            borderRadius: 'var(--radius-sm)',
                             fontSize: '0.75rem',
                             fontFamily: 'monospace'
                           }}>
@@ -1638,10 +1638,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '4px',
-                          background: 'rgba(255, 255, 255, 0.03)',
+                          background: 'var(--bg-inset)',
                           color: 'var(--text-secondary)',
                           padding: '4px 8px',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '0.75rem'
                         }}>
                           <Calendar size={12} />
@@ -1649,10 +1649,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         </span>
 
                         <span style={{
-                          background: item.occurrence_count > 1 ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                          background: item.occurrence_count > 1 ? 'var(--warn-bg)' : 'var(--bg-elevated)',
                           color: item.occurrence_count > 1 ? 'var(--status-yellow)' : 'var(--text-secondary)',
                           padding: '3px 8px',
-                          borderRadius: '6px',
+                          borderRadius: 'var(--radius-sm)',
                           fontSize: '0.75rem',
                           fontWeight: 600
                         }}>
@@ -1669,9 +1669,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
                       {/* Invoice Price Snapshot */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                        <span>Prezzo Rilevato in Fattura: <strong style={{ color: '#fff', fontSize: '0.95rem' }}>€{item.prezzo_unitario !== undefined ? item.prezzo_unitario.toFixed(2) : '0.00'}</strong> / {item.unita_misura || 'Pz'}</span>
+                        <span>Prezzo Rilevato in Fattura: <strong style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€{item.prezzo_unitario !== undefined ? item.prezzo_unitario.toFixed(2) : '0.00'}</strong> / {item.unita_misura || 'Pz'}</span>
                         {item.quantita !== undefined && item.quantita > 0 && (
-                          <span>Quantità: <strong style={{ color: '#fff' }}>{item.quantita}</strong></span>
+                          <span>Quantità: <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{item.quantita}</strong></span>
                         )}
                       </div>
                     </div>
@@ -1687,10 +1687,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         alignItems: 'center',
                         gap: '6px',
                         padding: '8px 14px',
-                        borderRadius: '8px',
-                        border: isExpanded && activeMode === 'create' ? '1px solid #34d399' : '1px solid rgba(16, 185, 129, 0.3)',
-                        background: isExpanded && activeMode === 'create' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.1)',
-                        color: '#34d399',
+                        borderRadius: 'var(--radius-md)',
+                        border: isExpanded && activeMode === 'create' ? '1px solid var(--ok)' : '1px solid var(--ok-border)',
+                        background: isExpanded && activeMode === 'create' ? 'var(--ok-bg)' : 'var(--ok-bg)',
+                        color: 'var(--ok)',
                         fontWeight: 600,
                         fontSize: '0.85rem',
                         cursor: 'pointer',
@@ -1709,10 +1709,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         alignItems: 'center',
                         gap: '6px',
                         padding: '8px 14px',
-                        borderRadius: '8px',
-                        border: isExpanded && activeMode === 'associate' ? '1px solid #60a5fa' : '1px solid rgba(59, 130, 246, 0.3)',
-                        background: isExpanded && activeMode === 'associate' ? 'rgba(59, 130, 246, 0.25)' : 'rgba(59, 130, 246, 0.1)',
-                        color: '#60a5fa',
+                        borderRadius: 'var(--radius-md)',
+                        border: isExpanded && activeMode === 'associate' ? '1px solid var(--accent-text)' : '1px solid var(--accent-border)',
+                        background: isExpanded && activeMode === 'associate' ? 'var(--accent-bg)' : 'var(--accent-bg)',
+                        color: 'var(--accent-text)',
                         fontWeight: 600,
                         fontSize: '0.85rem',
                         cursor: 'pointer',
@@ -1747,9 +1747,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   <div style={{
                     margin: '0 24px 16px',
                     padding: '12px 18px',
-                    borderRadius: '8px',
-                    background: 'linear-gradient(90deg, rgba(59, 130, 246, 0.12), rgba(16, 185, 129, 0.08))',
-                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--accent-bg)',
+                    border: '1px solid var(--accent-border)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -1757,10 +1757,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     gap: '12px'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <Sparkles size={18} color="#60a5fa" />
+                      <Sparkles size={18} color="var(--accent-text)" />
                       <div>
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Suggerimento corrispondenza: </span>
-                        <strong style={{ color: '#fff', fontSize: '0.9rem' }}>{item.best_candidate.canonical_name}</strong>
+                        <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>{item.best_candidate.canonical_name}</strong>
                         {item.best_candidate.sku_interno && (
                           <span style={{ marginLeft: '8px', color: 'var(--text-secondary)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
                             ({item.best_candidate.sku_interno})
@@ -1768,8 +1768,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         )}
                         <span style={{
                           marginLeft: '10px',
-                          background: 'rgba(59, 130, 246, 0.2)',
-                          color: '#93c5fd',
+                          background: 'var(--accent-bg)',
+                          color: 'var(--accent-text)',
                           padding: '2px 8px',
                           borderRadius: '4px',
                           fontSize: '0.75rem',
@@ -1790,10 +1790,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       }}
                       style={{
                         padding: '6px 12px',
-                        background: 'rgba(59, 130, 246, 0.2)',
-                        border: '1px solid rgba(59, 130, 246, 0.4)',
-                        borderRadius: '6px',
-                        color: '#fff',
+                        background: 'var(--accent-bg)',
+                        border: '1px solid var(--accent-border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text-primary)',
                         fontSize: '0.8rem',
                         fontWeight: 600,
                         cursor: 'pointer'
@@ -1808,7 +1808,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 {isExpanded && (
                   <div style={{
                     padding: '24px',
-                    background: 'rgba(0, 0, 0, 0.25)',
+                    background: 'var(--bg-inset)',
                     borderTop: '1px solid var(--border-glass)',
                     display: 'flex',
                     flexDirection: 'column',
@@ -1824,10 +1824,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                           alignItems: 'center',
                           gap: '8px',
                           padding: '8px 16px',
-                          borderRadius: '8px',
+                          borderRadius: 'var(--radius-md)',
                           border: 'none',
-                          background: activeMode === 'create' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                          color: activeMode === 'create' ? '#34d399' : 'var(--text-secondary)',
+                          background: activeMode === 'create' ? 'var(--ok-bg)' : 'transparent',
+                          color: activeMode === 'create' ? 'var(--ok)' : 'var(--text-secondary)',
                           cursor: 'pointer',
                           fontWeight: 600,
                           fontSize: '0.9rem',
@@ -1845,10 +1845,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                           alignItems: 'center',
                           gap: '8px',
                           padding: '8px 16px',
-                          borderRadius: '8px',
+                          borderRadius: 'var(--radius-md)',
                           border: 'none',
-                          background: activeMode === 'associate' ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                          color: activeMode === 'associate' ? '#60a5fa' : 'var(--text-secondary)',
+                          background: activeMode === 'associate' ? 'var(--accent-bg)' : 'transparent',
+                          color: activeMode === 'associate' ? 'var(--accent-text)' : 'var(--text-secondary)',
                           cursor: 'pointer',
                           fontWeight: 600,
                           fontSize: '0.9rem',
@@ -1865,10 +1865,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                         <div style={{
                           padding: '12px 16px',
-                          borderRadius: '8px',
-                          background: 'rgba(16, 185, 129, 0.08)',
-                          border: '1px solid rgba(16, 185, 129, 0.2)',
-                          color: '#34d399',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'var(--ok-bg)',
+                          border: '1px solid var(--ok-border)',
+                          color: 'var(--ok)',
                           fontSize: '0.85rem'
                         }}>
                           💡 Verrà creato il prodotto nel catalogo generale, memorizzato l'alias fornitore per il riconoscimento automatico futuro e inserita la riga nel <strong>Listino Master</strong> di <strong>{item.supplier_name}</strong>.
@@ -1887,10 +1887,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
-                                background: 'rgba(255, 255, 255, 0.05)',
+                                background: 'var(--bg-elevated)',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                color: 'white',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
@@ -1909,10 +1909,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
-                                background: 'rgba(255, 255, 255, 0.05)',
+                                background: 'var(--bg-elevated)',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                color: 'white',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.9rem',
                                 outline: 'none',
                                 fontFamily: 'monospace'
@@ -1936,8 +1936,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 padding: '10px 14px',
                                 background: 'var(--bg-secondary)',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                color: 'white',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
@@ -1960,7 +1960,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                   style={{
                                     background: 'transparent',
                                     border: 'none',
-                                    color: '#60a5fa',
+                                    color: 'var(--accent-text)',
                                     fontSize: '0.75rem',
                                     cursor: 'pointer',
                                     display: 'flex',
@@ -1985,10 +1985,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                   style={{
                                     flex: 1,
                                     padding: '9px 12px',
-                                    background: 'rgba(255, 255, 255, 0.05)',
-                                    border: '1px solid #3b82f6',
-                                    borderRadius: '8px',
-                                    color: 'white',
+                                    background: 'var(--bg-elevated)',
+                                    border: '1px solid var(--accent)',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: 'var(--text-primary)',
                                     fontSize: '0.85rem',
                                     outline: 'none'
                                   }}
@@ -2005,10 +2005,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                   disabled={creatingSubcat || !inlineNewSubcatName.trim()}
                                   style={{
                                     padding: '0 12px',
-                                    background: '#10b981',
+                                    background: 'var(--ok)',
                                     border: 'none',
-                                    borderRadius: '8px',
-                                    color: 'white',
+                                    borderRadius: 'var(--radius-md)',
+                                    color: 'var(--text-primary)',
                                     fontSize: '0.8rem',
                                     fontWeight: 600,
                                     cursor: 'pointer'
@@ -2024,9 +2024,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                   }}
                                   style={{
                                     padding: '0 10px',
-                                    background: 'rgba(255,255,255,0.05)',
+                                    background: 'var(--bg-elevated)',
                                     border: '1px solid var(--border-glass)',
-                                    borderRadius: '8px',
+                                    borderRadius: 'var(--radius-md)',
                                     color: 'var(--text-secondary)',
                                     fontSize: '0.8rem',
                                     cursor: 'pointer'
@@ -2044,8 +2044,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                   padding: '10px 14px',
                                   background: 'var(--bg-secondary)',
                                   border: '1px solid var(--border-glass)',
-                                  borderRadius: '8px',
-                                  color: 'white',
+                                  borderRadius: 'var(--radius-md)',
+                                  color: 'var(--text-primary)',
                                   fontSize: '0.9rem',
                                   outline: 'none'
                                 }}
@@ -2076,10 +2076,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 style={{
                                   width: '100%',
                                   padding: '10px 14px 10px 30px',
-                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  background: 'var(--bg-elevated)',
                                   border: '1px solid var(--border-glass)',
-                                  borderRadius: '8px',
-                                  color: 'white',
+                                  borderRadius: 'var(--radius-md)',
+                                  color: 'var(--text-primary)',
                                   fontSize: '0.9rem',
                                   outline: 'none',
                                   fontWeight: 600
@@ -2100,10 +2100,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
-                                background: 'rgba(255, 255, 255, 0.05)',
+                                background: 'var(--bg-elevated)',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                color: 'white',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
@@ -2121,10 +2121,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
-                                background: 'rgba(255, 255, 255, 0.05)',
+                                background: 'var(--bg-elevated)',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                color: 'white',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
@@ -2140,7 +2140,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               padding: '10px 18px',
                               background: 'transparent',
                               border: '1px solid var(--border-glass)',
-                              borderRadius: '8px',
+                              borderRadius: 'var(--radius-md)',
                               color: 'var(--text-secondary)',
                               cursor: 'pointer',
                               fontSize: '0.85rem'
@@ -2154,17 +2154,17 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                             disabled={isResolving}
                             style={{
                               padding: '10px 22px',
-                              background: 'linear-gradient(135deg, #10b981, #059669)',
+                              background: 'var(--ok)',
                               border: 'none',
-                              borderRadius: '8px',
-                              color: 'white',
+                              borderRadius: 'var(--radius-md)',
+                              color: 'var(--text-primary)',
                               fontWeight: 600,
                               cursor: isResolving ? 'not-allowed' : 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '8px',
                               fontSize: '0.9rem',
-                              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
+                              boxShadow: 'none'
                             }}
                           >
                             {isResolving ? <Loader2 size={16} className="spin" /> : <Plus size={16} />}
@@ -2179,10 +2179,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                         <div style={{
                           padding: '12px 16px',
-                          borderRadius: '8px',
-                          background: 'rgba(59, 130, 246, 0.08)',
-                          border: '1px solid rgba(59, 130, 246, 0.2)',
-                          color: '#60a5fa',
+                          borderRadius: 'var(--radius-md)',
+                          background: 'var(--accent-bg)',
+                          border: '1px solid var(--accent-border)',
+                          color: 'var(--accent-text)',
                           fontSize: '0.85rem'
                         }}>
                           🔗 Seleziona il prodotto dal catalogo a cui corrisponde la voce "{item.raw_description}". Verrà salvato l'alias per <strong>{item.supplier_name}</strong> così tutte le prossime fatture lo riconosceranno istantaneamente.
@@ -2202,10 +2202,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               style={{
                                 width: '100%',
                                 padding: '10px 14px 10px 38px',
-                                background: 'rgba(255, 255, 255, 0.05)',
+                                background: 'var(--bg-elevated)',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                color: 'white',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
@@ -2219,7 +2219,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                             overflowY: 'auto',
                             background: 'var(--bg-secondary)',
                             border: '1px solid var(--border-glass)',
-                            borderRadius: '8px',
+                            borderRadius: 'var(--radius-md)',
                             display: 'flex',
                             flexDirection: 'column'
                           }}>
@@ -2239,9 +2239,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                     }}
                                     style={{
                                       padding: '10px 14px',
-                                      borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+                                      borderBottom: '1px solid var(--line)',
                                       cursor: 'pointer',
-                                      background: isSelected ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                                      background: isSelected ? 'var(--accent-bg)' : 'transparent',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
@@ -2249,7 +2249,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                     }}
                                   >
                                     <div>
-                                      <strong style={{ color: isSelected ? '#93c5fd' : 'white', fontSize: '0.9rem' }}>
+                                      <strong style={{ color: isSelected ? 'var(--accent-text)' : 'var(--text-primary)', fontSize: '0.9rem' }}>
                                         {p.canonical_name}
                                       </strong>
                                       {p.sku_interno && (
@@ -2258,12 +2258,12 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                         </span>
                                       )}
                                       {p.category && (
-                                        <span style={{ marginLeft: '8px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>
+                                        <span style={{ marginLeft: '8px', fontSize: '0.75rem', background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: '4px', color: 'var(--text-secondary)' }}>
                                           {p.category}
                                         </span>
                                       )}
                                     </div>
-                                    {isSelected && <Check size={16} color="#60a5fa" />}
+                                    {isSelected && <Check size={16} color="var(--accent-text)" />}
                                   </div>
                                 );
                               })
@@ -2288,10 +2288,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 style={{
                                   width: '100%',
                                   padding: '10px 14px 10px 30px',
-                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  background: 'var(--bg-elevated)',
                                   border: '1px solid var(--border-glass)',
-                                  borderRadius: '8px',
-                                  color: 'white',
+                                  borderRadius: 'var(--radius-md)',
+                                  color: 'var(--text-primary)',
                                   fontSize: '0.9rem',
                                   outline: 'none',
                                   fontWeight: 600
@@ -2315,10 +2315,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
-                                background: 'rgba(255, 255, 255, 0.05)',
+                                background: 'var(--bg-elevated)',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
-                                color: 'white',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
@@ -2333,8 +2333,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                             style={{
                               padding: '8px 14px',
                               background: 'transparent',
-                              border: '1px solid rgba(239, 68, 68, 0.2)',
-                              borderRadius: '8px',
+                              border: '1px solid var(--crit-border)',
+                              borderRadius: 'var(--radius-md)',
                               color: 'var(--status-red)',
                               cursor: 'pointer',
                               fontSize: '0.8rem',
@@ -2354,7 +2354,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 padding: '10px 18px',
                                 background: 'transparent',
                                 border: '1px solid var(--border-glass)',
-                                borderRadius: '8px',
+                                borderRadius: 'var(--radius-md)',
                                 color: 'var(--text-secondary)',
                                 cursor: 'pointer',
                                 fontSize: '0.85rem'
@@ -2368,17 +2368,17 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               disabled={isResolving || !selectedExistingId}
                               style={{
                                 padding: '10px 22px',
-                                background: selectedExistingId ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'rgba(255,255,255,0.05)',
+                                background: selectedExistingId ? 'var(--accent)' : 'var(--bg-elevated)',
                                 border: 'none',
-                                borderRadius: '8px',
-                                color: selectedExistingId ? 'white' : 'var(--text-secondary)',
+                                borderRadius: 'var(--radius-md)',
+                                color: selectedExistingId ? 'var(--text-primary)' : 'var(--text-secondary)',
                                 fontWeight: 600,
                                 cursor: selectedExistingId && !isResolving ? 'pointer' : 'not-allowed',
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '8px',
                                 fontSize: '0.9rem',
-                                boxShadow: selectedExistingId ? '0 4px 12px rgba(59, 130, 246, 0.25)' : undefined
+                                boxShadow: selectedExistingId ? 'none' : undefined
                               }}
                             >
                               {isResolving ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
@@ -2416,10 +2416,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   style={{
                     width: '100%',
                     padding: '10px 14px 10px 38px',
-                    background: 'rgba(255, 255, 255, 0.04)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.9rem',
                     outline: 'none'
                   }}
@@ -2433,18 +2433,18 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   style={{
                     width: '100%',
                     padding: '10px 14px',
-                    background: 'rgba(255, 255, 255, 0.04)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.88rem',
                     outline: 'none',
                     cursor: 'pointer'
                   }}
                 >
-                  <option value="all" style={{ background: '#13131c' }}>Tutti gli Stati ({standbyItems.length})</option>
-                  <option value="standby" style={{ background: '#13131c' }}>⏳ Standby WhatsApp ({standbyItems.filter(i => i.status === 'standby').length})</option>
-                  <option value="completed" style={{ background: '#13131c' }}>✅ Attivati a Listino ({standbyItems.filter(i => i.status === 'completed').length})</option>
+                  <option value="all" style={{ background: 'var(--bg-card)' }}>Tutti gli Stati ({standbyItems.length})</option>
+                  <option value="standby" style={{ background: 'var(--bg-card)' }}>⏳ Standby WhatsApp ({standbyItems.filter(i => i.status === 'standby').length})</option>
+                  <option value="completed" style={{ background: 'var(--bg-card)' }}>✅ Attivati a Listino ({standbyItems.filter(i => i.status === 'completed').length})</option>
                 </select>
               </div>
             </div>
@@ -2457,9 +2457,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 alignItems: 'center',
                 gap: '8px',
                 padding: '9px 14px',
-                background: 'rgba(255, 255, 255, 0.05)',
+                background: 'var(--bg-elevated)',
                 border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
+                borderRadius: 'var(--radius-md)',
                 color: 'var(--text-primary)',
                 cursor: loadingStandby ? 'not-allowed' : 'pointer',
                 fontSize: '0.82rem',
@@ -2479,8 +2479,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             </div>
           ) : filteredStandbyItems.length === 0 ? (
             <div className="glass-panel" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              <Clock size={42} style={{ color: '#64748b', margin: '0 auto 16px' }} />
-              <h3 style={{ color: 'white', margin: '0 0 8px', fontSize: '1.2rem' }}>Nessun Prodotto in Standby</h3>
+              <Clock size={42} style={{ color: 'var(--text-muted)', margin: '0 auto 16px' }} />
+              <h3 style={{ color: 'var(--text-primary)', margin: '0 0 8px', fontSize: '1.2rem' }}>Nessun Prodotto in Standby</h3>
               <p style={{ margin: 0, fontSize: '0.9rem', maxWidth: '500px', marginInline: 'auto' }}>
                 Quando richiedi una quotazione a nuovi fornitori per un articolo non catalogato (es. dallo Sviluppo Ordini Settore), il prodotto comparirà qui in standby con i relativi pulsanti WhatsApp e form di compilazione finale.
               </p>
@@ -2500,8 +2500,8 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '16px',
-                      border: isStandby ? '1px solid rgba(37, 211, 102, 0.35)' : '1px solid rgba(16, 185, 129, 0.2)',
-                      boxShadow: isStandby ? '0 0 20px rgba(37, 211, 102, 0.1)' : 'none',
+                      border: isStandby ? '1px solid rgba(37, 211, 102, 0.35)' : '1px solid var(--ok-border)',
+                      boxShadow: isStandby ? 'none' : 'none',
                       position: 'relative'
                     }}
                   >
@@ -2510,10 +2510,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span style={{
                           padding: '4px 10px',
-                          borderRadius: '20px',
-                          background: isStandby ? 'rgba(37, 211, 102, 0.18)' : 'rgba(16, 185, 129, 0.2)',
-                          color: isStandby ? '#34d399' : '#10b981',
-                          border: isStandby ? '1px solid rgba(37, 211, 102, 0.4)' : '1px solid #10b981',
+                          borderRadius: 'var(--radius-lg)',
+                          background: isStandby ? 'rgba(37, 211, 102, 0.18)' : 'var(--ok-bg)',
+                          color: isStandby ? 'var(--ok)' : 'var(--ok)',
+                          border: isStandby ? '1px solid rgba(37, 211, 102, 0.4)' : '1px solid var(--ok)',
                           fontSize: '0.78rem',
                           fontWeight: 700,
                           display: 'flex',
@@ -2525,7 +2525,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         </span>
 
                         {item.category && (
-                          <span style={{ padding: '3px 8px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', fontSize: '0.75rem', fontWeight: 600 }}>
+                          <span style={{ padding: '3px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--accent-bg)', color: 'var(--accent-text)', fontSize: '0.75rem', fontWeight: 600 }}>
                             {item.category} {item.subcategory ? `> ${item.subcategory}` : ''}
                           </span>
                         )}
@@ -2534,10 +2534,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                       <button
                         onClick={() => handleDeleteStandby(item.id, item.canonical_name)}
                         style={{
-                          background: 'rgba(239, 68, 68, 0.1)',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          borderRadius: '6px',
-                          color: '#f87171',
+                          background: 'var(--crit-bg)',
+                          border: '1px solid var(--crit-border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--crit)',
                           padding: '5px',
                           cursor: 'pointer'
                         }}
@@ -2549,25 +2549,25 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
                     {/* Title & Product Info */}
                     <div>
-                      <h3 style={{ margin: '0 0 6px', fontSize: '1.15rem', fontWeight: 800, color: 'white' }}>
+                      <h3 style={{ margin: '0 0 6px', fontSize: '1.15rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                         {item.canonical_name}
                       </h3>
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                        {item.sku_interno && <span>SKU: <strong style={{ color: '#93c5fd' }}>{item.sku_interno}</strong></span>}
-                        {item.brand && <span>Brand: <strong style={{ color: 'white' }}>{item.brand}</strong></span>}
-                        <span>UoM: <strong style={{ color: '#f59e0b' }}>{item.comparison_unit}</strong></span>
+                        {item.sku_interno && <span>SKU: <strong style={{ color: 'var(--accent-text)' }}>{item.sku_interno}</strong></span>}
+                        {item.brand && <span>Brand: <strong style={{ color: 'var(--text-primary)' }}>{item.brand}</strong></span>}
+                        <span>UoM: <strong style={{ color: 'var(--warn)' }}>{item.comparison_unit}</strong></span>
                         {createdDate && <span>Inviato il: {createdDate}</span>}
                       </div>
                       {item.notes && (
-                        <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#94a3b8', background: 'rgba(0,0,0,0.3)', padding: '6px 10px', borderRadius: '6px' }}>
+                        <div style={{ marginTop: '8px', fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'var(--bg-inset)', padding: '6px 10px', borderRadius: 'var(--radius-sm)' }}>
                           📝 {item.notes}
                         </div>
                       )}
                     </div>
 
                     {/* Suppliers Requested Section with Standby WhatsApp buttons */}
-                    <div style={{ background: 'rgba(0,0,0,0.25)', padding: '12px 14px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ background: 'var(--bg-inset)', padding: '12px 14px', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Store size={14} />
                         <span>Fornitori Inoltrati ({item.suppliers_data?.length || 0}):</span>
                       </div>
@@ -2581,9 +2581,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               key={sup.supplier_id}
                               style={{
                                 padding: '8px 12px',
-                                borderRadius: '8px',
-                                background: 'rgba(255, 255, 255, 0.03)',
-                                border: '1px solid rgba(255,255,255,0.06)',
+                                borderRadius: 'var(--radius-md)',
+                                background: 'var(--bg-inset)',
+                                border: '1px solid var(--line)',
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
@@ -2591,7 +2591,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                               }}
                             >
                               <div>
-                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'white' }}>
+                                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                                   {sup.supplier_name}
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -2606,16 +2606,16 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                   rel="noopener noreferrer"
                                   style={{
                                     padding: '5px 10px',
-                                    borderRadius: '6px',
-                                    background: 'linear-gradient(135deg, #25D366, #128C7E)',
-                                    color: 'white',
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: '#25D366',
+                                    color: 'var(--text-primary)',
                                     fontSize: '0.75rem',
                                     fontWeight: 700,
                                     textDecoration: 'none',
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '5px',
-                                    boxShadow: '0 0 10px rgba(37, 211, 102, 0.3)'
+                                    boxShadow: 'none'
                                   }}
                                 >
                                   <MessageSquare size={12} />
@@ -2635,20 +2635,20 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                         style={{
                           width: '100%',
                           padding: '11px',
-                          borderRadius: '10px',
-                          border: isStandby ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: 'var(--radius-md)',
+                          border: isStandby ? 'none' : '1px solid var(--line)',
                           background: isStandby 
-                            ? 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)' 
-                            : 'rgba(255, 255, 255, 0.06)',
-                          color: 'white',
-                          fontWeight: 800,
+                            ? 'var(--accent)' 
+                            : 'var(--bg-elevated)',
+                          color: 'var(--text-primary)',
+                          fontWeight: 700,
                           fontSize: '0.88rem',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '8px',
-                          boxShadow: isStandby ? '0 0 20px rgba(139, 92, 246, 0.3)' : 'none',
+                          boxShadow: isStandby ? 'none' : 'none',
                           transition: 'all 0.2s'
                         }}
                       >
@@ -2671,8 +2671,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(8px)',
+          backgroundColor: 'var(--bg-overlay)',
           zIndex: 9999,
           display: 'flex',
           alignItems: 'center',
@@ -2680,16 +2679,16 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           padding: '16px'
         }}>
           <div style={{
-            background: 'linear-gradient(145deg, #182234 0%, #0d1424 100%)',
+            background: 'var(--bg-card)',
             border: '1px solid rgba(37, 211, 102, 0.4)',
-            borderRadius: '16px',
+            borderRadius: 'var(--radius-lg)',
             width: '100%',
             maxWidth: '650px',
             maxHeight: '92vh',
             overflowY: 'auto',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 35px rgba(37, 211, 102, 0.25)',
+            boxShadow: 'var(--shadow-pop)',
             padding: '26px',
-            color: 'white',
+            color: 'var(--text-primary)',
             display: 'flex',
             flexDirection: 'column',
             gap: '20px'
@@ -2698,19 +2697,19 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
-                  width: '44px', height: '44px', borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #25D366, #128C7E)',
+                  width: '44px', height: '44px', borderRadius: 'var(--radius-lg)',
+                  background: '#25D366',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 0 15px rgba(37, 211, 102, 0.4)'
+                  boxShadow: 'none'
                 }}>
                   <Edit3 size={22} color="white" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>
                     Compila Dati Prodotto Ricevuti dai Fornitori
                   </h3>
                   <p style={{ margin: '3px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Articolo: <strong style={{ color: 'white' }}>{compilingItem.canonical_name}</strong>
+                    Articolo: <strong style={{ color: 'var(--text-primary)' }}>{compilingItem.canonical_name}</strong>
                   </p>
                 </div>
               </div>
@@ -2718,9 +2717,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 type="button"
                 onClick={() => setCompilingItem(null)}
                 style={{
-                  background: 'rgba(255,255,255,0.06)',
+                  background: 'var(--bg-elevated)',
                   border: 'none',
-                  borderRadius: '8px',
+                  borderRadius: 'var(--radius-md)',
                   color: 'var(--text-secondary)',
                   padding: '6px',
                   cursor: 'pointer'
@@ -2734,7 +2733,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {/* Fornitore aggiudicatario / che ha risposto */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--ok)' }}>
                   Fornitore con Offerta / Quotazione *
                 </label>
                 <select
@@ -2742,19 +2741,19 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                   onChange={e => setCompileForm({ ...compileForm, supplier_id: Number(e.target.value) })}
                   style={{
                     padding: '10px 14px',
-                    background: 'rgba(0,0,0,0.4)',
+                    background: 'var(--bg-inset)',
                     border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    color: 'white',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
                     fontSize: '0.9rem',
                     outline: 'none',
                     fontWeight: 700,
                     cursor: 'pointer'
                   }}
                 >
-                  <option value={0} style={{ background: '#13131c' }}>-- Seleziona Fornitore --</option>
+                  <option value={0} style={{ background: 'var(--bg-card)' }}>-- Seleziona Fornitore --</option>
                   {compilingItem.suppliers_data?.map(s => (
-                    <option key={s.supplier_id} value={s.supplier_id} style={{ background: '#13131c' }}>
+                    <option key={s.supplier_id} value={s.supplier_id} style={{ background: 'var(--bg-card)' }}>
                       {s.supplier_name} {s.phone ? `(${s.phone})` : ''}
                     </option>
                   ))}
@@ -2764,7 +2763,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               {/* Prezzo e Unità di misura */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#93c5fd' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-text)' }}>
                     Prezzo Netto Concordato (€) *
                   </label>
                   <input
@@ -2776,10 +2775,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     onChange={e => setCompileForm({ ...compileForm, prezzo_concordato: e.target.value })}
                     style={{
                       padding: '10px 12px',
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      border: '1px solid rgba(59, 130, 246, 0.4)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      background: 'var(--accent-bg)',
+                      border: '1px solid var(--accent-border)',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontWeight: 700,
                       fontSize: '0.95rem',
                       outline: 'none'
@@ -2799,10 +2798,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     onChange={e => setCompileForm({ ...compileForm, unita_misura: e.target.value })}
                     style={{
                       padding: '10px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.9rem',
                       outline: 'none'
                     }}
@@ -2823,10 +2822,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     onChange={e => setCompileForm({ ...compileForm, sku_interno: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none'
                     }}
@@ -2844,10 +2843,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     onChange={e => setCompileForm({ ...compileForm, brand: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none'
                     }}
@@ -2866,17 +2865,17 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     onChange={e => setCompileForm({ ...compileForm, category: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none',
                       cursor: 'pointer'
                     }}
                   >
                     {CATEGORIES.map(c => (
-                      <option key={c} value={c} style={{ background: '#13131c' }}>{c}</option>
+                      <option key={c} value={c} style={{ background: 'var(--bg-card)' }}>{c}</option>
                     ))}
                   </select>
                 </div>
@@ -2892,10 +2891,10 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                     onChange={e => setCompileForm({ ...compileForm, subcategory: e.target.value })}
                     style={{
                       padding: '9px 12px',
-                      background: 'rgba(0,0,0,0.4)',
+                      background: 'var(--bg-inset)',
                       border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)',
                       fontSize: '0.85rem',
                       outline: 'none'
                     }}
@@ -2922,17 +2921,17 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                 disabled={submittingCompile || !compileForm.supplier_id || !compileForm.prezzo_concordato}
                 style={{
                   padding: '11px 22px',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--radius-md)',
                   border: 'none',
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: 'white',
-                  fontWeight: 800,
+                  background: 'var(--ok)',
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
                   fontSize: '0.9rem',
                   cursor: submittingCompile || !compileForm.supplier_id || !compileForm.prezzo_concordato ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 0 25px rgba(16, 185, 129, 0.4)',
+                  boxShadow: 'none',
                   opacity: submittingCompile || !compileForm.supplier_id || !compileForm.prezzo_concordato ? 0.6 : 1,
                   transition: 'all 0.2s'
                 }}

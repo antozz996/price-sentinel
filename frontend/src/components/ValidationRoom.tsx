@@ -198,7 +198,7 @@ export default function ValidationRoom() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }}>
+          <button className="btn" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-elevated)', borderColor: 'var(--line-strong)' }}>
             <Download size={16} /> Esporta Dossier Excel
           </button>
           <button className="btn btn-primary" onClick={() => fetchAnomalie()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -222,12 +222,12 @@ export default function ValidationRoom() {
             const isTrendLoading = loadingTrend[sku] || false;
 
             return (
-              <div key={ano.id} className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid #ef4444' }}>
+              <div key={ano.id} className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid var(--crit)' }}>
                 
                 {/* Header Row */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', textTransform: 'uppercase' }}>
                       ID Anomalia #{ano.id}
                     </span>
                     <h4 style={{ margin: '8px 0 4px 0', fontWeight: 600 }}>{ano.descrizione_orig || `Riga #${ano.riga_fattura_id}`}</h4>
@@ -246,28 +246,28 @@ export default function ValidationRoom() {
                 </div>
 
                 {/* Audit Grid Details */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', background: 'var(--bg-inset)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Fatturato Netto</span>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       € {Number(ano.prezzo_fatturato_snapshot).toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ cad</span>
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Baseline Listino</span>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#10b981' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       € {Number(ano.prezzo_listino_snapshot).toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ cad</span>
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Differenza Unitaria</span>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#ef4444' }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       + € {Number(ano.delta_prezzo).toFixed(2)}
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Volume Acquistato</span>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                       {Number(ano.quantita).toFixed(2)} unità
                     </div>
                   </div>
@@ -275,7 +275,7 @@ export default function ValidationRoom() {
 
                 {/* Mapping is shown only when ingestion has not already linked the invoice line. */}
                 {ano.sku_interno ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '14px 16px', borderRadius: '12px', color: '#6ee7b7' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--ok-bg)', border: '1px solid var(--ok-border)', padding: '14px 16px', borderRadius: 'var(--radius-lg)', color: 'var(--ok)' }}>
                     <Check size={18} />
                     <div>
                       <strong>Prodotto già associato</strong>
@@ -285,10 +285,10 @@ export default function ValidationRoom() {
                     </div>
                   </div>
                 ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(245, 158, 11, 0.04)', border: '1px solid rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', padding: '16px', borderRadius: 'var(--radius-lg)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Sparkles size={16} color="#f59e0b" />
-                    <span style={{ fontSize: '0.85rem', color: 'rgba(245, 158, 11, 0.95)', fontWeight: 600 }}>
+                    <Sparkles size={16} color="var(--warn)" />
+                    <span style={{ fontSize: '0.85rem', color: 'var(--warn)', fontWeight: 600 }}>
                       Associazione mancante: collega questa voce una sola volta
                     </span>
                   </div>
@@ -306,7 +306,7 @@ export default function ValidationRoom() {
                           setProductQueries(prev => ({ ...prev, [ano.id]: query }));
                           setSelectedSkus(prev => ({ ...prev, [ano.id]: match?.sku_interno || '' }));
                         }}
-                        style={{ background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
+                        style={{ background: 'var(--bg-inset)', color: 'var(--text-primary)', border: '1px solid var(--line)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', width: '100%' }}
                       />
                       <datalist id={`products-${ano.id}`}>
                         {products.map(product => (
@@ -323,12 +323,12 @@ export default function ValidationRoom() {
                         placeholder="1.0"
                         value={conversionCoefficients[ano.id] || ''}
                         onChange={(e) => setConversionCoefficients({ ...conversionCoefficients, [ano.id]: e.target.value })}
-                        style={{ background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.85rem', width: '100%' }}
+                        style={{ background: 'var(--bg-inset)', color: 'var(--text-primary)', border: '1px solid var(--line)', padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', width: '100%' }}
                       />
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'flex-end', height: '100%', paddingTop: '18px' }}>
-                      <button className="btn" onClick={() => handleSaveAlias(ano)} style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', borderRadius: '8px', transition: 'all 0.2s' }}>
+                      <button className="btn" onClick={() => handleSaveAlias(ano)} style={{ padding: '8px 16px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--warn-bg)', borderColor: 'var(--warn-border)', color: 'var(--warn)', borderRadius: 'var(--radius-sm)', transition: 'all 0.2s' }}>
                         <Save size={14} /> Collega Alias
                       </button>
                     </div>
@@ -338,18 +338,18 @@ export default function ValidationRoom() {
 
                 {/* Collapsible Chronological Historical Price Trend Visualizer */}
                 {sku && (
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                  <div style={{ borderTop: '1px solid var(--line)', paddingTop: '12px' }}>
                     <button 
                       className="btn" 
                       onClick={() => toggleTrend(ano.id, sku)} 
-                      style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6' }}
+                      style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--accent-bg)', borderColor: 'var(--accent-border)', color: 'var(--accent-text)' }}
                     >
                       <TrendingUp size={14} /> {isTrendOpen ? "Nascondi Trend Storico" : "Visualizza Trend Storico"}
                     </button>
 
                     {isTrendOpen && (
-                      <div className="glass-panel" style={{ marginTop: '12px', padding: '16px', background: 'rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <h5 style={{ margin: 0, fontSize: '0.9rem', color: '#3b82f6', fontWeight: 600 }}>📈 Timeline Storico Prezzi (Acquisti & Listino)</h5>
+                      <div className="glass-panel" style={{ marginTop: '12px', padding: '16px', background: 'var(--bg-inset)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <h5 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--accent-text)', fontWeight: 600 }}>📈 Timeline Storico Prezzi (Acquisti & Listino)</h5>
                         
                         {isTrendLoading ? (
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '12px' }}>Caricamento dati analitici...</div>
@@ -369,7 +369,7 @@ export default function ValidationRoom() {
                             return (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                 {/* The Graphic Visual Sparkline / Bar Chart */}
-                                <div style={{ position: 'relative', height: '140px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', padding: '0 16px 8px 16px', marginTop: '10px' }}>
+                                <div style={{ position: 'relative', height: '140px', borderBottom: '1px solid var(--line-strong)', display: 'flex', justifyContent: 'space-around', alignItems: 'flex-end', padding: '0 16px 8px 16px', marginTop: '10px' }}>
                                   
                                   {/* Baseline contract line */}
                                   {activeContract && (
@@ -379,12 +379,12 @@ export default function ValidationRoom() {
                                         left: 0, 
                                         right: 0, 
                                         bottom: `${((activeContract - minPrice) / priceRange) * 120}px`, 
-                                        borderTop: '2px dashed #10b981', 
+                                        borderTop: '2px dashed var(--ok)',
                                         zIndex: 1, 
                                         pointerEvents: 'none' 
                                       }}
                                     >
-                                      <span style={{ position: 'absolute', right: '4px', top: '-18px', fontSize: '0.7rem', color: '#10b981', background: 'rgba(0,0,0,0.8)', padding: '2px 4px', borderRadius: '4px' }}>
+                                      <span style={{ position: 'absolute', right: '4px', top: '-18px', fontSize: '0.7rem', color: 'var(--ok)', background: 'var(--bg-card)', padding: '2px 4px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                                         Contratto: € {activeContract.toFixed(2)}
                                       </span>
                                     </div>
@@ -416,17 +416,17 @@ export default function ValidationRoom() {
                                           style={{ 
                                             height: `${Math.max(pointHeight, 5)}px`, 
                                             width: '8px', 
-                                            background: isOvercharge ? '#ef4444' : '#3b82f6', 
-                                            borderRadius: '4px', 
-                                            transition: 'all 0.3s', 
+                                            background: isOvercharge ? 'var(--crit)' : 'var(--accent)',
+                                            borderRadius: '4px',
+                                            transition: 'all 0.3s',
                                             opacity: 0.8,
-                                            boxShadow: isOvercharge ? '0 0 8px rgba(239, 68, 68, 0.4)' : 'none'
+                                            boxShadow: 'none'
                                           }}
                                         />
 
                                         {/* Hover Tooltip / Detail bubble */}
-                                        <div className="trend-tooltip" style={{ fontSize: '0.75rem', color: '#fff', marginTop: '6px', textAlign: 'center' }}>
-                                          <div style={{ fontWeight: 600 }}>€ {pt.prezzo_pagato.toFixed(2)}</div>
+                                        <div className="trend-tooltip" style={{ fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '6px', textAlign: 'center' }}>
+                                          <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {pt.prezzo_pagato.toFixed(2)}</div>
                                           <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{formattedDate}</div>
                                         </div>
                                       </div>
@@ -437,14 +437,14 @@ export default function ValidationRoom() {
                                 {/* Tabular Chronological List for high precision */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
                                   {history.map((pt: any, idx: number) => (
-                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
                                       <span style={{ color: 'var(--text-secondary)' }}>
                                         📅 {new Date(pt.data).toLocaleDateString('it-IT')}
                                       </span>
                                       <span>
                                         Fornitore: <strong>{pt.fornitore}</strong>
                                       </span>
-                                      <span style={{ fontWeight: 600, color: activeContract && pt.prezzo_pagato > activeContract ? '#ef4444' : '#fff' }}>
+                                      <span style={{ fontWeight: 600, color: activeContract && pt.prezzo_pagato > activeContract ? 'var(--crit)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                                         € {pt.prezzo_pagato.toFixed(2)} / cad (Qta: {pt.quantita})
                                       </span>
                                     </div>
@@ -464,7 +464,7 @@ export default function ValidationRoom() {
                 )}
 
                 {/* Action Controls Row */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid var(--line)', paddingTop: '16px' }}>
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button className="btn" onClick={() => handleWhatsAppDispute(ano)} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#25D366', color: 'white', borderColor: '#25D366' }}>
                       <MessageSquare size={16} /> 💬 Contesta su WhatsApp
@@ -474,7 +474,7 @@ export default function ValidationRoom() {
                     <button className="btn btn-primary" onClick={() => handleAzione(ano.id, 'accetta')} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--status-green)', borderColor: 'var(--status-green)' }}>
                       <Check size={16} /> Accetta Variazione
                     </button>
-                    <button className="btn" onClick={() => handleAzione(ano.id, 'segnala')} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--status-red)', background: 'var(--status-red-bg)', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                    <button className="btn" onClick={() => handleAzione(ano.id, 'segnala')} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--crit)', background: 'var(--crit-bg)', borderColor: 'var(--crit-border)' }}>
                       <AlertTriangle size={16} /> Segnala & Escala
                     </button>
                   </div>

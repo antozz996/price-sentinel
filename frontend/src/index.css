@@ -60,6 +60,7 @@
   --status-green: var(--ok);       --status-green-bg: var(--ok-bg);
   --status-yellow: var(--warn);    --status-yellow-bg: var(--warn-bg);
   --status-orange: var(--warn);
+  --status-green-color: var(--ok); --status-red-color: var(--crit); --status-yellow-color: var(--warn);
   --border-radius-lg: var(--radius-lg);
   --border-radius-md: var(--radius-md);
   --border-radius-sm: var(--radius-sm);

@@ -298,8 +298,8 @@ export default function CommercialAgreements() {
   const averageDiscountPct = totalSpent > 0 ? (totalRebate / totalSpent) * 100 : 0;
 
   const selectStyle: React.CSSProperties = {
-    padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-glass)',
-    borderRadius: '8px', color: 'white', fontSize: '0.85rem', outline: 'none', minWidth: '160px', flex: 1
+    padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)', fontSize: '0.85rem', outline: 'none', minWidth: '160px', flex: 1
   };
 
   const inputStyle: React.CSSProperties = {
@@ -307,8 +307,8 @@ export default function CommercialAgreements() {
   };
 
   const optionStyle = {
-    background: '#121e36',
-    color: 'white'
+    background: 'var(--bg-card)',
+    color: 'var(--text-primary)'
   };
 
   const thStyle: React.CSSProperties = {
@@ -382,11 +382,11 @@ export default function CommercialAgreements() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+          <div style={{ padding: '14px', borderRadius: '12px', background: 'var(--accent-bg)', color: 'var(--accent-text)' }}>
             <DollarSign size={24} />
           </div>
           <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+            <div style={{ fontSize: '1.75rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               € {totalSpent.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Fatturato Sotto Accordo</div>
@@ -394,11 +394,11 @@ export default function CommercialAgreements() {
         </div>
 
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+          <div style={{ padding: '14px', borderRadius: '12px', background: 'var(--ok-bg)', color: 'var(--ok)' }}>
             <TrendingDown size={24} />
           </div>
           <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#10b981' }}>
+            <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               € {totalRebate.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Rientro Maturato Stimato</div>
@@ -406,11 +406,11 @@ export default function CommercialAgreements() {
         </div>
 
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+          <div style={{ padding: '14px', borderRadius: '12px', background: 'var(--info-bg)', color: 'var(--info)' }}>
             <BarChart2 size={24} />
           </div>
           <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+            <div style={{ fontSize: '1.75rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               {totalVolume.toLocaleString('it-IT', { maximumFractionDigits: 2 })}
             </div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Volume Acquistato Totale</div>
@@ -418,11 +418,11 @@ export default function CommercialAgreements() {
         </div>
 
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+          <div style={{ padding: '14px', borderRadius: '12px', background: 'var(--warn-bg)', color: 'var(--warn)' }}>
             <Percent size={24} />
           </div>
           <div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 700, color: '#f59e0b' }}>
+            <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--warn)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               {averageDiscountPct.toFixed(2)} %
             </div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Risparmio Medio (PFA)</div>
@@ -438,7 +438,7 @@ export default function CommercialAgreements() {
             <Award size={18} color="var(--accent-blue)" /> Accordi Commerciali Attivi
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'var(--bg-elevated)', padding: '4px 10px', borderRadius: '999px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               {filteredAgreements.length} Accordi
             </span>
             <button
@@ -459,9 +459,9 @@ export default function CommercialAgreements() {
           <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Nessun accordo commerciale trovato con i filtri selezionati.</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.02)' }}>
+                <tr style={{ borderBottom: '1px solid var(--border-glass)', background: 'var(--bg-inset)' }}>
                   <th style={thStyle}>Fornitore</th>
                   <th style={thStyle}>Prodotto / SKU</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Prezzo Pattuito</th>
@@ -477,35 +477,35 @@ export default function CommercialAgreements() {
               <tbody>
                 {filteredAgreements.map(ag => {
                   let pfaLabel = '';
-                  let pfaBadgeBg = 'rgba(255,255,255,0.05)';
-                  let pfaBadgeColor = 'white';
+                  let pfaBadgeBg = 'var(--bg-elevated)';
+                  let pfaBadgeColor = 'var(--text-primary)';
 
                   if (ag.pfa_tipo === 'fisso') {
                     pfaLabel = `-${Number(ag.pfa_valore).toFixed(2)} € / ${ag.unita_misura}`;
-                    pfaBadgeBg = 'rgba(16, 185, 129, 0.1)';
-                    pfaBadgeColor = '#10b981';
+                    pfaBadgeBg = 'var(--ok-bg)';
+                    pfaBadgeColor = 'var(--ok)';
                   } else if (ag.pfa_tipo === 'percentuale') {
                     pfaLabel = `-${(Number(ag.pfa_valore) * 100).toFixed(1)}% PFA`;
-                    pfaBadgeBg = 'rgba(59, 130, 246, 0.1)';
-                    pfaBadgeColor = '#3b82f6';
+                    pfaBadgeBg = 'var(--accent-bg)';
+                    pfaBadgeColor = 'var(--accent-text)';
                   } else if (ag.pfa_tipo === 'scaglioni') {
                     pfaLabel = 'Scaglioni';
-                    pfaBadgeBg = 'rgba(245, 158, 11, 0.1)';
-                    pfaBadgeColor = '#f59e0b';
+                    pfaBadgeBg = 'var(--warn-bg)';
+                    pfaBadgeColor = 'var(--warn)';
                   }
 
                   return (
-                    <tr key={ag.listino_id} style={{ borderBottom: '1px solid var(--border-glass)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.01)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <tr key={ag.listino_id} style={{ borderBottom: '1px solid var(--border-glass)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                       <td style={{ ...tdStyle, fontWeight: 500 }}>{ag.fornitore_nome}</td>
                       <td style={tdStyle}>
                         <div style={{ fontWeight: 600 }}>{ag.descrizione}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>{ag.sku_interno}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>{ag.sku_interno}</div>
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500 }}>€ {Number(ag.prezzo_pattuito).toFixed(2)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {Number(ag.prezzo_pattuito).toFixed(2)}</td>
                       <td style={tdStyle}>
                         <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '4px' }}>
                           <span style={{
-                            padding: '4px 10px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600,
+                            padding: '4px 10px', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums',
                             background: pfaBadgeBg, color: pfaBadgeColor, textAlign: 'center', display: 'inline-block'
                           }}>
                             {pfaLabel}
@@ -513,28 +513,28 @@ export default function CommercialAgreements() {
                           
                           {/* If scaglioni, show thresholds tooltip/list on hover */}
                           {ag.pfa_tipo === 'scaglioni' && ag.pfa_scaglioni.length > 0 && (
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px 8px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.03)', marginTop: '4px' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px 8px', background: 'var(--bg-inset)', borderRadius: '6px', border: '1px solid var(--line)', marginTop: '4px' }}>
                               {ag.pfa_scaglioni.map(sc => (
                                 <div key={sc.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
                                   <span>&gt; €{sc.soglia_da.toLocaleString('it-IT')}:</span>
-                                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>{(sc.valore_percentuale * 100).toFixed(1)}%</span>
+                                  <span style={{ color: 'var(--warn)', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{(sc.valore_percentuale * 100).toFixed(1)}%</span>
                                 </div>
                               ))}
                             </div>
                           )}
                         </div>
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         € {ag.netto_rientro_contratto !== null ? Number(ag.netto_rientro_contratto).toFixed(2) : '—'}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         {Number(ag.quantita_acquistata).toFixed(1)} <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ag.unita_misura}</span>
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right' }}>€ {Number(ag.totale_fatturato).toFixed(2)}</td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500, color: '#10b981' }}>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {Number(ag.totale_fatturato).toFixed(2)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         € {Number(ag.rientro_accumulato).toFixed(2)}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: 'var(--accent-blue)' }}>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                         € {Number(ag.netto_rientro_medio).toFixed(2)}
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
@@ -542,7 +542,7 @@ export default function CommercialAgreements() {
                           <button
                             onClick={() => openEditModal(ag)}
                             style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px', transition: 'color 0.2s' }}
-                            onMouseEnter={e => e.currentTarget.style.color = 'var(--accent-blue)'}
+                            onMouseEnter={e => e.currentTarget.style.color = 'var(--accent-text)'}
                             onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
                             title="Modifica Accordo"
                           >
@@ -572,7 +572,7 @@ export default function CommercialAgreements() {
       {isModalOpen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(8px)',
+          background: 'var(--bg-overlay)',
           display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
         }}>
           <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '24px', position: 'relative', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -616,11 +616,11 @@ export default function CommercialAgreements() {
                     <RefreshCw size={14} className="animate-spin" /> Caricamento catalogo prodotti...
                   </div>
                 ) : !modalSupplier ? (
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '10px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-glass)' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', padding: '10px 12px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--line)' }}>
                     Seleziona prima un fornitore
                   </div>
                 ) : editingAgreement !== null ? (
-                  <div style={{ fontSize: '0.85rem', color: 'white', padding: '10px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', border: '1px solid var(--border-glass)', opacity: 0.7 }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', padding: '10px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--line)', opacity: 0.7 }}>
                     {editingAgreement.descrizione} ({editingAgreement.sku_interno})
                   </div>
                 ) : (
@@ -654,9 +654,9 @@ export default function CommercialAgreements() {
                       <div style={{
                         position: 'absolute', top: '100%', left: 0, right: 0,
                         maxHeight: '220px', overflowY: 'auto',
-                        background: '#121e36', border: '1px solid var(--border-glass)',
-                        borderRadius: '8px', marginTop: '4px', zIndex: 1010,
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                        background: 'var(--bg-card)', border: '1px solid var(--border-glass)',
+                        borderRadius: 'var(--radius-md)', marginTop: '4px', zIndex: 1010,
+                        boxShadow: 'var(--shadow-pop)'
                       }}>
                         {supplierProducts.filter(p => {
                           if (!productSearchQuery) return true;
@@ -682,17 +682,17 @@ export default function CommercialAgreements() {
                                   setIsProductDropdownOpen(false);
                                 }}
                                 style={{
-                                  padding: '10px 12px', fontSize: '0.85rem', color: 'white', cursor: 'pointer',
-                                  background: isSelected ? 'var(--accent-blue)' : 'transparent',
-                                  borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s'
+                                  padding: '10px 12px', fontSize: '0.85rem', color: 'var(--text-primary)', cursor: 'pointer',
+                                  background: isSelected ? 'var(--accent)' : 'transparent',
+                                  borderBottom: '1px solid var(--line)', transition: 'background 0.2s'
                                 }}
-                                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-elevated)'; }}
                                 onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                               >
                                 <div style={{ fontWeight: 600 }}>{p.descrizione}</div>
-                                <div style={{ fontSize: '0.75rem', color: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                <div style={{ fontSize: '0.75rem', color: isSelected ? 'var(--text-on-accent)' : 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
                                   <span>SKU: {p.sku_interno}</span>
-                                  <span>€{Number(p.prezzo_pattuito).toFixed(2)}</span>
+                                  <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€{Number(p.prezzo_pattuito).toFixed(2)}</span>
                                 </div>
                               </div>
                             );
@@ -746,7 +746,7 @@ export default function CommercialAgreements() {
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="btn"
-                style={{ background: 'transparent', border: '1px solid var(--border-glass)', color: 'white', padding: '8px 16px', fontSize: '0.85rem' }}
+                style={{ background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-primary)', padding: '8px 16px', fontSize: '0.85rem' }}
               >
                 Annulla
               </button>

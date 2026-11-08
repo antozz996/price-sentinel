@@ -519,7 +519,7 @@ export default function App() {
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: '100vh',
-          background: 'radial-gradient(circle at center, #13131c 0%, #0a0a0f 100%)',
+          background: 'var(--bg-app)',
           padding: '20px',
           width: '100vw',
           position: 'fixed',
@@ -535,18 +535,18 @@ export default function App() {
             boxSizing: 'border-box',
             flexDirection: 'column',
             gap: '24px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-            border: '1px solid rgba(255,255,255,0.06)'
+            boxShadow: 'var(--shadow-pop)',
+            border: '1px solid var(--line)'
           }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{
                 display: 'inline-flex',
                 padding: '12px',
-                borderRadius: '12px',
-                background: 'rgba(59, 130, 246, 0.1)',
-                color: 'var(--accent-blue)',
+                borderRadius: 'var(--radius-lg)',
+                background: 'var(--accent-bg)',
+                color: 'var(--accent-text)',
                 marginBottom: '16px',
-                border: '1px solid rgba(59, 130, 246, 0.2)'
+                border: '1px solid var(--accent-border)'
               }}>
                 <Activity size={32} />
               </div>
@@ -558,10 +558,10 @@ export default function App() {
               {loginError && (
                 <div style={{
                   padding: '12px',
-                  borderRadius: '8px',
-                  background: 'var(--status-red-bg)',
-                  color: 'var(--status-red)',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--crit-bg)',
+                  color: 'var(--crit)',
+                  border: '1px solid var(--crit-border)',
                   fontSize: '0.85rem',
                   display: 'flex',
                   alignItems: 'center',
@@ -586,10 +586,10 @@ export default function App() {
                       width: '100%',
                       boxSizing: 'border-box',
                       padding: '12px 12px 12px 38px',
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      background: 'var(--bg-inset)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)',
                       outline: 'none',
                       fontSize: '0.9rem',
                       transition: 'var(--transition-smooth)'
@@ -612,10 +612,10 @@ export default function App() {
                       width: '100%',
                       boxSizing: 'border-box',
                       padding: '12px 12px 12px 38px',
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'white',
+                      background: 'var(--bg-inset)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-primary)',
                       outline: 'none',
                       fontSize: '0.9rem',
                       transition: 'var(--transition-smooth)'
@@ -761,7 +761,7 @@ export default function App() {
   if (supplierPublicMatch) {
     return (
       <PageErrorBoundary>
-        <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: '#0b1220', color: 'white' }}>Caricamento modulo…</main>}>
+        <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: 'var(--bg-app)', color: 'var(--text-primary)' }}>Caricamento modulo…</main>}>
           <SupplierPricePublicForm token={decodeURIComponent(supplierPublicMatch[1])} />
         </Suspense>
       </PageErrorBoundary>
@@ -782,8 +782,8 @@ export default function App() {
       <aside className={`sidebar ${mobileSidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--accent-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Activity color="white" size={20} />
+            <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-sm)', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Activity color="var(--text-on-accent)" size={20} />
             </div>
             <h2 style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700, letterSpacing: '0.5px' }}>
               {accountName.toUpperCase()}
@@ -848,12 +848,13 @@ export default function App() {
                           </span>
                           {item.id === 'unlistedproducts' && unlistedProductsCount > 0 && (
                             <span style={{
-                              background: 'var(--status-yellow)',
-                              color: '#000',
+                              background: 'var(--warn)',
+                              color: 'var(--bg-app)',
                               fontSize: '0.72rem',
                               fontWeight: 700,
+                              fontFamily: 'var(--font-mono)',
                               padding: '2px 7px',
-                              borderRadius: '10px',
+                              borderRadius: '999px',
                               lineHeight: 1
                             }}>
                               {unlistedProductsCount}
@@ -871,7 +872,7 @@ export default function App() {
 
         <div className="sidebar-footer">
           <div className="sidebar-user-summary">
-            <span style={{ fontWeight: 700, color: 'white' }}>{getRoleLabel()}</span>
+            <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{getRoleLabel()}</span>
             <small>{profile?.nome_completo || profile?.email || 'Profilo in caricamento…'}</small>
           </div>
         </div>
@@ -880,8 +881,8 @@ export default function App() {
       {/* Main UI Area */}
       <main className="main-content">
         {/* Background glow effects */}
-        <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'var(--accent-blue)', filter: 'blur(150px)', opacity: 0.15, pointerEvents: 'none', borderRadius: '50%' }}></div>
-        <div style={{ position: 'absolute', bottom: '-10%', left: '20%', width: '300px', height: '300px', background: 'var(--status-red)', filter: 'blur(150px)', opacity: 0.1, pointerEvents: 'none', borderRadius: '50%' }}></div>
+        <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '400px', height: '400px', background: 'var(--accent-blue)', filter: 'blur(150px)', opacity: 0, pointerEvents: 'none', borderRadius: '50%' }}></div>
+        <div style={{ position: 'absolute', bottom: '-10%', left: '20%', width: '300px', height: '300px', background: 'var(--status-red)', filter: 'blur(150px)', opacity: 0, pointerEvents: 'none', borderRadius: '50%' }}></div>
 
         <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px', position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -890,15 +891,15 @@ export default function App() {
               className="hamburger-btn" 
               onClick={() => setMobileSidebarOpen(true)}
               style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--radius-md)',
                 width: '40px',
                 height: '40px',
                 display: 'none',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'white',
+                color: 'var(--text-primary)',
                 cursor: 'pointer',
                 transition: 'var(--transition-smooth)'
               }}
@@ -919,17 +920,17 @@ export default function App() {
               title={pendingSupplierResponsesCount > 0 ? `${pendingSupplierResponsesCount} risposte fornitori da revisionare` : 'Centro Notifiche: Nuovi Ordini & Segnalazioni'}
               style={{
                 position: 'relative',
-                background: (pendingFeedbacksCount > 0 || recentOrdersCount > 0 || pendingSupplierResponsesCount > 0) ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.03)',
-                border: pendingFeedbacksCount > 0 ? '1px solid rgba(239, 68, 68, 0.4)' : (recentOrdersCount > 0 ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid var(--border-glass)'),
-                borderRadius: '10px',
+                background: (pendingFeedbacksCount > 0 || recentOrdersCount > 0 || pendingSupplierResponsesCount > 0) ? 'var(--accent-bg)' : 'var(--bg-card)',
+                border: pendingFeedbacksCount > 0 ? '1px solid var(--crit-border)' : (recentOrdersCount > 0 ? '1px solid var(--accent-border)' : '1px solid var(--line)'),
+                borderRadius: 'var(--radius-md)',
                 width: '40px',
                 height: '40px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: pendingFeedbacksCount > 0 ? '#ef4444' : (recentOrdersCount > 0 ? '#60a5fa' : 'var(--text-secondary)'),
+                color: pendingFeedbacksCount > 0 ? 'var(--crit)' : (recentOrdersCount > 0 ? 'var(--accent-text)' : 'var(--text-secondary)'),
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'var(--transition-fast)'
               }}
             >
               <Bell size={18} />
@@ -938,13 +939,14 @@ export default function App() {
                   position: 'absolute',
                   top: '-4px',
                   right: '-4px',
-                  background: pendingFeedbacksCount > 0 ? '#ef4444' : '#3b82f6',
-                  color: 'white',
+                  background: pendingFeedbacksCount > 0 ? 'var(--crit)' : 'var(--accent)',
+                  color: 'var(--text-on-accent)',
                   fontSize: '0.68rem',
-                  fontWeight: 800,
-                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  borderRadius: '999px',
                   padding: '1px 5px',
-                  boxShadow: pendingFeedbacksCount > 0 ? '0 0 10px rgba(239, 68, 68, 0.8)' : '0 0 10px rgba(59, 130, 246, 0.8)'
+                  boxShadow: 'none'
                 }}>
                   {pendingFeedbacksCount + recentOrdersCount + pendingSupplierResponsesCount}
                 </span>
@@ -952,10 +954,10 @@ export default function App() {
             </button>
 
             <div className="profile-info" style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 600, color: 'white' }}>{getRoleLabel()}</div>
+              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{getRoleLabel()}</div>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{profile?.nome_completo || profile?.email || 'Profilo in caricamento…'}</div>
             </div>
-            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-glass)', border: '1px solid var(--border-glass)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--accent-blue)' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--bg-elevated)', border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'var(--accent-text)' }}>
               {profile?.nome_completo ? profile.nome_completo.charAt(0).toUpperCase() : (profile?.email?.charAt(0).toUpperCase() || '…')}
             </div>
           </div>
@@ -974,7 +976,7 @@ export default function App() {
               gap: '16px',
               color: 'var(--text-secondary)'
             }}>
-              <Loader2 size={32} className="spin" style={{ color: 'var(--accent-blue)' }} />
+              <Loader2 size={32} className="spin" style={{ color: 'var(--accent-text)' }} />
               <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>Caricamento modulo in corso…</span>
             </div>
           }>
