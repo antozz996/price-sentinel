@@ -3,10 +3,16 @@ import type { CSSProperties, FormEvent } from 'react';
 import { API_BASE } from '../api';
 import { normalizeSupplierUnit, SUPPLIER_UNIT_OPTIONS } from '../constants/units';
 
-type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null; istruzioni?: string | null };
+type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; dicitura_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null; istruzioni?: string | null };
 type FormData = { supplier_name: string; requires_supplier_details?: boolean; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
 type ExtraOffer = { key: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota: string };
 type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string; extraOffers: ExtraOffer[] };
+
+// "€ 3,00 per 0,25 KG" or "€ 1,00 / KG" for the agreed offer format.
+const formatLabel = (quantita: string | null | undefined, unita: string) => {
+  const q = Number(quantita);
+  return quantita && q > 0 && q !== 1 ? ` per ${q.toLocaleString('it-IT')} ${unita}` : ` / ${unita}`;
+};
 
 // Live check of what the supplier is actually declaring, e.g. "2 KG a € 2,00 = € 1,00 al KG".
 function UnitPriceHint({ prezzo, quantita, unita }: { prezzo: string; quantita: string; unita: string }) {
@@ -49,7 +55,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       .then(form => {
         if (!active) return;
         setData(form);
-        const initial = Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: normalizeSupplierUnit(i.unita_corrente), marca: i.brand_corrente || '', dicitura_fornitore: '', quantita_confezione: '', conferma_prezzo: false, non_trattato: false, nota: '', extraOffers: [] }]));
+        const initial = Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: normalizeSupplierUnit(i.unita_corrente), marca: i.brand_corrente || '', dicitura_fornitore: i.dicitura_corrente || '', quantita_confezione: i.quantita_corrente ? String(Number(i.quantita_corrente)) : '', conferma_prezzo: false, non_trattato: false, nota: '', extraOffers: [] }]));
         try {
           const saved = JSON.parse(localStorage.getItem(draftKey) || 'null');
           setAnswers(saved?.answers && form.items.every(i => saved.answers[i.id]) ? Object.fromEntries(form.items.map(i => [i.id, { ...initial[i.id], ...saved.answers[i.id], extraOffers: saved.answers[i.id].extraOffers || [] }])) : initial);
@@ -140,7 +146,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       const answer = answers[item.id]; if (!answer) return null;
       return <section key={item.id} style={{ ...box, padding: 16, margin: '14px 0', maxWidth: 'none' }}>
         <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>{item.descrizione}</h2>
-        <p style={{ color: 'var(--text-secondary)' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? ` / ${item.unita_corrente}` : ' (unità da indicare)'}`}</p>
+        <p style={{ color: 'var(--text-secondary)' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? formatLabel(item.quantita_corrente, item.unita_corrente) : ' (unità da indicare)'}`}</p>
         {data.request_type === 'confirmation' && !item.unita_corrente && <p style={{ color: 'var(--warn)' }}>Il prezzo attuale non ha un’unità di misura: indica quantità e unità a cui si riferisce il tuo prezzo (KG, PZ, cartone…).</p>}
         {item.istruzioni &&<p style={{ padding: 10, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Indicazione per questo prodotto:</strong> {item.istruzioni}</p>}
         {data.request_type === 'confirmation' && item.validita_corrente_da &&<p style={{ color: 'var(--text-secondary)' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
@@ -165,7 +171,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         </div>)}
         {!answer.non_trattato && answer.extraOffers.length < 9 && <button type="button" className="btn" style={{ marginTop: 12 }} onClick={() => addExtraOffer(item.id)}>+ Aggiungi un’altra marca o formato</button>}
         {/* Without an agreed unit there is nothing to confirm: the answer is reviewed as a proposal. */}
-        {data.request_type === 'confirmation' && !answer.non_trattato && item.unita_corrente && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo e unità corrispondono al pattuito</label>}
+        {data.request_type === 'confirmation' && !answer.non_trattato && item.unita_corrente && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo, quantità e unità corrispondono al pattuito</label>}
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
       </section>;
     })}

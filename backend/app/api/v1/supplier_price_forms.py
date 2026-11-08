@@ -16,7 +16,7 @@ from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
-from app.models.products import Product
+from app.models.products import Product, SupplierProductAlias
 from app.models.supplier_price_form import SupplierPriceFormIdentity, SupplierPriceFormItem, SupplierPriceFormRequest
 from app.models.utenti import Utente
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
@@ -83,6 +83,71 @@ def _offer_id(supplier_id: int, sku: str, offer: "SupplierOffer") -> str:
     return "OFF-" + sha256(identity.encode("utf-8")).hexdigest()[:16].upper()
 
 
+_PACK_UNIT_BY_COMPARISON = {"pz": "PZ", "piece": "PZ", "ct": "CT", "bt": "BT", "bottle": "BT", "cf": "CF"}
+OfferFormat = tuple[Decimal | None, str | None, str | None, str | None]  # quantity, unit, wording, brand
+
+
+async def _offer_formats(db: AsyncSession, supplier_id: int, rows: list[ListinoMaster]) -> dict[int, OfferFormat]:
+    """Format of the agreed offer behind each listino row.
+
+    Approved form offers are stored with unita_misura "conf" and the package on
+    the alias, so the format is read back from the approved form (exact) or
+    rebuilt from the alias, never shown to the supplier as "conf".
+    """
+    alias_ids = {row.supplier_product_alias_id for row in rows if row.supplier_product_alias_id}
+    skus = {row.sku_interno for row in rows}
+    aliases = {alias.id: alias for alias in (await db.execute(
+        select(SupplierProductAlias).options(noload("*")).where(SupplierProductAlias.id.in_(alias_ids))
+    )).scalars()} if alias_ids else {}
+    products = {product.sku_interno: product for product in (await db.execute(
+        select(Product).where(Product.sku_interno.in_(skus))
+    )).scalars()} if alias_ids else {}
+    approved: dict[str, dict] = {}
+    if alias_ids:
+        items = (await db.execute(
+            select(SupplierPriceFormItem).join(SupplierPriceFormRequest).where(
+                SupplierPriceFormRequest.supplier_id == supplier_id,
+                SupplierPriceFormRequest.status == "approved",
+                SupplierPriceFormItem.sku_interno.in_(skus),
+            ).order_by(SupplierPriceFormRequest.id)
+        )).scalars().all()
+        for item in items:  # later approvals win
+            for offer in item.offerte_inviate or []:
+                approved[offer["id_offerta"]] = offer
+    formats: dict[int, OfferFormat] = {}
+    for row in rows:
+        alias = aliases.get(row.supplier_product_alias_id)
+        if alias is None:
+            unit = (row.unita_misura or "").strip().upper()
+            formats[row.id] = (None, unit if unit in ALLOWED_UNITS and unit != "CONF" else None, None, None)
+            continue
+        offer = approved.get(alias.supplier_code)
+        if offer:
+            formats[row.id] = (Decimal(offer["quantita_confezione"]), offer["unita_misura"],
+                               offer.get("dicitura_fornitore"), offer.get("marca"))
+            continue
+        product = products.get(row.sku_interno)
+        if alias.weight_g:
+            quantity, unit = Decimal(alias.weight_g) / 1000, "KG"
+        elif alias.volume_ml:
+            quantity, unit = Decimal(alias.volume_ml) / 1000, "L"
+        elif alias.pack_qty:
+            quantity = Decimal(alias.pack_qty)
+            unit = _PACK_UNIT_BY_COMPARISON.get((product.comparison_unit or "").strip().lower()) if product else None
+        else:
+            quantity, unit = None, None
+        formats[row.id] = (quantity if unit else None, unit, alias.raw_description, alias.brand)
+    return formats
+
+
+def _format_label(quantity: Decimal | None, unit: str | None) -> str:
+    if not unit:
+        return "unità da completare"
+    if quantity is None or quantity == 1:
+        return unit
+    return f"{format(quantity.normalize(), 'f').replace('.', ',')} {unit}"
+
+
 def _request_view(request: SupplierPriceFormRequest) -> dict:
     return {
         "id": request.id,
@@ -110,6 +175,8 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "descrizione": item.descrizione,
                 "prezzo_corrente": str(item.prezzo_corrente) if item.prezzo_corrente is not None else None,
                 "unita_corrente": item.unita_corrente,
+                "quantita_corrente": str(item.quantita_corrente) if item.quantita_corrente is not None else None,
+                "dicitura_corrente": item.dicitura_corrente,
                 "brand_corrente": item.brand_corrente,
                 "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
@@ -210,6 +277,8 @@ async def get_public_form(
                 "descrizione": item.descrizione,
                 "prezzo_corrente": str(item.prezzo_corrente) if item.prezzo_corrente is not None else None,
                 "unita_corrente": item.unita_corrente,
+                "quantita_corrente": str(item.quantita_corrente) if item.quantita_corrente is not None else None,
+                "dicitura_corrente": item.dicitura_corrente,
                 "brand_corrente": item.brand_corrente,
                 "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
@@ -294,8 +363,9 @@ async def submit_public_form(
             if offer.conferma_prezzo and not (
                 item.prezzo_corrente is not None and offer.prezzo == item.prezzo_corrente
                 and item.unita_corrente is not None and unit.casefold() == item.unita_corrente.strip().casefold()
+                and (item.quantita_corrente is None or offer.quantita_confezione == item.quantita_corrente)
             ):
-                raise HTTPException(status_code=422, detail=f"La riga {item.sku_interno} è indicata come confermata ma prezzo o unità sono diversi dal pattuito")
+                raise HTTPException(status_code=422, detail=f"La riga {item.sku_interno} è indicata come confermata ma prezzo, quantità o unità sono diversi dal pattuito")
             offer_id = _offer_id(request.supplier_id, item.sku_interno, offer)
             if offer_id in seen_offer_ids:
                 raise HTTPException(status_code=422, detail=f"Due offerte identiche per {item.sku_interno}: cambia marca, formato o dicitura")
@@ -404,14 +474,17 @@ async def create_form_request(
         sku_values = {row.sku_interno for row in rows if row.sku_interno}
         products = (await db.execute(select(Product).where(Product.sku_interno.in_(sku_values)))).scalars().all() if sku_values else []
         brand_by_sku = {product.sku_interno: product.brand for product in products}
+        formats = await _offer_formats(db, payload.supplier_id, rows)
         form_items = [
             SupplierPriceFormItem(
                 listino_id=row.id,
                 sku_interno=row.sku_interno,
                 descrizione=row.descrizione,
                 prezzo_corrente=row.prezzo_pattuito,
-                unita_corrente=row.unita_misura,
-                brand_corrente=brand_by_sku.get(row.sku_interno),
+                unita_corrente=formats[row.id][1],
+                quantita_corrente=formats[row.id][0],
+                dicitura_corrente=formats[row.id][2],
+                brand_corrente=formats[row.id][3] or brand_by_sku.get(row.sku_interno),
                 validita_corrente_da=row.data_inizio_validita,
                 validita_corrente_a=row.data_scadenza,
             )
@@ -529,6 +602,11 @@ async def get_supplier_catalog(
         )
         .order_by(ListinoMaster.sku_interno)
     )).scalars().all()
+    # Same rule as order resolution: once a product has approved offers from this
+    # supplier, the older generic row (no offer) is superseded and not re-asked.
+    offer_skus = {row.sku_interno for row in rows if row.supplier_product_alias_id}
+    rows = [row for row in rows if row.supplier_product_alias_id or row.sku_interno not in offer_skus]
+    formats = await _offer_formats(db, supplier_id, rows)
 
     categories_by_sku: dict[str, tuple[str | None, str | None]] = {}
     sku_values = {row.sku_interno for row in rows if row.sku_interno}
@@ -545,9 +623,9 @@ async def get_supplier_catalog(
         {
             "id": row.id,
             "sku_interno": row.sku_interno,
-            "descrizione": row.descrizione,
+            "descrizione": row.descrizione + (f" · {formats[row.id][3]}" if formats[row.id][3] else ""),
             "prezzo_pattuito": str(row.prezzo_pattuito),
-            "unita_misura": row.unita_misura,
+            "unita_misura": _format_label(formats[row.id][0], formats[row.id][1]),
             "data_inizio_validita": row.data_inizio_validita.isoformat(),
             "data_scadenza": row.data_scadenza.isoformat() if row.data_scadenza else None,
             "category": categories_by_sku.get(row.sku_interno, (None, None))[0],
