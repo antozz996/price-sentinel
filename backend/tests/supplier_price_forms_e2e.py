@@ -15,6 +15,7 @@ import psycopg2
 
 from app.main import app
 from app.services.auth import create_access_token
+from app.services.supplier_form_pdf import PdfItem, PdfOffer, change_percent
 from app.services.variant_price_import import _dimensions
 
 DSN = os.environ["TEST_DATABASE_DSN"]
@@ -56,6 +57,14 @@ async def run() -> None:
           _dimensions(Decimal("75"), "CL") == (1, 750, None))
     check("preset package units remain countable",
           _dimensions(Decimal("6"), "CT") == (6, None, None))
+    kg_before = PdfItem("x", previous_price=Decimal("12"), previous_quantity=Decimal("1"), previous_unit="KG")
+    check("PDF change compares price per kg (0,25 KG at 3,00 vs 12,00/KG is unchanged)",
+          change_percent(PdfOffer(Decimal("3"), Decimal("0.25"), "KG"), kg_before) == 0)
+    check("PDF change is not computed between a price per piece and a price per kg",
+          change_percent(PdfOffer(Decimal("1.8"), Decimal("1"), "PZ"), kg_before) is None)
+    check("PDF change is not computed when the previous unit is unknown",
+          change_percent(PdfOffer(Decimal("1.8"), Decimal("1"), "PZ"),
+                         PdfItem("x", previous_price=Decimal("7.2"))) is None)
     seed()
     admin_headers = {
         "Authorization": f"Bearer {create_access_token(1, 'admin')}"
@@ -191,6 +200,11 @@ async def run() -> None:
             headers=admin_headers,
         )
         check("a reviewed response cannot be applied twice", repeat.status_code == 409)
+        pdf = await client.get(f"/api/v1/supplier-price-forms/{created_data['request']['id']}/pdf",
+                               headers=admin_headers)
+        check("an approved price list can be downloaded as a shareable PDF",
+              pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf"
+              and pdf.content.startswith(b"%PDF") and "listino-" in pdf.headers["content-disposition"])
         pending_after = await client.get("/api/v1/supplier-price-forms/notifications/pending",
                                          headers=admin_headers)
         check("notification clears after approval",
@@ -287,6 +301,8 @@ async def run() -> None:
         })
         check("admin creates a second form", overdue.status_code == 201)
         overdue_id = overdue.json()["request"]["id"]
+        open_pdf = await client.get(f"/api/v1/supplier-price-forms/{overdue_id}/pdf", headers=admin_headers)
+        check("a form not yet compiled has no PDF", open_pdf.status_code == 409)
     with psycopg2.connect(DSN) as connection:
         with connection.cursor() as cursor:
             cursor.execute("update supplier_price_form_requests set expires_at=now() - interval '1 minute' "
