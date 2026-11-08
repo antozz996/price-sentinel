@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_, or_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload, selectinload
 
 from app.database import get_db
 from app.api.deps import get_current_user, require_admin
@@ -181,6 +182,12 @@ async def get_prodotti_per_recensione(
         select(ProductFeedback)
         .where(ProductFeedback.product_id.in_(product_ids))
         .order_by(ProductFeedback.created_at.desc())
+        .options(
+            noload(ProductFeedback.product),
+            noload(ProductFeedback.ordine),
+            noload(ProductFeedback.resolved_by),
+            selectinload(ProductFeedback.user).noload(Utente.location),
+        )
     )
     all_feedbacks = (await db.scalars(feedbacks_stmt)).all()
 
@@ -195,6 +202,7 @@ async def get_prodotti_per_recensione(
         select(ListinoMaster)
         .where(ListinoMaster.sku_interno.in_(sku_list))
         .order_by(ListinoMaster.prezzo_pattuito.asc())
+        .options(noload(ListinoMaster.pfa_scaglioni), noload(ListinoMaster.uom_conversioni))
     )).all() if sku_list else []
 
     listino_map: dict[str, ListinoMaster] = {}
@@ -202,8 +210,8 @@ async def get_prodotti_per_recensione(
         if lm.sku_interno and lm.sku_interno not in listino_map:
             listino_map[lm.sku_interno] = lm
 
-    fornitori_db = (await db.scalars(select(Fornitore))).all()
-    forn_name_map = {f.id: f.nome_azienda for f in fornitori_db}
+    fornitori_rows = (await db.execute(select(Fornitore.id, Fornitore.nome_azienda))).all()
+    forn_name_map = {row.id: row.nome_azienda for row in fornitori_rows}
 
     results: List[ProductReviewItemResponse] = []
     for p in products:
@@ -425,6 +433,11 @@ async def get_pending_feedbacks(
             ProductFeedback.stato == "in_attesa"
         )
         .order_by(ProductFeedback.created_at.desc())
+        .options(
+            noload(ProductFeedback.ordine),
+            noload(ProductFeedback.resolved_by),
+            selectinload(ProductFeedback.user).noload(Utente.location),
+        )
     )
     feedbacks = (await db.scalars(stmt)).all()
     

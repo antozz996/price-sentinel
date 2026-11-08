@@ -17,7 +17,8 @@ from fastapi import (
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user, require_manager
 from app.database import get_db
@@ -25,12 +26,15 @@ from app.models.anomalie import Anomalia, StatoValidazione
 from app.services.anomaly_policy import operational_anomaly_filter
 from app.services.tenant_scope import invoice_tenant_filter
 from app.models.disputes import (
+    DisputeAttachment,
     DisputeCase,
     DisputeCaseAnomaly,
     DisputeCommunication,
     DisputeCreditNote,
 )
 from app.models.fatture import Fattura, RigaFattura
+from app.models.fornitori import Fornitore
+from app.models.location import Location
 from app.models.purchase_order_reconciliation import (
     LiquidStockVenueMapping,
     PurchaseOrderReconciliation,
@@ -378,15 +382,22 @@ async def list_cases(
     statement = select(DisputeCase).options(
         selectinload(DisputeCase.anomalies),
         selectinload(DisputeCase.communications),
-        selectinload(DisputeCase.attachments),
+        selectinload(DisputeCase.attachments).defer(DisputeAttachment.content),
         selectinload(DisputeCase.responses),
         selectinload(DisputeCase.credit_notes).selectinload(
             DisputeCreditNote.allocations
         ),
         selectinload(DisputeCase.audit_events),
-        selectinload(DisputeCase.supplier),
-        selectinload(DisputeCase.location),
-        selectinload(DisputeCase.owner),
+        selectinload(DisputeCase.supplier).options(
+            noload(Fornitore.fatture),
+            noload(Fornitore.listini),
+            noload(Fornitore.alias),
+        ),
+        selectinload(DisputeCase.location).options(
+            noload(Location.utenti),
+            noload(Location.fatture),
+        ),
+        selectinload(DisputeCase.owner).noload(Utente.location),
     )
     if location_id is not None:
         statement = statement.where(DisputeCase.location_id == location_id)
@@ -535,7 +546,7 @@ async def download_attachment(
     user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    case = await load_case(db, case_id, user)
+    case = await load_case(db, case_id, user, include_attachment_content=True)
     attachment = await get_attachment(db, attachment_id, user)
     if attachment.dispute_case_id != case.id:
         raise HTTPException(status_code=409, detail="cross_case_attachment")
@@ -567,7 +578,7 @@ async def dispute_pdf(
     db: AsyncSession = Depends(get_db),
 ):
     case = await load_case(db, case_id, user)
-    content = generate_dispute_pdf(case)
+    content = await run_in_threadpool(generate_dispute_pdf, case)
     return StreamingResponse(
         BytesIO(content),
         media_type="application/pdf",

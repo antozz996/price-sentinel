@@ -10,6 +10,8 @@ from io import BytesIO
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy import select, func, and_, or_, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import require_admin, get_current_user
 from app.config import settings
@@ -332,7 +334,11 @@ async def export_vendor_passport(
     if not isinstance(data_a, date):
         data_a = None
     from app.models.fornitori import Fornitore
-    fornitore = await db.scalar(select(Fornitore).where(Fornitore.id == fornitore_id))
+    fornitore = await db.scalar(
+        select(Fornitore)
+        .options(noload(Fornitore.listini), noload(Fornitore.fatture), noload(Fornitore.alias))
+        .where(Fornitore.id == fornitore_id)
+    )
     if not fornitore:
         from fastapi import HTTPException
         raise HTTPException(404, "Fornitore non trovato")
@@ -361,7 +367,7 @@ async def export_vendor_passport(
         ]
     }
     
-    pdf_bytes = generate_vendor_passport_pdf(vendor_data)
+    pdf_bytes = await run_in_threadpool(generate_vendor_passport_pdf, vendor_data)
     
     return Response(
         content=pdf_bytes,
@@ -1182,91 +1188,95 @@ async def export_dispute_excel(
     
     res = await db.execute(text(sql), params)
     
-    # Crea Workbook excel
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Report Rincari"
+    def _build_workbook(rows):
+        # Crea Workbook excel
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Report Rincari"
     
-    ws.views.sheetView[0].showGridLines = True
+        ws.views.sheetView[0].showGridLines = True
     
-    headers = [
-        "Mese", "SKU Interno", "Prodotto", "Fornitore", 
-        "Prezzo Target (€)", "Prezzo Medio Rilevato (€)", 
-        "Quantità Acquistata", "Rincaro Unitario (€)", "Spreco Rilevato (€)"
-    ]
-    
-    ws.append(headers)
-    
-    header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
-    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
-    thin_border = Border(
-        left=Side(style='thin', color='DDDDDD'),
-        right=Side(style='thin', color='DDDDDD'),
-        top=Side(style='thin', color='DDDDDD'),
-        bottom=Side(style='thin', color='DDDDDD')
-    )
-    
-    for col_idx in range(1, len(headers) + 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = header_align
-        cell.border = thin_border
-    
-    # Aggiungi i dati
-    row_num = 2
-    for r in res.all():
-        prezzo_medio = float(r.prezzo_medio)
-        prezzo_precedente = float(r.prezzo_precedente)
-        rincaro_unitario = prezzo_medio - prezzo_precedente
-        quantita = float(r.qta_mese_corrente)
-        spreco = rincaro_unitario * quantita
-        
-        row_data = [
-            r.mese,
-            r.sku_interno,
-            r.nome_normalizzato,
-            r.fornitore_ragione_sociale,
-            prezzo_precedente,
-            prezzo_medio,
-            quantita,
-            rincaro_unitario,
-            spreco
+        headers = [
+            "Mese", "SKU Interno", "Prodotto", "Fornitore", 
+            "Prezzo Target (€)", "Prezzo Medio Rilevato (€)", 
+            "Quantità Acquistata", "Rincaro Unitario (€)", "Spreco Rilevato (€)"
         ]
-        ws.append(row_data)
-        
-        for col_idx in range(1, len(row_data) + 1):
-            cell = ws.cell(row=row_num, column=col_idx)
+    
+        ws.append(headers)
+    
+        header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    
+        thin_border = Border(
+            left=Side(style='thin', color='DDDDDD'),
+            right=Side(style='thin', color='DDDDDD'),
+            top=Side(style='thin', color='DDDDDD'),
+            bottom=Side(style='thin', color='DDDDDD')
+        )
+    
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_align
             cell.border = thin_border
-            cell.font = Font(name="Calibri", size=11)
+    
+        # Aggiungi i dati
+        row_num = 2
+        for r in rows:
+            prezzo_medio = float(r.prezzo_medio)
+            prezzo_precedente = float(r.prezzo_precedente)
+            rincaro_unitario = prezzo_medio - prezzo_precedente
+            quantita = float(r.qta_mese_corrente)
+            spreco = rincaro_unitario * quantita
+        
+            row_data = [
+                r.mese,
+                r.sku_interno,
+                r.nome_normalizzato,
+                r.fornitore_ragione_sociale,
+                prezzo_precedente,
+                prezzo_medio,
+                quantita,
+                rincaro_unitario,
+                spreco
+            ]
+            ws.append(row_data)
+        
+            for col_idx in range(1, len(row_data) + 1):
+                cell = ws.cell(row=row_num, column=col_idx)
+                cell.border = thin_border
+                cell.font = Font(name="Calibri", size=11)
             
-            if col_idx in (5, 6, 8, 9):
-                cell.number_format = '€ #,##0.00'
-                cell.alignment = Alignment(horizontal="right")
-            elif col_idx == 7:
-                cell.number_format = '#,##0.00'
-                cell.alignment = Alignment(horizontal="right")
-            else:
-                cell.alignment = Alignment(horizontal="left")
+                if col_idx in (5, 6, 8, 9):
+                    cell.number_format = '€ #,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_idx == 7:
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+                else:
+                    cell.alignment = Alignment(horizontal="left")
                 
-        row_num += 1
+            row_num += 1
         
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            val_str = str(cell.value or '')
-            if cell.column in (5, 6, 8, 9) and type(cell.value) in (int, float):
-                val_str = f"€ {cell.value:.2f}"
-            if len(val_str) > max_len:
-                max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        for col in ws.columns:
+            max_len = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                val_str = str(cell.value or '')
+                if cell.column in (5, 6, 8, 9) and type(cell.value) in (int, float):
+                    val_str = f"€ {cell.value:.2f}"
+                if len(val_str) > max_len:
+                    max_len = len(val_str)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
-    stream = BytesIO()
-    wb.save(stream)
-    stream.seek(0)
+        stream = BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+        return stream
+
+    stream = await run_in_threadpool(_build_workbook, res.all())
     
     headers = {
         'Content-Disposition': 'attachment; filename="dossier_contestazione_rincari.xlsx"'
@@ -1677,7 +1687,7 @@ async def get_product_consumption_invoices_pdf(
 
     filter_desc = " | ".join(filters_parts) if filters_parts else "Nessuno"
 
-    pdf_bytes = generate_consumption_invoices_pdf(title, invoices, filter_desc)
+    pdf_bytes = await run_in_threadpool(generate_consumption_invoices_pdf, title, invoices, filter_desc)
     
     return Response(
         content=pdf_bytes,
@@ -1759,93 +1769,97 @@ async def export_product_consumption_excel(
     
     res = await db.execute(text(sql), params)
     
-    # Crea Workbook excel
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Consumi per Prodotto"
+    def _build_workbook(rows):
+        # Crea Workbook excel
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Consumi per Prodotto"
     
-    # Mostra griglia
-    ws.views.sheetView[0].showGridLines = True
+        # Mostra griglia
+        ws.views.sheetView[0].showGridLines = True
     
-    headers = [
-        "SKU Interno", "Prodotto", "Fornitore", "Quantità Totale", "di cui Omaggi",
-        "Unità di Misura", "Prezzo Medio (€)", "Spesa Totale (€)"
-    ]
-    
-    ws.append(headers)
-    
-    # Stile intestazione elegante (Tonalità Navy coordinata a Price Sentinel)
-    header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
-    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
-    thin_border = Border(
-        left=Side(style='thin', color='DDDDDD'),
-        right=Side(style='thin', color='DDDDDD'),
-        top=Side(style='thin', color='DDDDDD'),
-        bottom=Side(style='thin', color='DDDDDD')
-    )
-    
-    for col_idx in range(1, len(headers) + 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = header_align
-        cell.border = thin_border
-    
-    # Aggiungi i dati
-    row_num = 2
-    for r in res.all():
-        quantita = float(r.quantita_totale or 0)
-        quantita_omaggio = float(r.quantita_omaggio or 0)
-        prezzo_medio = float(r.prezzo_medio or 0)
-        spesa_totale = float(r.spesa_totale or 0)
-        
-        row_data = [
-            r.sku_interno,
-            r.descrizione,
-            r.fornitori or "—",
-            quantita,
-            quantita_omaggio,
-            r.unita_misura or "Pz",
-            prezzo_medio,
-            spesa_totale
+        headers = [
+            "SKU Interno", "Prodotto", "Fornitore", "Quantità Totale", "di cui Omaggi",
+            "Unità di Misura", "Prezzo Medio (€)", "Spesa Totale (€)"
         ]
-        ws.append(row_data)
-        
-        for col_idx in range(1, len(row_data) + 1):
-            cell = ws.cell(row=row_num, column=col_idx)
+    
+        ws.append(headers)
+    
+        # Stile intestazione elegante (Tonalità Navy coordinata a Price Sentinel)
+        header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    
+        thin_border = Border(
+            left=Side(style='thin', color='DDDDDD'),
+            right=Side(style='thin', color='DDDDDD'),
+            top=Side(style='thin', color='DDDDDD'),
+            bottom=Side(style='thin', color='DDDDDD')
+        )
+    
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_align
             cell.border = thin_border
-            cell.font = Font(name="Calibri", size=11)
+    
+        # Aggiungi i dati
+        row_num = 2
+        for r in rows:
+            quantita = float(r.quantita_totale or 0)
+            quantita_omaggio = float(r.quantita_omaggio or 0)
+            prezzo_medio = float(r.prezzo_medio or 0)
+            spesa_totale = float(r.spesa_totale or 0)
+        
+            row_data = [
+                r.sku_interno,
+                r.descrizione,
+                r.fornitori or "—",
+                quantita,
+                quantita_omaggio,
+                r.unita_misura or "Pz",
+                prezzo_medio,
+                spesa_totale
+            ]
+            ws.append(row_data)
+        
+            for col_idx in range(1, len(row_data) + 1):
+                cell = ws.cell(row=row_num, column=col_idx)
+                cell.border = thin_border
+                cell.font = Font(name="Calibri", size=11)
             
-            if col_idx in (7, 8):
-                cell.number_format = '€ #,##0.00'
-                cell.alignment = Alignment(horizontal="right")
-            elif col_idx in (4, 5):
-                cell.number_format = '#,##0.00'
-                cell.alignment = Alignment(horizontal="right")
-            elif col_idx in (1, 6):
-                cell.alignment = Alignment(horizontal="center")
-            else:
-                cell.alignment = Alignment(horizontal="left")
+                if col_idx in (7, 8):
+                    cell.number_format = '€ #,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_idx in (4, 5):
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_idx in (1, 6):
+                    cell.alignment = Alignment(horizontal="center")
+                else:
+                    cell.alignment = Alignment(horizontal="left")
                 
-        row_num += 1
+            row_num += 1
         
-    # Auto-fit colonne
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            val_str = str(cell.value or '')
-            if cell.column in (7, 8) and type(cell.value) in (int, float):
-                val_str = f"€ {cell.value:.2f}"
-            if len(val_str) > max_len:
-                max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        # Auto-fit colonne
+        for col in ws.columns:
+            max_len = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                val_str = str(cell.value or '')
+                if cell.column in (7, 8) and type(cell.value) in (int, float):
+                    val_str = f"€ {cell.value:.2f}"
+                if len(val_str) > max_len:
+                    max_len = len(val_str)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
-    stream = BytesIO()
-    wb.save(stream)
-    stream.seek(0)
+        stream = BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+        return stream
+
+    stream = await run_in_threadpool(_build_workbook, res.all())
     
     headers = {
         'Content-Disposition': 'attachment; filename="report_consumo_prodotti.xlsx"'
@@ -1992,87 +2006,91 @@ async def export_top_purchased_excel(
         db=db
     )
     
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Listino Top Prodotti"
+    def _build_workbook(data):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Listino Top Prodotti"
     
-    ws.views.sheetView[0].showGridLines = True
+        ws.views.sheetView[0].showGridLines = True
     
-    headers = [
-        "Posizione", "SKU Interno", "Prodotto", "Fornitore", "Unità di Misura", 
-        "Quantità Totale", "Numero Acquisti", "Prezzo Medio (€)", "Spesa Totale (€)"
-    ]
-    
-    ws.append(headers)
-    
-    header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
-    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
-    thin_border = Border(
-        left=Side(style='thin', color='DDDDDD'),
-        right=Side(style='thin', color='DDDDDD'),
-        top=Side(style='thin', color='DDDDDD'),
-        bottom=Side(style='thin', color='DDDDDD')
-    )
-    
-    for col_idx in range(1, len(headers) + 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = header_align
-        cell.border = thin_border
-    
-    row_num = 2
-    for idx, item in enumerate(data):
-        row_data = [
-            idx + 1,
-            item["sku_interno"],
-            item["descrizione"],
-            item["fornitori"],
-            item["unita_misura"],
-            item["quantita_totale"],
-            item["numero_acquisti"],
-            item["prezzo_medio"],
-            item["spesa_totale"]
+        headers = [
+            "Posizione", "SKU Interno", "Prodotto", "Fornitore", "Unità di Misura", 
+            "Quantità Totale", "Numero Acquisti", "Prezzo Medio (€)", "Spesa Totale (€)"
         ]
-        ws.append(row_data)
-        
-        for col_idx in range(1, len(row_data) + 1):
-            cell = ws.cell(row=row_num, column=col_idx)
+    
+        ws.append(headers)
+    
+        header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    
+        thin_border = Border(
+            left=Side(style='thin', color='DDDDDD'),
+            right=Side(style='thin', color='DDDDDD'),
+            top=Side(style='thin', color='DDDDDD'),
+            bottom=Side(style='thin', color='DDDDDD')
+        )
+    
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_align
             cell.border = thin_border
-            cell.font = Font(name="Calibri", size=11)
+    
+        row_num = 2
+        for idx, item in enumerate(data):
+            row_data = [
+                idx + 1,
+                item["sku_interno"],
+                item["descrizione"],
+                item["fornitori"],
+                item["unita_misura"],
+                item["quantita_totale"],
+                item["numero_acquisti"],
+                item["prezzo_medio"],
+                item["spesa_totale"]
+            ]
+            ws.append(row_data)
+        
+            for col_idx in range(1, len(row_data) + 1):
+                cell = ws.cell(row=row_num, column=col_idx)
+                cell.border = thin_border
+                cell.font = Font(name="Calibri", size=11)
             
-            if col_idx in (8, 9):
-                cell.number_format = '€ #,##0.00'
-                cell.alignment = Alignment(horizontal="right")
-            elif col_idx == 6:
-                cell.number_format = '#,##0.00'
-                cell.alignment = Alignment(horizontal="right")
-            elif col_idx == 7:
-                cell.number_format = '#,##0'
-                cell.alignment = Alignment(horizontal="right")
-            elif col_idx in (1, 2, 5):
-                cell.alignment = Alignment(horizontal="center")
-            else:
-                cell.alignment = Alignment(horizontal="left")
+                if col_idx in (8, 9):
+                    cell.number_format = '€ #,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_idx == 6:
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_idx == 7:
+                    cell.number_format = '#,##0'
+                    cell.alignment = Alignment(horizontal="right")
+                elif col_idx in (1, 2, 5):
+                    cell.alignment = Alignment(horizontal="center")
+                else:
+                    cell.alignment = Alignment(horizontal="left")
                 
-        row_num += 1
+            row_num += 1
         
-    for col in ws.columns:
-        max_len = 0
-        col_letter = get_column_letter(col[0].column)
-        for cell in col:
-            val_str = str(cell.value or '')
-            if cell.column in (8, 9) and type(cell.value) in (int, float):
-                val_str = f"€ {cell.value:.2f}"
-            if len(val_str) > max_len:
-                max_len = len(val_str)
-        ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+        for col in ws.columns:
+            max_len = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                val_str = str(cell.value or '')
+                if cell.column in (8, 9) and type(cell.value) in (int, float):
+                    val_str = f"€ {cell.value:.2f}"
+                if len(val_str) > max_len:
+                    max_len = len(val_str)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
         
-    stream = BytesIO()
-    wb.save(stream)
-    stream.seek(0)
+        stream = BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+        return stream
+
+    stream = await run_in_threadpool(_build_workbook, data)
     
     filename = f"listino_top_{limit or 'all'}_prodotti.xlsx"
     headers = {

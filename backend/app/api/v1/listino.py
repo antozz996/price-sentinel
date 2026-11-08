@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, 
 from fastapi.responses import Response
 from sqlalchemy import select, and_, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user, require_admin
 from app.config import settings
@@ -40,6 +42,17 @@ from app.services.excel_import import (
 )
 
 router = APIRouter()
+
+
+def _fornitore_noload(fornitore_model) -> tuple:
+    # Fornitore.listini/fatture/alias are lazy="selectin"; these endpoints use
+    # only scalar supplier columns. Model is passed in because Fornitore is
+    # imported lazily inside the endpoints.
+    return (
+        noload(fornitore_model.listini),
+        noload(fornitore_model.fatture),
+        noload(fornitore_model.alias),
+    )
 
 
 def _deny_ungoverned_contract_write(reason: str) -> None:
@@ -125,7 +138,7 @@ async def download_template_excel(
     fornitore_nome: str = Query("NomeFornitore", description="Nome del fornitore per il titolo"),
     _admin: Utente = Depends(require_admin),
 ):
-    content = generate_template_excel(fornitore_nome)
+    content = await run_in_threadpool(generate_template_excel, fornitore_nome)
     filename = f"template_listino_{fornitore_nome.replace(' ', '_').lower()}.xlsx"
     return Response(
         content=content,
@@ -159,14 +172,16 @@ async def import_listino_excel(
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Formato non supportato. Usa un file .xlsx")
     from app.models.fornitori import Fornitore
-    forn_result = await db.execute(select(Fornitore).where(Fornitore.id == fornitore_id))
+    forn_result = await db.execute(
+        select(Fornitore).options(*_fornitore_noload(Fornitore)).where(Fornitore.id == fornitore_id)
+    )
     fornitore = forn_result.scalar_one_or_none()
     if fornitore is None:
         raise HTTPException(status_code=404, detail="Fornitore non trovato")
 
     import io
     file_data = io.BytesIO(await file.read())
-    parse_result = parse_listino_excel(file_data, fornitore_id)
+    parse_result = await run_in_threadpool(parse_listino_excel, file_data, fornitore_id)
     return {
         "mode": "dry_run" if parse_result.is_valid else "validation_failed",
         "fornitore": fornitore.nome_azienda,
@@ -304,7 +319,7 @@ async def import_multi_supplier(
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File superiore a 10 MB")
     digest = sha256(raw).hexdigest()
-    parse_result = parse_multi_supplier_excel(io.BytesIO(raw))
+    parse_result = await run_in_threadpool(parse_multi_supplier_excel, io.BytesIO(raw))
 
     if not parse_result.is_valid:
         return {"mode": "validation_failed", **parse_result.to_dict()}
@@ -323,12 +338,14 @@ async def import_multi_supplier(
         preview_supplier_ids: dict[str, int | None] = {}
         for name in parse_result.suppliers_detected:
             found = (await db.execute(
-                select(Fornitore).where(func.lower(Fornitore.nome_azienda) == name.lower())
+                select(Fornitore).options(*_fornitore_noload(Fornitore))
+                .where(func.lower(Fornitore.nome_azienda) == name.lower())
             )).scalar_one_or_none()
             if found is None:
                 piva = generate_deterministic_piva(name)
                 found = (await db.execute(
-                    select(Fornitore).where(Fornitore.partita_iva == piva)
+                    select(Fornitore).options(*_fornitore_noload(Fornitore))
+                    .where(Fornitore.partita_iva == piva)
                 )).scalar_one_or_none()
                 if found and found.nome_azienda.strip().casefold() != name.strip().casefold():
                     raise HTTPException(status_code=409, detail="Identità fornitore ambigua: verifica il fornitore prima dell'anteprima")
@@ -461,12 +478,16 @@ async def import_multi_supplier(
 
     suppliers_map = {}
     for name in parse_result.suppliers_detected:
-        stmt = select(Fornitore).where(func.lower(Fornitore.nome_azienda) == name.lower())
+        stmt = (
+            select(Fornitore).options(*_fornitore_noload(Fornitore))
+            .where(func.lower(Fornitore.nome_azienda) == name.lower())
+        )
         forn = (await db.execute(stmt)).scalar_one_or_none()
         if not forn:
             piva = generate_deterministic_piva(name)
             forn = (await db.execute(
-                select(Fornitore).where(Fornitore.partita_iva == piva)
+                select(Fornitore).options(*_fornitore_noload(Fornitore))
+                .where(Fornitore.partita_iva == piva)
             )).scalar_one_or_none()
             if forn and forn.nome_azienda.strip().casefold() != name.strip().casefold():
                 raise HTTPException(
@@ -605,7 +626,7 @@ async def extract_listino_from_invoices(
     from app.models.fatture import Fattura, RigaFattura, TipoDocumento
     from decimal import Decimal
 
-    fornitore = await db.get(Fornitore, fornitore_id)
+    fornitore = await db.get(Fornitore, fornitore_id, options=_fornitore_noload(Fornitore))
     if not fornitore:
         raise HTTPException(status_code=404, detail="Fornitore non trovato")
 
@@ -689,7 +710,7 @@ async def extract_listino_from_invoices(
     items.sort(key=lambda x: x["descrizione"])
 
     if format == "excel":
-        excel_bytes = generate_extracted_listino_excel(fornitore.nome_azienda, items)
+        excel_bytes = await run_in_threadpool(generate_extracted_listino_excel, fornitore.nome_azienda, items)
         safe_name = "".join(c for c in fornitore.nome_azienda if c.isalnum() or c in " _-").strip().replace(" ", "_")
         filename = f"listino_estratto_{safe_name}_{date.today().strftime('%Y%m%d')}.xlsx"
         return Response(

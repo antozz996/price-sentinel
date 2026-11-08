@@ -76,7 +76,14 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
   const [filterDataDa, setFilterDataDa] = useState('');
   const [filterDataA, setFilterDataA] = useState('');
   const [searchQuery, setSearchQuery] = useState(focus?.numero || '');
+  // Debounced copy used for fetching, so typing doesn't send one request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState(focus?.numero || '');
   const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 350);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   // Pagination states
   const [limit, setLimit] = useState(25);
@@ -107,14 +114,14 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
   // Reset offset to 0 when filters or page size changes
   useEffect(() => {
     setOffset(0);
-  }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, searchQuery, limit]);
+  }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, debouncedSearch, limit]);
 
   useEffect(() => {
     const controller = new AbortController();
     loadFatture(controller.signal);
     return () => controller.abort();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, searchQuery, limit, offset]);
+  }, [filterFornitore, filterLocation, filterMarker, filterDataDa, filterDataA, debouncedSearch, limit, offset]);
 
   async function loadFornitori(signal?: AbortSignal) {
     try {
@@ -146,7 +153,7 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
       if (filterMarker) params.set('marker', filterMarker);
       if (filterDataDa) params.set('data_da', filterDataDa);
       if (filterDataA) params.set('data_a', filterDataA);
-      if (searchQuery) params.set('search', searchQuery);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       params.set('limit', limit.toString());
       params.set('offset', offset.toString());
 

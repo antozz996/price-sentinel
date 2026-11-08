@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, File, Uplo
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete, and_, or_, text, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
@@ -337,7 +338,11 @@ async def list_products(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user)
 ):
-    stmt = select(Product).options(selectinload(Product.aliases)).order_by(Product.canonical_name)
+    stmt = (
+        select(Product)
+        .options(selectinload(Product.aliases).noload(SupplierProductAlias.supplier))
+        .order_by(Product.canonical_name)
+    )
     res = await db.execute(stmt)
     return res.scalars().all()
 
@@ -927,12 +932,22 @@ async def get_match_work_queue(
         .outerjoin(Product, Product.id == MatchCandidate.product_id)
         .where(RigaFattura.stato_matching == StatoMatching.in_parking)
         .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc(), MatchCandidate.score.desc())
+        .options(
+            noload(RigaFattura.anomalie),
+            noload(Fattura.righe),
+            noload(Fornitore.listini),
+            noload(Fornitore.fatture),
+            noload(Fornitore.alias),
+            noload(MatchCandidate.product),
+            noload(MatchCandidate.invoice_line),
+            noload(MatchCandidate.supplier),
+            noload(MatchCandidate.resolved_by),
+        )
     )
     rows = (await db.execute(stmt)).all()
     active_products = (
         await db.execute(select(Product).where(Product.is_active.is_(True)))
     ).scalars().all()
-    live_catalog_index = _build_live_catalog_index(active_products)
 
     groups: dict[tuple[int, str, str], dict[str, Any]] = {}
     weak_candidates_discarded = 0
@@ -990,15 +1005,22 @@ async def get_match_work_queue(
                 "reason_json": reason,
             }
 
+    def _compute_live_alternatives() -> list[list[dict[str, Any]]]:
+        # CPU-only: works on already-loaded scalar columns, no DB access.
+        live_catalog_index = _build_live_catalog_index(active_products)
+        return [
+            _live_catalog_suggestions(group["raw_description"], active_products, live_catalog_index)
+            for group in groups.values()
+        ]
+
+    live_alternatives = await run_in_threadpool(_compute_live_alternatives)
+
     items = []
-    for group in groups.values():
+    for group, alternatives in zip(groups.values(), live_alternatives):
         # Persisted candidates describe the catalog at ingestion time and may
         # contain an obsolete score or miss a format conflict. Recalculate on
         # every queue read against the current catalog; the displayed
         # percentage must represent today's evidence, not a stale snapshot.
-        alternatives = _live_catalog_suggestions(
-            group["raw_description"], active_products, live_catalog_index
-        )
         attributes = extract_candidate_attributes(group["raw_description"])
         best_candidate = alternatives[0] if alternatives else None
         items.append({
@@ -1773,13 +1795,12 @@ async def get_feedback_stats(
     _admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    res = await db.execute(
-        select(ProductFeedback).where(
+    count = (await db.execute(
+        select(func.count()).select_from(ProductFeedback).where(
             ProductFeedback.stato == "in_attesa",
             ProductFeedback.feedback == "NO"
         )
-    )
-    count = len(res.scalars().all())
+    )).scalar_one()
     return {"pending_negative_feedbacks": count}
 
 

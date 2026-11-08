@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
 
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
@@ -35,6 +35,11 @@ def _normalized_unit(value: str | None) -> str:
             detail=f"Unità di misura non valida. Seleziona una tra: {', '.join(sorted(ALLOWED_UNITS))}",
         )
     return unit
+
+
+# Fornitore.fatture/listini/alias are lazy="selectin": only scalar supplier
+# columns are used here, so skip loading the whole invoice/price history.
+_SUPPLIER_COLLECTIONS_NOLOAD = (noload(Fornitore.fatture), noload(Fornitore.listini), noload(Fornitore.alias))
 
 
 def _needs_supplier_details(supplier: Fornitore | None) -> bool:
@@ -181,7 +186,7 @@ async def get_public_form(
     token_hash = sha256(token.encode("utf-8")).hexdigest()
     request = (await db.execute(
         select(SupplierPriceFormRequest)
-        .options(selectinload(SupplierPriceFormRequest.supplier), selectinload(SupplierPriceFormRequest.items))
+        .options(selectinload(SupplierPriceFormRequest.supplier).options(*_SUPPLIER_COLLECTIONS_NOLOAD), selectinload(SupplierPriceFormRequest.items))
         .where(SupplierPriceFormRequest.token_hash == token_hash)
     )).scalar_one_or_none()
     now = datetime.now(timezone.utc)
@@ -220,7 +225,7 @@ async def submit_public_form(
     token_hash = sha256(token.encode("utf-8")).hexdigest()
     request = (await db.execute(
         select(SupplierPriceFormRequest)
-        .options(selectinload(SupplierPriceFormRequest.items), selectinload(SupplierPriceFormRequest.supplier))
+        .options(selectinload(SupplierPriceFormRequest.items), selectinload(SupplierPriceFormRequest.supplier).options(*_SUPPLIER_COLLECTIONS_NOLOAD))
         .where(SupplierPriceFormRequest.token_hash == token_hash)
         .with_for_update()
     )).scalar_one_or_none()
@@ -332,7 +337,7 @@ async def create_form_request(
     db: AsyncSession = Depends(get_db),
 ):
     _require_primary_tenant(admin)
-    supplier = await db.get(Fornitore, payload.supplier_id)
+    supplier = await db.get(Fornitore, payload.supplier_id, options=_SUPPLIER_COLLECTIONS_NOLOAD)
     if not supplier or supplier.archived_at is not None:
         raise HTTPException(status_code=404, detail="Fornitore non trovato o archiviato")
 
@@ -420,7 +425,7 @@ async def create_form_request(
     await db.commit()
     request = (await db.execute(
         select(SupplierPriceFormRequest)
-        .options(selectinload(SupplierPriceFormRequest.supplier), selectinload(SupplierPriceFormRequest.items))
+        .options(selectinload(SupplierPriceFormRequest.supplier).options(*_SUPPLIER_COLLECTIONS_NOLOAD), selectinload(SupplierPriceFormRequest.items))
         .where(SupplierPriceFormRequest.id == request.id)
     )).scalar_one()
     return {
@@ -500,7 +505,7 @@ async def get_supplier_catalog(
     db: AsyncSession = Depends(get_db),
 ):
     _require_primary_tenant(admin)
-    supplier = await db.get(Fornitore, supplier_id)
+    supplier = await db.get(Fornitore, supplier_id, options=_SUPPLIER_COLLECTIONS_NOLOAD)
     if not supplier or supplier.archived_at is not None:
         raise HTTPException(status_code=404, detail="Fornitore non trovato o archiviato")
 
@@ -551,7 +556,7 @@ async def list_form_requests(
     _require_primary_tenant(admin)
     query = (
         select(SupplierPriceFormRequest)
-        .options(selectinload(SupplierPriceFormRequest.supplier), selectinload(SupplierPriceFormRequest.items))
+        .options(selectinload(SupplierPriceFormRequest.supplier).options(*_SUPPLIER_COLLECTIONS_NOLOAD), selectinload(SupplierPriceFormRequest.items))
         .order_by(SupplierPriceFormRequest.created_at.desc())
     )
     records = (await db.execute(query)).scalars().unique().all()
@@ -636,9 +641,9 @@ async def approve_form_request(
         raise HTTPException(status_code=409, detail="; ".join(error["message"] for error in errors))
     identity = await db.get(SupplierPriceFormIdentity, request.id)
     if identity:
-        supplier = await db.get(Fornitore, request.supplier_id)
+        supplier = await db.get(Fornitore, request.supplier_id, options=_SUPPLIER_COLLECTIONS_NOLOAD)
         if _needs_supplier_details(supplier):
-            clash = await db.scalar(select(Fornitore).where(
+            clash = await db.scalar(select(Fornitore).options(*_SUPPLIER_COLLECTIONS_NOLOAD).where(
                 Fornitore.id != supplier.id,
                 Fornitore.partita_iva.in_([identity.partita_iva, "IT" + identity.partita_iva]),
             ))
@@ -691,7 +696,7 @@ async def get_form_request(
     _require_primary_tenant(admin)
     request = (await db.execute(
         select(SupplierPriceFormRequest)
-        .options(selectinload(SupplierPriceFormRequest.supplier), selectinload(SupplierPriceFormRequest.items))
+        .options(selectinload(SupplierPriceFormRequest.supplier).options(*_SUPPLIER_COLLECTIONS_NOLOAD), selectinload(SupplierPriceFormRequest.items))
         .where(SupplierPriceFormRequest.id == request_id)
     )).scalar_one_or_none()
     if not request:

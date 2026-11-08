@@ -10,9 +10,11 @@ from uuid import UUID, uuid4
 from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
 
 from app.models.anomalie import Anomalia, StatoValidazione
+from app.models.fornitori import Fornitore
+from app.models.location import Location
 from app.models.disputes import (
     DisputeAttachment,
     DisputeAuditEvent,
@@ -137,19 +139,31 @@ async def _audit(
     )
 
 
-def _case_options():
+def _case_options(*, include_attachment_content: bool = False):
+    # Attachment bytes are served only by the download endpoint; supplier,
+    # location and owner are serialized only through scalar name/email fields.
+    attachments = selectinload(DisputeCase.attachments)
+    if not include_attachment_content:
+        attachments = attachments.defer(DisputeAttachment.content)
     return (
         selectinload(DisputeCase.anomalies),
         selectinload(DisputeCase.communications),
-        selectinload(DisputeCase.attachments),
+        attachments,
         selectinload(DisputeCase.responses),
         selectinload(DisputeCase.credit_notes).selectinload(
             DisputeCreditNote.allocations
         ),
         selectinload(DisputeCase.audit_events),
-        selectinload(DisputeCase.supplier),
-        selectinload(DisputeCase.location),
-        selectinload(DisputeCase.owner),
+        selectinload(DisputeCase.supplier).options(
+            noload(Fornitore.fatture),
+            noload(Fornitore.listini),
+            noload(Fornitore.alias),
+        ),
+        selectinload(DisputeCase.location).options(
+            noload(Location.utenti),
+            noload(Location.fatture),
+        ),
+        selectinload(DisputeCase.owner).noload(Utente.location),
     )
 
 
@@ -159,10 +173,11 @@ async def load_case(
     user: Utente,
     *,
     for_update: bool = False,
+    include_attachment_content: bool = False,
 ) -> DisputeCase:
     statement = (
         select(DisputeCase)
-        .options(*_case_options())
+        .options(*_case_options(include_attachment_content=include_attachment_content))
         .where(DisputeCase.id == case_id)
     )
     if for_update:
