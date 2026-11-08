@@ -17,6 +17,7 @@ interface Product {
   supplier_pack_sizes: number[]
   container_type: string | null
   comparison_unit: string | null
+  supplier_form_note?: string | null
   is_commodity: boolean
   is_active: boolean
 }
@@ -149,6 +150,7 @@ export default function ProductIdentityManager() {
     unit_count: '1',
     container_type: '',
     comparison_unit: 'Pz',
+    supplier_form_note: '',
     is_commodity: false,
     is_active: true
   })
@@ -289,7 +291,8 @@ export default function ProductIdentityManager() {
         sku_interno: productForm.sku_interno || null,
         subcategory: productForm.subcategory || null,
         variant: productForm.variant || null,
-        container_type: productForm.container_type || null
+        container_type: productForm.container_type || null,
+        supplier_form_note: productForm.supplier_form_note.trim() || null
       }
 
       let res
@@ -482,6 +485,7 @@ export default function ProductIdentityManager() {
       unit_count: product.unit_count.toString(),
       container_type: product.container_type || '',
       comparison_unit: product.comparison_unit || '',
+      supplier_form_note: product.supplier_form_note || '',
       is_commodity: product.is_commodity,
       is_active: product.is_active
     })
@@ -701,6 +705,7 @@ export default function ProductIdentityManager() {
                     unit_count: '1',
                     container_type: '',
                     comparison_unit: 'piece',
+                    supplier_form_note: '',
                     is_commodity: false,
                     is_active: true
                   })
@@ -1995,6 +2000,18 @@ export default function ProductIdentityManager() {
                   <option value="Box" style={{ background: 'var(--bg-card)' }}>Box / Cassa</option>
                   <option value="CP" style={{ background: 'var(--bg-card)' }}>Coppia (CP)</option>
                 </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', gridColumn: '1 / -1' }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Indicazione per i fornitori (mostrata nel modulo listino)</label>
+                <input
+                  type="text"
+                  maxLength={500}
+                  placeholder="es. Indica il prezzo al kg: quantità 1, unità KG"
+                  value={productForm.supplier_form_note}
+                  onChange={e => setProductForm({ ...productForm, supplier_form_note: e.target.value })}
+                  style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
+                />
               </div>
 
               <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '16px' }}>

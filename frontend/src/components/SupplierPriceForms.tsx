@@ -457,7 +457,7 @@ export default function SupplierPriceForms() {
         {detail.request_type !== 'new_listino' && <div>Pattuito: € {i.prezzo_corrente} / {i.unita_corrente || 'unità da completare'}</div>}
         {i.non_trattato ? <div>Non trattato dal fornitore</div> : i.offerte_inviate?.length ? i.offerte_inviate.map((offer, index) => <div key={offer.id_offerta} style={{ marginTop: 8, padding: 8, borderLeft: '2px solid var(--accent-text)' }}>
           <strong>Offerta {index + 1}: € {offer.prezzo} per confezione da {offer.quantita_confezione} {offer.unita_misura}</strong>
-          <div>{offer.dicitura_fornitore} · Marca: {offer.marca}</div><small>ID offerta: {offer.id_offerta}{offer.nota ? ' · Nota: ' + offer.nota : ''}</small>
+          <div>{offer.dicitura_fornitore}{offer.marca ? ' · Marca: ' + offer.marca : ''}</div><small>ID offerta: {offer.id_offerta}{offer.nota ? ' · Nota: ' + offer.nota : ''}</small>
         </div>) : <><div>Offerta: {i.prezzo_inviato ? '€ ' + i.prezzo_inviato + ' per confezione' : 'in attesa'}</div><div>Dicitura del fornitore: {i.dicitura_inviata || 'da compilare'} · Marca: {i.brand_inviata || 'da compilare'} · Confezione: {i.quantita_inviata || 'da compilare'} {i.unita_inviata || ''}</div></>}
         <div>Esito: {i.esito === 'non_trattato' ? 'Non trattato' : i.esito === 'confermato' ? 'Confermato' : i.esito === 'nuova_offerta' ? 'Nuova offerta da revisionare' : i.esito === 'proposta_variazione' ? 'Proposta di variazione' : 'Da compilare'}{i.nota_fornitore ? ' · Nota: ' + i.nota_fornitore : ''}</div>
       </div>)}</div>
