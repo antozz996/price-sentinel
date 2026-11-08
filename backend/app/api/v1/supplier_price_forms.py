@@ -6,7 +6,8 @@ import secrets
 import re
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,12 +15,14 @@ from sqlalchemy.orm import noload, selectinload
 
 from app.api.deps import get_current_user, require_admin
 from app.database import get_db
+from app.models.company_settings import CompanySettings
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.products import Product, SupplierProductAlias
 from app.models.supplier_price_form import SupplierPriceFormIdentity, SupplierPriceFormItem, SupplierPriceFormRequest
 from app.models.utenti import Utente
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
+from app.services.supplier_form_pdf import PdfForm, PdfItem, PdfOffer, generate_supplier_form_pdf
 from app.services.variant_price_import import build_variant_preview, commit_variant_preview
 
 router = APIRouter()
@@ -804,6 +807,42 @@ async def reject_form_request(
     request.status = "rejected"
     await db.commit()
     return {"id": request.id, "status": request.status}
+
+
+@router.get("/{request_id}/pdf", summary="PDF del listino compilato dal fornitore, da condividere")
+async def form_request_pdf(
+    request_id: int,
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    request = (await db.execute(
+        select(SupplierPriceFormRequest)
+        .options(selectinload(SupplierPriceFormRequest.supplier).options(*_SUPPLIER_COLLECTIONS_NOLOAD), selectinload(SupplierPriceFormRequest.items))
+        .where(SupplierPriceFormRequest.id == request_id)
+    )).scalar_one_or_none()
+    if not request:
+        raise HTTPException(status_code=404, detail="Modulo non trovato")
+    if request.status not in ("submitted", "approved"):
+        raise HTTPException(status_code=409, detail="Il PDF è disponibile solo per i listini inviati o approvati")
+    company = await db.scalar(select(CompanySettings.company_name).order_by(CompanySettings.id).limit(1))
+    form = PdfForm(
+        company_name=company or "Price Sentinel",
+        supplier_name=request.supplier.nome_azienda if request.supplier else f"Fornitore {request.supplier_id}",
+        form_id=request.id, status=request.status, request_type=request.request_type,
+        submitted_at=request.submitted_at, valid_from=request.validita_inviata_da, valid_to=request.validita_inviata_a,
+        items=[PdfItem(
+            description=item.descrizione,
+            not_handled=item.non_trattato,
+            offers=[PdfOffer(price=Decimal(o["prezzo"]), quantity=Decimal(o["quantita_confezione"]), unit=o["unita_misura"])
+                    for o in item.offerte_inviate or []],
+            previous_price=item.prezzo_corrente, previous_quantity=item.quantita_corrente, previous_unit=item.unita_corrente,
+        ) for item in request.items],
+    )
+    content = await run_in_threadpool(generate_supplier_form_pdf, form)
+    slug = re.sub(r"[^a-z0-9]+", "-", form.supplier_name.lower()).strip("-") or "fornitore"
+    return Response(content=content, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="listino-{slug}-{request.id}.pdf"'})
 
 
 @router.get("/{request_id}", summary="Dettaglio risposta a un modulo listino")

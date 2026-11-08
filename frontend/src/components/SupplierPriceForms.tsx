@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { fetchWithAuth } from '../api';
+import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession } from '../api';
 
 type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string | null };
 type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean> };
@@ -257,6 +257,39 @@ export default function SupplierPriceForms() {
     catch (e) { setError(e instanceof Error ? e.message : 'Chiusura non riuscita'); }
     finally { setBusy(false); }
   };
+  // PDF of the compiled price list. On phones the share sheet attaches it directly
+  // (WhatsApp included); on desktop it is downloaded and the supplier chat is opened.
+  const sharePdf = async (form: FormRequest) => {
+    setError(''); setNotice('');
+    const url = `${API_BASE}/supplier-price-forms/${form.id}/pdf`;
+    try {
+      let response = await fetch(url, { headers: getHeaders() });
+      if (response.status === 401 && await refreshAuthSession(true)) response = await fetch(url, { headers: getHeaders() });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail || 'PDF non disponibile');
+      }
+      const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `listino-${form.id}.pdf`;
+      const blob = await response.blob();
+      const file = new File([blob], name, { type: 'application/pdf' });
+      const validity = form.validita_inviata_da
+        ? ` valido dal ${new Date(form.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')}${form.validita_inviata_a ? ' al ' + new Date(form.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT') : ''}`
+        : '';
+      const text = `Listino ${form.supplier_name}${validity}${form.status === 'approved' ? '' : ' (in revisione)'}.`;
+      if (navigator.canShare?.({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: name, text }); return; }
+        catch (shareError) { if ((shareError as DOMException)?.name === 'AbortError') return; }
+      }
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob); link.download = name; link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+      const phone = phoneForWhatsApp(suppliers.find(s => s.id === form.supplier_id)?.telefono_contatto);
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text + ' In allegato il PDF.')}`, '_blank', 'noopener,noreferrer');
+      setNotice(`PDF scaricato (${name}). Nella chat WhatsApp che si è aperta allegalo con la graffetta.`
+        + (phone ? '' : ' Numero del fornitore non presente: scegli tu il contatto.'));
+    } catch (e) { setError(e instanceof Error ? e.message : 'PDF non disponibile'); }
+  };
+
   const approveForm = async (id: number) => {
     if (!window.confirm('Integrare tutte le offerte di questa risposta nel listino operativo V2? I prezzi precedenti resteranno nello storico.')) return;
     setBusy(true); setError(''); setNotice('');
@@ -435,6 +468,7 @@ export default function SupplierPriceForms() {
     {detail && <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{formStatusLabel(detail.status)}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
+      {['submitted', 'approved'].includes(detail.status) && <p><button type="button" className="btn" onClick={() => void sharePdf(detail)}>📄 PDF listino · condividi su WhatsApp</button></p>}
       {detail.anagrafica_inviata ? <div style={{ ...card, marginBottom: 12, borderColor: 'var(--warn-border)' }}>
         <strong>Dati aziendali inviati dal fornitore</strong>
         <div>Ragione sociale: {detail.anagrafica_inviata.ragione_sociale}</div>
