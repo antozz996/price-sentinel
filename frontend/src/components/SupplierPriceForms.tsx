@@ -257,20 +257,39 @@ export default function SupplierPriceForms() {
     catch (e) { setError(e instanceof Error ? e.message : 'Chiusura non riuscita'); }
     finally { setBusy(false); }
   };
-  // PDF of the compiled price list. On phones the share sheet attaches it directly
-  // (WhatsApp included); on desktop it is downloaded and the supplier chat is opened.
+  // PDF of the compiled price list, named "<fornitore> - <data di compilazione>.pdf" by the server.
+  const fetchFormPdf = async (form: FormRequest): Promise<{ blob: Blob; name: string }> => {
+    const url = `${API_BASE}/supplier-price-forms/${form.id}/pdf`;
+    let response = await fetch(url, { headers: getHeaders() });
+    if (response.status === 401 && await refreshAuthSession(true)) response = await fetch(url, { headers: getHeaders() });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.detail || 'PDF non disponibile');
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const utf8Name = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+    const name = utf8Name ? decodeURIComponent(utf8Name) : (/filename="([^"]+)"/.exec(disposition)?.[1] || `${form.supplier_name}.pdf`);
+    return { blob: await response.blob(), name };
+  };
+  const saveBlob = (blob: Blob, name: string) => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = name; link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  };
+  const downloadPdf = async (form: FormRequest) => {
+    setError(''); setNotice('');
+    try {
+      const { blob, name } = await fetchFormPdf(form);
+      saveBlob(blob, name);
+      setNotice(`PDF scaricato: ${name}`);
+    } catch (e) { setError(e instanceof Error ? e.message : 'PDF non disponibile'); }
+  };
+  // On phones the share sheet attaches the PDF directly (WhatsApp included);
+  // on desktop it is downloaded and the supplier chat is opened.
   const sharePdf = async (form: FormRequest) => {
     setError(''); setNotice('');
-    const url = `${API_BASE}/supplier-price-forms/${form.id}/pdf`;
     try {
-      let response = await fetch(url, { headers: getHeaders() });
-      if (response.status === 401 && await refreshAuthSession(true)) response = await fetch(url, { headers: getHeaders() });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        throw new Error(body?.detail || 'PDF non disponibile');
-      }
-      const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || `listino-${form.id}.pdf`;
-      const blob = await response.blob();
+      const { blob, name } = await fetchFormPdf(form);
       const file = new File([blob], name, { type: 'application/pdf' });
       const validity = form.validita_inviata_da
         ? ` valido dal ${new Date(form.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')}${form.validita_inviata_a ? ' al ' + new Date(form.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT') : ''}`
@@ -280,9 +299,7 @@ export default function SupplierPriceForms() {
         try { await navigator.share({ files: [file], title: name, text }); return; }
         catch (shareError) { if ((shareError as DOMException)?.name === 'AbortError') return; }
       }
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob); link.download = name; link.click();
-      setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+      saveBlob(blob, name);
       const phone = phoneForWhatsApp(suppliers.find(s => s.id === form.supplier_id)?.telefono_contatto);
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text + ' In allegato il PDF.')}`, '_blank', 'noopener,noreferrer');
       setNotice(`PDF scaricato (${name}). Nella chat WhatsApp che si è aperta allegalo con la graffetta.`
@@ -461,14 +478,17 @@ export default function SupplierPriceForms() {
         <h2 style={{ margin: 0 }}>Moduli creati</h2><button className="btn" type="button" onClick={loadForms}>Aggiorna</button>
       </div>
       {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Tipo</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
-        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{f.request_type === 'new_listino' ? 'Nuova offerta' : 'Conferma prezzi'}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{formStatusLabel(f.status)}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> <button className="btn" type="button" disabled={busy || f.status === 'approved'} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
+        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{f.request_type === 'new_listino' ? 'Nuova offerta' : 'Conferma prezzi'}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{formStatusLabel(f.status)}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> {['submitted', 'approved'].includes(f.status) && <><button className="btn" type="button" onClick={() => void downloadPdf(f)} title="Scarica il PDF con i prezzi">PDF</button> </>}<button className="btn" type="button" disabled={busy || f.status === 'approved'} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
       </tbody></table></div> : <p style={{ color: 'var(--text-secondary)' }}>Nessun modulo ancora creato.</p>}
     </section>
 
     {detail && <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{formStatusLabel(detail.status)}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
-      {['submitted', 'approved'].includes(detail.status) && <p><button type="button" className="btn" onClick={() => void sharePdf(detail)}>📄 PDF listino · condividi su WhatsApp</button></p>}
+      {['submitted', 'approved'].includes(detail.status) && <p style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" className="btn" onClick={() => void downloadPdf(detail)}>⬇️ Scarica PDF prezzi</button>
+        <button type="button" className="btn" onClick={() => void sharePdf(detail)}>📄 Condividi PDF su WhatsApp</button>
+      </p>}
       {detail.anagrafica_inviata ? <div style={{ ...card, marginBottom: 12, borderColor: 'var(--warn-border)' }}>
         <strong>Dati aziendali inviati dal fornitore</strong>
         <div>Ragione sociale: {detail.anagrafica_inviata.ragione_sociale}</div>
