@@ -16,6 +16,7 @@ from app.models.alias import AliasProdotto
 from app.models.listino import ListinoMaster, UoMConversione
 from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.services.normalization import (
+    KG_UNITS,
     normalize_text,
     extract_candidate_attributes,
     extract_volume_ml,
@@ -122,7 +123,7 @@ def normalize_price_for_comparison(
         comp_unit = "box"
     elif raw_comp_unit in {"l", "lt", "liter", "litre", "litro", "litri"}:
         comp_unit = "liter"
-    elif raw_comp_unit in {"kg", "chilo", "chili", "kilo"}:
+    elif raw_comp_unit in KG_UNITS:
         comp_unit = "kg"
     else:
         comp_unit = "piece"
@@ -200,7 +201,7 @@ def normalize_price_for_comparison(
             explanation = "Volume mancante per calcolo prezzo al litro"
 
     elif comp_unit == "kg":
-        if uom_normalized in {"kg", "chilo", "chili", "kilo"}:
+        if uom_normalized in KG_UNITS:
             return NormalizedPriceResult(
                 normalized_unit_price=price,
                 comparison_unit=comp_unit,

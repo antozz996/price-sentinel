@@ -15,7 +15,11 @@ import psycopg2
 
 from app.main import app
 from app.services.auth import create_access_token
+from types import SimpleNamespace
+
+from app.services.matching import normalize_price_for_comparison
 from app.services.supplier_form_pdf import PdfOffer, _unit_price_text
+from app.services.supplier_list_import import normalize_price_uom
 from app.services.variant_price_import import _dimensions
 
 DSN = os.environ["TEST_DATABASE_DSN"]
@@ -57,6 +61,13 @@ async def run() -> None:
           _dimensions(Decimal("75"), "CL") == (1, 750, None))
     check("preset package units remain countable",
           _dimensions(Decimal("6"), "CT") == (6, None, None))
+    weighed = normalize_price_for_comparison(
+        Decimal("3.00"), Decimal("1"), "conf",
+        SimpleNamespace(comparison_unit="Kg", unit_count=1, volume_ml=None, weight_g=None),
+        SimpleNamespace(pack_qty=1, raw_description="FRAGOLE", volume_ml=None, weight_g=250))
+    check("an approved 0,25 KG offer is compared per kg (12,00/kg), not per piece",
+          weighed.reliable and weighed.comparison_unit == "kg" and weighed.normalized_unit_price == 12)
+    check("price list unit KG is recognised as kilograms", normalize_price_uom("KG") == "kg")
     check("PDF unit price is per kg for weighed packs (0,25 KG at 3,00 = 12,00/KG)",
           _unit_price_text(PdfOffer(Decimal("3"), Decimal("0.25"), "KG")) == "€ 12,00/KG")
     seed()

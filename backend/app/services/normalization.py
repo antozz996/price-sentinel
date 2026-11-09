@@ -8,6 +8,11 @@ import unicodedata
 from typing import Optional
 
 
+# normalize_text() expands "kg" to "chilogrammi": unit checks done on normalized text
+# must accept both forms, otherwise kilograms silently fall back to "piece".
+KG_UNITS = frozenset({"kg", "chilo", "chili", "kilo", "chilogrammo", "chilogrammi", "kilogrammo", "kilogrammi"})
+
+
 def normalize_text(text: str) -> str:
     """
     Normalizza una descrizione di testo:

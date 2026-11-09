@@ -26,6 +26,22 @@ def normalize(price, uom, target, pack_qty=None, comparison_unit="Pz"):
     )
 
 
+class KilogramUnitTest(unittest.TestCase):
+    """normalize_text() turns "kg" into "chilogrammi": kilograms must not fall back to "piece"."""
+
+    def test_product_in_kg_compares_per_kg(self):
+        result = normalize_price_for_comparison(Decimal("1.00"), Decimal("1"), "KG", product("Kg"), None)
+        self.assertTrue(result.reliable)
+        self.assertEqual(result.comparison_unit, "kg")
+
+    def test_weighed_pack_is_converted_to_price_per_kg(self):
+        pack = SimpleNamespace(pack_qty=1, raw_description="FRAGOLE", volume_ml=None, weight_g=250)
+        result = normalize_price_for_comparison(Decimal("3.00"), Decimal("1"), "conf", product("Kg"), pack)
+        self.assertTrue(result.reliable)
+        self.assertEqual(result.comparison_unit, "kg")
+        self.assertEqual(result.normalized_unit_price, Decimal("12"))
+
+
 class PackUnitTest(unittest.TestCase):
     def test_pack_price_matches_a_pack_price_list(self):
         result = normalize("50.09", "CF", "CF", pack_qty=54)
