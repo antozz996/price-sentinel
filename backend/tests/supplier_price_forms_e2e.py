@@ -18,6 +18,7 @@ from app.main import app
 from app.services.auth import create_access_token
 from types import SimpleNamespace
 
+from app.api.v1.supplier_price_forms import _best_price_decision
 from app.services.matching import normalize_price_for_comparison
 from app.services.supplier_form_pdf import PdfOffer, _unit_price_text
 from app.services.supplier_list_import import normalize_price_uom
@@ -69,6 +70,15 @@ async def run() -> None:
     check("an approved 0,25 KG offer is compared per kg (12,00/kg), not per piece",
           weighed.reliable and weighed.comparison_unit == "kg" and weighed.normalized_unit_price == 12)
     check("price list unit KG is recognised as kilograms", normalize_price_uom("KG") == "kg")
+    market = {("SKU", "kg"): Decimal("3.50")}
+    check("a recipient at or below the best comparable price is told it is the best",
+          _best_price_decision(market, {("SKU", "kg"): Decimal("3.00")}, {"SKU": Decimal("3.00")})
+          == {"SKU": (Decimal("3.5000"), "kg", True)})
+    check("the best price is hidden when the recipient's own (non comparable) price is already lower",
+          _best_price_decision(market, {}, {"SKU": Decimal("0.50")}) == {})
+    check("the best price is shown when the recipient's own price is higher or missing",
+          _best_price_decision(market, {}, {"SKU": Decimal("4.00")}) == {"SKU": (Decimal("3.5000"), "kg", False)}
+          and _best_price_decision(market, {}, {}) == {"SKU": (Decimal("3.5000"), "kg", False)})
     check("PDF unit price is per kg for weighed packs (0,25 KG at 3,00 = 12,00/KG)",
           _unit_price_text(PdfOffer(Decimal("3"), Decimal("0.25"), "KG")) == "€ 12,00/KG")
     seed()
@@ -355,6 +365,23 @@ async def run() -> None:
                                          json={"nome": "Fornitore da invitare CI", "categories": ["Beverage"]})
         check("admin creates a provisional supplier", new_supplier.status_code == 201)
         new_id = new_supplier.json()["id"]
+
+        # Best market price: off by default, shown only when the admin turns it on.
+        async def market_form(show: bool) -> tuple[int, dict]:
+            made = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers, json={
+                "supplier_id": new_id, "request_type": "new_listino", "category": "Beverage",
+                "product_ids": [1], "show_best_price": show})
+            body = made.json()
+            item = (await client.get(f"/api/v1/supplier-price-forms/public/{body['token']}")).json()["items"][0]
+            return body["request"]["id"], item
+        plain_id, plain_item = await market_form(False)
+        check("by default suppliers do not see the best market price", plain_item.get("miglior_prezzo") is None)
+        market_id, market_item = await market_form(True)
+        check("when enabled the best comparable price of other suppliers is shown per bottle "
+              "(6 BT at 20,00 = 3,3333)", market_item.get("miglior_prezzo") == {
+                  "prezzo": "3.3333", "unita": "bottle", "siete_i_migliori": False})
+        for form_id in (plain_id, market_id):
+            await client.delete(f"/api/v1/supplier-price-forms/{form_id}", headers=admin_headers)
         duplicate = await client.post("/api/v1/supplier-price-forms/new-supplier", headers=admin_headers,
                                       json={"nome": "fornitore da invitare ci", "categories": ["Beverage"]})
         check("the same provisional name cannot be created twice", duplicate.status_code == 409)

@@ -27,6 +27,7 @@ from app.models.products import Product, SupplierProductAlias
 from app.models.supplier_price_form import SupplierPriceFormIdentity, SupplierPriceFormItem, SupplierPriceFormRequest
 from app.models.utenti import Utente
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
+from app.services.matching import normalize_price_for_comparison
 from app.services.supplier_form_pdf import PdfForm, PdfItem, PdfOffer, generate_supplier_form_pdf
 from app.services.variant_price_import import build_variant_preview, commit_variant_preview
 
@@ -169,6 +170,74 @@ async def _offer_formats(db: AsyncSession, supplier_id: int, rows: list[ListinoM
     return formats
 
 
+async def _best_prices(db: AsyncSession, supplier_id: int, skus: set[str]) -> dict[str, tuple[Decimal, str, bool]]:
+    """Per SKU: (best comparable price of the other suppliers, base unit, recipient already at or below it).
+
+    Only active prices of active suppliers with a unit, normalized with the same function used
+    for orders (per kg, liter, piece, box, bottle); unreliable comparisons are left out, so a price
+    per piece is never presented as a price per kg.
+
+    The figure is meant to push prices down: when the recipient is not reliably comparable but
+    already has a price at or below the best one (even without a unit), nothing is shown, so a
+    supplier is never invited to raise its price.
+    """
+    if not skus:
+        return {}
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    products = {p.sku_interno: p for p in (await db.execute(
+        select(Product).where(Product.sku_interno.in_(skus), Product.is_active.is_(True))
+    )).scalars()}
+    rows = (await db.execute(
+        select(ListinoMaster, SupplierProductAlias)
+        .join(Fornitore, Fornitore.id == ListinoMaster.fornitore_id)
+        .outerjoin(SupplierProductAlias, SupplierProductAlias.id == ListinoMaster.supplier_product_alias_id)
+        .where(
+            ListinoMaster.sku_interno.in_(skus),
+            ListinoMaster.data_inizio_validita <= today,
+            (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= today),
+            Fornitore.attivo_whitelist.is_(True),
+            Fornitore.archived_at.is_(None),
+        )
+        .options(noload("*"))
+    )).all()
+    others: dict[tuple[str, str], Decimal] = {}
+    own: dict[tuple[str, str], Decimal] = {}
+    own_raw: dict[str, Decimal] = {}  # recipient's lowest current price, comparable or not
+    for row, alias in rows:
+        product = products.get(row.sku_interno)
+        if product is None:
+            continue
+        if row.fornitore_id == supplier_id:
+            raw = Decimal(str(row.prezzo_pattuito))
+            own_raw[row.sku_interno] = min(raw, own_raw.get(row.sku_interno, raw))
+        if not (row.unita_misura or "").strip():
+            continue
+        result = normalize_price_for_comparison(
+            Decimal(str(row.prezzo_pattuito)), Decimal("1"), row.unita_misura, product, alias)
+        if not result.reliable or result.normalized_unit_price <= 0:
+            continue
+        bucket = own if row.fornitore_id == supplier_id else others
+        key = (row.sku_interno, result.comparison_unit)
+        if key not in bucket or result.normalized_unit_price < bucket[key]:
+            bucket[key] = result.normalized_unit_price
+    return _best_price_decision(others, own, own_raw)
+
+
+def _best_price_decision(
+    others: dict[tuple[str, str], Decimal],
+    own: dict[tuple[str, str], Decimal],
+    own_raw: dict[str, Decimal],
+) -> dict[str, tuple[Decimal, str, bool]]:
+    best: dict[str, tuple[Decimal, str, bool]] = {}
+    for (sku, unit), price in others.items():
+        mine = own.get((sku, unit))
+        if mine is not None:  # reliably comparable: best price, or "you are the best"
+            best[sku] = (price.quantize(Decimal("0.0001")), unit, mine <= price)
+        elif sku not in own_raw or own_raw[sku] > price:  # never invite a supplier to raise its price
+            best[sku] = (price.quantize(Decimal("0.0001")), unit, False)
+    return best
+
+
 def _format_label(quantity: Decimal | None, unit: str | None) -> str:
     if not unit:
         return "unità da completare"
@@ -184,6 +253,7 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
         "supplier_name": request.supplier.nome_azienda if request.supplier else None,
         "status": request.status,
         "request_type": request.request_type,
+        "show_best_price": request.show_best_price,
         "created_at": request.created_at.isoformat(),
         "expires_at": request.expires_at.isoformat(),
         "submitted_at": request.submitted_at.isoformat() if request.submitted_at else None,
@@ -225,6 +295,9 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                     else "confermato" if item.conferma_prezzo
                     else "proposta_variazione"
                 ),
+                "best_price": str(item.best_price) if item.best_price is not None else None,
+                "best_price_unit": item.best_price_unit,
+                "recipient_is_best": item.recipient_is_best,
             }
             for item in request.items
         ],
@@ -239,6 +312,8 @@ class CreateFormRequest(BaseModel):
     category: Optional[str] = Field(default=None, max_length=100)
     expires_in_days: int = Field(default=14, ge=1, le=30)
     note: Optional[str] = Field(default=None, max_length=1000)
+    # Off unless the admin turns it on for this form.
+    show_best_price: bool = False
 
 
 class SupplierOffer(BaseModel):
@@ -312,6 +387,11 @@ async def get_public_form(
                 "validita_corrente_da": item.validita_corrente_da.isoformat() if item.validita_corrente_da else None,
                 "validita_corrente_a": item.validita_corrente_a.isoformat() if item.validita_corrente_a else None,
                 "istruzioni": notes_by_sku.get(item.sku_interno),
+                # Only when the admin chose to show it: price and base unit, never the competitor.
+                "miglior_prezzo": ({
+                    "prezzo": str(item.best_price), "unita": item.best_price_unit,
+                    "siete_i_migliori": bool(item.recipient_is_best),
+                } if request.show_best_price and item.best_price is not None else None),
             }
             for item in request.items
         ],
@@ -520,6 +600,13 @@ async def create_form_request(
             for row in rows
         ]
 
+    if payload.show_best_price:
+        # Snapshot now: the supplier sees a stable figure and the admin can review exactly what was shown.
+        best = await _best_prices(db, supplier.id, {item.sku_interno for item in form_items})
+        for item in form_items:
+            if item.sku_interno in best:
+                item.best_price, item.best_price_unit, item.recipient_is_best = best[item.sku_interno]
+
     token = secrets.token_urlsafe(36)
     now = datetime.now(timezone.utc)
     request = SupplierPriceFormRequest(
@@ -532,6 +619,7 @@ async def create_form_request(
         created_at=now,
         expires_at=now + timedelta(days=payload.expires_in_days),
         note=payload.note.strip() if payload.note else None,
+        show_best_price=payload.show_best_price,
         items=form_items,
     )
     db.add(request)

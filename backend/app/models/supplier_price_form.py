@@ -30,6 +30,8 @@ class SupplierPriceFormRequest(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     validita_inviata_da: Mapped[date | None] = mapped_column(Date, nullable=True)
     validita_inviata_a: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Opt-in chosen by the admin: show suppliers the best comparable market price (no competitor names).
+    show_best_price: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     supplier = relationship("Fornitore", lazy="selectin")
     items: Mapped[list["SupplierPriceFormItem"]] = relationship(
@@ -79,6 +81,11 @@ class SupplierPriceFormItem(Base):
     # Format of the agreed offer (e.g. 0.25 KG), so the supplier confirms "€ 3 per 0,25 KG" instead of "per conf".
     quantita_corrente: Mapped[Decimal | None] = mapped_column(Numeric(12, 3), nullable=True)
     dicitura_corrente: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Snapshot taken at creation (only with show_best_price): best comparable price of the other
+    # suppliers, per base unit (kg, liter, piece, box, bottle), and whether the recipient already beats it.
+    best_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 4), nullable=True)
+    best_price_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    recipient_is_best: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     validita_corrente_da: Mapped[date | None] = mapped_column(Date, nullable=True)
     validita_corrente_a: Mapped[date | None] = mapped_column(Date, nullable=True)
 

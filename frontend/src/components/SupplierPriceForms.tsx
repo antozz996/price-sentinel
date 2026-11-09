@@ -7,9 +7,9 @@ type CapabilitySupplier = { supplier_id: number; supplier_name: string; categori
 type Category = { nome: string; is_active: boolean };
 type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
 type SubmittedOffer = { id_offerta: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota?: string | null; conferma_prezzo: boolean };
-type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; offerte_inviate?: SubmittedOffer[]; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string };
+type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; offerte_inviate?: SubmittedOffer[]; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string; best_price?: string | null; best_price_unit?: string | null; recipient_is_best?: boolean | null };
 type SupplierDetails = { ragione_sociale: string; partita_iva: string; telefono_ordini: string };
-type FormRequest = { id: number; supplier_id: number; supplier_name: string; requires_supplier_details?: boolean; anagrafica_inviata?: SupplierDetails | null; request_type?: 'confirmation' | 'new_listino'; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
+type FormRequest = { id: number; supplier_id: number; supplier_name: string; requires_supplier_details?: boolean; anagrafica_inviata?: SupplierDetails | null; request_type?: 'confirmation' | 'new_listino'; show_best_price?: boolean; status: string; created_at: string; expires_at: string; submitted_at?: string | null; validita_inviata_da?: string | null; validita_inviata_a?: string | null; note?: string | null; items: FormItem[] };
 type CreateResult = { request: FormRequest; token: string; public_path: string };
 
 const FORM_STATUS_LABELS: Record<string, string> = {
@@ -21,6 +21,9 @@ const FORM_STATUS_LABELS: Record<string, string> = {
   closed: 'Chiuso',
 };
 const formStatusLabel = (status: string) => FORM_STATUS_LABELS[status] ?? status;
+const BASE_UNIT_LABELS: Record<string, string> = { kg: 'kg', liter: 'litro', piece: 'pezzo', box: 'confezione', bottle: 'bottiglia' };
+const bestPriceText = (price: string, unit?: string | null) =>
+  `€ ${Number(price).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}/${BASE_UNIT_LABELS[unit || ''] || unit || ''}`;
 type CreatedLink = { supplier: Supplier; url: string; publicPath: string };
 type MatrixResponse = { categories?: Category[]; suppliers?: CapabilitySupplier[] };
 
@@ -53,6 +56,7 @@ export default function SupplierPriceForms() {
   const [listinoSection, setListinoSection] = useState('all');
   const [days, setDays] = useState(14);
   const [note, setNote] = useState('');
+  const [showBestPrice, setShowBestPrice] = useState(false);  // opt-in per form, never on by default
   const [publicBaseUrl, setPublicBaseUrl] = useState(() => {
     if (configuredPublicOrigin) return configuredPublicOrigin;
     if (localBrowserOrigin) return localStorage.getItem('supplierFormsPublicBaseUrl') || window.location.origin;
@@ -233,7 +237,7 @@ export default function SupplierPriceForms() {
           ...(requestType === 'new_listino'
             ? { category: recipientMode === 'category' ? recipientCategory : productCategory, product_ids: listinoIds }
             : { listino_ids: listinoIds }),
-          expires_in_days: days, note: note.trim() || null
+          expires_in_days: days, note: note.trim() || null, show_best_price: showBestPrice
         }) }) as CreateResult;
         results.push({ supplier, url: publicOrigin + result.public_path, publicPath: result.public_path });
         setCreatedLinks([...results]);
@@ -439,6 +443,11 @@ export default function SupplierPriceForms() {
         </div>}
         <label>Scadenza link<select style={field} value={days} onChange={e => setDays(Number(e.target.value))}>{[7,14,21,30].map(d => <option key={d} value={d}>{d} giorni</option>)}</select></label>
         <label style={{ gridColumn: '1 / -1' }}>Nota per i fornitori<textarea style={field} rows={2} maxLength={1000} value={note} onChange={e => setNote(e.target.value)} placeholder="Facoltativa" /></label>
+        <label style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={showBestPrice} onChange={e => setShowBestPrice(e.target.checked)} style={{ marginTop: 3 }} />
+          <span><strong>Mostra ai fornitori il miglior prezzo ricevuto</strong>
+            <small style={{ display: 'block', color: 'var(--text-secondary)' }}>Accanto a ogni prodotto il fornitore vede il prezzo più basso degli altri fornitori, senza nomi, solo se confrontabile per unità (€/kg, €/pezzo…). Non compare se il fornitore ha già un prezzo uguale o più basso; se è il migliore vede “Siete il prezzo migliore”.</small></span>
+        </label>
       </div>
       {recipientMode === 'category' && recipientCategory && <p style={{ color: 'var(--text-secondary)' }}>Fornitori associati a {recipientCategory}: <strong>{selectedSuppliers.length}</strong></p>}
       {selectedSupplierIds.length > 0 && <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
@@ -528,6 +537,7 @@ export default function SupplierPriceForms() {
         <div>Telefono per gli ordini: {detail.anagrafica_inviata.telefono_ordini}</div>
         {detail.status === 'submitted' && <small style={{ color: 'var(--text-secondary)' }}>Con l’approvazione questi dati sostituiscono il nome provvisorio nell’anagrafica fornitore.</small>}
       </div> : detail.requires_supplier_details && <p style={{ color: 'var(--warn)' }}>Fornitore nuovo: ragione sociale, partita IVA e telefono arriveranno con la risposta.</p>}
+      {detail.show_best_price && <p style={{ color: 'var(--warn)' }}>Modulo inviato con il miglior prezzo di mercato visibile al fornitore ({detail.items.filter(i => i.best_price).length} prodotti).</p>}
       <p>Validità indicata dal fornitore: <strong>{detail.validita_inviata_da ? `dal ${new Date(detail.validita_inviata_da + 'T00:00:00').toLocaleDateString('it-IT')}${detail.validita_inviata_a ? ` al ${new Date(detail.validita_inviata_a + 'T00:00:00').toLocaleDateString('it-IT')}` : ' fino a nuova approvazione'}` : 'non ancora indicata'}</strong></p>
       {detail.status === 'submitted' && <div style={{ ...card, marginBottom: 12, borderColor: 'var(--accent-border)' }}>
         <h3 style={{ marginTop: 0 }}>Risposta pronta per la revisione</h3>
@@ -541,6 +551,7 @@ export default function SupplierPriceForms() {
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
         {detail.request_type !== 'new_listino' && <div>Pattuito: € {i.prezzo_corrente} {i.unita_corrente ? (i.quantita_corrente && Number(i.quantita_corrente) !== 1 ? `per ${Number(i.quantita_corrente).toLocaleString('it-IT')} ${i.unita_corrente}` : `/ ${i.unita_corrente}`) : '/ unità da completare'}</div>}
+        {detail.show_best_price && i.best_price && <div style={{ color: 'var(--text-secondary)' }}>Mostrato al fornitore: {i.recipient_is_best ? '“Siete il prezzo migliore”' : `miglior prezzo ricevuto ${bestPriceText(i.best_price, i.best_price_unit)}`}</div>}
         {i.non_trattato ? <div>Non trattato dal fornitore</div> : i.offerte_inviate?.length ? i.offerte_inviate.map((offer, index) => <div key={offer.id_offerta} style={{ marginTop: 8, padding: 8, borderLeft: '2px solid var(--accent-text)' }}>
           <strong>Offerta {index + 1}: € {offer.prezzo} per confezione da {offer.quantita_confezione} {offer.unita_misura}</strong>
           <div>{offer.dicitura_fornitore}{offer.marca ? ' · Marca: ' + offer.marca : ''}</div><small>ID offerta: {offer.id_offerta}{offer.nota ? ' · Nota: ' + offer.nota : ''}</small>
