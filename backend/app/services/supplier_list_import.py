@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.models.listino import ListinoMaster
-from app.services.normalization import normalize_text, extract_volume_ml, infer_category, extract_pack_qty, extract_weight_g
+from app.services.normalization import KG_UNITS, normalize_text, extract_volume_ml, infer_category, extract_pack_qty, extract_weight_g
 from app.services.matching import resolve_invoice_line_product
 
 
@@ -22,7 +22,7 @@ def normalize_price_uom(value: Any) -> str:
     normalized = normalize_text(str(value or "")).strip()
     aliases = {
         "liter": {"l", "lt", "litro", "litri", "liter", "litre"},
-        "kg": {"kg", "chilo", "chili", "kilo"},
+        "kg": KG_UNITS,
         "bottle": {"bottiglia", "bottiglie", "bot", "bt", "btl", "bottle"},
         "box": {
             "scatola", "scatole", "cassa", "casse", "box", "conf", "confezione",
