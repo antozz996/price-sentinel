@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 
 import httpx
@@ -209,7 +210,11 @@ async def run() -> None:
                                headers=admin_headers)
         check("an approved price list can be downloaded as a shareable PDF",
               pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf"
-              and pdf.content.startswith(b"%PDF") and "listino-" in pdf.headers["content-disposition"])
+              and pdf.content.startswith(b"%PDF"))
+        rome_today = datetime.now(ZoneInfo("Europe/Rome")).strftime("%d-%m-%Y")
+        check("the PDF is named after the supplier and the compilation date",
+              f'filename="Supplier forms CI synthetic - {rome_today}.pdf"' in pdf.headers["content-disposition"]
+              and "filename*=UTF-8''Supplier%20forms%20CI%20synthetic%20-%20" in pdf.headers["content-disposition"])
         pending_after = await client.get("/api/v1/supplier-price-forms/notifications/pending",
                                          headers=admin_headers)
         check("notification clears after approval",

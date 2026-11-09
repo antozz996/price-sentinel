@@ -4,6 +4,8 @@ from decimal import Decimal
 from hashlib import sha256
 import secrets
 import re
+import unicodedata
+from urllib.parse import quote
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -840,9 +842,17 @@ async def form_request_pdf(
         ) for item in request.items],
     )
     content = await run_in_threadpool(generate_supplier_form_pdf, form)
-    slug = re.sub(r"[^a-z0-9]+", "-", form.supplier_name.lower()).strip("-") or "fornitore"
     return Response(content=content, media_type="application/pdf", headers={
-        "Content-Disposition": f'attachment; filename="listino-{slug}-{request.id}.pdf"'})
+        "Content-Disposition": _pdf_disposition(form.supplier_name, request.submitted_at)})
+
+
+def _pdf_disposition(supplier_name: str, submitted_at: datetime | None) -> str:
+    """'<fornitore> - <data di compilazione>.pdf', e.g. "LA BONTA' DELL'ORTO SRL - 07-11-2026.pdf"."""
+    compiled = (submitted_at or datetime.now(timezone.utc)).astimezone(ZoneInfo("Europe/Rome"))
+    name = " ".join(re.sub(r'[\\/:*?"<>|]+', " ", supplier_name).split()) or "Fornitore"
+    filename = f"{name} - {compiled:%d-%m-%Y}.pdf"
+    ascii_name = unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode() or "listino.pdf"
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 @router.get("/{request_id}", summary="Dettaglio risposta a un modulo listino")
