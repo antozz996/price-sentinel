@@ -2,12 +2,14 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from decimal import Decimal
 from hashlib import sha256
+import base64
 import secrets
 import re
 import unicodedata
 from urllib.parse import quote
 from typing import Literal, Optional
 
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -16,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload, selectinload
 
 from app.api.deps import get_current_user, require_admin
+from app.config import settings
 from app.database import get_db
 from app.models.company_settings import CompanySettings
 from app.models.fornitori import Fornitore
@@ -86,6 +89,27 @@ def _offer_id(supplier_id: int, sku: str, offer: "SupplierOffer") -> str:
         (offer.unita_misura or "").strip().casefold(),
     ))
     return "OFF-" + sha256(identity.encode("utf-8")).hexdigest()[:16].upper()
+
+
+def _token_cipher() -> Fernet:
+    # Dedicated key derived from the app secret: the stored token is useless without it.
+    key = base64.urlsafe_b64encode(sha256(f"supplier-form-link:{settings.SECRET_KEY}".encode("utf-8")).digest())
+    return Fernet(key)
+
+
+def _encrypt_token(token: str) -> str:
+    return _token_cipher().encrypt(token.encode("utf-8")).decode("ascii")
+
+
+def _stored_token(request: SupplierPriceFormRequest) -> str | None:
+    """The current link token, if it was stored and still matches the active hash."""
+    if not request.token_encrypted:
+        return None
+    try:
+        token = _token_cipher().decrypt(request.token_encrypted.encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        return None
+    return token if sha256(token.encode("utf-8")).hexdigest() == request.token_hash else None
 
 
 _PACK_UNIT_BY_COMPARISON = {"pz": "PZ", "piece": "PZ", "ct": "CT", "bt": "BT", "bottle": "BT", "cf": "CF"}
@@ -503,6 +527,7 @@ async def create_form_request(
         created_by_id=admin.id,
         request_type=payload.request_type,
         token_hash=sha256(token.encode("utf-8")).hexdigest(),
+        token_encrypted=_encrypt_token(token),
         status="open",
         created_at=now,
         expires_at=now + timedelta(days=payload.expires_in_days),
@@ -809,6 +834,49 @@ async def reject_form_request(
     request.status = "rejected"
     await db.commit()
     return {"id": request.id, "status": request.status}
+
+
+class ShareLinkRequest(BaseModel):
+    # Only for forms created before links were stored: issue a new link (the old one stops working).
+    new_link: bool = False
+
+
+@router.post("/{request_id}/share-link", summary="Link di un modulo in coda, da condividere di nuovo")
+async def share_form_link(
+    request_id: int,
+    payload: ShareLinkRequest,
+    admin: Utente = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_primary_tenant(admin)
+    request = (await db.execute(
+        select(SupplierPriceFormRequest)
+        .options(selectinload(SupplierPriceFormRequest.supplier).options(*_SUPPLIER_COLLECTIONS_NOLOAD))
+        .where(SupplierPriceFormRequest.id == request_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if not request:
+        raise HTTPException(status_code=404, detail="Modulo non trovato")
+    if request.status != "open" or request.expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=409, detail="Il link si può condividere solo per i moduli aperti e non scaduti")
+    token = _stored_token(request)
+    new_link = False
+    if token is None:
+        if not payload.new_link:
+            return {"needs_new_link": True}
+        token = secrets.token_urlsafe(36)
+        request.token_hash = sha256(token.encode("utf-8")).hexdigest()
+        request.token_encrypted = _encrypt_token(token)
+        new_link = True
+        await db.commit()
+    return {
+        "needs_new_link": False,
+        "new_link": new_link,
+        "public_path": f"/fornitore/listino/{token}",
+        "expires_at": request.expires_at.isoformat(),
+        "supplier_id": request.supplier_id,
+        "supplier_name": request.supplier.nome_azienda if request.supplier else None,
+    }
 
 
 @router.get("/{request_id}/pdf", summary="PDF del listino compilato dal fornitore, da condividere")

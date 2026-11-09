@@ -20,6 +20,8 @@ class SupplierPriceFormRequest(Base):
         Integer, ForeignKey("utenti.id", ondelete="RESTRICT"), nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    # Same token encrypted with the app secret, so the admin can share the link again later.
+    token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_type: Mapped[str] = mapped_column(String(30), nullable=False, default="confirmation", server_default="confirmation")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

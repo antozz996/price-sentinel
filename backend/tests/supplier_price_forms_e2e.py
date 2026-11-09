@@ -313,6 +313,29 @@ async def run() -> None:
         overdue_id = overdue.json()["request"]["id"]
         open_pdf = await client.get(f"/api/v1/supplier-price-forms/{overdue_id}/pdf", headers=admin_headers)
         check("a form not yet compiled has no PDF", open_pdf.status_code == 409)
+        share_url = f"/api/v1/supplier-price-forms/{overdue_id}/share-link"
+        shared = await client.post(share_url, headers=admin_headers, json={"new_link": False})
+        check("a queued form shares the same link again",
+              shared.status_code == 200 and shared.json()["public_path"] == overdue.json()["public_path"])
+        with psycopg2.connect(DSN) as connection:  # a form created before links were stored
+            with connection.cursor() as cursor:
+                cursor.execute("update supplier_price_form_requests set token_encrypted=null where id=%s", (overdue_id,))
+        legacy = await client.post(share_url, headers=admin_headers, json={"new_link": False})
+        check("an older form without stored link asks before issuing a new one",
+              legacy.status_code == 200 and legacy.json() == {"needs_new_link": True})
+        renewed = await client.post(share_url, headers=admin_headers, json={"new_link": True})
+        new_path = renewed.json().get("public_path", "")
+        old_token = overdue.json()["public_path"].rsplit("/", 1)[1]
+        check("a new link is issued on request", renewed.status_code == 200 and renewed.json()["new_link"]
+              and new_path and new_path != overdue.json()["public_path"])
+        old_public = await client.get(f"/api/v1/supplier-price-forms/public/{old_token}")
+        new_public = await client.get(f"/api/v1/supplier-price-forms/public/{new_path.rsplit('/', 1)[1]}")
+        check("the replaced link stops working and the new one opens the form",
+              old_public.status_code == 404 and new_public.status_code == 200)
+        approved_share = await client.post(
+            f"/api/v1/supplier-price-forms/{created_data['request']['id']}/share-link",
+            headers=admin_headers, json={"new_link": True})
+        check("an approved form link cannot be shared or renewed", approved_share.status_code == 409)
     with psycopg2.connect(DSN) as connection:
         with connection.cursor() as cursor:
             cursor.execute("update supplier_price_form_requests set expires_at=now() - interval '1 minute' "

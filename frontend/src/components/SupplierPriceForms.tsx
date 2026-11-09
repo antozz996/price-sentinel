@@ -65,6 +65,7 @@ export default function SupplierPriceForms() {
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [listNotice, setListNotice] = useState('');  // feedback for actions on created forms (link, PDF)
   const [newSupplierOpen, setNewSupplierOpen] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
   const [newSupplierCategories, setNewSupplierCategories] = useState<string[]>([]);
@@ -277,17 +278,17 @@ export default function SupplierPriceForms() {
     setTimeout(() => URL.revokeObjectURL(link.href), 10000);
   };
   const downloadPdf = async (form: FormRequest) => {
-    setError(''); setNotice('');
+    setError(''); setNotice(''); setListNotice('');
     try {
       const { blob, name } = await fetchFormPdf(form);
       saveBlob(blob, name);
-      setNotice(`PDF scaricato: ${name}`);
+      setListNotice(`PDF scaricato: ${name}`);
     } catch (e) { setError(e instanceof Error ? e.message : 'PDF non disponibile'); }
   };
   // On phones the share sheet attaches the PDF directly (WhatsApp included);
   // on desktop it is downloaded and the supplier chat is opened.
   const sharePdf = async (form: FormRequest) => {
-    setError(''); setNotice('');
+    setError(''); setNotice(''); setListNotice('');
     try {
       const { blob, name } = await fetchFormPdf(form);
       const file = new File([blob], name, { type: 'application/pdf' });
@@ -302,7 +303,7 @@ export default function SupplierPriceForms() {
       saveBlob(blob, name);
       const phone = phoneForWhatsApp(suppliers.find(s => s.id === form.supplier_id)?.telefono_contatto);
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text + ' In allegato il PDF.')}`, '_blank', 'noopener,noreferrer');
-      setNotice(`PDF scaricato (${name}). Nella chat WhatsApp che si è aperta allegalo con la graffetta.`
+      setListNotice(`PDF scaricato (${name}). Nella chat WhatsApp che si è aperta allegalo con la graffetta.`
         + (phone ? '' : ' Numero del fornitore non presente: scegli tu il contatto.'));
     } catch (e) { setError(e instanceof Error ? e.message : 'PDF non disponibile'); }
   };
@@ -349,6 +350,34 @@ export default function SupplierPriceForms() {
     try { await navigator.clipboard.writeText(url); setNotice('Link copiato negli appunti.'); }
     catch { setNotice('Copia non disponibile: seleziona e copia il link mostrato.'); }
   };
+  // Share again the link of a queued form (open, not yet compiled): full URL copied and supplier chat opened.
+  const isQueued = (form: FormRequest) => form.status === 'open' && new Date(form.expires_at).getTime() > Date.now();
+  const shareFormLink = async (form: FormRequest) => {
+    setError(''); setNotice(''); setListNotice('');
+    if (!publicUrlReady) { setError('Indirizzo pubblico dell’app non valido: impostalo nella sezione di creazione dei moduli.'); return; }
+    try {
+      const call = (newLink: boolean) => fetchWithAuth(`/supplier-price-forms/${form.id}/share-link`, {
+        method: 'POST', body: JSON.stringify({ new_link: newLink }),
+      });
+      let result = await call(false);
+      if (result.needs_new_link) {
+        const ok = window.confirm(`Il modulo per ${form.supplier_name} è stato creato prima che i link venissero salvati, quindi quello originale non è recuperabile.\n\nGenero un nuovo link? Il link precedente smetterà di funzionare: se l’avevi già inviato, il fornitore dovrà usare quello nuovo.`);
+        if (!ok) return;
+        result = await call(true);
+      }
+      const url = publicOrigin + result.public_path;
+      const daysLeft = Math.max(1, Math.ceil((new Date(result.expires_at).getTime() - Date.now()) / 86400000));
+      const phone = phoneForWhatsApp(suppliers.find(s => s.id === form.supplier_id)?.telefono_contatto);
+      try { await navigator.clipboard.writeText(url); } catch { /* the link is also shown in the notice */ }
+      if (!isLocalAddress(publicOrigin)) {
+        const message = `Buongiorno ${form.supplier_name}, ti inviamo il modulo per la verifica del listino: ${url}\n\nIl link scade tra ${daysLeft} giorni.`;
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+      }
+      setListNotice(`${result.new_link ? 'Nuovo link generato e copiato' : 'Link copiato'} per ${form.supplier_name}: ${url}`
+        + (isLocalAddress(publicOrigin) ? ' (indirizzo locale: non inviarlo al fornitore)' : phone ? '' : ' · numero WhatsApp non in anagrafica: scegli tu il contatto nella chat aperta'));
+    } catch (e) { setError(e instanceof Error ? e.message : 'Condivisione del link non riuscita'); }
+  };
+
   const whatsappUrl = (item: CreatedLink) => {
     const phone = phoneForWhatsApp(item.supplier.telefono_contatto);
     if (!phone || !publicUrlReady || isLocalAddress(publicOrigin)) return '';
@@ -477,14 +506,17 @@ export default function SupplierPriceForms() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>Moduli creati</h2><button className="btn" type="button" onClick={loadForms}>Aggiorna</button>
       </div>
+      {listNotice && <div role="status" style={{ color: 'var(--ok)', marginTop: 10, overflowWrap: 'anywhere' }}>{listNotice}</div>}
+      {error && <div role="alert" style={{ color: 'var(--crit)', marginTop: 10 }}>{error}</div>}
       {forms.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}><table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th align="left">Fornitore</th><th align="left">Tipo</th><th align="left">Creato</th><th align="left">Scadenza</th><th align="left">Stato</th><th></th></tr></thead><tbody>
-        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{f.request_type === 'new_listino' ? 'Nuova offerta' : 'Conferma prezzi'}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{formStatusLabel(f.status)}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> {['submitted', 'approved'].includes(f.status) && <><button className="btn" type="button" onClick={() => void downloadPdf(f)} title="Scarica il PDF con i prezzi">PDF</button> </>}<button className="btn" type="button" disabled={busy || f.status === 'approved'} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
+        {forms.map(f => <tr key={f.id}><td>{f.supplier_name}</td><td>{f.request_type === 'new_listino' ? 'Nuova offerta' : 'Conferma prezzi'}</td><td>{new Date(f.created_at).toLocaleDateString('it-IT')}</td><td>{new Date(f.expires_at).toLocaleDateString('it-IT')}</td><td>{formStatusLabel(f.status)}</td><td style={{ whiteSpace: 'nowrap' }}><button className="btn" type="button" onClick={() => openDetail(f.id)}>Dettaglio</button> {isQueued(f) && <><button className="btn" type="button" style={{ background: '#25D366', borderColor: '#25D366', color: '#fff' }} onClick={() => void shareFormLink(f)} title="Copia il link e apri la chat WhatsApp del fornitore">Condividi link</button> </>}{['submitted', 'approved'].includes(f.status) && <><button className="btn" type="button" onClick={() => void downloadPdf(f)} title="Scarica il PDF con i prezzi">PDF</button> </>}<button className="btn" type="button" disabled={busy || f.status === 'approved'} onClick={() => deleteForm(f)} aria-label={`Elimina modulo per ${f.supplier_name}`} title="Elimina modulo">Elimina</button></td></tr>)}
       </tbody></table></div> : <p style={{ color: 'var(--text-secondary)' }}>Nessun modulo ancora creato.</p>}
     </section>
 
     {detail && <section style={card}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><h2 style={{ marginTop: 0 }}>{detail.request_type === 'new_listino' ? 'Nuova offerta da revisionare' : 'Risposte'} · {detail.supplier_name}</h2><button className="btn" onClick={() => setDetail(null)}>Chiudi</button></div>
       <p>Stato: <strong>{formStatusLabel(detail.status)}</strong>{detail.submitted_at ? ' · inviato ' + new Date(detail.submitted_at).toLocaleString('it-IT') : ''}</p>
+      {isQueued(detail) && <p><button type="button" className="btn" style={{ background: '#25D366', borderColor: '#25D366', color: '#fff' }} onClick={() => void shareFormLink(detail)}>Condividi link al fornitore</button></p>}
       {['submitted', 'approved'].includes(detail.status) && <p style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" className="btn" onClick={() => void downloadPdf(detail)}>⬇️ Scarica PDF prezzi</button>
         <button type="button" className="btn" onClick={() => void sharePdf(detail)}>📄 Condividi PDF su WhatsApp</button>
