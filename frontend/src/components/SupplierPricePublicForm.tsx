@@ -3,10 +3,15 @@ import type { CSSProperties, FormEvent } from 'react';
 import { API_BASE } from '../api';
 import { normalizeSupplierUnit, SUPPLIER_UNIT_OPTIONS } from '../constants/units';
 
-type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; dicitura_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null; istruzioni?: string | null };
+type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; dicitura_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null; istruzioni?: string | null; miglior_prezzo?: { prezzo: string; unita: string; siete_i_migliori: boolean } | null };
 type FormData = { supplier_name: string; requires_supplier_details?: boolean; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
 type ExtraOffer = { key: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota: string };
 type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string; extraOffers: ExtraOffer[] };
+
+// Best comparable market price chosen by the buyer to be shown (no competitor names).
+const BASE_UNIT_LABELS: Record<string, string> = { kg: 'kg', liter: 'litro', piece: 'pezzo', box: 'confezione', bottle: 'bottiglia' };
+const bestPriceLabel = (price: string, unit: string) =>
+  `€ ${Number(price).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}/${BASE_UNIT_LABELS[unit] || unit}`;
 
 // "€ 3,00 per 0,25 KG" or "€ 1,00 / KG" for the agreed offer format.
 const formatLabel = (quantita: string | null | undefined, unita: string) => {
@@ -148,6 +153,9 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>{item.descrizione}</h2>
         <p style={{ color: 'var(--text-secondary)' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? formatLabel(item.quantita_corrente, item.unita_corrente) : ' (unità da indicare)'}`}</p>
         {data.request_type === 'confirmation' && !item.unita_corrente && <p style={{ color: 'var(--warn)' }}>Il prezzo attuale non ha un’unità di misura: indica quantità e unità a cui si riferisce il tuo prezzo (KG, PZ, cartone…).</p>}
+        {item.miglior_prezzo && (item.miglior_prezzo.siete_i_migliori
+          ? <p style={{ padding: 10, border: '1px solid var(--ok-border)', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--text-primary)' }}>✅ <strong>Siete il prezzo migliore</strong> tra le offerte che abbiamo ricevuto per questo prodotto.</p>
+          : <p style={{ padding: 10, border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', background: 'var(--accent-bg)', color: 'var(--text-primary)' }}>📉 <strong>Miglior prezzo ricevuto: {bestPriceLabel(item.miglior_prezzo.prezzo, item.miglior_prezzo.unita)}</strong></p>)}
         {item.istruzioni &&<p style={{ padding: 10, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Indicazione per questo prodotto:</strong> {item.istruzioni}</p>}
         {data.request_type === 'confirmation' && item.validita_corrente_da &&<p style={{ color: 'var(--text-secondary)' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
         <label style={{ display: 'block', margin: '12px 0' }}><input type="checkbox" checked={answer.non_trattato} onChange={e => setAnswer(item.id, { non_trattato: e.target.checked })} /> Non trattiamo questo prodotto</label>
