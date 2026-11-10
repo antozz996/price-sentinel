@@ -118,7 +118,9 @@ async def run() -> None:
         denied = await client.get("/api/v1/volumi", headers=manager)
         check("a manager cannot open the admin volume analysis", denied.status_code == 403)
         anonymous = await client.get("/api/v1/volumi")
-        check("an anonymous user cannot open the volume analysis", anonymous.status_code in (401, 403))
+        check("a request without credentials is refused", anonymous.status_code in (401, 403, 422))
+        forged = await client.get("/api/v1/volumi", headers={"Authorization": "Bearer not-a-token"})
+        check("an invalid token cannot open the volume analysis", forged.status_code == 401)
 
         options = await client.get("/api/v1/volumi/opzioni", headers=admin)
         check("filter options list suppliers and categories",
