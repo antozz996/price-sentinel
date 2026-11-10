@@ -46,6 +46,18 @@ def _normalized_unit(value: str | None) -> str:
     return unit
 
 
+def _check_quantity(quantity: Decimal, unit: str, product: str) -> None:
+    """Reject impossible package sizes (0,001 KG, 1,2 pieces) before they become prices."""
+    if unit in {"KG", "L"}:
+        ok = quantity >= Decimal("0.01")
+        hint = "almeno 0,01 (10 g / 10 ml)"
+    else:  # grams, centilitres, millilitres and countable units are whole numbers
+        ok = quantity >= 1 and quantity == quantity.to_integral_value()
+        hint = "un numero intero (es. 1)"
+    if not ok:
+        raise HTTPException(status_code=422, detail=f"{product}: la quantità per {unit} deve essere {hint}")
+
+
 # Fornitore.fatture/listini/alias are lazy="selectin": only scalar supplier
 # columns are used here, so skip loading the whole invoice/price history.
 _SUPPLIER_COLLECTIONS_NOLOAD = (noload(Fornitore.fatture), noload(Fornitore.listini), noload(Fornitore.alias))
@@ -468,6 +480,7 @@ async def submit_public_form(
                 raise HTTPException(status_code=422, detail=f"Completa quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
             brand = (offer.marca or "").strip() or None
             unit = _normalized_unit(offer.unita_misura)
+            _check_quantity(offer.quantita_confezione, unit, item.descrizione)
             if request.request_type == "new_listino" and offer.conferma_prezzo:
                 raise HTTPException(status_code=422, detail="Una nuova offerta non può essere marcata come conferma")
             if offer.conferma_prezzo and index != 0:
