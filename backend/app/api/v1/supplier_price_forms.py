@@ -166,7 +166,9 @@ async def _offer_formats(db: AsyncSession, supplier_id: int, rows: list[ListinoM
             unit = _PACK_UNIT_BY_COMPARISON.get((product.comparison_unit or "").strip().lower()) if product else None
         else:
             quantity, unit = None, None
-        formats[row.id] = (quantity if unit else None, unit, alias.raw_description, alias.brand)
+        # Imported aliases may carry our internal code as description: never show it as the supplier's wording.
+        wording = alias.raw_description if alias.raw_description and alias.raw_description.strip() != row.sku_interno else None
+        formats[row.id] = (quantity if unit else None, unit, wording, alias.brand)
     return formats
 
 
@@ -459,7 +461,8 @@ async def submit_public_form(
         seen_offer_ids: set[str] = set()
         for index, offer in enumerate(offers):
             # Brand and supplier wording are optional (fresh produce): wording falls back to our description.
-            if not (offer.dicitura_fornitore or "").strip():
+            # Our internal code is never the supplier's wording (older forms prefilled it).
+            if not (offer.dicitura_fornitore or "").strip() or offer.dicitura_fornitore.strip() == item.sku_interno:
                 offer.dicitura_fornitore = item.descrizione[:255]
             if offer.prezzo is None or not (offer.unita_misura or "").strip() or offer.quantita_confezione is None:
                 raise HTTPException(status_code=422, detail=f"Completa quantità, unità e prezzo dell'offerta {index + 1} per {item.sku_interno}")
