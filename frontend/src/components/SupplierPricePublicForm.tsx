@@ -13,6 +13,10 @@ const BASE_UNIT_LABELS: Record<string, string> = { kg: 'kg', liter: 'litro', pie
 const bestPriceLabel = (price: string, unit: string) =>
   `€ ${Number(price).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}/${BASE_UNIT_LABELS[unit] || unit}`;
 
+// KG/L accept fractions down to 10 g/10 ml; every other unit is a whole count (mirrors the backend check).
+const quantityLimits = (unit: string) =>
+  ['KG', 'L'].includes((unit || '').toUpperCase()) ? { min: '0.01', step: '0.01' } : { min: '1', step: '1' };
+
 // "€ 3,00 per 0,25 KG" or "€ 1,00 / KG" for the agreed offer format.
 const formatLabel = (quantita: string | null | undefined, unita: string) => {
   const q = Number(quantita);
@@ -162,7 +166,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         {answer.non_trattato ? <p style={{ color: 'var(--text-secondary)' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
           <label>Vostra denominazione (facoltativa)<input style={input} maxLength={255} placeholder={item.descrizione} value={answer.dicitura_fornitore} onChange={e => setAnswer(item.id, { dicitura_fornitore: e.target.value })} /></label>
           <label>Marca (facoltativa)<input style={input} maxLength={100} value={answer.marca} onChange={e => setAnswer(item.id, { marca: e.target.value })} /></label>
-          <label>Quantità della confezione<input style={input} type="number" min="0.001" step="0.001" required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /></label>
+          <label>Quantità della confezione<input style={input} type="number" {...quantityLimits(answer.unita_misura)} required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /></label>
           <label>Unità di misura<select style={input} required value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
           <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /><small style={{ display: 'block', color: 'var(--text-secondary)' }}>Prezzo totale della quantità indicata.</small><UnitPriceHint prezzo={answer.prezzo} quantita={answer.quantita_confezione} unita={answer.unita_misura} /></label>
         </div>}
@@ -171,7 +175,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginTop: 10 }}>
             <label>Vostra denominazione (facoltativa)<input style={input} maxLength={255} placeholder={item.descrizione} value={offer.dicitura_fornitore} onChange={e => changeExtraOffer(item.id, offer.key, { dicitura_fornitore: e.target.value })} /></label>
             <label>Marca (facoltativa)<input style={input} maxLength={100} value={offer.marca} onChange={e => changeExtraOffer(item.id, offer.key, { marca: e.target.value })} /></label>
-            <label>Quantità della confezione<input style={input} type="number" min="0.001" step="0.001" required value={offer.quantita_confezione} onChange={e => changeExtraOffer(item.id, offer.key, { quantita_confezione: e.target.value })} /></label>
+            <label>Quantità della confezione<input style={input} type="number" {...quantityLimits(offer.unita_misura)} required value={offer.quantita_confezione} onChange={e => changeExtraOffer(item.id, offer.key, { quantita_confezione: e.target.value })} /></label>
             <label>Unità di misura<select style={input} required value={offer.unita_misura} onChange={e => changeExtraOffer(item.id, offer.key, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
             <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={offer.prezzo} onChange={e => changeExtraOffer(item.id, offer.key, { prezzo: e.target.value })} /><UnitPriceHint prezzo={offer.prezzo} quantita={offer.quantita_confezione} unita={offer.unita_misura} /></label>
           </div>

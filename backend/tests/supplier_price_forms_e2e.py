@@ -126,6 +126,15 @@ async def run() -> None:
             }]},
         )
         check("incomplete supplier packaging cannot be submitted", incomplete.status_code == 422)
+        for qty, unit in (("0.001", "KG"), ("1.2", "BT"), ("0", "BT")):
+            impossible = await client.post(
+                f"/api/v1/supplier-price-forms/public/{token}/submit",
+                json={"validita_inviata_da": start.isoformat(), "answers": [{
+                    "item_id": item_id, "prezzo": "4.2500", "unita_misura": unit,
+                    "quantita_confezione": qty, "non_trattato": False,
+                }]},
+            )
+            check(f"an impossible package size ({qty} {unit}) is refused", impossible.status_code == 422)
         submitted = await client.post(
             f"/api/v1/supplier-price-forms/public/{token}/submit",
             json={
