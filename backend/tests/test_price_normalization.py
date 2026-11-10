@@ -42,6 +42,20 @@ class KilogramUnitTest(unittest.TestCase):
         self.assertEqual(result.normalized_unit_price, Decimal("12"))
 
 
+class WeightPricePerPieceTest(unittest.TestCase):
+    """A price per kg/litre on a product compared per piece must not pass as a price per piece."""
+
+    def test_price_per_kg_is_not_a_price_per_piece(self):
+        for uom in ("KG", "kg", "LT", "L", "GR"):
+            result = normalize_price_for_comparison(Decimal("25.90"), Decimal("1"), uom, product("Pz"), None)
+            self.assertFalse(result.reliable, uom)
+
+    def test_piece_and_pack_prices_stay_reliable(self):
+        for uom in ("PZ", "NR", "BT", None):
+            result = normalize_price_for_comparison(Decimal("1.32"), Decimal("1"), uom, product("Pz"), None)
+            self.assertTrue(result.reliable, uom)
+
+
 class PackUnitTest(unittest.TestCase):
     def test_pack_price_matches_a_pack_price_list(self):
         result = normalize("50.09", "CF", "CF", pack_qty=54)

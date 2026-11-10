@@ -60,6 +60,13 @@ class NormalizedPriceResult:
     explanation: str = ""
 
 
+# Weight/volume units (after normalize_text) other than kg: a price in these is never per piece.
+MEASURE_UOMS = frozenset({
+    "g", "gr", "grammo", "grammi", "kgm", "hg", "etto", "etti",
+    "l", "lt", "ltr", "litro", "litri", "ml", "cl", "centilitro", "centilitri",
+})
+
+
 def normalize_price_for_comparison(
     price_or_line,
     quantity_or_product,
@@ -162,6 +169,10 @@ def normalize_price_for_comparison(
             explanation = f"Prezzo confezione diviso per {pack_qty} {comp_unit}"
         elif is_individual_uom:
             explanation = f"Prezzo già espresso per {comp_unit}; pack fisico {pack_qty}"
+        elif uom_normalized in KG_UNITS or uom_normalized in MEASURE_UOMS:
+            # A price per kg/litre is not a price per piece: never compare it as one.
+            reliable = False
+            explanation = f"Prezzo a peso/volume ({uom}) ma prodotto confrontato per {comp_unit}"
         elif pack_qty > 1:
             reliable = False
             explanation = "Unità prezzo ambigua: conversione confezione non applicata"
