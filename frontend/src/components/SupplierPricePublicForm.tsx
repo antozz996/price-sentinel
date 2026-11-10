@@ -64,7 +64,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       .then(form => {
         if (!active) return;
         setData(form);
-        const initial = Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: normalizeSupplierUnit(i.unita_corrente), marca: i.brand_corrente || '', dicitura_fornitore: i.dicitura_corrente || '', quantita_confezione: i.quantita_corrente ? String(Number(i.quantita_corrente)) : '', conferma_prezzo: false, non_trattato: false, nota: '', extraOffers: [] }]));
+        const initial = Object.fromEntries(form.items.map(i => [i.id, { prezzo: i.prezzo_corrente || '', unita_misura: normalizeSupplierUnit(i.unita_corrente), marca: i.brand_corrente || '', dicitura_fornitore: i.dicitura_corrente || '', quantita_confezione: i.quantita_corrente ? String(Number(i.quantita_corrente)) : '1', conferma_prezzo: false, non_trattato: false, nota: '', extraOffers: [] }]));
         try {
           const saved = JSON.parse(localStorage.getItem(draftKey) || 'null');
           setAnswers(saved?.answers && form.items.every(i => saved.answers[i.id]) ? Object.fromEntries(form.items.map(i => [i.id, { ...initial[i.id], ...saved.answers[i.id], extraOffers: saved.answers[i.id].extraOffers || [] }])) : initial);
@@ -79,11 +79,11 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   const setAnswer = (id: number, change: Partial<Answer>) => setAnswers(prev => {
     const old = prev[id]; const next = { ...old, ...change };
     if (change.prezzo !== undefined || change.unita_misura !== undefined || change.marca !== undefined || change.quantita_confezione !== undefined || change.dicitura_fornitore !== undefined || change.non_trattato) next.conferma_prezzo = false;
-    if (change.non_trattato) { next.prezzo = ''; next.unita_misura = ''; next.marca = ''; next.dicitura_fornitore = ''; next.quantita_confezione = ''; next.extraOffers = []; }
+    if (change.non_trattato) { next.prezzo = ''; next.unita_misura = ''; next.marca = ''; next.dicitura_fornitore = ''; next.quantita_confezione = '1'; next.extraOffers = []; }
     return { ...prev, [id]: next };
   });
 
-  const addExtraOffer = (id: number) => setAnswers(prev => ({ ...prev, [id]: { ...prev[id], extraOffers: [...prev[id].extraOffers, { key: crypto.randomUUID(), prezzo: '', unita_misura: prev[id].unita_misura, marca: '', dicitura_fornitore: '', quantita_confezione: '', nota: '' }] } }));
+  const addExtraOffer = (id: number) => setAnswers(prev => ({ ...prev, [id]: { ...prev[id], extraOffers: [...prev[id].extraOffers, { key: crypto.randomUUID(), prezzo: '', unita_misura: prev[id].unita_misura, marca: '', dicitura_fornitore: '', quantita_confezione: '1', nota: '' }] } }));
   const changeExtraOffer = (id: number, key: string, change: Partial<ExtraOffer>) => setAnswers(prev => ({ ...prev, [id]: { ...prev[id], extraOffers: prev[id].extraOffers.map(offer => offer.key === key ? { ...offer, ...change } : offer) } }));
   const removeExtraOffer = (id: number, key: string) => setAnswers(prev => ({ ...prev, [id]: { ...prev[id], extraOffers: prev[id].extraOffers.filter(offer => offer.key !== key) } }));
 
@@ -126,11 +126,11 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
 
   return <main style={wrap}><form style={box} onSubmit={submit}>
     <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'} · {data.supplier_name}</h1>
-    <p>Per ogni prodotto trattato indica quantità della confezione, unità e prezzo. Marca e vostra denominazione sono facoltative: compilale solo se diverse dalla nostra descrizione (per frutta e verdura sfusa di solito puoi lasciarle vuote). La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>
-    <p style={{ padding: 12, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Come indicare il prezzo:</strong> il prezzo si riferisce sempre alla <strong>quantità</strong> e all’<strong>unità di misura</strong> che indichi nella stessa riga.<br />
-      • <strong>Venduto a peso (sfuso)</strong>: quantità 1, unità KG, prezzo al kg. Es. melanzane a € 1,50/kg → 1 · KG · € 1,50.<br />
-      • <strong>Venduto a pezzo</strong>: quantità 1, unità PZ, prezzo del singolo pezzo. Es. ananas a € 3,00 l’uno → 1 · PZ · € 3,00.<br />
-      • <strong>Confezione, busta, cassetta o cartone</strong>: quantità = contenuto della confezione, prezzo dell’intera confezione. Es. sacco di patate da 2 kg a € 2,00 → 2 · KG · € 2,00; vaschetta di fragole da 250 g a € 3,00 → 0,25 · KG · € 3,00; cartone da 6 pezzi a € 12,00 → 6 · PZ · € 12,00.<br />
+    <p>Per ogni prodotto trattato indica il prezzo e a cosa si riferisce (di solito 1 kg o 1 pezzo). Marca e vostra denominazione sono facoltative: compilale solo se diverse dalla nostra descrizione (per frutta e verdura sfusa di solito puoi lasciarle vuote). La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>
+    <p style={{ padding: 12, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Come indicare il prezzo:</strong> scrivi il prezzo e per quanto vale: <strong>€ … per 1 KG</strong> oppure <strong>€ … per 1 PZ</strong>.<br />
+      • <strong>Venduto a peso (sfuso)</strong>: melanzane a € 1,50 al kg → € 1,50 per 1 KG.<br />
+      • <strong>Venduto a pezzo</strong>: ananas a € 3,00 l’uno → € 3,00 per 1 PZ.<br />
+      • <strong>Solo se vendi una confezione chiusa</strong> (sacco, vaschetta, cartone) e non il singolo kg o pezzo, indica quanto contiene: sacco di patate da 2 kg a € 2,00 → € 2,00 per 2 KG; cartone da 6 pezzi a € 12,00 → € 12,00 per 6 PZ.<br />
       Sotto ogni prezzo vedi il valore per unità calcolato: controlla che sia corretto. Se un prodotto ha un’indicazione specifica, segui quella.</p>
     {data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: 'var(--text-secondary)' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>
@@ -166,18 +166,18 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         {answer.non_trattato ? <p style={{ color: 'var(--text-secondary)' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
           <label>Vostra denominazione (facoltativa)<input style={input} maxLength={255} placeholder={item.descrizione} value={answer.dicitura_fornitore} onChange={e => setAnswer(item.id, { dicitura_fornitore: e.target.value })} /></label>
           <label>Marca (facoltativa)<input style={input} maxLength={100} value={answer.marca} onChange={e => setAnswer(item.id, { marca: e.target.value })} /></label>
-          <label>Quantità della confezione<input style={input} type="number" {...quantityLimits(answer.unita_misura)} required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /></label>
-          <label>Unità di misura<select style={input} required value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-          <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /><small style={{ display: 'block', color: 'var(--text-secondary)' }}>Prezzo totale della quantità indicata.</small><UnitPriceHint prezzo={answer.prezzo} quantita={answer.quantita_confezione} unita={answer.unita_misura} /></label>
+          <label>Prezzo (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={answer.prezzo} onChange={e => setAnswer(item.id, { prezzo: e.target.value })} /><UnitPriceHint prezzo={answer.prezzo} quantita={answer.quantita_confezione} unita={answer.unita_misura} /></label>
+          <label>per (quantità)<input style={input} type="number" {...quantityLimits(answer.unita_misura)} required value={answer.quantita_confezione} onChange={e => setAnswer(item.id, { quantita_confezione: e.target.value })} /><small style={{ display: 'block', color: 'var(--text-secondary)' }}>Di solito 1. Cambia solo per una confezione chiusa.</small></label>
+          <label>Unità<select style={input} required value={answer.unita_misura} onChange={e => setAnswer(item.id, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
         </div>}
         {!answer.non_trattato && answer.extraOffers.map((offer, index) => <div key={offer.key} style={{ marginTop: 14, padding: 12, border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><strong>Altra marca o formato {index + 2}</strong><button type="button" className="btn" onClick={() => removeExtraOffer(item.id, offer.key)}>Rimuovi</button></div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginTop: 10 }}>
             <label>Vostra denominazione (facoltativa)<input style={input} maxLength={255} placeholder={item.descrizione} value={offer.dicitura_fornitore} onChange={e => changeExtraOffer(item.id, offer.key, { dicitura_fornitore: e.target.value })} /></label>
             <label>Marca (facoltativa)<input style={input} maxLength={100} value={offer.marca} onChange={e => changeExtraOffer(item.id, offer.key, { marca: e.target.value })} /></label>
-            <label>Quantità della confezione<input style={input} type="number" {...quantityLimits(offer.unita_misura)} required value={offer.quantita_confezione} onChange={e => changeExtraOffer(item.id, offer.key, { quantita_confezione: e.target.value })} /></label>
-            <label>Unità di misura<select style={input} required value={offer.unita_misura} onChange={e => changeExtraOffer(item.id, offer.key, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
-            <label>Prezzo del prodotto/confezione (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={offer.prezzo} onChange={e => changeExtraOffer(item.id, offer.key, { prezzo: e.target.value })} /><UnitPriceHint prezzo={offer.prezzo} quantita={offer.quantita_confezione} unita={offer.unita_misura} /></label>
+            <label>Prezzo (€)<input style={input} type="number" min="0.0001" step="0.0001" required value={offer.prezzo} onChange={e => changeExtraOffer(item.id, offer.key, { prezzo: e.target.value })} /><UnitPriceHint prezzo={offer.prezzo} quantita={offer.quantita_confezione} unita={offer.unita_misura} /></label>
+            <label>per (quantità)<input style={input} type="number" {...quantityLimits(offer.unita_misura)} required value={offer.quantita_confezione} onChange={e => changeExtraOffer(item.id, offer.key, { quantita_confezione: e.target.value })} /></label>
+            <label>Unità<select style={input} required value={offer.unita_misura} onChange={e => changeExtraOffer(item.id, offer.key, { unita_misura: e.target.value })}><option value="">Seleziona…</option>{SUPPLIER_UNIT_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
           </div>
           <label style={{ display: 'block', marginTop: 10 }}>Nota su questa offerta<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={offer.nota} onChange={e => changeExtraOffer(item.id, offer.key, { nota: e.target.value })} /></label>
         </div>)}
