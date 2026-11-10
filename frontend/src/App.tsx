@@ -13,6 +13,7 @@ const FattureList = lazyPage(() => import('./components/FattureList'))
 const SettingsPage = lazyPage(() => import('./components/SettingsPage'))
 const SkuManager = lazyPage(() => import('./components/SkuManager'))
 const ProductConsumptionReport = lazyPage(() => import('./components/ProductConsumptionReport'))
+const PurchaseVolumeAnalysis = lazyPage(() => import('./components/PurchaseVolumeAnalysis'))
 const SmartPriceSheet = lazyPage(() => import('./components/SmartPriceSheet'))
 const TopProductsPriceList = lazyPage(() => import('./components/TopProductsPriceList'))
 const PriceTrendAnalyzer = lazyPage(() => import('./components/PriceTrendAnalyzer'))
@@ -95,6 +96,7 @@ const NAV_SECTIONS: NavSection[] = [
         { id: 'priceanalysis', label: 'Oscillazioni prezzi' },
         { id: 'topproducts', label: 'Top prodotti', adminOnly: true },
         { id: 'productconsumption', label: 'Consumi per prodotto', adminOnly: true },
+        { id: 'purchasevolumes', label: 'Analisi volumi', adminOnly: true },
       ] },
     ],
   },
@@ -675,6 +677,7 @@ export default function App() {
       case 'topproducts': return <TopProductsPriceList />;
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
+      case 'purchasevolumes': return <PurchaseVolumeAnalysis />;
       case 'priceanalysis': return <PriceTrendAnalyzer onOpenInvoice={(id, numero) => { setInvoiceFocus({ id, numero }); setActiveTab('fatture'); }} />;
       case 'sectororders': return <SectorOrderBuilder userProfile={profile} />;
       case 'goodsreceipt': return <GoodsReceipt userProfile={profile} />;
@@ -749,6 +752,7 @@ export default function App() {
       case 'topproducts': return { title: 'Top prodotti', sub: 'Analizza prezzi e volumi dei prodotti più acquistati' };
       case 'crosssupplier': return { title: 'Listino Smart', sub: 'Prezzi, qualità fornitori e regole di acquisto in un’unica matrice' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
+      case 'purchasevolumes': return { title: 'Analisi volumi', sub: 'Quante unità di ogni prodotto sono state acquistate nel periodo scelto' };
       case 'priceanalysis': return { title: 'Analisi Oscillazioni Prezzi', sub: 'Confronta l\'andamento storico e le oscillazioni dei prezzi di acquisto' };
       case 'sectororders': return { title: 'Sviluppo Ordini Settore', sub: 'Compilazione fabbisogno per responsabili, assegnazione fornitori e invio WhatsApp' };
       case 'goodsreceipt': return { title: 'Ricezione & Scarico Merci', sub: 'Controllo quantitativo merci consegnate vs ordinate e segnalazione difformità' };
