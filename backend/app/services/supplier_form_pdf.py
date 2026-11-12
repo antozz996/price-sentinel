@@ -124,7 +124,8 @@ def generate_supplier_form_pdf(form: PdfForm) -> bytes:
         Spacer(1, 4 * mm),
     ]
 
-    confirmation = form.request_type == "confirmation"
+    # A category form mixes prefilled prices and rows quoted from scratch.
+    confirmation = form.request_type == "confirmation" or any(item.previous_price is not None for item in form.items)
     header = ["Prodotto", "Formato", "Prezzo", "Prezzo unitario"] + (["Precedente"] if confirmation else [])
     rows: list[list] = [header]
     not_handled: list[str] = []

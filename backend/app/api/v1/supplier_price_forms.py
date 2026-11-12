@@ -184,6 +184,30 @@ async def _offer_formats(db: AsyncSession, supplier_id: int, rows: list[ListinoM
     return formats
 
 
+async def _active_supplier_rows(db: AsyncSession, supplier_id: int) -> list[ListinoMaster]:
+    """The supplier's price rows valid today that a form may ask about."""
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    rows = (await db.execute(
+        select(ListinoMaster)
+        .where(
+            ListinoMaster.fornitore_id == supplier_id,
+            ListinoMaster.data_inizio_validita <= today,
+            (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= today),
+        )
+        .order_by(ListinoMaster.sku_interno, ListinoMaster.id)
+    )).scalars().all()
+    if not rows:
+        return []
+    # Once a product has approved offers from this supplier, rows from older
+    # imports (generic or with a non-offer alias) are superseded and not re-asked.
+    offer_alias_ids = set((await db.scalars(select(SupplierProductAlias.id).where(
+        SupplierProductAlias.id.in_({row.supplier_product_alias_id for row in rows if row.supplier_product_alias_id}),
+        SupplierProductAlias.source == "normalized_sheet_offer",
+    ))).all())
+    offer_skus = {row.sku_interno for row in rows if row.supplier_product_alias_id in offer_alias_ids}
+    return [row for row in rows if row.supplier_product_alias_id in offer_alias_ids or row.sku_interno not in offer_skus]
+
+
 async def _best_prices(db: AsyncSession, supplier_id: int, skus: set[str]) -> dict[str, tuple[Decimal, str, bool]]:
     """Per SKU: (best comparable price of the other suppliers, base unit, recipient already at or below it).
 
@@ -305,7 +329,7 @@ def _request_view(request: SupplierPriceFormRequest) -> dict:
                 "esito": (
                     "non_trattato" if item.non_trattato
                     else "da_compilare" if item.prezzo_inviato is None
-                    else "nuova_offerta" if request.request_type == "new_listino"
+                    else "nuova_offerta" if item.listino_id is None
                     else "confermato" if item.conferma_prezzo
                     else "proposta_variazione"
                 ),
@@ -481,7 +505,7 @@ async def submit_public_form(
             brand = (offer.marca or "").strip() or None
             unit = _normalized_unit(offer.unita_misura)
             _check_quantity(offer.quantita_confezione, unit, item.descrizione)
-            if request.request_type == "new_listino" and offer.conferma_prezzo:
+            if item.listino_id is None and offer.conferma_prezzo:
                 raise HTTPException(status_code=422, detail="Una nuova offerta non può essere marcata come conferma")
             if offer.conferma_prezzo and index != 0:
                 raise HTTPException(status_code=422, detail="Solo l'offerta principale può confermare il prezzo pattuito")
@@ -562,19 +586,43 @@ async def create_form_request(
         )).scalars().all()
         if len(products) != len(payload.product_ids):
             raise HTTPException(status_code=422, detail="Uno o più prodotti non appartengono alla categoria selezionata o non sono attivi")
-        form_items = [
-            SupplierPriceFormItem(
-                listino_id=None,
-                sku_interno=product.sku_interno or f"PROD-{product.id}",
-                descrizione=product.canonical_name,
-                prezzo_corrente=None,
-                unita_corrente=product.comparison_unit,
-                brand_corrente=product.brand,
-                validita_corrente_da=None,
-                validita_corrente_a=None,
-            )
-            for product in products
-        ]
+        # Every supplier of a category gets the same product list: where this
+        # supplier already has an active price it is prefilled (and replaced on
+        # approval, like a confirmation), elsewhere the row is left to quote.
+        skus = {product.sku_interno for product in products if product.sku_interno}
+        current_rows = [row for row in await _active_supplier_rows(db, supplier.id) if row.sku_interno in skus]
+        formats = await _offer_formats(db, supplier.id, current_rows)
+        rows_by_sku: dict[str, list[ListinoMaster]] = {}
+        for row in current_rows:
+            rows_by_sku.setdefault(row.sku_interno, []).append(row)
+        form_items = []
+        for product in products:
+            # pop: two catalog products sharing a SKU must not ask the same row twice
+            own_rows = rows_by_sku.pop(product.sku_interno, []) if product.sku_interno else []
+            if not own_rows:
+                form_items.append(SupplierPriceFormItem(
+                    listino_id=None,
+                    sku_interno=product.sku_interno or f"PROD-{product.id}",
+                    descrizione=product.canonical_name,
+                    prezzo_corrente=None,
+                    unita_corrente=product.comparison_unit,
+                    brand_corrente=product.brand,
+                    validita_corrente_da=None,
+                    validita_corrente_a=None,
+                ))
+            for row in own_rows:
+                form_items.append(SupplierPriceFormItem(
+                    listino_id=row.id,
+                    sku_interno=row.sku_interno,
+                    descrizione=product.canonical_name,
+                    prezzo_corrente=row.prezzo_pattuito,
+                    unita_corrente=formats[row.id][1],
+                    quantita_corrente=formats[row.id][0],
+                    dicitura_corrente=formats[row.id][2],
+                    brand_corrente=formats[row.id][3] or product.brand,
+                    validita_corrente_da=row.data_inizio_validita,
+                    validita_corrente_a=row.data_scadenza,
+                ))
     else:
         if not payload.listino_ids or payload.product_ids or payload.category:
             raise HTTPException(status_code=422, detail="Per confermare un listino seleziona solo le sue righe attive")
@@ -726,24 +774,7 @@ async def get_supplier_catalog(
     if not supplier or supplier.archived_at is not None:
         raise HTTPException(status_code=404, detail="Fornitore non trovato o archiviato")
 
-    today = datetime.now(ZoneInfo("Europe/Rome")).date()
-    rows = (await db.execute(
-        select(ListinoMaster)
-        .where(
-            ListinoMaster.fornitore_id == supplier_id,
-            ListinoMaster.data_inizio_validita <= today,
-            (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= today),
-        )
-        .order_by(ListinoMaster.sku_interno)
-    )).scalars().all()
-    # Once a product has approved offers from this supplier, rows from older
-    # imports (generic or with a non-offer alias) are superseded and not re-asked.
-    offer_alias_ids = set((await db.scalars(select(SupplierProductAlias.id).where(
-        SupplierProductAlias.id.in_({row.supplier_product_alias_id for row in rows if row.supplier_product_alias_id}),
-        SupplierProductAlias.source == "normalized_sheet_offer",
-    ))).all()) if rows else set()
-    offer_skus = {row.sku_interno for row in rows if row.supplier_product_alias_id in offer_alias_ids}
-    rows = [row for row in rows if row.supplier_product_alias_id in offer_alias_ids or row.sku_interno not in offer_skus]
+    rows = await _active_supplier_rows(db, supplier_id)
     formats = await _offer_formats(db, supplier_id, rows)
 
     categories_by_sku: dict[str, tuple[str | None, str | None]] = {}
@@ -914,8 +945,8 @@ async def approve_form_request(
         ))).scalars().all()
         for row in approved_rows:
             row.data_scadenza = request.validita_inviata_a
-    if request.request_type == "confirmation":
-        await _close_confirmed_rows(db, request, set(result.get("listino_ids") or []))
+    # Only rows the form asked about (items with a listino row) are replaced.
+    await _close_confirmed_rows(db, request, set(result.get("listino_ids") or []))
     request.status = "approved"
     await db.commit()
     return {"id": request.id, "status": request.status, "result": result}
