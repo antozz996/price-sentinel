@@ -453,7 +453,7 @@ export default function SupplierPriceForms() {
       {selectedSupplierIds.length > 0 && <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
         {requestType === 'new_listino' ? <>
           {recipientMode === 'category'
-            ? <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Catalogo prodotti della categoria {recipientCategory}, da quotare da zero.</p>
+            ? <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Catalogo prodotti della categoria {recipientCategory}, uguale per tutti i fornitori: i prezzi già a listino di ciascuno sono precompilati, gli altri prodotti sono da quotare.</p>
             : <label>Categoria prodotti da richiedere
                 <select style={field} value={productCategory} onChange={e => setProductCategory(e.target.value)}>
                   <option value="">Seleziona categoria…</option>
@@ -550,7 +550,7 @@ export default function SupplierPriceForms() {
       </div>}
       <div style={{ display: 'grid', gap: 8 }}>{detail.items.map(i => <div key={i.id} style={{ ...card, padding: 12 }}>
         <strong>{i.descrizione}</strong><small style={{ display: 'block', color: 'var(--text-secondary)' }}>{i.sku_interno}</small>
-        {detail.request_type !== 'new_listino' && <div>Pattuito: € {i.prezzo_corrente} {i.unita_corrente ? (i.quantita_corrente && Number(i.quantita_corrente) !== 1 ? `per ${Number(i.quantita_corrente).toLocaleString('it-IT')} ${i.unita_corrente}` : `/ ${i.unita_corrente}`) : '/ unità da completare'}</div>}
+        {i.prezzo_corrente != null && <div>Pattuito: € {i.prezzo_corrente} {i.unita_corrente ? (i.quantita_corrente && Number(i.quantita_corrente) !== 1 ? `per ${Number(i.quantita_corrente).toLocaleString('it-IT')} ${i.unita_corrente}` : `/ ${i.unita_corrente}`) : '/ unità da completare'}</div>}
         {detail.show_best_price && i.best_price && <div style={{ color: 'var(--text-secondary)' }}>Mostrato al fornitore: {i.recipient_is_best ? '“Siete il prezzo migliore”' : `miglior prezzo ricevuto ${bestPriceText(i.best_price, i.best_price_unit)}`}</div>}
         {i.non_trattato ? <div>Non trattato dal fornitore</div> : i.offerte_inviate?.length ? i.offerte_inviate.map((offer, index) => <div key={offer.id_offerta} style={{ marginTop: 8, padding: 8, borderLeft: '2px solid var(--accent-text)' }}>
           <strong>Offerta {index + 1}: € {offer.prezzo} per confezione da {offer.quantita_confezione} {offer.unita_misura}</strong>

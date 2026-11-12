@@ -329,6 +329,9 @@ async def run() -> None:
             "product_ids": [1], "expires_in_days": 1,
         })
         check("admin creates a second form", overdue.status_code == 201)
+        overdue_items = overdue.json()["request"]["items"]
+        check("a new-listino form prefills the supplier's active offers instead of asking them from scratch",
+              len(overdue_items) == 3 and all(i["listino_id"] and i["prezzo_corrente"] for i in overdue_items))
         overdue_id = overdue.json()["request"]["id"]
         open_pdf = await client.get(f"/api/v1/supplier-price-forms/{overdue_id}/pdf", headers=admin_headers)
         check("a form not yet compiled has no PDF", open_pdf.status_code == 409)

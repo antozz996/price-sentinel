@@ -103,7 +103,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
           validita_inviata_a: validitaA || null,
           anagrafica: data.requires_supplier_details ? anagrafica : null,
           answers: data.items.map(i => ({ item_id: i.id, non_trattato: answers[i.id].non_trattato, offerte: answers[i.id].non_trattato ? null : [
-            { prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, marca: answers[i.id].marca, dicitura_fornitore: answers[i.id].dicitura_fornitore, quantita_confezione: answers[i.id].quantita_confezione, conferma_prezzo: data.request_type === 'confirmation' && answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null },
+            { prezzo: answers[i.id].prezzo, unita_misura: answers[i.id].unita_misura, marca: answers[i.id].marca, dicitura_fornitore: answers[i.id].dicitura_fornitore, quantita_confezione: answers[i.id].quantita_confezione, conferma_prezzo: i.prezzo_corrente != null && answers[i.id].conferma_prezzo, nota: answers[i.id].nota || null },
             ...answers[i.id].extraOffers.map(offer => ({ prezzo: offer.prezzo, unita_misura: offer.unita_misura, marca: offer.marca, dicitura_fornitore: offer.dicitura_fornitore, quantita_confezione: offer.quantita_confezione, nota: offer.nota, conferma_prezzo: false })),
           ] }))
         })
@@ -153,15 +153,17 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     </section>
     {data.items.map(item => {
       const answer = answers[item.id]; if (!answer) return null;
+      // A form can mix rows with an agreed price (to confirm or change) and rows to quote from scratch.
+      const hasCurrent = item.prezzo_corrente != null;
       return <section key={item.id} style={{ ...box, padding: 16, margin: '14px 0', maxWidth: 'none' }}>
         <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>{item.descrizione}</h2>
-        <p style={{ color: 'var(--text-secondary)' }}>SKU {item.sku_interno}{data.request_type === 'new_listino' ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? formatLabel(item.quantita_corrente, item.unita_corrente) : ' (unità da indicare)'}`}</p>
-        {data.request_type === 'confirmation' && !item.unita_corrente && <p style={{ color: 'var(--warn)' }}>Il prezzo attuale non ha un’unità di misura: indica quantità e unità a cui si riferisce il tuo prezzo (KG, PZ, cartone…).</p>}
+        <p style={{ color: 'var(--text-secondary)' }}>SKU {item.sku_interno}{!hasCurrent ? ` · Unità di riferimento: ${item.unita_corrente || 'da indicare'}` : ` · Prezzo attuale: € ${item.prezzo_corrente}${item.unita_corrente ? formatLabel(item.quantita_corrente, item.unita_corrente) : ' (unità da indicare)'}`}</p>
+        {hasCurrent && !item.unita_corrente && <p style={{ color: 'var(--warn)' }}>Il prezzo attuale non ha un’unità di misura: indica quantità e unità a cui si riferisce il tuo prezzo (KG, PZ, cartone…).</p>}
         {item.miglior_prezzo && (item.miglior_prezzo.siete_i_migliori
           ? <p style={{ padding: 10, border: '1px solid var(--ok-border)', borderRadius: 'var(--radius-md)', background: 'var(--ok-bg)', color: 'var(--text-primary)' }}>✅ <strong>Siete il prezzo migliore</strong> tra le offerte che abbiamo ricevuto per questo prodotto.</p>
           : <p style={{ padding: 10, border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-md)', background: 'var(--accent-bg)', color: 'var(--text-primary)' }}>📉 <strong>Miglior prezzo ricevuto: {bestPriceLabel(item.miglior_prezzo.prezzo, item.miglior_prezzo.unita)}</strong></p>)}
         {item.istruzioni &&<p style={{ padding: 10, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Indicazione per questo prodotto:</strong> {item.istruzioni}</p>}
-        {data.request_type === 'confirmation' && item.validita_corrente_da &&<p style={{ color: 'var(--text-secondary)' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
+        {hasCurrent && item.validita_corrente_da &&<p style={{ color: 'var(--text-secondary)' }}>Validità: dal {new Date(item.validita_corrente_da).toLocaleDateString('it-IT')}{item.validita_corrente_a ? ' al ' + new Date(item.validita_corrente_a).toLocaleDateString('it-IT') : ''}</p>}
         <label style={{ display: 'block', margin: '12px 0' }}><input type="checkbox" checked={answer.non_trattato} onChange={e => setAnswer(item.id, { non_trattato: e.target.checked })} /> Non trattiamo questo prodotto</label>
         {answer.non_trattato ? <p style={{ color: 'var(--text-secondary)' }}>Non è necessario inserire prezzo o unità di misura per questo prodotto.</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10 }}>
           <label>Vostra denominazione (facoltativa)<input style={input} maxLength={255} placeholder={item.descrizione} value={answer.dicitura_fornitore} onChange={e => setAnswer(item.id, { dicitura_fornitore: e.target.value })} /></label>
@@ -183,7 +185,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
         </div>)}
         {!answer.non_trattato && answer.extraOffers.length < 9 && <button type="button" className="btn" style={{ marginTop: 12 }} onClick={() => addExtraOffer(item.id)}>+ Aggiungi un’altra marca o formato</button>}
         {/* Without an agreed unit there is nothing to confirm: the answer is reviewed as a proposal. */}
-        {data.request_type === 'confirmation' && !answer.non_trattato && item.unita_corrente && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo, quantità e unità corrispondono al pattuito</label>}
+        {hasCurrent && !answer.non_trattato && item.unita_corrente && <label style={{ display: 'block', marginTop: 12 }}><input type="checkbox" checked={answer.conferma_prezzo} onChange={e => setAnswer(item.id, { conferma_prezzo: e.target.checked })} /> Confermo che prezzo, quantità e unità corrispondono al pattuito</label>}
         <label style={{ display: 'block', marginTop: 10 }}>Nota<textarea style={{ ...input, marginTop: 4 }} rows={2} maxLength={1000} value={answer.nota} onChange={e => setAnswer(item.id, { nota: e.target.value })} /></label>
       </section>;
     })}
