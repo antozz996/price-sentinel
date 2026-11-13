@@ -295,11 +295,37 @@ def infer_new_product_category(text: str, supplier_categories: tuple[str, ...] =
     an equipment one). An unknown product is left without category instead of
     being filed under Beverage.
     """
+    if _is_equipment(text) and (not supplier_categories or {"Materiali", "Attrezzatura"} & set(supplier_categories)):
+        return "Attrezzatura"
     if len(supplier_categories) == 1:
         return supplier_categories[0]
     guess = _keyword_category(text)
     return "Materiali" if guess == "Materiali di consumo" else guess
 
+
+_EQUIPMENT_WORDS = (
+    "padella|padelle|casseruola|casseruole|pentola|pentole|tegame|tegami|teglia|teglie|paella|wok|pirofila|"
+    "mestolo|mestoli|schiumarola|cucchiaione|frusta|spatola|pinza|molla|pelapatate|apriscatole|grattugia|"
+    "mandolina|chinoise|colino|colafritto|scolapasta|tagliere|taglieri|coltello|coltelli|spelucchino|"
+    "forchetta|cucchiaio|cucchiaino|posate|bacinella|bacinelle|gastronorm|bowl|ciotola|ciotole|brocca|"
+    "caraffa|lattiera|tazza|tazze|tazzina|piatto|piatti|piattino|vassoio|vassoi|bicchiere|bicchieri|calice|"
+    "calici|flute|tumbler|macina|macinapepe|sifone|stampo|stampi|ruoto|mixer|impastatrice|frullatore|"
+    "affettatrice|bilancia|termometro|cannello|pressino|sassola|portacondimenti|dispenser|distributore|"
+    "cestello|cestino|bidone|pattumiera|carrello|armadio|tappeto|tergivetro|raschietto|spingiacqua|"
+    "reggi vassoio|porzionatore|anello|tagliapasta|bocchette|inox|acciaio|melamina|porcellana|gn"
+)
+# Disposable or packaged-by-the-dozen items share the nouns above (piatto, bicchiere, coltello…).
+_DISPOSABLE_WORDS = (
+    "monouso|compostabile|cartoncino|cartone|carta|politenato|polpa|palma|bamboo|betulla|ps|pet|pp|r pet|"
+    "trasparente|asporto|finger|\\d+ pezzi|\\d+ pz|\\d+pz|ricambio|ricarica|lame|"
+    "detergente|sgrassante|liquido|retina|spirale"
+)
+
+
+def _is_equipment(text: str) -> bool:
+    """Durable kitchen/dining equipment, as opposed to consumables bought again and again."""
+    cleaned = normalize_text(text)
+    return bool(re.search(rf"\b({_EQUIPMENT_WORDS})\b", cleaned)) and not re.search(rf"\b({_DISPOSABLE_WORDS})\b", cleaned)
 
 def _keyword_category(text: str) -> str | None:
     cleaned = normalize_text(text)
