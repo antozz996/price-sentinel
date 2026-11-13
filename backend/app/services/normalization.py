@@ -280,6 +280,19 @@ def extract_candidate_attributes(text: str) -> dict:
     }
 
 
+_LOT_DETAILS = re.compile(
+    r"(\s+[A-Za-z]{2}\s+(?:I{1,2}|E|EXTRA)\s+\S+)?\s+LOTTO\b.*$", re.IGNORECASE | re.DOTALL)
+
+
+def strip_lot_details(text: str) -> str:
+    """Produce invoices append origin, class, size and lot ("FRIARIELLI IT I N/C LOTTO 1-1691").
+
+    The lot changes at every delivery, so the article is what comes before it.
+    Text without a lot is returned unchanged.
+    """
+    return _LOT_DETAILS.sub("", text or "").strip() or (text or "")
+
+
 def infer_category(text: str) -> str:
     """
     Inferisce la macro-categoria Ho.Re.Ca.: Beverage, Food, Materiali di consumo.
