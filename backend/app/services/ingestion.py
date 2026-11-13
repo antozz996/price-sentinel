@@ -557,20 +557,29 @@ async def _is_known_non_product(db: AsyncSession, fornitore_id: int, riga, cache
     matches the ones filed before it. Credit notes are left out: their lines are
     no_match by default, not by choice.
     """
-    description = re.sub(r"\d+", "#", (riga.descrizione or "").strip().lower())
-    if riga.codice_articolo or not description:
+    exact = (riga.descrizione or "").strip().lower()
+    description = re.sub(r"\d+", "#", exact)
+    if riga.codice_articolo or not exact:
         return False
-    if description not in cache:
-        cache[description] = bool(await db.scalar(
-            select(RigaFattura.id)
+    if exact not in cache:
+        archived = (
+            select(RigaFattura.descrizione_fornitore_raw)
             .join(Fattura, Fattura.id == RigaFattura.fattura_id)
             .where(
                 Fattura.fornitore_id == fornitore_id,
                 Fattura.tipo_documento != TipoDocumento.TD04,
                 RigaFattura.stato_matching == StatoMatching.no_match,
                 func.coalesce(RigaFattura.codice_fornitore_raw, "") == "",
-                func.regexp_replace(
-                    func.lower(func.btrim(RigaFattura.descrizione_fornitore_raw)), "[0-9]+", "#", "g") == description,
-            ).limit(1)
-        ))
-    return cache[description]
+            )
+        )
+        same_text = func.lower(func.btrim(RigaFattura.descrizione_fornitore_raw))
+        if await db.scalar(archived.where(same_text == exact).limit(1)) is not None:
+            cache[exact] = True
+        else:
+            # Without the digits a wrongly filed product would drag its other sizes
+            # along: ask for a habit (three lines filed), not a single precedent.
+            same_shape = (await db.scalars(
+                archived.where(func.regexp_replace(same_text, "[0-9]+", "#", "g") == description).limit(3)
+            )).all()
+            cache[exact] = description != exact and len(same_shape) >= 3
+    return cache[exact]

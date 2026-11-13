@@ -287,6 +287,13 @@ async def resolve_invoice_line_product(
     
     aliases_by_code = {a.supplier_code: a for a in aliases_res if a.supplier_code and a.status == "approved"}
     aliases_by_desc = {a.normalized_description: a for a in aliases_res if a.status == "approved"}
+    # Links created from a price sheet carry no invoice wording (their text is the
+    # internal SKU), so a supplier that invoices without article codes would never
+    # be recognised. When the invoice line is written exactly like the catalog name
+    # of a product this supplier is already linked to, that link is the match.
+    alias_by_product = {a.product_id: a for a in aliases_res if a.status == "approved"}
+    product_names = [normalize_text(p.canonical_name) for p in products]
+    unique_names = {name for name in product_names if name and product_names.count(name) == 1}
     
     candidates = []
     
@@ -328,6 +335,15 @@ async def resolve_invoice_line_product(
                 matched_alias_id = alias_by_desc.id
                 is_alias_matched = True
             
+        # B2. Riga scritta come il nome a catalogo di un prodotto gia' collegato al fornitore
+        if not is_alias_matched and norm_desc in unique_names and p.id in alias_by_product \
+                and normalize_text(p.canonical_name) == norm_desc:
+            score = 97.0
+            reason_dict["alias_match"] = True
+            reason_dict["catalog_name_match"] = True
+            matched_alias_id = alias_by_product[p.id].id
+            is_alias_matched = True
+
         # C. EAN uguale (approved)
         if not is_alias_matched and ean:
             has_ean_match = any(a.ean == ean and a.status == "approved" for a in aliases_res if a.product_id == p.id)
