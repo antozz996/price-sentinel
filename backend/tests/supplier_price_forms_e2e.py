@@ -361,6 +361,37 @@ async def run() -> None:
             f"/api/v1/supplier-price-forms/{created_data['request']['id']}/share-link",
             headers=admin_headers, json={"new_link": True})
         check("an approved form link cannot be shared or renewed", approved_share.status_code == 409)
+
+        # A category split into sections goes to a supplier only for its enabled sections.
+        with psycopg2.connect(DSN) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    insert into master_subcategories(categoria_nome,nome,is_active,created_at,updated_at)
+                    values ('Food','Frutta',true,now(),now()), ('Food','Carne',true,now(),now());
+                    insert into products(
+                        id,sku_interno,canonical_name,normalized_name,category,subcategory,
+                        comparison_unit,is_commodity,is_active,unit_count,created_at,updated_at)
+                    values (901,'CI-FRUTTA','Synthetic apple','synthetic apple','Food','Frutta','Kg',false,true,1,now(),now()),
+                           (902,'CI-CARNE','Synthetic steak','synthetic steak','Food','Carne','Kg',false,true,1,now(),now());
+                """)
+        food = {"supplier_id": 1, "request_type": "new_listino", "category": "Food", "product_ids": [901, 902]}
+        no_sections = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers, json=food)
+        check("a supplier with no enabled section gets no form for a sectioned category",
+              no_sections.status_code == 422)
+        with psycopg2.connect(DSN) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    insert into supplier_subcategory_capabilities
+                        (supplier_id,categoria_nome,subcategory,enabled,created_at,updated_at)
+                    values (1,'Food','Carne',true,now(),now())
+                """)
+        butcher = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers, json=food)
+        check("a supplier is asked only the products of its enabled sections",
+              butcher.status_code == 201
+              and [i["sku_interno"] for i in butcher.json()["request"]["items"]] == ["CI-CARNE"])
+        fruit = await client.post("/api/v1/supplier-price-forms/", headers=admin_headers,
+                                  json={**food, "subcategory": "Frutta"})
+        check("a section not enabled for the supplier is refused", fruit.status_code == 422)
     with psycopg2.connect(DSN) as connection:
         with connection.cursor() as cursor:
             cursor.execute("update supplier_price_form_requests set expires_at=now() - interval '1 minute' "
