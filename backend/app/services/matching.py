@@ -18,6 +18,7 @@ from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.services.normalization import (
     KG_UNITS,
     normalize_text,
+    strip_lot_details,
     extract_candidate_attributes,
     extract_volume_ml,
     extract_weight_g,
@@ -292,6 +293,21 @@ async def resolve_invoice_line_product(
     # be recognised. When the invoice line is written exactly like the catalog name
     # of a product this supplier is already linked to, that link is the match.
     alias_by_product = {a.product_id: a for a in aliases_res if a.status == "approved"}
+    # A produce line carries a lot number that changes at every delivery: the
+    # article is the text before it, both on this line and on the links already made.
+    core_desc = normalize_text(strip_lot_details(raw_description))
+    has_lot = core_desc != norm_desc
+    core_links: dict[str, set[int]] = {}
+    for a in aliases_res:
+        if a.status == "approved" and a.raw_description:
+            core = normalize_text(strip_lot_details(a.raw_description))
+            if core != a.normalized_description:
+                core_links.setdefault(core, set()).add(a.id)
+    alias_by_core = {
+        core: next(a for a in aliases_res if a.id in ids)
+        for core, ids in core_links.items()
+        if len({a.product_id for a in aliases_res if a.id in ids}) == 1
+    }
     product_names = [normalize_text(p.canonical_name) for p in products]
     unique_names = {name for name in product_names if name and product_names.count(name) == 1}
     
@@ -336,8 +352,17 @@ async def resolve_invoice_line_product(
                 is_alias_matched = True
             
         # B2. Riga scritta come il nome a catalogo di un prodotto gia' collegato al fornitore
-        if not is_alias_matched and norm_desc in unique_names and p.id in alias_by_product \
-                and normalize_text(p.canonical_name) == norm_desc:
+        if not is_alias_matched and has_lot and core_desc in alias_by_core \
+                and alias_by_core[core_desc].product_id == p.id:
+            score = 96.0
+            reason_dict["alias_match"] = True
+            reason_dict["lot_stripped_match"] = True
+            matched_alias_id = alias_by_core[core_desc].id
+            is_alias_matched = True
+
+        name_key = core_desc if has_lot else norm_desc
+        if not is_alias_matched and name_key in unique_names and p.id in alias_by_product \
+                and normalize_text(p.canonical_name) == name_key:
             score = 97.0
             reason_dict["alias_match"] = True
             reason_dict["catalog_name_match"] = True
