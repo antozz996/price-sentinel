@@ -284,6 +284,24 @@ def infer_category(text: str) -> str:
     """
     Inferisce la macro-categoria Ho.Re.Ca.: Beverage, Food, Materiali di consumo.
     """
+    return _keyword_category(text) or "Beverage"
+
+
+def infer_new_product_category(text: str, supplier_categories: tuple[str, ...] = ()) -> str | None:
+    """Category proposed for a product not yet in the catalog; None when unknown.
+
+    A supplier enabled for a single category only sells that one, which beats
+    any keyword guess ("mixer" is a drink for a beverage supplier, a tool for
+    an equipment one). An unknown product is left without category instead of
+    being filed under Beverage.
+    """
+    if len(supplier_categories) == 1:
+        return supplier_categories[0]
+    guess = _keyword_category(text)
+    return "Materiali" if guess == "Materiali di consumo" else guess
+
+
+def _keyword_category(text: str) -> str | None:
     cleaned = normalize_text(text)
 
     def has_word(pattern: str) -> bool:
@@ -338,4 +356,4 @@ def infer_category(text: str) -> str:
     ]):
         return "Beverage"
 
-    return "Beverage"
+    return None
