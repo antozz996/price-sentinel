@@ -11,6 +11,7 @@ Spec §2.2 Steps 5-9:
 """
 
 import logging
+import re
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -552,9 +553,11 @@ def _parse_date(date_str: str) -> date:
 async def _is_known_non_product(db: AsyncSession, fornitore_id: int, riga, cache: dict[str, bool]) -> bool:
     """A code-less line whose description this supplier already had filed as no_match.
 
-    Credit notes are left out: their lines are no_match by default, not by choice.
+    Digits are ignored, so a delivery-note total ("DDT N 4679/26 DEL 17/04/2026")
+    matches the ones filed before it. Credit notes are left out: their lines are
+    no_match by default, not by choice.
     """
-    description = (riga.descrizione or "").strip().lower()
+    description = re.sub(r"\d+", "#", (riga.descrizione or "").strip().lower())
     if riga.codice_articolo or not description:
         return False
     if description not in cache:
@@ -566,7 +569,8 @@ async def _is_known_non_product(db: AsyncSession, fornitore_id: int, riga, cache
                 Fattura.tipo_documento != TipoDocumento.TD04,
                 RigaFattura.stato_matching == StatoMatching.no_match,
                 func.coalesce(RigaFattura.codice_fornitore_raw, "") == "",
-                func.lower(func.btrim(RigaFattura.descrizione_fornitore_raw)) == description,
+                func.regexp_replace(
+                    func.lower(func.btrim(RigaFattura.descrizione_fornitore_raw)), "[0-9]+", "#", "g") == description,
             ).limit(1)
         ))
     return cache[description]
