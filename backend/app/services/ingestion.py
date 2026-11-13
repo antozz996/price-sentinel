@@ -14,7 +14,7 @@ import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.anomalie import Anomalia, StatoValidazione, NotaDiCredito
@@ -159,12 +159,19 @@ async def _process_td01(
     await db.flush()
 
     # ── Processa ogni riga ──
+    non_product_cache: dict[str, bool] = {}
     for riga_parsed in parsed.righe:
         # Skip omaggi — Spec §3.3
         if riga_parsed.is_omaggio:
             stats["righe_omaggio"] += 1
             riga_db = _create_riga_fattura(fattura.id, riga_parsed, StatoMatching.matched, None)
             db.add(riga_db)
+            continue
+
+        # Charges already filed as "not a product" for this supplier (transport,
+        # office fees…) come back on every invoice: file them the same way.
+        if await _is_known_non_product(db, fornitore.id, riga_parsed, non_product_cache):
+            db.add(_create_riga_fattura(fattura.id, riga_parsed, StatoMatching.no_match, None))
             continue
 
         # ── Matching Engine ──
@@ -182,6 +189,11 @@ async def _process_td01(
 
         if match_result.matched and match_result.livello in (1, 2) and match_result.decision == "auto_match":
             # Match confermato con listino attivo (Livello 1 o 2)
+            stato = StatoMatching.matched
+            stats["righe_matched"] += 1
+        elif match_result.senza_listino:
+            # Known product, no price agreement on the invoice date: linked
+            # to the product, with no price check and therefore no anomaly.
             stato = StatoMatching.matched
             stats["righe_matched"] += 1
         else:
@@ -316,7 +328,7 @@ async def _process_td04(
                 unita_misura_fattura=riga_parsed.unita_misura,
                 data_documento=parsed.data_documento,
             )
-            if match_res.matched:
+            if match_res.matched or match_res.senza_listino:
                 sku = match_res.sku_interno
                 stato = StatoMatching.matched
         except Exception as e:
@@ -536,3 +548,25 @@ def _parse_date(date_str: str) -> date:
         except ValueError:
             continue
     return date.today()
+
+async def _is_known_non_product(db: AsyncSession, fornitore_id: int, riga, cache: dict[str, bool]) -> bool:
+    """A code-less line whose description this supplier already had filed as no_match.
+
+    Credit notes are left out: their lines are no_match by default, not by choice.
+    """
+    description = (riga.descrizione or "").strip().lower()
+    if riga.codice_articolo or not description:
+        return False
+    if description not in cache:
+        cache[description] = bool(await db.scalar(
+            select(RigaFattura.id)
+            .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+            .where(
+                Fattura.fornitore_id == fornitore_id,
+                Fattura.tipo_documento != TipoDocumento.TD04,
+                RigaFattura.stato_matching == StatoMatching.no_match,
+                func.coalesce(RigaFattura.codice_fornitore_raw, "") == "",
+                func.lower(func.btrim(RigaFattura.descrizione_fornitore_raw)) == description,
+            ).limit(1)
+        ))
+    return cache[description]

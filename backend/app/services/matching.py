@@ -49,6 +49,9 @@ class MatchResult:
     decision: str = "parking"                  # auto_match, needs_review, parking
     reason: str | None = None                  # Dettaglio in JSON
     candidates: list = None                    # Voci candidate suggerite
+    # Prodotto certo (alias approvato) ma nessun listino copre la data della
+    # fattura: la riga si collega al prodotto senza controllo prezzo.
+    senza_listino: bool = False
 
 
 @dataclass
@@ -534,6 +537,15 @@ async def match_riga(
                 result.matched = False
                 result.livello = 4
             return result
+        if result.supplier_alias_id is not None and not await _listino_exists_at(
+            db, fornitore_id, res_v2["sku_interno"], data_documento
+        ):
+            # A known supplier article bought before its price list starts (or
+            # after it ended): nothing to review by hand, only no price to check.
+            result.sku_interno = res_v2["sku_interno"]
+            result.senza_listino = True
+            result.livello = 4
+            return result
             
     if result.decision == "needs_review" and res_v2["sku_interno"]:
         result.livello = 3
@@ -544,6 +556,23 @@ async def match_riga(
         
     result.matched = False
     return result
+
+
+async def _listino_exists_at(db: AsyncSession, fornitore_id: int, sku_interno: str, data_documento) -> bool:
+    """True when at least one price row of the supplier covers the document date."""
+    from datetime import date as date_type
+    try:
+        doc_date = data_documento if isinstance(data_documento, date_type) else date_type.fromisoformat(data_documento)
+    except (TypeError, ValueError):
+        return True  # unreadable date: keep the line in manual review
+    return bool(await db.scalar(
+        select(ListinoMaster.id).where(
+            ListinoMaster.fornitore_id == fornitore_id,
+            ListinoMaster.sku_interno == sku_interno,
+            ListinoMaster.data_inizio_validita <= doc_date,
+            (ListinoMaster.data_scadenza.is_(None)) | (ListinoMaster.data_scadenza >= doc_date),
+        ).limit(1)
+    ))
 
 
 async def _get_listino_attivo(
