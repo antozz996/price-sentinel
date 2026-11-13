@@ -21,6 +21,24 @@ from app.schemas.fornitori import FornitoreCreate, FornitoreResponse, FornitoreU
 
 router = APIRouter()
 
+# Legal forms and fillers that differ between a price sheet ("DI PALO") and an
+# invoice ("DI PALO S.R.L."), without changing who the supplier is.
+_LEGAL_WORDS = frozenset({
+    "srl", "srls", "spa", "sas", "snc", "sapa", "scarl", "scrl", "sc", "ss", "soc", "coop",
+    "societa", "c", "e", "unipersonale", "unip", "semplificata", "a", "socio", "unico", "in", "liquidazione",
+})
+
+
+def _identity_key(name: str) -> str:
+    """Supplier name reduced to what identifies it: no punctuation, case or legal form."""
+    import re
+    import unicodedata
+
+    plain = "".join(c for c in unicodedata.normalize("NFD", name.casefold()) if unicodedata.category(c) != "Mn")
+    words = re.split(r"[^a-z0-9]+", plain.replace(".", "").replace("'", ""))
+    kept = [word for word in words if word and word not in _LEGAL_WORDS]
+    return "".join(kept or [word for word in words if word])
+
 
 class SheetSupplierRegistration(BaseModel):
     nome_azienda: str = Field(min_length=1, max_length=255)
@@ -138,7 +156,7 @@ async def create_fornitore(
     # provisional TEMP record instead of creating a second supplier with the
     # same commercial identity and splitting prices from invoices.
     if not clean_piva.startswith("TEMP"):
-        identity_key = "".join(char for char in clean_nome.casefold() if char.isalnum())
+        identity_key = _identity_key(clean_nome)
         provisional_rows = (
             await db.scalars(
                 select(Fornitore)
@@ -151,7 +169,7 @@ async def create_fornitore(
         ).all()
         provisional_matches = [
             supplier for supplier in provisional_rows
-            if "".join(char for char in supplier.nome_azienda.casefold() if char.isalnum()) == identity_key
+            if _identity_key(supplier.nome_azienda) == identity_key
         ]
         if len(provisional_matches) > 1:
             raise HTTPException(
