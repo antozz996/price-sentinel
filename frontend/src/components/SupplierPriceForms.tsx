@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession } from '../api';
 
 type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string | null };
-type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean> };
+type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean>; subcategories?: Record<string, string[]> };
 type Category = { nome: string; is_active: boolean };
 type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
 type SubmittedOffer = { id_offerta: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota?: string | null; conferma_prezzo: boolean };
@@ -42,6 +42,8 @@ function phoneForWhatsApp(value?: string | null) {
   return digits.length >= 8 ? digits : '';
 }
 
+const same = (a?: string | null, b?: string | null) => (a || '').trim().toLocaleLowerCase() === (b || '').trim().toLocaleLowerCase();
+
 export default function SupplierPriceForms() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -51,6 +53,9 @@ export default function SupplierPriceForms() {
   const [productCategory, setProductCategory] = useState('');
   const [supplierIds, setSupplierIds] = useState<number[]>([]);
   const [recipientCategory, setRecipientCategory] = useState('');
+  // Sections (reparti) of each category, by lowercase category name; '' = every enabled section.
+  const [sectionsByCategory, setSectionsByCategory] = useState<Record<string, string[]>>({});
+  const [section, setSection] = useState('');
   const [rowsBySupplier, setRowsBySupplier] = useState<Record<number, PriceRow[]>>({});
   const [selectedBySupplier, setSelectedBySupplier] = useState<Record<number, number[]>>({});
   const [listinoSection, setListinoSection] = useState('all');
@@ -100,20 +105,37 @@ export default function SupplierPriceForms() {
     Promise.all([
       fetchWithAuth('/fornitori/'),
       fetchWithAuth('/categories/matrix'),
-    ]).then(([supplierData, matrixData]: [any, MatrixResponse]) => {
+      fetchWithAuth('/categories/subcategories'),
+    ]).then(([supplierData, matrixData, sectionData]: [any, MatrixResponse, any]) => {
+      const sections: Record<string, string[]> = {};
+      for (const item of Array.isArray(sectionData) ? sectionData : []) {
+        if (item?.is_active === false || !item?.categoria_nome || !item?.nome) continue;
+        (sections[String(item.categoria_nome).trim().toLocaleLowerCase()] ||= []).push(String(item.nome).trim());
+      }
+      setSectionsByCategory(sections);
       setSuppliers(Array.isArray(supplierData) ? supplierData : supplierData.items || supplierData.records || []);
       setCategories((matrixData.categories || []).filter(category => category.is_active));
       setCapabilitySuppliers(matrixData.suppliers || []);
     }).catch((e: unknown) => setError(e instanceof Error ? e.message : 'Impossibile caricare fornitori e categorie'));
   }, []);
 
+  const activeCategory = recipientMode === 'category' ? recipientCategory : requestType === 'new_listino' ? productCategory : '';
+  const categorySections = sectionsByCategory[activeCategory.trim().toLocaleLowerCase()] || [];
+  const categorySuppliers = useMemo(() => recipientMode !== 'category' || !recipientCategory ? [] : capabilitySuppliers
+    .filter(s => s.categories?.[recipientCategory] === true && suppliers.some(x => x.id === s.supplier_id)),
+    [recipientMode, recipientCategory, capabilitySuppliers, suppliers]);
   const eligibleSupplierIds = useMemo(() => {
-    if (recipientMode !== 'category' || !recipientCategory) return [];
-    return capabilitySuppliers
-      .filter(s => s.categories?.[recipientCategory] === true)
-      .map(s => s.supplier_id)
-      .filter(id => suppliers.some(s => s.id === id));
-  }, [recipientMode, recipientCategory, capabilitySuppliers, suppliers]);
+    // In a category split into sections a supplier only takes part for its enabled sections.
+    const sections = sectionsByCategory[recipientCategory.trim().toLocaleLowerCase()] || [];
+    return categorySuppliers.filter(s => {
+      if (!sections.length) return true;
+      const enabled = s.subcategories?.[recipientCategory] || [];
+      return section ? enabled.some(name => same(name, section)) : enabled.length > 0;
+    }).map(s => s.supplier_id);
+  }, [categorySuppliers, sectionsByCategory, recipientCategory, section]);
+  const suppliersWithoutSections = categorySections.length
+    ? categorySuppliers.filter(s => !(s.subcategories?.[recipientCategory] || []).length).map(s => s.supplier_name)
+    : [];
   const selectedSupplierIds = recipientMode === 'category' ? eligibleSupplierIds : supplierIds;
   const selectedSuppliers = selectedSupplierIds.map(id => suppliers.find(s => s.id === id)).filter((s): s is Supplier => Boolean(s));
   const publicOrigin = publicBaseUrl.trim().replace(/\/$/, '');
@@ -138,8 +160,16 @@ export default function SupplierPriceForms() {
             id: p.id, sku_interno: p.sku_interno, descrizione: p.descrizione,
             unita_misura: p.unita_misura, category: p.category, subcategory: p.subcategory,
           }));
-          setRowsBySupplier(Object.fromEntries(selectedSupplierIds.map(id => [id, rows])));
-          setSelectedBySupplier(Object.fromEntries(selectedSupplierIds.map(id => [id, rows.map(row => row.id)])));
+          const sections = sectionsByCategory[category.trim().toLocaleLowerCase()] || [];
+          const rowsFor = (id: number) => {
+            if (section) return rows.filter(row => same(row.subcategory, section));
+            if (!sections.length) return rows;
+            const enabled = capabilitySuppliers.find(s => s.supplier_id === id)?.subcategories?.[category] || [];
+            return rows.filter(row => enabled.some(name => same(name, row.subcategory)));
+          };
+          const entries = selectedSupplierIds.map(id => [id, rowsFor(id)] as const);
+          setRowsBySupplier(Object.fromEntries(entries));
+          setSelectedBySupplier(Object.fromEntries(entries.map(([id, list]) => [id, list.map(row => row.id)])));
         })
         .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'Impossibile caricare il catalogo prodotti'); })
         .finally(() => { if (live) setLoadingCatalog(false); });
@@ -156,7 +186,7 @@ export default function SupplierPriceForms() {
       if (recipientMode === 'category' && recipientCategory) {
         const initial: Record<number, number[]> = {};
         for (const [id, rows] of entries) {
-          initial[id] = rows.filter(row => row.category?.trim().toLocaleLowerCase() === recipientCategory.toLocaleLowerCase()).map(row => row.id);
+          initial[id] = rows.filter(row => same(row.category, recipientCategory) && (!section || same(row.subcategory, section))).map(row => row.id);
         }
         setSelectedBySupplier(initial);
       }
@@ -164,7 +194,7 @@ export default function SupplierPriceForms() {
       if (live) setError(e instanceof Error ? e.message : 'Impossibile caricare uno o più listini');
     }).finally(() => { if (live) setLoadingCatalog(false); });
     return () => { live = false; };
-  }, [selectedSupplierIds, recipientMode, recipientCategory, requestType, productCategory]);
+  }, [selectedSupplierIds, recipientMode, recipientCategory, requestType, productCategory, section, sectionsByCategory, capabilitySuppliers]);
 
   const allRows = useMemo(
     () => selectedSupplierIds.flatMap(id => rowsBySupplier[id] || []),
@@ -196,13 +226,13 @@ export default function SupplierPriceForms() {
   const visibleRowsBySupplier = useMemo(() => Object.fromEntries(selectedSupplierIds.map(id => {
     const rows = rowsBySupplier[id] || [];
     return [id, rows.filter(row => {
-      if (recipientMode === 'category') return row.category?.trim().toLocaleLowerCase() === recipientCategory.toLocaleLowerCase();
+      if (recipientMode === 'category') return same(row.category, recipientCategory) && (!section || same(row.subcategory, section));
       if (!activeGroup || activeGroup.value === 'all') return true;
       if (activeGroup.uncategorized) return !row.category?.trim();
       if (activeGroup.subcategory) return row.category?.trim() === activeGroup.category && row.subcategory?.trim() === activeGroup.subcategory;
       return row.category?.trim() === activeGroup.category;
     })];
-  })), [selectedSupplierIds, rowsBySupplier, activeGroup, recipientMode, recipientCategory]);
+  })), [selectedSupplierIds, rowsBySupplier, activeGroup, recipientMode, recipientCategory, section]);
   const visibleRows = selectedSupplierIds.flatMap(id => visibleRowsBySupplier[id] || []);
   const selectedCount = selectedSupplierIds.reduce((sum, id) => sum + (selectedBySupplier[id]?.length || 0), 0);
   const allVisibleSelected = visibleRows.length > 0 && selectedSupplierIds.every(id =>
@@ -224,6 +254,13 @@ export default function SupplierPriceForms() {
       ? current[supplierId].filter(x => x !== id) : [...(current[supplierId] || []), id]
   }));
 
+  const sectionSelect = categorySections.length > 0 && <label>Reparto
+    <select style={field} value={section} onChange={e => setSection(e.target.value)}>
+      <option value="">Tutti i reparti abilitati</option>
+      {categorySections.map(name => <option key={name} value={name}>{name}</option>)}
+    </select>
+  </label>;
+
   const createForms = async () => {
     setBusy(true); setError(''); setNotice(''); setCreatedLinks([]);
     const results: CreatedLink[] = [];
@@ -235,7 +272,7 @@ export default function SupplierPriceForms() {
           supplier_id: supplier.id,
           request_type: requestType,
           ...(requestType === 'new_listino'
-            ? { category: recipientMode === 'category' ? recipientCategory : productCategory, product_ids: listinoIds }
+            ? { category: recipientMode === 'category' ? recipientCategory : productCategory, subcategory: section || null, product_ids: listinoIds }
             : { listino_ids: listinoIds }),
           expires_in_days: days, note: note.trim() || null, show_best_price: showBestPrice
         }) }) as CreateResult;
@@ -398,8 +435,8 @@ export default function SupplierPriceForms() {
         <button type="button" className={requestType === 'new_listino' ? 'btn btn-primary' : 'btn'} onClick={() => { setRequestType('new_listino'); setCreatedLinks([]); }}>Richiedi nuovo listino</button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-        <button type="button" className={recipientMode === 'suppliers' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('suppliers'); setSupplierIds([]); setCreatedLinks([]); }}>Seleziona fornitori</button>
-        <button type="button" className={recipientMode === 'category' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('category'); setSupplierIds([]); setRecipientCategory(''); setCreatedLinks([]); }}>Seleziona per categoria</button>
+        <button type="button" className={recipientMode === 'suppliers' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('suppliers'); setSection(''); setSupplierIds([]); setCreatedLinks([]); }}>Seleziona fornitori</button>
+        <button type="button" className={recipientMode === 'category' ? 'btn btn-primary' : 'btn'} onClick={() => { setRecipientMode('category'); setSection(''); setSupplierIds([]); setRecipientCategory(''); setCreatedLinks([]); }}>Seleziona per categoria</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 12 }}>
         {localBrowserOrigin && <label style={{ gridColumn: '1 / -1' }}>Indirizzo base da inserire nei link
@@ -412,7 +449,7 @@ export default function SupplierPriceForms() {
           <small style={{ display: 'block', color: 'var(--text-secondary)', marginTop: 5 }}>Per provare il modulo sul tuo computer puoi usare localhost. Il fornitore non potrà aprire un link localhost: prima di inviarlo, inserisci il dominio pubblico o il tunnel attivo.</small>
         </label>}
         {recipientMode === 'category' ? <label>Categoria fornitori
-          <select style={field} value={recipientCategory} onChange={e => setRecipientCategory(e.target.value)}>
+          <select style={field} value={recipientCategory} onChange={e => { setRecipientCategory(e.target.value); setSection(''); }}>
             <option value="">Seleziona categoria…</option>
             {categories.map(category => <option key={category.nome} value={category.nome}>{category.nome}</option>)}
           </select>
@@ -441,6 +478,7 @@ export default function SupplierPriceForms() {
             </div>
           </div>}
         </div>}
+        {recipientMode === 'category' && sectionSelect}
         <label>Scadenza link<select style={field} value={days} onChange={e => setDays(Number(e.target.value))}>{[7,14,21,30].map(d => <option key={d} value={d}>{d} giorni</option>)}</select></label>
         <label style={{ gridColumn: '1 / -1' }}>Nota per i fornitori<textarea style={field} rows={2} maxLength={1000} value={note} onChange={e => setNote(e.target.value)} placeholder="Facoltativa" /></label>
         <label style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -449,18 +487,20 @@ export default function SupplierPriceForms() {
             <small style={{ display: 'block', color: 'var(--text-secondary)' }}>Accanto a ogni prodotto il fornitore vede il prezzo più basso degli altri fornitori, senza nomi, solo se confrontabile per unità (€/kg, €/pezzo…). Non compare se il fornitore ha già un prezzo uguale o più basso; se è il migliore vede “Siete il prezzo migliore”.</small></span>
         </label>
       </div>
-      {recipientMode === 'category' && recipientCategory && <p style={{ color: 'var(--text-secondary)' }}>Fornitori associati a {recipientCategory}: <strong>{selectedSuppliers.length}</strong></p>}
+      {recipientMode === 'category' && recipientCategory && <p style={{ color: 'var(--text-secondary)' }}>Fornitori associati a {recipientCategory}{section ? ' · ' + section : ''}: <strong>{selectedSuppliers.length}</strong></p>}
+      {recipientMode === 'category' && suppliersWithoutSections.length > 0 && <p style={{ color: 'var(--warn)' }}>Esclusi perché senza reparti {recipientCategory} abilitati: {suppliersWithoutSections.join(', ')}. Abilitali in Categorie per includerli.</p>}
       {selectedSupplierIds.length > 0 && <div style={{ marginTop: 16, display: 'grid', gap: 12 }}>
         {requestType === 'new_listino' ? <>
           {recipientMode === 'category'
             ? <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Catalogo prodotti della categoria {recipientCategory}, uguale per tutti i fornitori: i prezzi già a listino di ciascuno sono precompilati, gli altri prodotti sono da quotare.</p>
             : <label>Categoria prodotti da richiedere
-                <select style={field} value={productCategory} onChange={e => setProductCategory(e.target.value)}>
+                <select style={field} value={productCategory} onChange={e => { setProductCategory(e.target.value); setSection(''); }}>
                   <option value="">Seleziona categoria…</option>
                   {categories.map(category => <option key={category.nome} value={category.nome}>{category.nome}</option>)}
                 </select>
               </label>}
-          <small style={{ color: 'var(--text-secondary)' }}>Vengono inclusi i prodotti attivi del catalogo generale per la categoria scelta. Il fornitore inserirà prezzi e unità; nessun prezzo di altri fornitori viene copiato.</small>
+          {recipientMode === 'suppliers' && sectionSelect}
+          <small style={{ color: 'var(--text-secondary)' }}>Vengono inclusi i prodotti attivi del catalogo generale per la categoria scelta{categorySections.length ? ', limitati ai reparti abilitati per ciascun fornitore' : ''}. Il fornitore inserirà prezzi e unità; nessun prezzo di altri fornitori viene copiato.</small>
         </> : <>
           <label>Listino / sezione da inviare
             <select style={field} value={listinoSection} onChange={e => setListinoSection(e.target.value)} disabled={recipientMode === 'category'}>

@@ -23,7 +23,9 @@ from app.database import get_db
 from app.models.company_settings import CompanySettings
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
+from app.models.categories import MasterSubcategory
 from app.models.products import Product, SupplierProductAlias
+from app.models.purchase_policy import SupplierSubcategoryCapability
 from app.models.supplier_price_form import SupplierPriceFormIdentity, SupplierPriceFormItem, SupplierPriceFormRequest
 from app.models.utenti import Utente
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
@@ -348,6 +350,8 @@ class CreateFormRequest(BaseModel):
     listino_ids: list[int] = Field(default_factory=list, max_length=2000)
     product_ids: list[int] = Field(default_factory=list, max_length=2000)
     category: Optional[str] = Field(default=None, max_length=100)
+    # Narrows a new_listino request to one section (reparto) of the category.
+    subcategory: Optional[str] = Field(default=None, max_length=100)
     expires_in_days: int = Field(default=14, ge=1, le=30)
     note: Optional[str] = Field(default=None, max_length=1000)
     # Off unless the admin turns it on for this form.
@@ -559,6 +563,21 @@ async def submit_public_form(
     return {"status": "submitted", "message": message}
 
 
+async def _enabled_sections(db: AsyncSession, supplier_id: int, category: str) -> set[str] | None:
+    """Sections of the category enabled for the supplier; None if the category has no sections."""
+    name = category.strip().lower()
+    has_sections = await db.scalar(select(func.count(MasterSubcategory.id)).where(
+        func.lower(func.btrim(MasterSubcategory.categoria_nome)) == name, MasterSubcategory.is_active.is_(True)))
+    if not has_sections:
+        return None
+    enabled = (await db.scalars(select(SupplierSubcategoryCapability.subcategory).where(
+        SupplierSubcategoryCapability.supplier_id == supplier_id,
+        func.lower(func.btrim(SupplierSubcategoryCapability.categoria_nome)) == name,
+        SupplierSubcategoryCapability.enabled.is_(True),
+    ))).all()
+    return {section.strip().casefold() for section in enabled}
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED, summary="Crea un modulo per un fornitore")
 async def create_form_request(
     payload: CreateFormRequest,
@@ -591,6 +610,32 @@ async def create_form_request(
         # approval, like a confirmation), elsewhere the row is left to quote.
         skus = {product.sku_interno for product in products if product.sku_interno}
         current_rows = [row for row in await _active_supplier_rows(db, supplier.id) if row.sku_interno in skus]
+        # A category split into sections (Food: Frutta, Carne…) only goes to a
+        # supplier for the sections enabled for it: a butcher is not asked fruit.
+        sections = await _enabled_sections(db, supplier.id, payload.category)
+        wanted = (payload.subcategory or "").strip().casefold()
+        if sections is not None:
+            if not sections:
+                raise HTTPException(status_code=422, detail=(
+                    f"{supplier.nome_azienda} non ha reparti {payload.category.strip()} abilitati: "
+                    "abilitali in Categorie prima di inviare il modulo"))
+            if wanted and wanted not in sections:
+                raise HTTPException(status_code=422, detail=(
+                    f"{supplier.nome_azienda} non è abilitato al reparto {payload.subcategory.strip()}"))
+        if wanted:
+            products = [p for p in products if (p.subcategory or "").strip().casefold() == wanted]
+        elif sections is not None:
+            # A product not yet assigned to a section stays with who already sells it.
+            sold = {row.sku_interno for row in current_rows}
+            products = [
+                p for p in products
+                if (p.subcategory or "").strip().casefold() in sections
+                or (not (p.subcategory or "").strip() and p.sku_interno in sold)
+            ]
+        if not products:
+            raise HTTPException(status_code=422, detail="Nessun prodotto della selezione rientra nei reparti abilitati per questo fornitore")
+        skus = {product.sku_interno for product in products if product.sku_interno}
+        current_rows = [row for row in current_rows if row.sku_interno in skus]
         formats = await _offer_formats(db, supplier.id, current_rows)
         rows_by_sku: dict[str, list[ListinoMaster]] = {}
         for row in current_rows:
