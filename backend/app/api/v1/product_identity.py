@@ -19,7 +19,8 @@ from app.models.listino import ListinoMaster
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
 from app.models.fornitori import Fornitore
 from app.models.anomalie import Anomalia, StatoValidazione
-from app.services.normalization import extract_candidate_attributes, infer_category, normalize_text
+from app.models.purchase_policy import SupplierCategoryCapability
+from app.services.normalization import extract_candidate_attributes, infer_new_product_category, normalize_text
 from app.services.matching import normalize_price_for_comparison, _get_listino_attivo
 from app.services.order_resolver import resolve_order_item
 
@@ -1017,6 +1018,13 @@ async def get_match_work_queue(
 
     live_alternatives = await run_in_threadpool(_compute_live_alternatives)
 
+    supplier_categories: dict[int, list[str]] = {}
+    for supplier_id, category in (await db.execute(
+        select(SupplierCategoryCapability.supplier_id, SupplierCategoryCapability.category)
+        .where(SupplierCategoryCapability.enabled.is_(True))
+    )).all():
+        supplier_categories.setdefault(supplier_id, []).append(category)
+
     items = []
     for group, alternatives in zip(groups.values(), live_alternatives):
         # Persisted candidates describe the catalog at ingestion time and may
@@ -1047,7 +1055,8 @@ async def get_match_work_queue(
             "data_documento": str(group["latest_invoice_date"]),
             "suggested_product": {
                 "canonical_name": group["raw_description"].strip(),
-                "category": attributes.get("category") or infer_category(group["raw_description"]),
+                "category": infer_new_product_category(
+                    group["raw_description"], tuple(supplier_categories.get(group["supplier_id"], ()))),
                 "volume_ml": attributes.get("volume_ml"),
                 "weight_g": attributes.get("weight_g"),
                 # Il formato 90x120 può indicare dimensioni, non 90 pezzi: il

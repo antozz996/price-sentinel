@@ -18,7 +18,7 @@ from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import SmartPriceSheetPreview
-from app.services.normalization import infer_category, normalize_text
+from app.services.normalization import infer_new_product_category, normalize_text
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
@@ -298,7 +298,7 @@ async def build_price_preview(
                     sku_interno=virtual_sku,
                     canonical_name=ref.strip(),
                     normalized_name=norm_ref,
-                    category=category or infer_category(ref) or "Beverage",
+                    category=category or infer_new_product_category(ref),
                     subcategory=subcategory or None,
                     comparison_unit=row_uom,
                     is_active=True,
@@ -562,7 +562,7 @@ async def build_price_preview(
                 "old_price": _price_string(Decimal(str(current.prezzo_pattuito))) if current else None,
                 "new_price": _price_string(price),
                 "uom": row_uom,
-                "category": category or getattr(product, "category", None) or "Beverage",
+                "category": category or getattr(product, "category", None),
                 "subcategory": subcategory or getattr(product, "subcategory", None),
                 "action": "unchanged" if same else ("update" if current else "create"),
             }
@@ -700,7 +700,7 @@ async def commit_price_preview(
                     normalized_name=norm_name,
                     order_name=ord_name,
                     normalized_order_name=normalize_text(ord_name) if ord_name else None,
-                    category=change.get("category") or infer_category(change["product_name"]) or "Beverage",
+                    category=change.get("category") or infer_new_product_category(change["product_name"]),
                     subcategory=change.get("subcategory"),
                     comparison_unit=change.get("uom") or "Pz",
                     is_active=True,

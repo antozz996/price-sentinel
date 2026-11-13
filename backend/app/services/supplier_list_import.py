@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.models.listino import ListinoMaster
-from app.services.normalization import KG_UNITS, normalize_text, extract_volume_ml, infer_category, extract_pack_qty, extract_weight_g
+from app.services.normalization import KG_UNITS, normalize_text, extract_volume_ml, infer_category, infer_new_product_category, extract_pack_qty, extract_weight_g
 from app.services.matching import resolve_invoice_line_product
 
 
@@ -345,7 +345,7 @@ async def import_supplier_list_excel(
                             sku_interno=matched_sku,
                             canonical_name=raw_desc,
                             normalized_name=normalized_description,
-                            category=category,
+                            category=infer_new_product_category(raw_desc),
                             volume_ml=volume_ml,
                             weight_g=weight_g,
                             unit_count=1,
