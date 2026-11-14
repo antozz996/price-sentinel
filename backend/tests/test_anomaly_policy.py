@@ -18,6 +18,7 @@ from app.api.v1.fatture import list_fatture, list_righe_fattura
 from app.models.anomalie import Anomalia, StatoValidazione
 from app.services.anomaly_policy import (
     MIN_ANOMALY_TOTAL,
+    MIN_ANOMALY_UNIT_DELTA,
     is_material_price_increase,
     operational_anomaly_filter,
     stale_unworked_anomaly_conditions,
@@ -70,14 +71,42 @@ class MaterialityRuleTest(unittest.TestCase):
         self.assertFalse(is_material_price_increase(Decimal("0.04")))
         self.assertFalse(is_material_price_increase(Decimal("0.0999")))
 
-    def test_ten_cents_is_material(self):
-        self.assertTrue(is_material_price_increase(Decimal("0.10")))
+    def test_exactly_ten_cents_is_not_material(self):
+        # Cases #224 (STRUTTO 4 x 0.025) and #294 (Spirale 1 x 0.10).
+        self.assertFalse(is_material_price_increase(Decimal("0.10")))
+        self.assertFalse(is_material_price_increase(Decimal("4") * Decimal("0.025"), Decimal("0.025")))
+        self.assertFalse(is_material_price_increase(Decimal("0.1000"), Decimal("0.1000")))
+
+    def test_above_ten_cents_is_material(self):
+        self.assertTrue(is_material_price_increase(Decimal("0.1001")))
+        self.assertTrue(is_material_price_increase(Decimal("0.11"), Decimal("0.11")))
         self.assertTrue(is_material_price_increase(Decimal("5.00")))
+        self.assertTrue(is_material_price_increase(5.0, 0.5))
+
+    def test_threshold_is_judged_at_stored_scale(self):
+        # A normalised price with long decimals must not create an anomaly that
+        # is stored as exactly 0.1000 and then hidden by the SQL filter.
+        self.assertFalse(is_material_price_increase(Decimal("0.100000000004"), Decimal("0.025000000001")))
+        self.assertTrue(is_material_price_increase(Decimal("0.10005"), Decimal("0.10005")))
+
+    def test_sub_half_cent_unit_gap_is_rounding(self):
+        # Case #72 (Moet): 8.1431 vs 8.14 on 90 bottles = 0.2828 EUR.
+        self.assertFalse(is_material_price_increase(Decimal("0.2828"), Decimal("0.0031")))
+        # Ice Imperial: 0.0017 EUR x 60.
+        self.assertFalse(is_material_price_increase(Decimal("0.102"), Decimal("0.0017")))
+        self.assertFalse(is_material_price_increase(Decimal("0.50"), Decimal("0.0049")))
+        # Half a cent and a real one-cent increase stay anomalies.
+        self.assertTrue(is_material_price_increase(Decimal("0.15"), Decimal("0.0050")))
+        self.assertTrue(is_material_price_increase(Decimal("0.30"), Decimal("0.0100")))
+
+    def test_unit_gap_is_optional_for_old_callers(self):
+        self.assertTrue(is_material_price_increase(Decimal("0.2828")))
 
     def test_sql_filter_uses_the_shared_threshold(self):
         sql = compiled(select(Anomalia.id).where(operational_anomaly_filter()))
-        self.assertIn("abs(anomalie.delta_totale) >=", sql)
-        self.assertIn(str(MIN_ANOMALY_TOTAL), sql)
+        self.assertIn(f"abs(anomalie.delta_totale) > {MIN_ANOMALY_TOTAL}", sql)
+        self.assertNotIn("abs(anomalie.delta_totale) >=", sql)
+        self.assertIn(f"abs(anomalie.delta_prezzo) >= {MIN_ANOMALY_UNIT_DELTA}", sql)
 
     def test_micro_anomalies_stay_visible_only_while_being_handled(self):
         sql = compiled(select(Anomalia.id).where(operational_anomaly_filter()))

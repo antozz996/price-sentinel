@@ -973,7 +973,7 @@ async def resolve_parked_line(
     from app.models.fatture import RigaFattura, Fattura, StatoMatching
     from app.models.anomalie import Anomalia, StatoValidazione
     from app.services.normalization import normalize_text
-    from app.services.matching import normalize_price_for_comparison, _get_listino_attivo
+    from app.services.matching import normalize_price_for_comparison, _get_listino_attivo, invoice_delta_total
     from decimal import Decimal
     from sqlalchemy import delete
     
@@ -1064,10 +1064,12 @@ async def resolve_parked_line(
                 target_comparison_unit=listino.unita_misura,
             )
             if norm_price_res.reliable:
-                riga.prezzo_netto_normalizzato = norm_price_res.normalized_unit_price
-                delta = riga.prezzo_netto_normalizzato - Decimal(str(listino.prezzo_pattuito))
-                delta_total = delta * riga.quantita
-                if is_material_price_increase(delta_total) and await invoice_in_check_scope(db, fattura.xml_raw_id):
+                # The line keeps its invoiced net price (spend reports multiply it by the
+                # quantity): the converted price lives only in the anomaly snapshot.
+                compared_price = norm_price_res.normalized_unit_price
+                delta = compared_price - Decimal(str(listino.prezzo_pattuito))
+                delta_total = invoice_delta_total(delta, riga.quantita, norm_price_res)
+                if is_material_price_increase(delta_total, delta) and await invoice_in_check_scope(db, fattura.xml_raw_id):
                     await archive_and_remove_anomalies(
                         db, Anomalia.riga_fattura_id == riga.id, reason="riassociazione"
                     )
@@ -1077,7 +1079,7 @@ async def resolve_parked_line(
                         delta_prezzo=delta,
                         delta_totale=delta_total,
                         prezzo_listino_snapshot=listino.prezzo_pattuito,
-                        prezzo_fatturato_snapshot=riga.prezzo_netto_normalizzato,
+                        prezzo_fatturato_snapshot=compared_price,
                         stato_validazione=StatoValidazione.da_verificare,
                     )
                     db.add(anomalia)

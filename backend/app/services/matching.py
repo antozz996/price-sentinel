@@ -62,6 +62,15 @@ class NormalizedPriceResult:
     pack_qty: Optional[int]
     reliable: bool = True
     explanation: str = ""
+    # Unità di listino contenute in una unità di fattura: 30 per un cartone da 30
+    # pezzi confrontato a pezzo, 0.2 per un kg confrontato con un cartone da 5 kg.
+    # La quantità della riga è in unità di fattura, il delta prezzo in unità di listino.
+    listino_units_per_invoice_unit: Decimal = Decimal("1")
+
+
+def invoice_delta_total(delta_prezzo, quantita, normalized: NormalizedPriceResult) -> Decimal:
+    """Sovrapprezzo totale della riga: delta per unità di listino x unità di listino fatturate."""
+    return Decimal(str(delta_prezzo)) * Decimal(str(quantita)) * normalized.listino_units_per_invoice_unit
 
 
 # Weight/volume units (after normalize_text) other than kg: a price in these is never per piece.
@@ -154,6 +163,7 @@ def normalize_price_for_comparison(
             pack_qty=getattr(alias_obj, "pack_qty", None),
             reliable=True,
             explanation=f"Fattore confezione: 1 unità di fattura = {factor.normalize()} unità di listino",
+            listino_units_per_invoice_unit=factor,
         )
 
     # 1. Risolvi pack_qty
@@ -272,12 +282,16 @@ def normalize_price_for_comparison(
             reliable = False
             explanation = "Unità prezzo ambigua: conversione a confezione non applicata"
 
+    # Every conversion above is price / units: the ratio gives the listino units
+    # in one invoice unit (pack split, per-litre/per-kg, piece-to-box scaling).
+    units = price / normalized_price if price and normalized_price else Decimal("1")
     return NormalizedPriceResult(
         normalized_unit_price=normalized_price,
         comparison_unit=comp_unit,
         pack_qty=pack_qty,
         reliable=reliable,
         explanation=explanation,
+        listino_units_per_invoice_unit=units,
     )
 
 
@@ -588,7 +602,7 @@ async def match_riga(
                 result.delta_prezzo = (result.prezzo_fatturato_normalizzato - listino.prezzo_pattuito).quantize(
                     Decimal("0.0001"), rounding=ROUND_HALF_UP
                 )
-                result.delta_totale = (result.delta_prezzo * quantita).quantize(
+                result.delta_totale = invoice_delta_total(result.delta_prezzo, quantita, norm_price_res).quantize(
                     Decimal("0.0001"), rounding=ROUND_HALF_UP
                 )
             else:

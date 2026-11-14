@@ -237,11 +237,12 @@ async def _process_td01(
             await db.flush()
 
         # Ignore sub-cent rounding noise: an operational anomaly starts only
-        # when the total overcharge reaches the shared materiality threshold.
+        # when the total overcharge exceeds the shared materiality threshold
+        # and the unit gap is not mere rounding.
         from app.services.anomaly_policy import invoice_in_check_scope, is_material_price_increase
         if (
             match_result.matched
-            and is_material_price_increase(match_result.delta_totale)
+            and is_material_price_increase(match_result.delta_totale, match_result.delta_prezzo)
             and await invoice_in_check_scope(db, xml_raw_id)
         ):
             anomalia = Anomalia(
