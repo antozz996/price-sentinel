@@ -7,7 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
@@ -67,6 +67,33 @@ def cut_offer_rows_at(rows, effective_date: date) -> None:
         if row.data_inizio_validita >= effective_date:
             # Starts on or after the new date (e.g. a confirmation form re-sent with
             # the same start): it cannot end the day before, keep the previous behaviour.
+            continue
+        row.data_scadenza = cutoff
+
+
+def previous_price_end(row_start: date, new_start: date) -> date:
+    """Scadenza del prezzo che viene sostituito da uno nuovo che parte il new_start.
+
+    Finisce il giorno prima, così un giorno ha un solo prezzo valido e
+    _get_listino_attivo non resta senza risposta. Se il vecchio prezzo parte lo
+    stesso giorno o dopo, non si crea un intervallo invertito: dura il suo primo giorno.
+    """
+    return max(new_start - timedelta(days=1), row_start)
+
+
+def cut_other_supplier_rows_at(rows, effective_date: date) -> None:
+    """Prezzi dello stesso fornitore e prodotto non legati a un'offerta del foglio.
+
+    Il listino legato al collegamento della fattura vince nel confronto
+    (_get_listino_attivo cerca prima il collegamento esatto): se il foglio prezzi
+    non lo chiude, il prezzo vecchio resta quello usato senza avvisi.
+    Stessa regola di cut_offer_rows_at, anche per le righe senza scadenza.
+    """
+    cutoff = effective_date - timedelta(days=1)
+    for row in rows:
+        if row.data_scadenza is not None and row.data_scadenza < effective_date:
+            continue
+        if row.data_inizio_validita >= effective_date:
             continue
         row.data_scadenza = cutoff
 
@@ -246,6 +273,22 @@ async def commit_variant_preview(db: AsyncSession, preview: SmartPriceSheetPrevi
                 ListinoMaster.data_scadenza >= effective_date,
             ).with_for_update())).all()
             cut_offer_rows_at(expiring, effective_date)
+        others = (await db.scalars(
+            select(ListinoMaster).options(noload("*"))
+            .outerjoin(SupplierProductAlias, SupplierProductAlias.id == ListinoMaster.supplier_product_alias_id)
+            .where(
+                ListinoMaster.fornitore_id == supplier.id,
+                ListinoMaster.sku_interno == product.sku_interno,
+                ListinoMaster.data_inizio_validita < effective_date,
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= effective_date),
+                or_(
+                    ListinoMaster.supplier_product_alias_id.is_(None),
+                    SupplierProductAlias.source.is_(None),
+                    SupplierProductAlias.source != "normalized_sheet_offer",
+                ),
+            ).with_for_update(of=ListinoMaster)
+        )).all()
+        cut_other_supplier_rows_at(others, effective_date)
         if current:
             current.data_scadenza = effective_date - timedelta(days=1)
             result["updated"] += 1

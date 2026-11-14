@@ -428,7 +428,11 @@ async def create_approvazione(
         if listino_active:
             if float(listino_active.prezzo_pattuito) != float(data.prezzo_approvato):
                 # Chiude la validita' del record corrente (Append-Only)
-                listino_active.data_scadenza = date.today()
+                # Finisce il giorno prima del nuovo: un solo prezzo valido per giorno.
+                from app.services.variant_price_import import previous_price_end
+                listino_active.data_scadenza = previous_price_end(
+                    listino_active.data_inizio_validita, date.today()
+                )
                 
                 # Crea nuovo record con prezzo aggiornato
                 new_list = ListinoMaster(

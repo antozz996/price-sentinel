@@ -15,6 +15,7 @@ from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.models.listino import ListinoMaster
 from app.services.normalization import KG_UNITS, normalize_text, extract_volume_ml, infer_category, infer_new_product_category, extract_pack_qty, extract_weight_g
 from app.services.matching import resolve_invoice_line_product
+from app.services.variant_price_import import previous_price_end
 
 
 def normalize_price_uom(value: Any) -> str:
@@ -139,7 +140,8 @@ async def save_append_only_price(
         if corrente.prezzo_pattuito == prezzo_pattuito and corrente.unita_misura == unita_misura:
             return "unchanged"
         else:
-            corrente.data_scadenza = data_inizio
+            # Il vecchio prezzo finisce il giorno prima: un solo prezzo valido per giorno.
+            corrente.data_scadenza = previous_price_end(corrente.data_inizio_validita, data_inizio)
             db.add(corrente)
             
             nuovo = ListinoMaster(

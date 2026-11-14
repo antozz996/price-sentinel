@@ -131,6 +131,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_offer_renewal.py' -v
 
+      - name: Unit - Minor fixes (normalized supplier choice, price closing, units, worked anomalies, archived suppliers)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_correzioni_minori.py' -v
+
       - name: Unit — Invoice XML per-unit discounts
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_xml_discounts.py' -v
