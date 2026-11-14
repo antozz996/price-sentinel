@@ -107,6 +107,14 @@ def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: s
     """
     import io
     from datetime import datetime
+    import html
+    from xml.sax.saxutils import escape as _xml_escape
+
+    from app.services.consumption_report import format_quantity, invoice_totals, quantities_text
+
+    def escape(value) -> str:
+        # Testo da fattura dentro un Paragraph: niente markup, ma "&amp;" resta "&".
+        return _xml_escape(html.unescape(str(value or "")))
     
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -158,9 +166,9 @@ def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: s
     # Header
     elements.append(Paragraph("<b>PRICE SENTINEL</b> - RIEPILOGO FATTURE DI CONSUMO", title_style))
     elements.append(Paragraph(
-        f"<b>Analisi articolo/i:</b> {title}<br/>"
+        f"<b>Analisi articolo/i:</b> {escape(title)}<br/>"
         f"<i>Report generato il {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</i>" + 
-        (f"<br/><b>Filtri attivi:</b> {filter_desc}" if filter_desc else ""), 
+        (f"<br/><b>Filtri attivi:</b> {escape(filter_desc)}" if filter_desc else ""), 
         subtitle_style
     ))
     elements.append(Spacer(1, 10))
@@ -177,9 +185,8 @@ def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: s
         Paragraph("Totale", header_cell_style),
     ]]
     
-    totale_quantita = 0.0
     totale_spesa = 0.0
-    
+
     for inv in invoices:
         data_doc = inv.get("data_documento", "")
         # Format date as DD/MM/YYYY if YYYY-MM-DD
@@ -193,34 +200,40 @@ def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: s
         pu = inv.get("prezzo_unitario", 0.0)
         tot = inv.get("spesa_totale", 0.0)
         
-        totale_quantita += qta
         totale_spesa += tot
-        
+        unita = inv.get("unita_misura") or ""
+        numero = escape(str(inv.get("numero_documento", "")))
+        if inv.get("is_reso"):
+            numero += "<br/><i>nota di credito</i>"
+
         data_matrix.append([
             Paragraph(data_doc_formatted, cell_style),
-            Paragraph(str(inv.get("numero_documento", "")), cell_style),
-            Paragraph(str(inv.get("location_nome", "")), cell_style),
-            Paragraph(str(inv.get("fornitore_nome", "")), cell_style),
-            Paragraph(str(inv.get("prodotto_descrizione", "")), cell_style),
-            Paragraph(f"{qta:,.1f}", cell_style),
+            Paragraph(numero, cell_style),
+            Paragraph(escape(str(inv.get("location_nome", ""))), cell_style),
+            Paragraph(escape(str(inv.get("fornitore_nome", ""))), cell_style),
+            Paragraph(escape(str(inv.get("prodotto_descrizione", ""))), cell_style),
+            # Quantità con la sua unità e con il segno (i resi sono negativi).
+            Paragraph(escape(f"{format_quantity(qta)} {unita}".strip()), cell_style),
             Paragraph(f"€ {pu:,.2f}", cell_style),
             Paragraph(f"€ {tot:,.2f}", cell_style),
         ])
-        
-    # Append Total row
+
+    # Totale: una quantità per unità, mai sommate tra loro ("5.940 Lt + 6 PZ").
+    has_summary = all("unita_riepilogo" in inv for inv in invoices)
+    totale_quantita = quantities_text(invoice_totals(invoices)) if invoices and has_summary else ""
     data_matrix.append([
         Paragraph("<b>TOTALE COMPLESSIVO</b>", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph("", cell_bold_style),
-        Paragraph(f"<b>{totale_quantita:,.1f}</b>", cell_bold_style),
+        Paragraph(f"<b>{escape(totale_quantita)}</b>", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph(f"<b>€ {totale_spesa:,.2f}</b>", cell_bold_style),
     ])
-    
+
     # Page width is 595. Margins are 30 on each side. Printable is 535 points.
-    col_widths = [55, 55, 75, 75, 125, 40, 50, 60]
+    col_widths = [50, 55, 70, 70, 110, 65, 50, 65]
     
     table = Table(data_matrix, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([

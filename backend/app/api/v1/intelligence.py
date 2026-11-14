@@ -8,6 +8,7 @@ from typing import Any
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_, or_, case, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
@@ -25,6 +26,7 @@ from fastapi.responses import Response, StreamingResponse
 from app.services.pdf_generator import generate_vendor_passport_pdf, generate_consumption_invoices_pdf
 from app.schemas.approvazioni import ApprovazionePrezzoCreate, ApprovazionePrezzoResponse
 from app.services.anomaly_policy import operational_anomaly_filter
+from app.services import consumption_report
 
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -1293,8 +1295,105 @@ async def export_dispute_excel(
 
 
 # ─────────────────────────────────────────────
-# Report Consumi per Prodotto (Product Consumption)
+# Report Consumi per Prodotto e Top prodotti
+# Un solo calcolo (services/consumption_report.py) per tabella, dettaglio, fatture,
+# PDF ed Excel, sulle righe d'acquisto della base comune (purchase_lines).
 # ─────────────────────────────────────────────
+
+class ConsumptionSelection(BaseModel):
+    """Selezione del dettaglio consumi. Gli SKU viaggiano nel corpo della richiesta:
+    con "Seleziona tutto" (1.757 SKU) l'URL superava gli 8 KB accettati da nginx."""
+
+    skus: list[str] = Field(..., min_length=1, max_length=20000)
+    location_ids: list[int] | None = None
+    fornitore_id: int | None = None
+    data_da: date | None = None
+    data_a: date | None = None
+
+
+def _consumption_filters(location_ids=None, fornitore_id=None, data_da=None, data_a=None, skus=None):
+    # isinstance: le funzioni sono chiamate anche direttamente (script, test) con i default Query(...).
+    return consumption_report.ReportFilters.build(
+        location_ids=location_ids,
+        fornitore_ids=[fornitore_id] if isinstance(fornitore_id, int) else None,
+        date_from=data_da,
+        date_to=data_a,
+        skus=skus,
+    )
+
+
+async def _consumption_items(db: AsyncSession, user, filters) -> list[dict]:
+    """Righe della tabella Consumi (una per SKU): le stesse per schermo, Excel e Top prodotti."""
+    rows, conversions = await consumption_report.load_lines(db, user, filters)
+    return consumption_report.aggregate_by_sku(rows, conversions)
+
+
+async def _selected_skus(db: AsyncSession, raw) -> list[str]:
+    skus = consumption_report.parse_skus(raw)
+    found = await consumption_report.excluded_skus(db, skus)
+    if found:
+        raise HTTPException(status_code=400, detail=f"Prodotto escluso dalle analisi: {', '.join(sorted(found))}")
+    return skus
+
+
+async def _consumption_detail(db: AsyncSession, user, raw_skus, filters_kwargs: dict) -> dict:
+    skus = await _selected_skus(db, raw_skus)
+    if not skus:
+        return {"sku_interno": "", "numero_prodotti": 0, "consumo_per_location": [], "consumo_per_mese": [],
+                "quantita_per_unita": [], "spesa_totale": 0.0, "unita_misura": None, "quantita_totale": None,
+                "prezzo_minimo": None, "prezzo_massimo": None, "prezzo_medio": None}
+    filters = _consumption_filters(skus=skus, **filters_kwargs)
+    rows, conversions = await consumption_report.load_lines(db, user, filters)
+    detail = consumption_report.consumption_detail(rows, conversions)
+    detail["sku_interno"] = skus[0] if len(skus) == 1 else f"{len(skus)} articoli"
+    return detail
+
+
+async def _consumption_invoices(db: AsyncSession, user, skus: list[str], filters_kwargs: dict):
+    if not skus:
+        return [], []
+    rows, conversions = await consumption_report.load_lines(db, user, _consumption_filters(skus=skus, **filters_kwargs))
+    return consumption_report.invoice_rows(rows, conversions), rows
+
+
+async def _consumption_pdf(db: AsyncSession, user, raw_skus, filters_kwargs: dict) -> Response:
+    skus = await _selected_skus(db, raw_skus)
+    invoices, rows = await _consumption_invoices(db, user, skus, filters_kwargs)
+    title = consumption_report.report_title(skus, rows) if skus else ""
+
+    filters_parts = []
+    loc_ids = consumption_report.parse_ids(filters_kwargs.get("location_ids"))
+    if loc_ids:
+        names = (await db.scalars(select(Location.nome_struttura).where(Location.id.in_(loc_ids)))).all()
+        filters_parts.append(f"Sedi: {', '.join(names)}")
+    fornitore_id = filters_kwargs.get("fornitore_id")
+    if isinstance(fornitore_id, int):
+        nome = await db.scalar(select(Fornitore.nome_azienda).where(Fornitore.id == fornitore_id))
+        if nome:
+            filters_parts.append(f"Fornitore: {nome}")
+    data_da, data_a = filters_kwargs.get("data_da"), filters_kwargs.get("data_a")
+    if isinstance(data_da, date):
+        filters_parts.append(f"Da: {data_da.strftime('%d/%m/%Y')}")
+    if isinstance(data_a, date):
+        filters_parts.append(f"A: {data_a.strftime('%d/%m/%Y')}")
+    filter_desc = " | ".join(filters_parts) if filters_parts else "Nessuno"
+
+    pdf_bytes = await run_in_threadpool(generate_consumption_invoices_pdf, title, invoices, filter_desc)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=Riepilogo_Fatture_Consumo.pdf"},
+    )
+
+
+def _selection_filters(selection: ConsumptionSelection) -> dict:
+    return {
+        "location_ids": selection.location_ids,
+        "fornitore_id": selection.fornitore_id,
+        "data_da": selection.data_da,
+        "data_a": selection.data_a,
+    }
+
 
 @router.get("/product-consumption", summary="Report Consumo per Prodotto")
 async def get_product_consumption(
@@ -1306,78 +1405,39 @@ async def get_product_consumption(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Ritorna il report aggregato di consumo per ciascun SKU.
+    Una riga per SKU: spesa netta (note di credito sottratte), quantità nell'unità di
+    confronto quando la conversione è affidabile, altrimenti divise per unità di fattura.
     """
-    loc_ids = []
-    if location_ids:
-        try:
-            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
-        except ValueError:
-            pass
+    return await _consumption_items(db, _admin, _consumption_filters(location_ids, fornitore_id, data_da, data_a))
 
-    location_filter = ""
-    params = {
-        "fornitore_id": fornitore_id,
-        "data_da": data_da,
-        "data_a": data_a
-    }
-    if loc_ids:
-        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
-        location_filter = f"AND f.location_id IN ({id_placeholders})"
-        for i, val in enumerate(loc_ids):
-            params[f"loc_id_{i}"] = val
 
-    sql = f"""
-    WITH product_names AS (
-        SELECT
-            lower(trim(sku_interno)) AS sku_key,
-            MAX(canonical_name) AS canonical_name
-        FROM products
-        WHERE is_active IS TRUE AND sku_interno IS NOT NULL
-        GROUP BY lower(trim(sku_interno))
-    )
-    SELECT 
-        rf.sku_interno, 
-        COALESCE(MAX(pn.canonical_name), MAX(rf.descrizione_fornitore_raw)) as descrizione,
-        SUM(rf.quantita) as quantita_totale,
-        SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
-        COALESCE(
-            MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
-            MAX(rf.unita_misura_fattura)
-        ) as unita_misura,
-        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
-        CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
-            ELSE 0 
-        END as prezzo_medio
-    FROM righe_fattura rf
-    JOIN fatture f ON rf.fattura_id = f.id
-    LEFT JOIN product_names pn ON pn.sku_key = lower(trim(rf.sku_interno))
-    WHERE rf.sku_interno IS NOT NULL
-      AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-      {location_filter}
-      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
-      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
-      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    GROUP BY rf.sku_interno
-    ORDER BY spesa_totale DESC
-    """
-    
-    res = await db.execute(text(sql), params)
-    
-    results = []
-    for r in res.all():
-        results.append({
-            "sku_interno": r.sku_interno,
-            "descrizione": r.descrizione,
-            "quantita_totale": float(r.quantita_totale or 0),
-            "quantita_omaggio": float(r.quantita_omaggio or 0),
-            "unita_misura": r.unita_misura or "Pz",
-            "spesa_totale": float(r.spesa_totale or 0),
-            "prezzo_medio": float(r.prezzo_medio or 0)
-        })
-    return results
+@router.post("/product-consumption/detail", summary="Dettaglio Consumo di uno o più SKU per Sede e Mese")
+async def post_product_consumption_detail(
+    selection: ConsumptionSelection,
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await _consumption_detail(db, _admin, selection.skus, _selection_filters(selection))
+
+
+@router.post("/product-consumption/invoices", summary="Fatture che generano il Consumo degli SKU selezionati")
+async def post_product_consumption_invoices(
+    selection: ConsumptionSelection,
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    skus = await _selected_skus(db, selection.skus)
+    invoices, _ = await _consumption_invoices(db, _admin, skus, _selection_filters(selection))
+    return invoices
+
+
+@router.post("/product-consumption/invoices-pdf", summary="PDF del Riepilogo Fatture di Consumo degli SKU selezionati")
+async def post_product_consumption_invoices_pdf(
+    selection: ConsumptionSelection,
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return await _consumption_pdf(db, _admin, selection.skus, _selection_filters(selection))
 
 
 @router.get("/product-consumption/{sku_interno}", summary="Dettaglio Consumo SKU per Location e Mese")
@@ -1390,138 +1450,9 @@ async def get_product_consumption_detail(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.esclusi import SKUEscluso
-    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
-    if chk.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
-
-    # Normalizza i parametri in caso di chiamata diretta in Python (es. unit tests)
-    if not isinstance(location_ids, str):
-        location_ids = None
-    if not isinstance(fornitore_id, int):
-        fornitore_id = None
-    if not isinstance(data_da, date):
-        data_da = None
-    if not isinstance(data_a, date):
-        data_a = None
-
-    skus = [x.strip() for x in sku_interno.split(",") if x.strip()]
-    if not skus:
-        return {
-            "sku_interno": sku_interno,
-            "consumo_per_location": [],
-            "consumo_per_mese": []
-        }
-
-    loc_ids = []
-    if location_ids:
-        try:
-            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
-        except ValueError:
-            pass
-
-    location_filter = ""
-    params = {
-        "fornitore_id": fornitore_id,
-        "data_da": data_da,
-        "data_a": data_a
-    }
-    
-    # Costruiamo il filtro SKU dinamico con bind variables
-    sku_placeholders = ",".join(f":sku_{i}" for i in range(len(skus)))
-    sku_filter = f"rf.sku_interno IN ({sku_placeholders})"
-    for i, s in enumerate(skus):
-        params[f"sku_{i}"] = s
-
-    if loc_ids:
-        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
-        location_filter = f"AND f.location_id IN ({id_placeholders})"
-        for i, val in enumerate(loc_ids):
-            params[f"loc_id_{i}"] = val
-
-    # 1. Split by Location
-    sql_loc = f"""
-    SELECT 
-        COALESCE(l.nome_struttura, 'Sede non assegnata') as location_nome,
-        SUM(rf.quantita) as quantita_totale,
-        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale
-    FROM righe_fattura rf
-    JOIN fatture f ON rf.fattura_id = f.id
-    LEFT JOIN location l ON f.location_id = l.id
-    WHERE {sku_filter}
-      {location_filter}
-      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
-      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
-      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    GROUP BY COALESCE(l.nome_struttura, 'Sede non assegnata')
-    ORDER BY spesa_totale DESC
-    """
-    res_loc = await db.execute(text(sql_loc), params)
-    by_location = []
-    for r in res_loc.all():
-        by_location.append({
-            "location_nome": r.location_nome,
-            "quantita_totale": float(r.quantita_totale or 0),
-            "spesa_totale": float(r.spesa_totale or 0)
-        })
-
-    # 2. Split by Month
-    sql_month = f"""
-    SELECT 
-        to_char(f.data_documento, 'YYYY-MM') as mese,
-        SUM(rf.quantita) as quantita_totale,
-        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale
-    FROM righe_fattura rf
-    JOIN fatture f ON rf.fattura_id = f.id
-    WHERE {sku_filter}
-      {location_filter}
-      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
-      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
-      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    GROUP BY to_char(f.data_documento, 'YYYY-MM')
-    ORDER BY mese DESC
-    """
-    res_month = await db.execute(text(sql_month), params)
-    by_month = []
-    for r in res_month.all():
-        by_month.append({
-            "mese": r.mese,
-            "quantita_totale": float(r.quantita_totale or 0),
-            "spesa_totale": float(r.spesa_totale or 0)
-        })
-
-    # 3. Aggregated Prices (Min, Max, Avg)
-    sql_prices = f"""
-    SELECT 
-        MIN(CASE WHEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) END) as prezzo_minimo,
-        MAX(CASE WHEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) END) as prezzo_massimo,
-        CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
-            ELSE 0 
-        END as prezzo_medio
-    FROM righe_fattura rf
-    JOIN fatture f ON rf.fattura_id = f.id
-    WHERE {sku_filter}
-      {location_filter}
-      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
-      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
-      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    """
-    res_prices = await db.execute(text(sql_prices), params)
-    row_prices = res_prices.one_or_none()
-    prezzo_minimo = float(row_prices.prezzo_minimo or 0) if row_prices and row_prices.prezzo_minimo else 0.0
-    prezzo_massimo = float(row_prices.prezzo_massimo or 0) if row_prices and row_prices.prezzo_massimo else 0.0
-    prezzo_medio = float(row_prices.prezzo_medio or 0) if row_prices and row_prices.prezzo_medio else 0.0
-
-    return {
-        "sku_interno": sku_interno,
-        "consumo_per_location": by_location,
-        "consumo_per_mese": by_month,
-        "prezzo_minimo": prezzo_minimo,
-        "prezzo_massimo": prezzo_massimo,
-        "prezzo_medio": prezzo_medio
-    }
+    """Versione GET per pochi SKU (separati da virgola). Per selezioni grandi usare POST /product-consumption/detail."""
+    filters = {"location_ids": location_ids, "fornitore_id": fornitore_id, "data_da": data_da, "data_a": data_a}
+    return await _consumption_detail(db, _admin, sku_interno, filters)
 
 
 @router.get("/product-consumption/{sku_interno}/invoices", summary="Dettaglio Fatture che generano il Consumo dello SKU")
@@ -1534,93 +1465,10 @@ async def get_product_consumption_invoices(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.esclusi import SKUEscluso
-    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
-    if chk.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
-
-    if not isinstance(location_ids, str):
-        location_ids = None
-    if not isinstance(fornitore_id, int):
-        fornitore_id = None
-    if not isinstance(data_da, date):
-        data_da = None
-    if not isinstance(data_a, date):
-        data_a = None
-
-    skus = [x.strip() for x in sku_interno.split(",") if x.strip()]
-    if not skus:
-        return []
-
-    loc_ids = []
-    if location_ids:
-        try:
-            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
-        except ValueError:
-            pass
-
-    location_filter = ""
-    params = {
-        "fornitore_id": fornitore_id,
-        "data_da": data_da,
-        "data_a": data_a
-    }
-    
-    sku_placeholders = ",".join(f":sku_{i}" for i in range(len(skus)))
-    sku_filter = f"rf.sku_interno IN ({sku_placeholders})"
-    for i, s in enumerate(skus):
-        params[f"sku_{i}"] = s
-
-    if loc_ids:
-        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
-        location_filter = f"AND f.location_id IN ({id_placeholders})"
-        for i, val in enumerate(loc_ids):
-            params[f"loc_id_{i}"] = val
-
-    sql = f"""
-    SELECT 
-        f.id as fattura_id,
-        f.numero_documento,
-        f.data_documento,
-        COALESCE(l.nome_struttura, 'Sede non assegnata') as location_nome,
-        COALESCE(fo.nome_azienda, 'Fornitore non specificato') as fornitore_nome,
-        rf.descrizione_fornitore_raw as prodotto_descrizione,
-        rf.quantita as quantita,
-        rf.unita_misura_fattura as unita_misura,
-        COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) as prezzo_unitario,
-        (COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
-        rf.is_omaggio as is_omaggio,
-        rf.sku_interno as sku_interno
-    FROM righe_fattura rf
-    JOIN fatture f ON rf.fattura_id = f.id
-    LEFT JOIN location l ON f.location_id = l.id
-    LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
-    WHERE {sku_filter}
-      {location_filter}
-      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
-      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
-      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    ORDER BY f.data_documento DESC, f.numero_documento DESC
-    """
-    
-    res = await db.execute(text(sql), params)
-    results = []
-    for r in res.all():
-        results.append({
-            "fattura_id": r.fattura_id,
-            "numero_documento": r.numero_documento,
-            "data_documento": r.data_documento.isoformat() if r.data_documento else None,
-            "location_nome": r.location_nome,
-            "fornitore_nome": r.fornitore_nome,
-            "prodotto_descrizione": r.prodotto_descrizione,
-            "quantita": float(r.quantita or 0),
-            "unita_misura": r.unita_misura or "Pz",
-            "prezzo_unitario": float(r.prezzo_unitario or 0),
-            "spesa_totale": float(r.spesa_totale or 0),
-            "is_omaggio": bool(r.is_omaggio or False),
-            "sku_interno": r.sku_interno
-        })
-    return results
+    skus = await _selected_skus(db, sku_interno)
+    filters = {"location_ids": location_ids, "fornitore_id": fornitore_id, "data_da": data_da, "data_a": data_a}
+    invoices, _ = await _consumption_invoices(db, _admin, skus, filters)
+    return invoices
 
 
 @router.get("/product-consumption/{sku_interno}/invoices-pdf", summary="Genera PDF del Riepilogo Fatture di Consumo dello/degli SKU")
@@ -1633,73 +1481,8 @@ async def get_product_consumption_invoices_pdf(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.models.esclusi import SKUEscluso
-    chk = await db.execute(select(SKUEscluso).where(SKUEscluso.sku_interno == sku_interno))
-    if chk.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
-
-    if not isinstance(location_ids, str):
-        location_ids = None
-    if not isinstance(fornitore_id, int):
-        fornitore_id = None
-    if not isinstance(data_da, date):
-        data_da = None
-    if not isinstance(data_a, date):
-        data_a = None
-
-    # Recupera i dati delle fatture
-    invoices = await get_product_consumption_invoices(
-        sku_interno=sku_interno,
-        location_ids=location_ids,
-        fornitore_id=fornitore_id,
-        data_da=data_da,
-        data_a=data_a,
-        _admin=_admin,
-        db=db
-    )
-
-    # Determina il titolo del report
-    skus = [x.strip() for x in sku_interno.split(",") if x.strip()]
-    
-    title = sku_interno
-    if len(skus) == 1:
-        sql_desc = "SELECT descrizione_fornitore_raw FROM righe_fattura WHERE sku_interno = :sku LIMIT 1"
-        res_desc = await db.execute(text(sql_desc), {"sku": skus[0]})
-        row_desc = res_desc.first()
-        if row_desc and row_desc[0]:
-            title = f"{skus[0]} - {row_desc[0]}"
-    else:
-        title = f"Consolidato di {len(skus)} articoli ({', '.join(skus[:3])}{'...' if len(skus) > 3 else ''})"
-
-    # Costruiamo una descrizione dei filtri
-    filters_parts = []
-    if location_ids:
-        loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
-        if loc_ids:
-            res_locs = await db.execute(text("SELECT nome_struttura FROM location WHERE id = ANY(:ids)"), {"ids": list(loc_ids)})
-            names = [r[0] for r in res_locs.all()]
-            filters_parts.append(f"Sedi: {', '.join(names)}")
-    if fornitore_id:
-        res_forn = await db.execute(text("SELECT nome_azienda FROM fornitori WHERE id = :fid"), {"fid": fornitore_id})
-        row_forn = res_forn.first()
-        if row_forn:
-            filters_parts.append(f"Fornitore: {row_forn[0]}")
-    if data_da:
-        filters_parts.append(f"Da: {data_da.strftime('%d/%m/%Y')}")
-    if data_a:
-        filters_parts.append(f"A: {data_a.strftime('%d/%m/%Y')}")
-
-    filter_desc = " | ".join(filters_parts) if filters_parts else "Nessuno"
-
-    pdf_bytes = await run_in_threadpool(generate_consumption_invoices_pdf, title, invoices, filter_desc)
-    
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=Riepilogo_Fatture_Consumo.pdf"
-        }
-    )
+    filters = {"location_ids": location_ids, "fornitore_id": fornitore_id, "data_da": data_da, "data_a": data_a}
+    return await _consumption_pdf(db, _admin, sku_interno, filters)
 
 
 @router.get("/export-product-consumption-excel", summary="Esporta Excel Consumo per Prodotto")
@@ -1712,166 +1495,23 @@ async def export_product_consumption_excel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Genera ed esporta un report Excel (.xlsx) dei consumi per prodotto.
+    Excel dei consumi per prodotto: stesse righe e stessi filtri della tabella a schermo
+    (SKU esclusi compresi), con il totale della spesa netta in fondo.
     """
-    loc_ids = []
-    if location_ids:
-        try:
-            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
-        except ValueError:
-            pass
-
-    location_filter = ""
-    params = {
-        "fornitore_id": fornitore_id,
-        "data_da": data_da,
-        "data_a": data_a
-    }
-    if loc_ids:
-        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
-        location_filter = f"AND f.location_id IN ({id_placeholders})"
-        for i, val in enumerate(loc_ids):
-            params[f"loc_id_{i}"] = val
-
-    sql = f"""
-    WITH product_names AS (
-        SELECT
-            lower(trim(sku_interno)) AS sku_key,
-            MAX(canonical_name) AS canonical_name
-        FROM products
-        WHERE is_active IS TRUE AND sku_interno IS NOT NULL
-        GROUP BY lower(trim(sku_interno))
-    )
-    SELECT 
-        rf.sku_interno, 
-        COALESCE(MAX(pn.canonical_name), MAX(rf.descrizione_fornitore_raw)) as descrizione,
-        COALESCE(string_agg(DISTINCT fo.nome_azienda, ', '), 'ND') as fornitori,
-        SUM(rf.quantita) as quantita_totale,
-        SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
-        COALESCE(
-            MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
-            MAX(rf.unita_misura_fattura)
-        ) as unita_misura,
-        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
-        CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
-            ELSE 0 
-        END as prezzo_medio
-    FROM righe_fattura rf
-    JOIN fatture f ON rf.fattura_id = f.id
-    LEFT JOIN product_names pn ON pn.sku_key = lower(trim(rf.sku_interno))
-    LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
-    WHERE rf.sku_interno IS NOT NULL
-      {location_filter}
-      AND (cast(:fornitore_id as integer) IS NULL OR f.fornitore_id = cast(:fornitore_id as integer))
-      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
-      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    GROUP BY rf.sku_interno
-    ORDER BY spesa_totale DESC
-    """
-    
-    res = await db.execute(text(sql), params)
-    
-    def _build_workbook(rows):
-        # Crea Workbook excel
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Consumi per Prodotto"
-    
-        # Mostra griglia
-        ws.views.sheetView[0].showGridLines = True
-    
-        headers = [
-            "SKU Interno", "Prodotto", "Fornitore", "Quantità Totale", "di cui Omaggi",
-            "Unità di Misura", "Prezzo Medio (€)", "Spesa Totale (€)"
-        ]
-    
-        ws.append(headers)
-    
-        # Stile intestazione elegante (Tonalità Navy coordinata a Price Sentinel)
-        header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
-        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
-        thin_border = Border(
-            left=Side(style='thin', color='DDDDDD'),
-            right=Side(style='thin', color='DDDDDD'),
-            top=Side(style='thin', color='DDDDDD'),
-            bottom=Side(style='thin', color='DDDDDD')
+    items = await _consumption_items(db, _admin, _consumption_filters(location_ids, fornitore_id, data_da, data_a))
+    rows = consumption_report.consumption_excel_rows(items)
+    total = ["TOTALE", f"{len(items)} prodotti", "", "", "", "", "", "", "",
+             sum(i["spesa_totale"] for i in items), ""]
+    stream = await run_in_threadpool(
+        lambda: consumption_report.build_workbook(
+            "Consumi per Prodotto", consumption_report.CONSUMPTION_EXCEL_HEADERS, rows,
+            money_cols=(9, 10), number_cols=(4, 7, 8), int_cols=(11,), center_cols=(1, 5), total_row=total,
         )
-    
-        for col_idx in range(1, len(headers) + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_align
-            cell.border = thin_border
-    
-        # Aggiungi i dati
-        row_num = 2
-        for r in rows:
-            quantita = float(r.quantita_totale or 0)
-            quantita_omaggio = float(r.quantita_omaggio or 0)
-            prezzo_medio = float(r.prezzo_medio or 0)
-            spesa_totale = float(r.spesa_totale or 0)
-        
-            row_data = [
-                r.sku_interno,
-                r.descrizione,
-                r.fornitori or "—",
-                quantita,
-                quantita_omaggio,
-                r.unita_misura or "Pz",
-                prezzo_medio,
-                spesa_totale
-            ]
-            ws.append(row_data)
-        
-            for col_idx in range(1, len(row_data) + 1):
-                cell = ws.cell(row=row_num, column=col_idx)
-                cell.border = thin_border
-                cell.font = Font(name="Calibri", size=11)
-            
-                if col_idx in (7, 8):
-                    cell.number_format = '€ #,##0.00'
-                    cell.alignment = Alignment(horizontal="right")
-                elif col_idx in (4, 5):
-                    cell.number_format = '#,##0.00'
-                    cell.alignment = Alignment(horizontal="right")
-                elif col_idx in (1, 6):
-                    cell.alignment = Alignment(horizontal="center")
-                else:
-                    cell.alignment = Alignment(horizontal="left")
-                
-            row_num += 1
-        
-        # Auto-fit colonne
-        for col in ws.columns:
-            max_len = 0
-            col_letter = get_column_letter(col[0].column)
-            for cell in col:
-                val_str = str(cell.value or '')
-                if cell.column in (7, 8) and type(cell.value) in (int, float):
-                    val_str = f"€ {cell.value:.2f}"
-                if len(val_str) > max_len:
-                    max_len = len(val_str)
-            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-        
-        stream = BytesIO()
-        wb.save(stream)
-        stream.seek(0)
-        return stream
-
-    stream = await run_in_threadpool(_build_workbook, res.all())
-    
-    headers = {
-        'Content-Disposition': 'attachment; filename="report_consumo_prodotti.xlsx"'
-    }
+    )
     return StreamingResponse(
         stream,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
+        headers={'Content-Disposition': 'attachment; filename="report_consumo_prodotti.xlsx"'},
     )
 
 
@@ -1888,99 +1528,18 @@ async def get_top_purchased_products(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Ritorna la lista dei prodotti più acquistati filtrati per fornitori, location e date range.
+    Classifica dei prodotti (stesso calcolo della tabella Consumi) e spesa netta di tutte
+    le voci filtrate, indipendente dal limite e dall'ordinamento.
     """
-    loc_ids = []
-    if location_ids:
-        try:
-            loc_ids = [int(x) for x in location_ids.split(",") if x.strip()]
-        except ValueError:
-            pass
-
-    forn_ids = []
-    if fornitore_ids:
-        try:
-            forn_ids = [int(x) for x in fornitore_ids.split(",") if x.strip()]
-        except ValueError:
-            pass
-    elif fornitore_id is not None:
+    forn_ids = consumption_report.parse_ids(fornitore_ids)
+    if forn_ids is None and isinstance(fornitore_id, int):
         forn_ids = [fornitore_id]
-
-    location_filter = ""
-    fornitore_filter = ""
-    params = {
-        "data_da": data_da,
-        "data_a": data_a,
-        "limit": limit
-    }
-
-    if loc_ids:
-        id_placeholders = ",".join(f":loc_id_{i}" for i in range(len(loc_ids)))
-        location_filter = f"AND f.location_id IN ({id_placeholders})"
-        for i, val in enumerate(loc_ids):
-            params[f"loc_id_{i}"] = val
-
-    if forn_ids:
-        forn_placeholders = ",".join(f":forn_id_{i}" for i in range(len(forn_ids)))
-        fornitore_filter = f"AND f.fornitore_id IN ({forn_placeholders})"
-        for i, val in enumerate(forn_ids):
-            params[f"forn_id_{i}"] = val
-
-    valid_sorts = {
-        "quantita": "quantita_totale DESC",
-        "spesa": "spesa_totale DESC",
-        "acquisti": "numero_acquisti DESC"
-    }
-    order_by_clause = valid_sorts.get(sort_by, "quantita_totale DESC")
-
-    sql = f"""
-    SELECT 
-        rf.sku_interno, 
-        MAX(rf.descrizione_fornitore_raw) as descrizione,
-        COALESCE(string_agg(DISTINCT fo.nome_azienda, ', '), '—') as fornitori,
-        SUM(rf.quantita) as quantita_totale,
-        SUM(CASE WHEN rf.is_omaggio = TRUE THEN rf.quantita ELSE 0 END) as quantita_omaggio,
-        COALESCE(
-            MAX(CASE WHEN rf.is_omaggio = FALSE AND rf.unita_misura_fattura NOT IN ('OMAGGIO', 'omaggio', 'Omaggio') THEN rf.unita_misura_fattura END),
-            MAX(rf.unita_misura_fattura)
-        ) as unita_misura,
-        SUM(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita) as spesa_totale,
-        COUNT(rf.id) as numero_acquisti,
-        CASE 
-            WHEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END) > 0 
-            THEN SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) * rf.quantita ELSE 0 END) / SUM(CASE WHEN rf.is_omaggio = FALSE AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0 THEN rf.quantita ELSE 0 END)
-            ELSE 0 
-        END as prezzo_medio
-    FROM righe_fattura rf
-    JOIN fatture f ON rf.fattura_id = f.id
-    LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
-    WHERE rf.sku_interno IS NOT NULL
-      AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-      {location_filter}
-      {fornitore_filter}
-      AND (cast(:data_da as date) IS NULL OR f.data_documento >= cast(:data_da as date))
-      AND (cast(:data_a as date) IS NULL OR f.data_documento <= cast(:data_a as date))
-    GROUP BY rf.sku_interno
-    ORDER BY {order_by_clause}
-    LIMIT :limit
-    """
-    
-    res = await db.execute(text(sql), params)
-    
-    results = []
-    for r in res.all():
-        results.append({
-            "sku_interno": r.sku_interno,
-            "descrizione": r.descrizione,
-            "fornitori": r.fornitori or "—",
-            "quantita_totale": float(r.quantita_totale or 0),
-            "quantita_omaggio": float(r.quantita_omaggio or 0),
-            "unita_misura": r.unita_misura or "Pz",
-            "spesa_totale": float(r.spesa_totale or 0),
-            "numero_acquisti": int(r.numero_acquisti or 0),
-            "prezzo_medio": float(r.prezzo_medio or 0)
-        })
-    return results
+    filters = consumption_report.ReportFilters.build(
+        location_ids=location_ids, fornitore_ids=forn_ids, date_from=data_da, date_to=data_a,
+    )
+    items = await _consumption_items(db, _admin, filters)
+    sort_key = sort_by if isinstance(sort_by, str) and sort_by in consumption_report.SORT_KEYS else "quantita"
+    return consumption_report.top_products(items, sort_key, limit if isinstance(limit, int) else 50)
 
 
 @router.get("/export-top-purchased-excel", summary="Esporta Excel dei prodotti più acquistati")
@@ -1996,7 +1555,7 @@ async def export_top_purchased_excel(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Genera ed esporta un report Excel (.xlsx) dei prodotti più acquistati con filtri.
+    Excel dei prodotti più acquistati: le stesse righe della tabella a schermo.
     """
     data = await get_top_purchased_products(
         limit=limit,
@@ -2009,101 +1568,20 @@ async def export_top_purchased_excel(
         _admin=_admin,
         db=db
     )
-    
-    def _build_workbook(data):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Listino Top Prodotti"
-    
-        ws.views.sheetView[0].showGridLines = True
-    
-        headers = [
-            "Posizione", "SKU Interno", "Prodotto", "Fornitore", "Unità di Misura", 
-            "Quantità Totale", "Numero Acquisti", "Prezzo Medio (€)", "Spesa Totale (€)"
-        ]
-    
-        ws.append(headers)
-    
-        header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
-        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
-        thin_border = Border(
-            left=Side(style='thin', color='DDDDDD'),
-            right=Side(style='thin', color='DDDDDD'),
-            top=Side(style='thin', color='DDDDDD'),
-            bottom=Side(style='thin', color='DDDDDD')
+    rows = consumption_report.top_excel_rows(data["prodotti"])
+    total = ["", "TOTALE", f"Spesa netta di tutte le voci filtrate ({data['numero_prodotti']})", "", "", "", "",
+             "", "", "", data["totale_spesa"]]
+    stream = await run_in_threadpool(
+        lambda: consumption_report.build_workbook(
+            "Listino Top Prodotti", consumption_report.TOP_EXCEL_HEADERS, rows,
+            money_cols=(10, 11), number_cols=(5, 8), int_cols=(9,), center_cols=(1, 2, 6), total_row=total,
         )
-    
-        for col_idx in range(1, len(headers) + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_align
-            cell.border = thin_border
-    
-        row_num = 2
-        for idx, item in enumerate(data):
-            row_data = [
-                idx + 1,
-                item["sku_interno"],
-                item["descrizione"],
-                item["fornitori"],
-                item["unita_misura"],
-                item["quantita_totale"],
-                item["numero_acquisti"],
-                item["prezzo_medio"],
-                item["spesa_totale"]
-            ]
-            ws.append(row_data)
-        
-            for col_idx in range(1, len(row_data) + 1):
-                cell = ws.cell(row=row_num, column=col_idx)
-                cell.border = thin_border
-                cell.font = Font(name="Calibri", size=11)
-            
-                if col_idx in (8, 9):
-                    cell.number_format = '€ #,##0.00'
-                    cell.alignment = Alignment(horizontal="right")
-                elif col_idx == 6:
-                    cell.number_format = '#,##0.00'
-                    cell.alignment = Alignment(horizontal="right")
-                elif col_idx == 7:
-                    cell.number_format = '#,##0'
-                    cell.alignment = Alignment(horizontal="right")
-                elif col_idx in (1, 2, 5):
-                    cell.alignment = Alignment(horizontal="center")
-                else:
-                    cell.alignment = Alignment(horizontal="left")
-                
-            row_num += 1
-        
-        for col in ws.columns:
-            max_len = 0
-            col_letter = get_column_letter(col[0].column)
-            for cell in col:
-                val_str = str(cell.value or '')
-                if cell.column in (8, 9) and type(cell.value) in (int, float):
-                    val_str = f"€ {cell.value:.2f}"
-                if len(val_str) > max_len:
-                    max_len = len(val_str)
-            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-        
-        stream = BytesIO()
-        wb.save(stream)
-        stream.seek(0)
-        return stream
-
-    stream = await run_in_threadpool(_build_workbook, data)
-    
-    filename = f"listino_top_{limit or 'all'}_prodotti.xlsx"
-    headers = {
-        'Content-Disposition': f'attachment; filename="{filename}"'
-    }
+    )
+    filename = f"listino_top_{limit if isinstance(limit, int) else 'all'}_prodotti.xlsx"
     return StreamingResponse(
         stream,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
     )
 
 

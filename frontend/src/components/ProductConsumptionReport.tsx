@@ -1,16 +1,81 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FileSpreadsheet, Search, RefreshCw, Download, BarChart2, Calendar, MapPin, Tag, FileText, X } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
+
+// Quantità di un gruppo di righe nella stessa unità: unità di confronto della voce se la
+// conversione è affidabile (convertita), altrimenti unità di fattura. Mai sommate tra loro.
+interface QuantityPart {
+  unita: string;
+  convertita: boolean;
+  quantita: number;
+  quantita_resa?: number;
+  quantita_omaggio?: number;
+  prezzo_medio?: number | null;
+  prezzo_minimo?: number | null;
+  prezzo_massimo?: number | null;
+}
 
 interface ConsumptionItem {
   sku_interno: string;
   descrizione: string;
-  quantita_totale: number;
-  quantita_omaggio: number;
-  unita_misura: string;
+  fornitori: string;
+  // Valori unici solo se tutte le righe stanno in una sola unità, altrimenti null.
+  quantita_totale: number | null;
+  quantita_omaggio: number | null;
+  quantita_resa: number | null;
+  unita_misura: string | null;
+  prezzo_medio: number | null;
+  quantita_per_unita: QuantityPart[];
   spesa_totale: number;
-  prezzo_medio: number;
+  spesa_resi: number;
+  numero_fatture: number;
+  solo_resi: boolean;
 }
+
+interface InvoiceLine {
+  fattura_id: number;
+  numero_documento: string;
+  data_documento: string;
+  tipo_documento: string;
+  is_reso: boolean;
+  location_nome: string;
+  fornitore_nome: string;
+  prodotto_descrizione: string;
+  sku_interno: string;
+  quantita: number;
+  unita_misura: string;
+  prezzo_unitario: number;
+  spesa_totale: number;
+  is_omaggio: boolean;
+  unita_riepilogo: string;
+  riepilogo_convertito: boolean;
+  quantita_riepilogo: number;
+}
+
+const fmtQty = (value: number) => value.toLocaleString('it-IT', { maximumFractionDigits: 2 });
+const fmtEur = (value: number) => `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtPrice = (value: number | null | undefined, unit?: string | null) =>
+  value === null || value === undefined ? 'n.d.' : `${fmtEur(value)}${unit ? ` / ${unit}` : ''}`;
+
+// "5.940 Lt + 6 PZ (non convertito)": una voce per unità.
+const formatQuantities = (parts: QuantityPart[]) =>
+  parts.length === 0
+    ? '0'
+    : parts
+        .map(p => `${fmtQty(p.quantita)} ${p.unita}${parts.length > 1 && !p.convertita ? ' (non convertito)' : ''}`)
+        .join(' + ');
+
+// Totali della finestra fatture raggruppati per unità di riepilogo.
+const invoiceTotals = (lines: InvoiceLine[]): QuantityPart[] => {
+  const totals = new Map<string, QuantityPart>();
+  for (const line of lines) {
+    const key = `${line.unita_riepilogo}|${line.riepilogo_convertito}`;
+    const entry = totals.get(key) || { unita: line.unita_riepilogo, convertita: line.riepilogo_convertito, quantita: 0 };
+    entry.quantita += line.quantita_riepilogo;
+    totals.set(key, entry);
+  }
+  return [...totals.values()].sort((a, b) => Math.abs(b.quantita) - Math.abs(a.quantita));
+};
 
 interface LocationItem {
   id: number;
@@ -26,17 +91,24 @@ interface SKUDetail {
   sku_interno: string;
   consumo_per_location: Array<{
     location_nome: string;
-    quantita_totale: number;
+    quantita_totale: number | null;
+    quantita_per_unita: QuantityPart[];
     spesa_totale: number;
   }>;
   consumo_per_mese: Array<{
     mese: string;
-    quantita_totale: number;
+    quantita_totale: number | null;
+    quantita_per_unita: QuantityPart[];
     spesa_totale: number;
   }>;
-  prezzo_minimo?: number;
-  prezzo_massimo?: number;
-  prezzo_medio?: number;
+  spesa_totale: number;
+  // null quando i prodotti selezionati hanno unità diverse: niente totale unico né prezzi.
+  unita_misura: string | null;
+  quantita_totale: number | null;
+  quantita_per_unita: QuantityPart[];
+  prezzo_minimo: number | null;
+  prezzo_massimo: number | null;
+  prezzo_medio: number | null;
 }
 
 const cleanText = (str: string) => {
@@ -69,16 +141,29 @@ export default function ProductConsumptionReport() {
   const [selectedSkus, setSelectedSkus] = useState<string[]>([]);
   const [skuDetail, setSkuDetail] = useState<SKUDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  
+  const [detailError, setDetailError] = useState<string | null>(null);
+  // Solo l'ultima richiesta di dettaglio può aggiornare il pannello.
+  const detailRequest = useRef(0);
+
   // Download State
   const [exporting, setExporting] = useState(false);
 
   // Invoices Modal States
   const [showInvoicesModal, setShowInvoicesModal] = useState(false);
-  const [invoicesList, setInvoicesList] = useState<any[]>([]);
+  const [invoicesList, setInvoicesList] = useState<InvoiceLine[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
 
   const headers = getHeaders();
+
+  // La lista SKU va nel corpo della richiesta: con "Seleziona tutto" l'URL superava 8 KB.
+  const selectionBody = (skus: string[]) => JSON.stringify({
+    skus,
+    location_ids: selectedLocations.length > 0 ? selectedLocations : null,
+    fornitore_id: selectedSupplier ? Number(selectedSupplier) : null,
+    data_da: dataDa || null,
+    data_a: dataA || null,
+  });
 
   const formatMese = (meseStr: string) => {
     if (!meseStr || !meseStr.includes('-')) return meseStr;
@@ -113,24 +198,18 @@ export default function ProductConsumptionReport() {
   const handleOpenInvoices = async () => {
     setShowInvoicesModal(true);
     setLoadingInvoices(true);
+    setInvoicesError(null);
+    setInvoicesList([]);
     try {
-      const params = new URLSearchParams();
-      if (selectedLocations.length > 0) {
-        params.append('location_ids', selectedLocations.join(','));
-      }
-      if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
-      if (dataDa) params.append('data_da', dataDa);
-      if (dataA) params.append('data_a', dataA);
-
-      const queryString = params.toString() ? `?${params.toString()}` : '';
-      const skuParam = encodeURIComponent(selectedSkus.join(','));
-
-      const res = await fetch(`${API_BASE}/intelligence/product-consumption/${skuParam}/invoices${queryString}`, { headers });
+      const res = await fetch(`${API_BASE}/intelligence/product-consumption/invoices`, {
+        method: 'POST', headers, body: selectionBody(selectedSkus)
+      });
       if (!res.ok) throw new Error("Errore caricamento fatture.");
-      const data = await res.json();
+      const data: InvoiceLine[] = await res.json();
       setInvoicesList(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setInvoicesError(err.message || 'Errore caricamento fatture.');
     } finally {
       setLoadingInvoices(false);
     }
@@ -139,18 +218,9 @@ export default function ProductConsumptionReport() {
   const handlePDFExport = async () => {
     setLoadingInvoices(true);
     try {
-      const params = new URLSearchParams();
-      if (selectedLocations.length > 0) {
-        params.append('location_ids', selectedLocations.join(','));
-      }
-      if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
-      if (dataDa) params.append('data_da', dataDa);
-      if (dataA) params.append('data_a', dataA);
-
-      const queryString = params.toString() ? `?${params.toString()}` : '';
-      const skuParam = encodeURIComponent(selectedSkus.join(','));
-
-      const res = await fetch(`${API_BASE}/intelligence/product-consumption/${skuParam}/invoices-pdf${queryString}`, { headers });
+      const res = await fetch(`${API_BASE}/intelligence/product-consumption/invoices-pdf`, {
+        method: 'POST', headers, body: selectionBody(selectedSkus)
+      });
       if (!res.ok) throw new Error("Esportazione PDF fallita");
       
       const blob = await res.blob();
@@ -212,43 +282,41 @@ export default function ProductConsumptionReport() {
 
   // Load and aggregate SKU detailed splits
   const loadSkusDetail = async (skus: string[]) => {
+    const requestId = ++detailRequest.current;
+    // Mai mostrare i numeri della selezione precedente sotto il titolo nuovo.
+    setSkuDetail(null);
+    setDetailError(null);
     if (skus.length === 0) {
-      setSkuDetail(null);
+      setLoadingDetail(false);
       return;
     }
     setLoadingDetail(true);
     try {
-      const params = new URLSearchParams();
-      if (selectedLocations.length > 0) {
-        params.append('location_ids', selectedLocations.join(','));
-      }
-      if (selectedSupplier) params.append('fornitore_id', selectedSupplier);
-      if (dataDa) params.append('data_da', dataDa);
-      if (dataA) params.append('data_a', dataA);
-
-      const queryString = params.toString() ? `?${params.toString()}` : '';
-      const skuParam = encodeURIComponent(skus.join(','));
-
-      const res = await fetch(`${API_BASE}/intelligence/product-consumption/${skuParam}${queryString}`, { headers });
+      const res = await fetch(`${API_BASE}/intelligence/product-consumption/detail`, {
+        method: 'POST', headers, body: selectionBody(skus)
+      });
       if (!res.ok) throw new Error("Errore caricamento dettagli dei consumi consolidati.");
       const data: SKUDetail = await res.json();
+      if (requestId !== detailRequest.current) return;
 
       // Ordina gli output per spesa decrescente e andamento mensile decrescente
       const byLocation = [...data.consumo_per_location].sort((a, b) => b.spesa_totale - a.spesa_totale);
       const byMonth = [...data.consumo_per_mese].sort((a, b) => b.mese.localeCompare(a.mese));
 
       setSkuDetail({
+        ...data,
         sku_interno: skus.length === 1 ? skus[0] : `${skus.length} Articoli`,
         consumo_per_location: byLocation,
         consumo_per_mese: byMonth,
-        prezzo_minimo: data.prezzo_minimo,
-        prezzo_massimo: data.prezzo_massimo,
-        prezzo_medio: data.prezzo_medio
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (requestId === detailRequest.current) {
+        setSkuDetail(null);
+        setDetailError(err.message || 'Errore caricamento dettagli dei consumi.');
+      }
     } finally {
-      setLoadingDetail(false);
+      if (requestId === detailRequest.current) setLoadingDetail(false);
     }
   };
 
@@ -308,15 +376,17 @@ export default function ProductConsumptionReport() {
       ? (consumption.find(item => item.sku_interno === selectedSkus[0])?.descrizione || selectedSkus[0])
       : `Consumo Consolidato (${selectedSkus.length} Prodotti)`;
 
-  const totalUnits = skuDetail 
-    ? skuDetail.consumo_per_location.reduce((sum, loc) => sum + loc.quantita_totale, 0)
-    : 0;
-  const totalSpend = skuDetail
-    ? skuDetail.consumo_per_location.reduce((sum, loc) => sum + loc.spesa_totale, 0)
-    : 0;
-  const prezzoMinimo = skuDetail?.prezzo_minimo || 0;
-  const prezzoMassimo = skuDetail?.prezzo_massimo || 0;
-  const prezzoMedio = skuDetail?.prezzo_medio || 0;
+  // Volume unico solo con una sola unità; altrimenti le quantità divise per unità.
+  const detailUnit = skuDetail?.unita_misura ?? null;
+  const totalUnitsText = skuDetail
+    ? (skuDetail.quantita_totale !== null ? fmtQty(skuDetail.quantita_totale) : formatQuantities(skuDetail.quantita_per_unita))
+    : '';
+  const totalSpend = skuDetail?.spesa_totale ?? 0;
+  const prezzoMinimo = skuDetail?.prezzo_minimo ?? null;
+  const prezzoMassimo = skuDetail?.prezzo_massimo ?? null;
+  const prezzoMedio = skuDetail?.prezzo_medio ?? null;
+  const tableSpend = filteredItems.reduce((sum, item) => sum + item.spesa_totale, 0);
+  const hasNegative = filteredItems.some(item => item.spesa_totale < 0 || (item.quantita_totale ?? 0) < 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -532,6 +602,21 @@ export default function ProductConsumptionReport() {
             </div>
           </div>
 
+          {!loading && !error && filteredItems.length > 0 && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span>
+                Spesa netta dei {filteredItems.length} prodotti in elenco:{' '}
+                <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtEur(tableSpend)}</strong>
+                {' '}(note di credito sottratte).
+              </span>
+              {hasNegative && (
+                <span>
+                  I valori negativi sono resi (note di credito) che coprono acquisti fatti prima del periodo selezionato.
+                </span>
+              )}
+            </div>
+          )}
+
           {loading ? (
             <div style={{ color: 'var(--text-secondary)', padding: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
               <RefreshCw className="animate-spin" size={20} />
@@ -614,32 +699,37 @@ export default function ProductConsumptionReport() {
                           </td>
                           <td style={{ padding: '14px 12px', color: 'var(--text-primary)', fontWeight: 600, maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.descrizione}</td>
                           <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                            {item.quantita_omaggio > 0 ? (
-                              <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                                <span>{item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })}</span>
-                                <span 
-                                  style={{ 
-                                    fontSize: '0.73rem', 
-                                    color: 'var(--ok)', 
-                                    whiteSpace: 'nowrap',
-                                    background: 'var(--ok-bg)',
-                                    padding: '1px 6px',
-                                    borderRadius: '4px',
-                                    border: '1px solid var(--ok-border)',
-                                    fontWeight: 500
-                                  }} 
-                                  title={`${item.quantita_omaggio.toLocaleString(undefined, { minimumFractionDigits: 1 })} unità in omaggio`}
-                                >
-                                  di cui {item.quantita_omaggio.toLocaleString(undefined, { minimumFractionDigits: 1 })} omaggi
+                            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                              {item.quantita_totale !== null ? (
+                                <span>{fmtQty(item.quantita_totale)}</span>
+                              ) : (
+                                // Unità che non si possono convertire: una riga per unità, mai sommate.
+                                item.quantita_per_unita.map((part, i) => (
+                                  <span key={i} title={part.convertita ? 'Convertito nell’unità della voce' : 'Non convertito: confezione non nota'}>
+                                    {fmtQty(part.quantita)} {part.unita}{!part.convertita && <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}> *</span>}
+                                  </span>
+                                ))
+                              )}
+                              {(item.quantita_omaggio ?? 0) > 0 && (
+                                <span style={{ fontSize: '0.73rem', color: 'var(--ok)', whiteSpace: 'nowrap', background: 'var(--ok-bg)', padding: '1px 6px', borderRadius: '4px', border: '1px solid var(--ok-border)', fontWeight: 500 }}>
+                                  di cui {fmtQty(item.quantita_omaggio ?? 0)} omaggi
                                 </span>
-                              </span>
-                            ) : (
-                              item.quantita_totale.toLocaleString(undefined, { minimumFractionDigits: 1 })
-                            )}
+                              )}
+                              {(item.quantita_resa ?? 0) > 0 && (
+                                <span style={{ fontSize: '0.73rem', color: 'var(--warn)', whiteSpace: 'nowrap', fontWeight: 500 }} title="Quantità resa con note di credito, già sottratta">
+                                  resi: -{fmtQty(item.quantita_resa ?? 0)}
+                                </span>
+                              )}
+                            </span>
                           </td>
-                          <td style={{ padding: '14px 12px', textAlign: 'center', color: 'var(--text-secondary)' }}>{item.unita_misura}</td>
-                          <td style={{ padding: '14px 12px', textAlign: 'right', color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {item.prezzo_medio.toFixed(2)}</td>
-                          <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {item.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td style={{ padding: '14px 12px', textAlign: 'center', color: 'var(--text-secondary)' }} title={item.unita_misura === null ? 'Righe in unità diverse: * = non convertito nell’unità della voce' : undefined}>
+                            {item.unita_misura ?? 'unità diverse'}
+                          </td>
+                          <td style={{ padding: '14px 12px', textAlign: 'right', color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtPrice(item.prezzo_medio)}</td>
+                          <td style={{ padding: '14px 12px', textAlign: 'right', fontWeight: 600, color: item.spesa_totale < 0 ? 'var(--warn)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                            {fmtEur(item.spesa_totale)}
+                            {item.solo_resi && <div style={{ fontSize: '0.72rem', fontWeight: 500 }}>solo resi</div>}
+                          </td>
                         </tr>
                       );
                     })
@@ -720,6 +810,10 @@ export default function ProductConsumptionReport() {
                 <RefreshCw className="animate-spin" size={18} />
                 <span>Calcolo aggregato dettagli...</span>
               </div>
+            ) : detailError ? (
+              <div style={{ padding: '16px', borderRadius: '8px', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid var(--crit-border)' }}>
+                {detailError}
+              </div>
             ) : skuDetail ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 <div>
@@ -750,9 +844,14 @@ export default function ProductConsumptionReport() {
                         Volume Totale Consolidato
                       </span>
                       <span style={{ fontSize: '1.3rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                        {totalUnits.toLocaleString()}
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400 }}>unità</span>
+                        {totalUnitsText}
+                        {detailUnit && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400 }}>{detailUnit}</span>}
                       </span>
+                      {!detailUnit && (
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                          Unità diverse: le quantità non si sommano e i prezzi non si confrontano.
+                        </span>
+                      )}
                     </div>
 
                     {/* Spend Card */}
@@ -770,7 +869,7 @@ export default function ProductConsumptionReport() {
                         Spesa Totale Consolidata
                       </span>
                       <span style={{ fontSize: '1.3rem', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {totalSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {fmtEur(totalSpend)}
                       </span>
                     </div>
                   </div>
@@ -795,7 +894,7 @@ export default function ProductConsumptionReport() {
                         Prezzo Minimo
                       </span>
                       <span style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {prezzoMinimo.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {fmtPrice(prezzoMinimo, detailUnit)}
                       </span>
                     </div>
 
@@ -813,7 +912,7 @@ export default function ProductConsumptionReport() {
                         Prezzo Medio
                       </span>
                       <span style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--info)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {prezzoMedio.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {fmtPrice(prezzoMedio, detailUnit)}
                       </span>
                     </div>
 
@@ -831,7 +930,7 @@ export default function ProductConsumptionReport() {
                         Prezzo Massimo
                       </span>
                       <span style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--warn)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {prezzoMassimo.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {fmtPrice(prezzoMassimo, detailUnit)}
                       </span>
                     </div>
                   </div>
@@ -854,7 +953,7 @@ export default function ProductConsumptionReport() {
                           <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
                               <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{loc.location_nome}</span>
-                              <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{loc.quantita_totale.toLocaleString()} unità</span>
+                              <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatQuantities(loc.quantita_per_unita)}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                               <span>Spesa Complessiva:</span>
@@ -865,7 +964,7 @@ export default function ProductConsumptionReport() {
                               <div style={{
                                 height: '100%',
                                 background: 'var(--accent)',
-                                width: `${Math.min(100, (loc.spesa_totale / (skuDetail.consumo_per_location[0]?.spesa_totale || 1)) * 100)}%`
+                                width: `${Math.min(100, (Math.abs(loc.spesa_totale) / (Math.max(...skuDetail.consumo_per_location.map(l => Math.abs(l.spesa_totale))) || 1)) * 100)}%`
                               }}></div>
                             </div>
                           </div>
@@ -885,7 +984,7 @@ export default function ProductConsumptionReport() {
                           <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
                               <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatMese(mon.mese)}</span>
-                              <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{mon.quantita_totale.toLocaleString()} unità</span>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatQuantities(mon.quantita_per_unita)}</span>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                               <span>Valore Speso:</span>
@@ -895,7 +994,7 @@ export default function ProductConsumptionReport() {
                               <div style={{
                                 height: '100%',
                                 background: 'var(--crit)',
-                                width: `${Math.min(100, (mon.spesa_totale / (Math.max(...skuDetail.consumo_per_mese.map(m => m.spesa_totale)) || 1)) * 100)}%`
+                                width: `${Math.min(100, (Math.abs(mon.spesa_totale) / (Math.max(...skuDetail.consumo_per_mese.map(m => Math.abs(m.spesa_totale))) || 1)) * 100)}%`
                               }}></div>
                             </div>
                           </div>
@@ -1008,6 +1107,10 @@ export default function ProductConsumptionReport() {
                 <RefreshCw className="animate-spin" size={24} color="var(--accent-blue)" />
                 <span>Caricamento riepilogo fatture...</span>
               </div>
+            ) : invoicesError ? (
+              <div style={{ padding: '16px', borderRadius: '8px', background: 'var(--status-red-bg)', color: 'var(--status-red)', border: '1px solid var(--crit-border)' }}>
+                {invoicesError}
+              </div>
             ) : invoicesList.length === 0 ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 0', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
                 Nessuna fattura trovata per i criteri selezionati.
@@ -1060,6 +1163,11 @@ export default function ProductConsumptionReport() {
                           >
                             {inv.numero_documento}
                           </span>
+                          {inv.is_reso && (
+                            <span style={{ marginLeft: '6px', fontSize: '0.7rem', color: 'var(--warn)', fontWeight: 700, background: 'var(--warn-bg)', padding: '1px 5px', borderRadius: '3px', border: '1px solid var(--warn-border)' }} title={`Nota di credito ${inv.tipo_documento}`}>
+                              RESO
+                            </span>
+                          )}
                         </td>
                         <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{inv.location_nome}</td>
                         <td style={{ padding: '12px 10px', color: 'var(--text-secondary)' }}>{inv.fornitore_nome}</td>
@@ -1067,15 +1175,9 @@ export default function ProductConsumptionReport() {
                           {inv.prodotto_descrizione}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                          {inv.is_omaggio || inv.unita_misura === 'OMAGGIO' ? (
+                          {inv.is_omaggio ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                              <span>
-                                {inv.quantita.toLocaleString(undefined, { minimumFractionDigits: 1 })}{' '}
-                                {inv.unita_misura === 'OMAGGIO' 
-                                  ? (consumption.find(c => c.sku_interno === inv.sku_interno)?.unita_misura || 'Pz') 
-                                  : inv.unita_misura
-                                }
-                              </span>
+                              <span>{fmtQty(inv.quantita)} {inv.unita_misura}</span>
                               <span 
                                 style={{ 
                                   fontSize: '0.7rem', 
@@ -1091,14 +1193,14 @@ export default function ProductConsumptionReport() {
                               </span>
                             </span>
                           ) : (
-                            `${inv.quantita.toLocaleString(undefined, { minimumFractionDigits: 1 })} ${inv.unita_misura}`
+                            `${fmtQty(inv.quantita)} ${inv.unita_misura}`
                           )}
                         </td>
                         <td style={{ padding: '12px 10px', textAlign: 'right', color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                          € {inv.prezzo_unitario.toFixed(2)}
+                          {fmtPrice(inv.prezzo_unitario, inv.unita_misura)}
                         </td>
-                        <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                          € {inv.spesa_totale.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 600, color: inv.spesa_totale < 0 ? 'var(--warn)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                          {fmtEur(inv.spesa_totale)}
                         </td>
                       </tr>
                     ))}
@@ -1108,7 +1210,7 @@ export default function ProductConsumptionReport() {
             )}
 
             {/* Footer Summary / Stats */}
-            {!loadingInvoices && invoicesList.length > 0 && (
+            {!loadingInvoices && !invoicesError && invoicesList.length > 0 && (
               <div style={{
                 display: 'flex',
                 justifyContent: 'flex-end',
@@ -1121,13 +1223,13 @@ export default function ProductConsumptionReport() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Quantità Totale:</span>
                   <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                    {invoicesList.reduce((acc, curr) => acc + curr.quantita, 0).toLocaleString(undefined, { minimumFractionDigits: 1 })} unità
+                    {formatQuantities(invoiceTotals(invoicesList))}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: 'var(--text-secondary)' }}>Spesa Totale:</span>
                   <span style={{ fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                    € {invoicesList.reduce((acc, curr) => acc + curr.spesa_totale, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {fmtEur(invoicesList.reduce((acc, curr) => acc + curr.spesa_totale, 0))}
                   </span>
                 </div>
               </div>
