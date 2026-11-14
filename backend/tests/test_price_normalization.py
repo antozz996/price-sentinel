@@ -217,9 +217,12 @@ class InvoiceDeltaTotalTest(unittest.TestCase):
         self.assertEqual(result.listino_units_per_invoice_unit, Decimal("1"))
         self.assertEqual(self.total(result, "4.10", "2"), Decimal("0.68"))
 
-    def test_zero_price_does_not_divide_by_zero(self):
+    def test_zero_price_keeps_the_pack_factor(self):
+        # A free carton (omaggio) still holds 100 pieces: the factor comes from the
+        # conversion, not from price / normalized price (which was 1 at price 0).
         result = normalize("0", "CT", "Pz", pack_qty=100)
-        self.assertEqual(result.listino_units_per_invoice_unit, Decimal("1"))
+        self.assertEqual(result.normalized_unit_price, Decimal("0"))
+        self.assertEqual(result.listino_units_per_invoice_unit, Decimal("100"))
 
 
 if __name__ == "__main__":
