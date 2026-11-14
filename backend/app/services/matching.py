@@ -100,9 +100,23 @@ def normalize_price_for_comparison(
     product: Optional[Product] = None,
     alias: Optional[SupplierProductAlias] = None,
     target_comparison_unit: Optional[str] = None,
+    *,
+    strict_pack: bool = False,
 ) -> NormalizedPriceResult:
     """
     Normalizza il prezzo di acquisto unitario per consentire il confronto con il listino.
+
+    listino_units_per_invoice_unit è calcolato dalla conversione stessa, non dal
+    rapporto tra i prezzi: vale anche per le righe a prezzo 0 (omaggi).
+
+    strict_pack=True (analisi: consumi, sprechi, medie) non indovina:
+    - products.unit_count <= 1 è il valore predefinito, non una confezione da 1:
+      la confezione si cerca nel collegamento, poi nella descrizione;
+    - se la conversione ha bisogno della confezione e non è nota, o l'unità della
+      riga non si riconosce, il risultato è reliable=False;
+    - N./NR/numero sono pezzi.
+    Il controllo anomalie usa strict_pack=False: con reliable=False l'anomalia non
+    nasce, quindi rendere rigida la conversione cambierebbe le anomalie esistenti.
     """
     from decimal import Decimal
     from app.models.products import Product, SupplierProductAlias
@@ -183,16 +197,23 @@ def normalize_price_for_comparison(
     pack_qty = None
     if alias_obj and getattr(alias_obj, "pack_qty", None) is not None:
         pack_qty = alias_obj.pack_qty
+        if strict_pack and pack_qty <= 0:
+            pack_qty = None
     if pack_qty is None and product_obj.unit_count is not None:
-        pack_qty = product_obj.unit_count
+        # In analysis mode unit_count 1 is the column default, not a pack of one.
+        if not strict_pack or product_obj.unit_count > 1:
+            pack_qty = product_obj.unit_count
     if pack_qty is None:
         pack_qty = extract_pack_qty(descrizione)
+    pack_known = pack_qty is not None and pack_qty > 0
     if pack_qty is None or pack_qty <= 0:
         pack_qty = 1
 
     reliable = True
     explanation = f"Normalizzazione per {comp_unit}"
     normalized_price = price
+    # Listino units in one invoice unit, set together with every price conversion.
+    units = Decimal("1")
 
     uom_normalized = normalize_uom(uom)
     package_uoms = {
@@ -204,13 +225,23 @@ def normalize_price_for_comparison(
         "bottle", "bottiglia", "bottiglie", "bot", "bt", "btl", "fl",
         "coppia", "coppie", "cp", "paio", "paia", "pair", "pairs",
     }
+    if strict_pack:
+        # "N.", "NR", "NUMERO" are pieces; trailing dots ("PZ.", "CT.") are noise.
+        uom_normalized = uom_normalized.strip(" .")
+        individual_uoms = individual_uoms | {"n", "nr", "numero", "num"}
     is_package_uom = uom_normalized in package_uoms
     is_individual_uom = uom_normalized in individual_uoms
+    # In analysis mode a pack conversion with an unknown pack is not reliable.
+    pack_unknown_needed = strict_pack and not pack_known
 
     if comp_unit in ("piece", "bottle"):
         if is_package_uom:
             normalized_price = price / Decimal(str(pack_qty))
+            units = Decimal(str(pack_qty))
             explanation = f"Prezzo confezione diviso per {pack_qty} {comp_unit}"
+            if pack_unknown_needed:
+                reliable = False
+                explanation = "Confezione sconosciuta: pezzi per cartone non noti"
         elif is_individual_uom:
             explanation = f"Prezzo già espresso per {comp_unit}; pack fisico {pack_qty}"
         elif uom_normalized in KG_UNITS or uom_normalized in MEASURE_UOMS:
@@ -220,6 +251,9 @@ def normalize_price_for_comparison(
         elif pack_qty > 1:
             reliable = False
             explanation = "Unità prezzo ambigua: conversione confezione non applicata"
+        elif strict_pack:
+            reliable = False
+            explanation = f"Unità di fattura non riconosciuta ({uom or 'vuota'})"
         else:
             explanation = f"Prezzo unitario per {comp_unit}"
 
@@ -241,16 +275,23 @@ def normalize_price_for_comparison(
             vol_ml = extract_volume_ml(descrizione)
 
         if vol_ml:
+            singles = None
             if is_package_uom:
                 prezzo_singolo = price / Decimal(str(pack_qty))
+                singles = Decimal(str(pack_qty))
             elif is_individual_uom:
                 prezzo_singolo = price
+                singles = Decimal("1")
             else:
                 prezzo_singolo = None
                 reliable = False
             if prezzo_singolo is not None:
                 normalized_price = prezzo_singolo / (Decimal(str(vol_ml)) / Decimal("1000"))
+                units = singles * Decimal(str(vol_ml)) / Decimal("1000")
             explanation = f"Prezzo al litro ricavato da {vol_ml}ml (pack fisico {pack_qty})"
+            if is_package_uom and pack_unknown_needed:
+                reliable = False
+                explanation = f"Confezione sconosciuta: bottiglie da {vol_ml}ml per cartone non note"
         else:
             reliable = False
             explanation = "Volume mancante per calcolo prezzo al litro"
@@ -273,16 +314,23 @@ def normalize_price_for_comparison(
             weight_g = extract_weight_g(descrizione)
 
         if weight_g:
+            singles = None
             if is_package_uom:
                 prezzo_singolo = price / Decimal(str(pack_qty))
+                singles = Decimal(str(pack_qty))
             elif is_individual_uom:
                 prezzo_singolo = price
+                singles = Decimal("1")
             else:
                 prezzo_singolo = None
                 reliable = False
             if prezzo_singolo is not None:
                 normalized_price = prezzo_singolo / (Decimal(str(weight_g)) / Decimal("1000"))
+                units = singles * Decimal(str(weight_g)) / Decimal("1000")
             explanation = f"Prezzo al kg ricavato da {weight_g}g (pack fisico {pack_qty})"
+            if is_package_uom and pack_unknown_needed:
+                reliable = False
+                explanation = f"Confezione sconosciuta: pezzi da {weight_g}g per cartone non noti"
         else:
             reliable = False
             explanation = "Peso mancante per calcolo prezzo al kg"
@@ -290,14 +338,21 @@ def normalize_price_for_comparison(
     elif comp_unit == "box":
         if is_individual_uom and pack_qty > 1:
             normalized_price = price * Decimal(str(pack_qty))
+            units = Decimal("1") / Decimal(str(pack_qty))
             explanation = f"Prezzo cassa normalizzato da pezzo singolo x{pack_qty}"
         elif not is_package_uom and pack_qty > 1:
             reliable = False
             explanation = "Unità prezzo ambigua: conversione a confezione non applicata"
+        elif strict_pack and not is_package_uom and not (is_individual_uom and pack_known):
+            reliable = False
+            explanation = (
+                "Confezione sconosciuta: pezzi per cartone non noti" if is_individual_uom
+                else f"Unità di fattura non riconosciuta ({uom or 'vuota'})"
+            )
 
-    # Every conversion above is price / units: the ratio gives the listino units
-    # in one invoice unit (pack split, per-litre/per-kg, piece-to-box scaling).
-    units = price / normalized_price if price and normalized_price else Decimal("1")
+    # units is set by each conversion (pack split, per-litre/per-kg, piece-to-box
+    # scaling) rather than read back from price / normalized price, so it is
+    # right for zero-price lines too (gifts, where that ratio would be 1).
     return NormalizedPriceResult(
         normalized_unit_price=normalized_price,
         comparison_unit=comp_unit,
