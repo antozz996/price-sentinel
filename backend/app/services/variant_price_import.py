@@ -52,6 +52,25 @@ def _dimensions(quantity: Decimal | None, unit: str | None) -> tuple[int | None,
     return None, None, None
 
 
+def cut_offer_rows_at(rows, effective_date: date) -> None:
+    """Rows of the same offer still valid on effective_date end the day before.
+
+    Fresh-produce forms are approved with an end date, so the row is not "current"
+    (data_scadenza IS NULL) when the next weekly response for the same package
+    arrives. Without cutting it, old and new price overlap and _get_listino_attivo
+    refuses to choose: the invoices of those days get no price check.
+    """
+    cutoff = effective_date - timedelta(days=1)
+    for row in rows:
+        if row.data_scadenza is None or row.data_scadenza < effective_date:
+            continue
+        if row.data_inizio_validita >= effective_date:
+            # Starts on or after the new date (e.g. a confirmation form re-sent with
+            # the same start): it cannot end the day before, keep the previous behaviour.
+            continue
+        row.data_scadenza = cutoff
+
+
 def _price_state(row: ListinoMaster | None) -> dict | None:
     if row is None:
         return None
@@ -220,6 +239,13 @@ async def commit_variant_preview(db: AsyncSession, preview: SmartPriceSheetPrevi
         if change["action"] == "unchanged":
             result["unchanged"] += 1
             continue
+        if alias:
+            expiring = (await db.scalars(select(ListinoMaster).options(noload("*")).where(
+                ListinoMaster.supplier_product_alias_id == alias.id,
+                ListinoMaster.data_scadenza.is_not(None),
+                ListinoMaster.data_scadenza >= effective_date,
+            ).with_for_update())).all()
+            cut_offer_rows_at(expiring, effective_date)
         if current:
             current.data_scadenza = effective_date - timedelta(days=1)
             result["updated"] += 1
