@@ -29,6 +29,7 @@ from app.models.purchase_policy import ProductPurchasePolicy, SupplierCategoryCa
 from app.models.categories import MasterCategory
 from app.models.utenti import Utente
 from app.services.normalization import normalize_text
+from app.services.purchase_recommendation import cheapest_comparable_listino
 
 router = APIRouter()
 
@@ -730,9 +731,19 @@ async def elabora_ordine_settore(
                         ListinoMaster.data_inizio_validita <= today,
                         or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today)
                     )
-                    .order_by(ListinoMaster.prezzo_pattuito.asc())
+                    .order_by(ListinoMaster.id)
                 )
-                best_listino = (await db.execute(listino_query)).scalars().first()
+                # Il più conveniente si sceglie sul prezzo nell'unità di confronto della
+                # voce, non sul prezzo grezzo: 0,22 al pezzo non batte 5,27 al cartone
+                # se il cartone ha 30 pezzi. I listini non confrontabili restano fuori.
+                candidate_rows = (await db.execute(listino_query)).scalars().all()
+                alias_ids = {r.supplier_product_alias_id for r in candidate_rows if r.supplier_product_alias_id}
+                aliases_by_id = {}
+                if alias_ids:
+                    aliases_by_id = {a.id: a for a in (await db.scalars(
+                        select(SupplierProductAlias).where(SupplierProductAlias.id.in_(alias_ids))
+                    )).all()}
+                best_listino = cheapest_comparable_listino(candidate_rows, product, aliases_by_id)
                 if best_listino:
                     chosen_supplier_id = best_listino.fornitore_id
                     unit_price = float(best_listino.prezzo_pattuito)

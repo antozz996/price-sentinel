@@ -156,6 +156,18 @@ def canonical_unit(value, *, strict: bool = False) -> Optional[str]:
     )
 
 
+def unit_family(value) -> Optional[str]:
+    """Famiglia di confronto di un'unità (Pz, CT, Kg o Lt), None se vuota o sconosciuta.
+
+    Per confrontare due unità senza dipendere da come sono scritte: "piece", "Pz",
+    "BT" e "bottle" sono tutte Pz; "box", "Ct", "conf" sono CT; "liter" e "LT" sono Lt.
+    """
+    try:
+        return canonical_unit(value, strict=True)
+    except UnitNotAllowedError:
+        return None
+
+
 _BARE_LITRES = (0.2, 0.25, 0.33, 0.35, 0.375, 0.4, 0.5, 0.7, 0.75, 1.0, 1.5, 1.75, 2.0)
 # "100cl", "0,75LT", "24X250 ML", "1 LITRO": il numero non deve far parte di un
 # codice (lettera diversa da x prima) e l'unità non deve continuare in una parola.

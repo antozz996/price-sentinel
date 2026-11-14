@@ -157,6 +157,10 @@ async def build_price_preview(
         )
     ).all()
     supplier_by_id = {row.id: row for row in suppliers}
+    archived_ids = {row.id for row in suppliers if row.archived_at is not None}
+    # I fornitori archiviati non si riconoscono più dal nome dell'intestazione:
+    # 'KITO' finirebbe su un vecchio fornitore provvisorio archiviato.
+    suppliers = [row for row in suppliers if row.archived_at is None]
     supplier_by_name: dict[str, list[Fornitore]] = defaultdict(list)
     for row in suppliers:
         supplier_by_name[normalize_text(row.nome_azienda)].append(row)
@@ -167,7 +171,19 @@ async def build_price_preview(
     errors: list[dict] = []
     for header in parsed["supplier_headers"]:
         explicit_id = supplier_mapping.get(header)
-        if explicit_id is not None and explicit_id > 0:
+        if explicit_id is not None and explicit_id > 0 and explicit_id in archived_ids:
+            errors.append(
+                {
+                    "type": "supplier_mapping",
+                    "header": header,
+                    "message": "Fornitore archiviato: scegline uno attivo.",
+                }
+            )
+            mapping_report.append(
+                {"header": header, "supplier_id": None, "supplier_name": None, "method": "archived"}
+            )
+            continue
+        elif explicit_id is not None and explicit_id > 0:
             supplier = supplier_by_id.get(explicit_id)
             method = "explicit"
         elif explicit_id == -1:
@@ -727,11 +743,17 @@ async def commit_price_preview(
                     or_(
                         Fornitore.nome_azienda == change["supplier_name"].strip(),
                         func.lower(Fornitore.nome_azienda) == norm_supp_name.lower(),
-                    )
+                    ),
+                    Fornitore.archived_at.is_(None),
                 )
             )
             if not supplier:
                 temp_piva = f"TEMP{hashlib.sha256(norm_supp_name.encode('utf-8')).hexdigest()[:7].upper()}"
+                # Un fornitore provvisorio archiviato con lo stesso nome ha già questa P.IVA.
+                base_piva, suffix = temp_piva, 1
+                while await db.scalar(select(Fornitore.id).where(Fornitore.partita_iva == temp_piva)):
+                    suffix += 1
+                    temp_piva = f"{base_piva}-{suffix}"
                 supplier = Fornitore(
                     nome_azienda=change["supplier_name"].strip(),
                     partita_iva=temp_piva,

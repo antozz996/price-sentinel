@@ -12,12 +12,33 @@ from sqlalchemy.orm import noload, selectinload
 from app.models.products import Product, SupplierProductAlias, ProductEquivalenceGroupItem
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
-from app.services.normalization import normalize_text
+from app.services.normalization import normalize_text, unit_family
 from app.services.matching import normalize_price_for_comparison
 from app.services.purchase_recommendation import (
     load_effective_purchase_context,
     rank_supplier_offers,
 )
+
+
+def convert_requested_quantity(requested_qty, requested_unit, comp_unit, unit_count, volume_ml, weight_g) -> Decimal:
+    """Quantità richiesta espressa nell'unità di confronto della voce.
+
+    Senza unità di confronto la quantità resta un numero di confezioni: l'offerta
+    resta visibile, ma non partecipa a confronti automatici.
+    """
+    qty = Decimal(str(requested_qty))
+    requested, comp = unit_family(requested_unit), unit_family(comp_unit)
+    if not comp_unit or not requested or not comp:
+        return qty
+    if requested == "CT" and comp == "Pz":
+        return qty * Decimal(str(unit_count))
+    if requested == "Pz" and comp == "CT" and unit_count > 0:
+        return qty / Decimal(str(unit_count))
+    if requested == "Pz" and comp == "Lt" and volume_ml > 0:
+        return qty * (Decimal(str(volume_ml)) / Decimal("1000"))
+    if requested == "Pz" and comp == "Kg" and weight_g > 0:
+        return qty * (Decimal(str(weight_g)) / Decimal("1000"))
+    return qty
 
 
 async def resolve_order_item(
@@ -121,18 +142,12 @@ async def resolve_order_item(
     # Conversione quantità a unità di confronto target
     target_total_units = Decimal(str(requested_qty))
     
-    if not comp_unit:
-        # Senza U.M. interpretiamo la quantità solo come numero di confezioni:
-        # l'offerta resta visibile, ma non partecipa a confronti automatici.
-        target_total_units = Decimal(str(requested_qty))
-    elif requested_unit == "box" and comp_unit in ("piece", "bottle"):
-        target_total_units = Decimal(str(requested_qty)) * Decimal(str(unit_count))
-    elif requested_unit in ("piece", "bottle") and comp_unit == "box" and unit_count > 0:
-        target_total_units = Decimal(str(requested_qty)) / Decimal(str(unit_count))
-    elif requested_unit in ("piece", "bottle") and comp_unit == "liter" and volume_ml > 0:
-        target_total_units = Decimal(str(requested_qty)) * (Decimal(str(volume_ml)) / Decimal("1000"))
-    elif requested_unit == "piece" and comp_unit == "kg" and weight_g > 0:
-        target_total_units = Decimal(str(requested_qty)) * (Decimal(str(weight_g)) / Decimal("1000"))
+    # Le unità si confrontano per famiglia (Pz, CT, Kg, Lt), non come testo:
+    # "Pz", "piece" e "BT" sono la stessa cosa, come "CT", "box" e "conf".
+    target_total_units = convert_requested_quantity(
+        requested_qty, requested_unit, comp_unit, unit_count, volume_ml, weight_g
+    )
+    comp_family = unit_family(comp_unit)
 
     # 2. Risoluzione degli ID di prodotto da includere
     product_ids = [matched_product.id]
@@ -300,14 +315,14 @@ async def resolve_order_item(
         if unit_missing:
             packs_needed = int(math.ceil(float(target_total_units)))
             actual_units_supplied = None
-        elif comp_unit in ("piece", "bottle"):
+        elif comp_family == "Pz":
             packs_needed = int(math.ceil(float(target_total_units) / pack_qty))
             actual_units_supplied = packs_needed * pack_qty
-        elif comp_unit == "liter" and alias_vol and alias_vol > 0:
+        elif comp_family == "Lt" and alias_vol and alias_vol > 0:
             liters_per_pack = (pack_qty * alias_vol) / 1000.0
             packs_needed = int(math.ceil(float(target_total_units) / liters_per_pack))
             actual_units_supplied = float(packs_needed * liters_per_pack)
-        elif comp_unit == "kg" and alias_w and alias_w > 0:
+        elif comp_family == "Kg" and alias_w and alias_w > 0:
             kg_per_pack = (pack_qty * alias_w) / 1000.0
             packs_needed = int(math.ceil(float(target_total_units) / kg_per_pack))
             actual_units_supplied = float(packs_needed * kg_per_pack)

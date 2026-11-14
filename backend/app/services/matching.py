@@ -25,7 +25,19 @@ from app.services.normalization import (
     extract_weight_g,
     extract_pack_qty,
     extract_container_type,
+    unit_family,
 )
+
+
+def pack_mismatch_blocks(comparison_unit, line_pack_qty, product_unit_count) -> bool:
+    """Una voce venduta a cartone (famiglia CT) non si propone per una riga con
+    confezione diversa. Si blocca solo se entrambe le confezioni sono note:
+    unit_count 1 è il valore predefinito delle voci, non una confezione da 1."""
+    if unit_family(comparison_unit) != "CT":
+        return False
+    if not line_pack_qty or not product_unit_count or product_unit_count <= 1:
+        return False
+    return line_pack_qty != product_unit_count
 
 
 @dataclass
@@ -472,9 +484,8 @@ async def resolve_invoice_line_product(
             if line_pk == prod_pk:
                 score += 10
                 reason_dict["pack_match"] = True
-            else:
-                if p.comparison_unit in ("box", "cartone", "cassa"):
-                    block_flag = True
+            elif pack_mismatch_blocks(p.comparison_unit, line_attrs.get("pack_qty"), p.unit_count):
+                block_flag = True
                     
             # Container
             line_cont = line_attrs.get("container_type")

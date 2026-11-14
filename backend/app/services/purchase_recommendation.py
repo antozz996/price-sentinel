@@ -26,6 +26,36 @@ def decimal_value(value) -> Decimal:
     return value if isinstance(value, Decimal) else Decimal(str(value))
 
 
+def comparable_listino_price(row, product, alias=None) -> Decimal | None:
+    """Prezzo di listino nell'unità di confronto della voce, None se non affidabile.
+
+    Un listino senza unità o con una conversione incerta non si confronta con gli
+    altri: resta visibile, ma non partecipa alla scelta automatica del fornitore.
+    """
+    from app.services.matching import normalize_price_for_comparison
+
+    if product is None or not (row.unita_misura or "").strip():
+        return None
+    normalized = normalize_price_for_comparison(
+        Decimal(str(row.prezzo_pattuito)), Decimal("1"), row.unita_misura, product, alias,
+    )
+    return normalized.normalized_unit_price if normalized.reliable else None
+
+
+def cheapest_comparable_listino(rows, product, aliases_by_id: dict | None = None):
+    """Listino con il prezzo normalizzato più basso; None se nessuno è confrontabile."""
+    aliases_by_id = aliases_by_id or {}
+    best = None
+    for row in rows:
+        price = comparable_listino_price(row, product, aliases_by_id.get(row.supplier_product_alias_id))
+        if price is None:
+            continue
+        key = (price, row.fornitore_id, row.id)
+        if best is None or key < best[0]:
+            best = (key, row)
+    return best[1] if best else None
+
+
 def assessment_snapshot(row: ProductSupplierAssessment) -> dict:
     return {
         "id": row.id,
@@ -261,3 +291,29 @@ def rank_supplier_offers(
             else ([] if recommended else ["Nessuna offerta rispetta le regole di acquisto."])
         ),
     }
+
+
+def rank_offers_keeping_incomparable(
+    offers: list[dict],
+    assessments: dict[int, dict] | None = None,
+    policy: dict | None = None,
+) -> dict:
+    """rank_supplier_offers sulle offerte con prezzo normalizzato; le altre
+    (unit_price_normalized None) restano in elenco come opzioni manuali, mai
+    indicate come la più conveniente o consigliata."""
+    comparable = [offer for offer in offers if offer.get("unit_price_normalized") is not None]
+    manual = [deepcopy(offer) for offer in offers if offer.get("unit_price_normalized") is None]
+    recommendation = rank_supplier_offers(comparable, assessments, policy)
+    assessments = assessments or {}
+    for offer in manual:
+        assessment = assessments.get(int(offer["supplier_id"])) or {
+            "status": "approved", "quality_score": 3, "reason": None, "scope": "default"
+        }
+        offer["assessment"] = assessment
+        offer["eligible"] = assessment.get("status") not in ("blocked", "discouraged")
+        offer["exclusion_reasons"] = [] if offer["eligible"] else ["supplier_not_eligible"]
+        offer["is_absolute_cheapest"] = False
+        offer["is_recommended"] = False
+        offer["is_selected"] = False
+    recommendation["offers"].extend(manual)
+    return recommendation

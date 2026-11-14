@@ -1188,6 +1188,39 @@ async def _load_catalog_index(db: AsyncSession) -> dict[str, Any]:
     return await run_in_threadpool(_build_live_catalog_index, list(products))
 
 
+async def _refresh_queue_line_anomaly(db, line, invoice, listino, compared_price, delta, delta_total) -> None:
+    """Ricalcola l'anomalia di una riga risolta dalla coda prodotti.
+
+    Archivia solo le anomalie non ancora lavorate (da verificare o in parcheggio):
+    una contestazione, un reclamo o una risoluzione restano dove sono. Se ne resta
+    una lavorata non se ne crea un'altra (una sola anomalia per riga).
+    """
+    from app.services.anomaly_policy import (
+        archive_and_remove_anomalies,
+        invoice_in_check_scope,
+        is_material_price_increase,
+        stale_unworked_anomaly_conditions,
+    )
+    await archive_and_remove_anomalies(
+        db, *stale_unworked_anomaly_conditions(line.id), reason="risoluzione_coda"
+    )
+    if not is_material_price_increase(delta_total, delta):
+        return
+    if not await invoice_in_check_scope(db, invoice.xml_raw_id):
+        return
+    worked = await db.scalar(select(Anomalia.id).where(Anomalia.riga_fattura_id == line.id).limit(1))
+    if worked is not None:
+        return
+    db.add(Anomalia(
+        riga_fattura_id=line.id,
+        delta_prezzo=delta,
+        delta_totale=delta_total,
+        prezzo_listino_snapshot=listino.prezzo_pattuito,
+        prezzo_fatturato_snapshot=compared_price,
+        stato_validazione=StatoValidazione.da_verificare,
+    ))
+
+
 async def _resolve_single_work_item(
     db: AsyncSession,
     data: WorkQueueResolutionRequest,
@@ -1434,22 +1467,10 @@ async def _resolve_single_work_item(
         # Keep the invoiced net price on the line: only the anomaly snapshot is converted.
         compared_price = normalized_price.normalized_unit_price
         delta = compared_price - Decimal(str(listino.prezzo_pattuito))
-        from app.services.anomaly_policy import (
-            archive_and_remove_anomalies,
-            invoice_in_check_scope,
-            is_material_price_increase,
-        )
-        await archive_and_remove_anomalies(db, Anomalia.riga_fattura_id == line.id, reason="risoluzione_coda")
         delta_total = invoice_delta_total(delta, line.quantita, normalized_price)
-        if is_material_price_increase(delta_total, delta) and await invoice_in_check_scope(db, invoice.xml_raw_id):
-            db.add(Anomalia(
-                riga_fattura_id=line.id,
-                delta_prezzo=delta,
-                delta_totale=delta_total,
-                prezzo_listino_snapshot=listino.prezzo_pattuito,
-                prezzo_fatturato_snapshot=compared_price,
-                stato_validazione=StatoValidazione.da_verificare,
-            ))
+        await _refresh_queue_line_anomaly(
+            db, line, invoice, listino, compared_price, delta, delta_total
+        )
 
     await db.execute(delete(MatchCandidate).where(MatchCandidate.invoice_line_id.in_(line_ids)))
     await db.flush()

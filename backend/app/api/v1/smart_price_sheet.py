@@ -40,7 +40,9 @@ from app.schemas.smart_price_sheet import (
     VariantPricePreviewRequest,
 )
 from app.services.purchase_recommendation import (
+    comparable_listino_price,
     policy_snapshot,
+    rank_offers_keeping_incomparable,
     rank_supplier_offers,
 )
 from app.services.smart_price_sheet import build_price_preview, commit_price_preview
@@ -362,9 +364,15 @@ async def matrix(
             continue
         if key in prices and prices[key].get("source_type") == "contratto":
             continue
+        # Prezzo nell'unità di confronto della voce; None se non confrontabile
+        # (senza unità o conversione incerta): l'offerta resta visibile ma fuori classifica.
+        comparable = comparable_listino_price(
+            row, products_by_sku.get(row.sku_interno), aliases_by_id.get(row.supplier_product_alias_id),
+        )
         prices[key] = {
             "supplier_id": row.fornitore_id,
-            "unit_price_normalized": f"{Decimal(str(row.prezzo_pattuito)):.4f}",
+            "unit_price_normalized": f"{comparable:.4f}" if comparable is not None else None,
+            "comparison_reliable": comparable is not None,
             "price": f"{Decimal(str(row.prezzo_pattuito)):.4f}",
             "source_type": "contratto",
             "uom": row.unita_misura,
@@ -388,7 +396,7 @@ async def matrix(
                 offer = prices.get((product.sku_interno, supplier.id))
                 if offer:
                     offers.append({**offer, "supplier_name": supplier.nome_azienda})
-        recommendation = rank_supplier_offers(
+        recommendation = rank_offers_keeping_incomparable(
             offers,
             effective_assessments.get(product.id, {}),
             effective_policies.get(product.id),
