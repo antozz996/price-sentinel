@@ -1,11 +1,22 @@
-"""Lettura del volume dal nome (extract_volume_ml) (volumi scritti in molti formati).
+"""Lettura del volume dal nome (extract_volume_ml) (volumi scritti in molti formati) e matching:
+la sola somiglianza del nome non collega mai una riga in automatico.
 
 python -m unittest discover -s tests -p 'test_volume_matching_guards.py' -v   (da backend/, PYTHONPATH=.)
 """
+import asyncio
+import os
 import unittest
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
-from app.services.normalization import extract_volume_ml
+# Placeholder settings: these tests never open a database connection.
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://unused:unused@127.0.0.1:1/unused")
+os.environ.setdefault("SECRET_KEY", "unit-test-placeholder-unit-test-placeholder")
+os.environ.setdefault("ARUBA_WEBHOOK_API_KEY", "unit-test-placeholder-unit-test-placeholder")
+os.environ.setdefault("LIQUIDSTOCK_INTEGRATION_SECRET", "unit-test-placeholder-unit-test-placeholder")
+
+from app.services.matching import resolve_invoice_line_product  # noqa: E402
+from app.services.normalization import extract_volume_ml  # noqa: E402
 
 
 def catalog_product(product_id: int, name: str, **overrides):
@@ -58,6 +69,23 @@ class VolumeFromNameTest(unittest.TestCase):
         ):
             with self.subTest(text=text):
                 self.assertIsNone(extract_volume_ml(text))
+
+
+class FuzzyMatchNeverAutoTest(unittest.TestCase):
+    def test_name_similarity_alone_is_only_a_suggestion(self):
+        product = catalog_product(
+            309, "VODKA BELVEDERE 70 CL VETRO", brand="Belvedere", category="Beverage",
+            volume_ml=700, container_type="vetro",
+        )
+        products, aliases = MagicMock(), MagicMock()
+        products.scalars.return_value.all.return_value = [product]
+        aliases.scalars.return_value.all.return_value = []
+        db = MagicMock()
+        db.execute = AsyncMock(side_effect=[products, aliases])
+        result = asyncio.run(resolve_invoice_line_product(db, 22, "VODKA BELVEDERE 70 CL VETRO"))
+        self.assertGreaterEqual(result["score"], 90)
+        self.assertEqual(result["decision"], "needs_review")
+        self.assertEqual(result["product_id"], 309)
 
 
 if __name__ == "__main__":

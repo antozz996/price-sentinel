@@ -5,7 +5,7 @@ import re
 from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, delete, and_, or_, text, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload, selectinload
@@ -20,7 +20,13 @@ from app.models.fatture import RigaFattura, Fattura, StatoMatching
 from app.models.fornitori import Fornitore
 from app.models.anomalie import Anomalia, StatoValidazione
 from app.models.purchase_policy import SupplierCategoryCapability
-from app.services.normalization import extract_candidate_attributes, infer_new_product_category, normalize_text
+from app.models.categories import MasterCategory
+from app.services.normalization import (
+    canonical_unit,
+    extract_candidate_attributes,
+    infer_new_product_category,
+    normalize_text,
+)
 from app.services.matching import normalize_price_for_comparison, _get_listino_attivo, invoice_delta_total
 from app.services.order_resolver import resolve_order_item
 
@@ -47,8 +53,20 @@ class ProductBase(BaseModel):
     is_commodity: Optional[bool] = False
     is_active: Optional[bool] = True
 
+def _strict_unit(value: Optional[str]) -> Optional[str]:
+    """Pydantic: unità di confronto scelta da API/schermata, solo Pz/CT/Kg/Lt (altrimenti 422)."""
+    return canonical_unit(value, strict=True)
+
+
+def _import_unit(value: Optional[str]) -> Optional[str]:
+    """Unità del listino presa dalla fattura (es. "K.", "Ct", "COL"): corregge le varianti
+    della stessa unità e lascia le altre come sono. Non è un errore, perché una sola riga
+    strana farebbe fallire una risoluzione massiva."""
+    return canonical_unit(value)
+
+
 class ProductCreate(ProductBase):
-    pass
+    _comparison_unit_allowed = field_validator("comparison_unit")(_strict_unit)
 
 class ProductUpdate(BaseModel):
     sku_interno: Optional[str] = None
@@ -66,6 +84,8 @@ class ProductUpdate(BaseModel):
     supplier_form_note: Optional[str] = Field(default=None, max_length=500)
     is_commodity: Optional[bool] = None
     is_active: Optional[bool] = None
+
+    _comparison_unit_allowed = field_validator("comparison_unit")(_strict_unit)
 
 class SantoGraalCatalogSeedItem(BaseModel):
     source_sheet: str = Field(min_length=1, max_length=100)
@@ -169,10 +189,17 @@ class WorkQueueResolutionProduct(BaseModel):
     weight_g: Optional[int] = Field(default=None, ge=1)
     unit_count: int = Field(default=1, ge=1)
     container_type: Optional[str] = Field(default=None, max_length=50)
-    comparison_unit: str = Field(default="piece", max_length=50)
+    comparison_unit: str = Field(default="Pz", max_length=50)
     prezzo_listino: Optional[Decimal] = None
     unita_misura_listino: Optional[str] = None
     data_inizio_validita: Optional[date] = None
+
+    @field_validator("comparison_unit")
+    @classmethod
+    def _comparison_unit_allowed(cls, value: str) -> str:
+        return canonical_unit(value, strict=True) or "Pz"
+
+    _listino_unit_allowed = field_validator("unita_misura_listino")(_import_unit)
 
 class WorkQueueResolutionRequest(BaseModel):
     invoice_line_ids: List[int] = Field(min_length=1, max_length=1000)
@@ -183,6 +210,12 @@ class WorkQueueResolutionRequest(BaseModel):
     unita_misura_listino: Optional[str] = None
     data_inizio_validita: Optional[date] = None
     insert_in_listino: Optional[bool] = True
+    # create_canonical si ferma (409) se a catalogo c'è già una voce simile;
+    # True solo dopo che l'operatore ha visto l'elenco e confermato che è un'altra cosa
+    # (gli script dati resolve_*.py devono passarlo esplicitamente, con una categoria valida).
+    allow_similar: bool = False
+
+    _listino_unit_allowed = field_validator("unita_misura_listino")(_import_unit)
 
 class BulkWorkQueueResolutionRequest(BaseModel):
     items: List[WorkQueueResolutionRequest] = Field(min_length=1, max_length=500)
@@ -1080,7 +1113,86 @@ async def get_match_work_queue(
     }
 
 
-async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionRequest) -> dict:
+SIMILAR_PRODUCTS_SHOWN = 3
+# Nome che la vecchia schermata usava per i Materiali: a catalogo la categoria è "Materiali".
+_CATEGORY_ALIASES = {"materiali di consumo": "Materiali"}
+
+
+async def _known_category(db: AsyncSession, value: Optional[str]) -> str:
+    """Categoria obbligatoria per una voce nuova, scritta come quelle già a catalogo.
+
+    Vale se esiste tra le categorie master attive o se è già usata da una voce attiva
+    (le categorie storiche come "Gelati confezionati" possono mancare dalla tabella master).
+    """
+    clean = (value or "").strip()
+    if not clean:
+        raise HTTPException(status_code=422, detail="Scegliere la categoria del nuovo prodotto")
+    clean = _CATEGORY_ALIASES.get(clean.casefold(), clean)
+    master = await db.scalar(
+        select(MasterCategory.nome).where(
+            func.lower(func.btrim(MasterCategory.nome)) == clean.casefold(),
+            MasterCategory.is_active.is_(True),
+        )
+    )
+    if master:
+        return master.strip()
+    in_use = await db.scalar(
+        select(Product.category).where(
+            func.lower(func.btrim(Product.category)) == clean.casefold(),
+            Product.is_active.is_(True),
+        ).limit(1)
+    )
+    if in_use:
+        return in_use.strip()
+    raise HTTPException(status_code=422, detail=f"Categoria «{clean}» sconosciuta: sceglierne una esistente")
+
+
+def _similar_catalog_products(names: list[str], catalog_index: dict[str, Any]) -> list[dict[str, Any]]:
+    """Voci attive simili al prodotto che si sta creando, con la stessa logica della coda.
+
+    _live_catalog_suggestions scarta già i formati diversi (70 cl / 1 l) e i nomi
+    con marche diverse, quindi restano solo le voci che potrebbero essere la stessa cosa.
+    """
+    products = list(catalog_index["products_by_id"].values())
+    found: dict[int, dict[str, Any]] = {}
+    for name in names:
+        if not (name or "").strip():
+            continue
+        for suggestion in _live_catalog_suggestions(name, products, catalog_index):
+            previous = found.get(suggestion["product_id"])
+            if previous is None or suggestion["score"] > previous["score"]:
+                found[suggestion["product_id"]] = {
+                    "product_id": suggestion["product_id"],
+                    "sku_interno": suggestion["sku_interno"],
+                    "canonical_name": suggestion["canonical_name"],
+                    "score": suggestion["score"],
+                }
+    return sorted(found.values(), key=lambda item: -item["score"])[:SIMILAR_PRODUCTS_SHOWN]
+
+
+def _extend_catalog_index(index: dict[str, Any], product: Product) -> None:
+    """Aggiunge una voce appena creata all'indice, così una risoluzione massiva non
+    crea due volte lo stesso prodotto arrivato da due fornitori."""
+    extra = _build_live_catalog_index([product])
+    for key, values in extra.items():
+        target = index[key]
+        for item_key, item_value in values.items():
+            if isinstance(item_value, set):
+                target.setdefault(item_key, set()).update(item_value)
+            else:
+                target[item_key] = item_value
+
+
+async def _load_catalog_index(db: AsyncSession) -> dict[str, Any]:
+    products = (await db.execute(select(Product).where(Product.is_active.is_(True)))).scalars().all()
+    return await run_in_threadpool(_build_live_catalog_index, list(products))
+
+
+async def _resolve_single_work_item(
+    db: AsyncSession,
+    data: WorkQueueResolutionRequest,
+    catalog_index: dict[str, Any] | None = None,
+) -> dict:
     allowed_actions = {"associate_existing", "create_canonical", "ignore"}
     if data.action not in allowed_actions:
         raise HTTPException(status_code=422, detail="Azione non supportata")
@@ -1136,25 +1248,50 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
                 raise HTTPException(status_code=409, detail="SKU interno già esistente")
         if not sku:
             sku = f"CAN-{representative_invoice.fornitore_id}-{representative_line.id}-{int(datetime.utcnow().timestamp())}"
+        category = await _known_category(db, canonical.category)
+
+        # Controllo doppioni su tutto il catalogo, prima di qualsiasi scrittura:
+        # sia il nome scelto sia la descrizione di fattura.
+        if not data.allow_similar:
+            if catalog_index is None:
+                catalog_index = await _load_catalog_index(db)
+            similar = _similar_catalog_products(
+                [canonical.canonical_name, representative_line.descrizione_fornitore_raw or ""],
+                catalog_index,
+            )
+            if similar:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "similar_products",
+                        "message": "A catalogo ci sono già prodotti simili: associare la riga a uno di questi "
+                                   "oppure confermare che è un prodotto diverso",
+                        "similar_products": similar,
+                        "invoice_line_ids": line_ids,
+                    },
+                )
 
         product = Product(
             sku_interno=sku,
             canonical_name=canonical.canonical_name.strip(),
             normalized_name=normalize_text(canonical.canonical_name),
             brand=canonical.brand.strip() if canonical.brand else None,
-            category=canonical.category.strip() if canonical.category else None,
+            category=category,
             subcategory=canonical.subcategory.strip() if canonical.subcategory else None,
             volume_ml=canonical.volume_ml,
             weight_g=canonical.weight_g,
             unit_count=canonical.unit_count,
             container_type=canonical.container_type,
-            comparison_unit="Pz" if canonical.comparison_unit in ("piece", None, "") else canonical.comparison_unit,
+            # Già ricondotta a Pz/CT/Kg/Lt dal validatore di WorkQueueResolutionProduct.
+            comparison_unit=canonical.comparison_unit,
             is_commodity=False,
             is_active=True,
         )
         db.add(product)
         await db.flush()
         created_product = True
+        if catalog_index is not None:
+            _extend_catalog_index(catalog_index, product)
 
     normalized_description = normalize_text(representative_line.descrizione_fornitore_raw or "")
     alias_filters = [SupplierProductAlias.supplier_id == representative_invoice.fornitore_id]
@@ -1215,7 +1352,7 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
                 else (data.canonical_data.unita_misura_listino if data.canonical_data and data.canonical_data.unita_misura_listino else None)
             )
             if not uom_val:
-                uom_val = representative_line.unita_misura_fattura or product.comparison_unit or "Pz"
+                uom_val = canonical_unit(representative_line.unita_misura_fattura) or product.comparison_unit or "Pz"
 
             valid_from = (
                 data.data_inizio_validita 
@@ -1251,7 +1388,12 @@ async def _resolve_single_work_item(db: AsyncSession, data: WorkQueueResolutionR
             if price_val is None:
                 price_val = representative_line.prezzo_netto_normalizzato or representative_line.prezzo_unitario_fatturato or 0
 
-            uom_val = data.unita_misura_listino or representative_line.unita_misura_fattura or product.comparison_unit or "Pz"
+            uom_val = (
+                data.unita_misura_listino
+                or canonical_unit(representative_line.unita_misura_fattura)
+                or product.comparison_unit
+                or "Pz"
+            )
             valid_from = data.data_inizio_validita or representative_invoice.data_documento or date.today()
 
             listino_entry = ListinoMaster(
@@ -1348,14 +1490,28 @@ async def resolve_match_work_queue_bulk(
     resolved_items = 0
     resolved_lines = 0
     errors = []
+    error_details = []
+    # Indice del catalogo costruito una volta sola per tutto il lotto (il controllo
+    # doppioni di create_canonical lo usa e lo aggiorna con le voci appena create).
+    catalog_index = None
+    if any(item.action == "create_canonical" and not item.allow_similar for item in payload.items):
+        catalog_index = await _load_catalog_index(db)
 
     for item in payload.items:
         try:
-            res = await _resolve_single_work_item(db, item)
+            res = await _resolve_single_work_item(db, item, catalog_index=catalog_index)
             resolved_items += 1
             resolved_lines += res.get("resolved_lines", 0)
+        except HTTPException as e:
+            errors.append(str(e))
+            error_details.append({
+                "invoice_line_ids": item.invoice_line_ids,
+                "status_code": e.status_code,
+                "detail": e.detail,
+            })
         except Exception as e:
             errors.append(str(e))
+            error_details.append({"invoice_line_ids": item.invoice_line_ids, "status_code": 500, "detail": str(e)})
 
     await db.commit()
     return {
@@ -1363,6 +1519,7 @@ async def resolve_match_work_queue_bulk(
         "resolved_items": resolved_items,
         "resolved_lines": resolved_lines,
         "errors": errors,
+        "error_details": error_details,
     }
 
 @router.get("/match-candidates", response_model=List[CandidateResponse], summary="Ottiene l'elenco dei match candidate pendenti")
@@ -1508,7 +1665,7 @@ async def approve_candidate(
 
     if candidate.source_type == "price_list_row" and candidate.reason_json:
         price_val = candidate.reason_json.get("price")
-        uom_val = candidate.reason_json.get("uom") or product.comparison_unit or "piece"
+        uom_val = canonical_unit(candidate.reason_json.get("uom")) or product.comparison_unit or "Pz"
         if price_val is not None:
             if alias.id is None:
                 await db.flush()

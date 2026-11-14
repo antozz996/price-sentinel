@@ -144,11 +144,45 @@ function cacheWorkQueue(data: WorkQueueResponse) {
   }
 }
 
+// Le stesse categorie del catalogo: una proposta del server (es. "Attrezzatura")
+// non va più trasformata in "Food" perché assente da questo elenco.
 const CATEGORIES = [
   'Food',
   'Beverage',
-  'Materiali di consumo',
+  'Materiali',
+  'Attrezzatura',
+  'Gelati confezionati',
 ];
+const LEGACY_CATEGORY: Record<string, string> = {
+  'Materiali di consumo': 'Materiali',
+  'Detergenti & Sanificazione': 'Materiali',
+  'Monouso & Packaging': 'Materiali',
+  'Alcolici & Liquori': 'Beverage',
+  'Birre': 'Beverage',
+  'Vini & Spumanti': 'Beverage',
+  'Soft Drink & Acque': 'Beverage',
+  'Caffetteria': 'Beverage',
+};
+
+// Unità ammesse dal server (normalization.canonical_unit): Pz, Kg, Lt, CT.
+const UNITS = ['Pz', 'Kg', 'Lt', 'CT'];
+const UNIT_SYNONYMS: Record<string, string> = {
+  pz: 'Pz', pezzo: 'Pz', pezzi: 'Pz', piece: 'Pz', nr: 'Pz', n: 'Pz', bt: 'Pz', btl: 'Pz', bottiglia: 'Pz', fl: 'Pz',
+  kg: 'Kg', k: 'Kg', chili: 'Kg', kilo: 'Kg',
+  l: 'Lt', lt: 'Lt', litro: 'Lt', litri: 'Lt',
+  ct: 'CT', cartone: 'CT', cs: 'CT', cassa: 'CT', crt: 'CT', cf: 'CT', cnf: 'CT', conf: 'CT', confezione: 'CT',
+};
+function canonicalUnit(value?: string | null): string | null {
+  const key = (value || '').trim().toLowerCase().replace(/\.+$/, '');
+  return UNIT_SYNONYMS[key] || null;
+}
+
+function errorText(detail: any, fallback: string): string {
+  if (!detail) return fallback;
+  if (typeof detail === 'string') return detail;
+  if (detail.message) return detail.message;
+  return fallback;
+}
 
 export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [queueData, setQueueData] = useState<WorkQueueResponse | null>(() => readCachedWorkQueue());
@@ -172,7 +206,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     prezzo_concordato: '',
     unita_misura: 'Pz',
     sku_interno: '',
-    category: 'Food',
+    category: '',
     subcategory: '',
     brand: '',
     notes: ''
@@ -192,7 +226,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   const [createForm, setCreateForm] = useState({
     canonical_name: '',
     sku_interno: '',
-    category: 'Food',
+    category: '',
     subcategory: '',
     comparison_unit: 'Pz',
     prezzo_listino: '',
@@ -249,13 +283,17 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
 
   const handleCreateInlineSubcategory = async () => {
     if (!inlineNewSubcatName.trim()) return;
+    if (!createForm.category) {
+      alert('Scegli prima la categoria');
+      return;
+    }
     setCreatingSubcat(true);
     try {
       const res = await fetch(`${API_BASE}/categories/subcategories`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({
-          categoria_nome: createForm.category || 'Food',
+          categoria_nome: createForm.category,
           nome: inlineNewSubcatName.trim(),
           is_active: true,
         }),
@@ -346,7 +384,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       prezzo_concordato: '',
       unita_misura: item.comparison_unit || 'Pz',
       sku_interno: item.sku_interno || '',
-      category: item.category || 'Food',
+      category: item.category || '',
       subcategory: item.subcategory || '',
       brand: item.brand || '',
       notes: ''
@@ -454,23 +492,18 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     const rawPrice = item.prezzo_unitario !== undefined && item.prezzo_unitario > 0 
       ? item.prezzo_unitario.toFixed(2) 
       : '';
-    const rawUom = item.unita_misura || 'Pz';
+    // Unità della fattura riportata a Pz/Kg/Lt/CT: "K." -> Kg, "NR" -> Pz, "conf" -> CT.
+    const rawUom = canonicalUnit(item.unita_misura) || 'Pz';
     const invoiceDate = item.data_documento || item.latest_invoice_date || new Date().toISOString().split('T')[0];
 
-    let initialCategory = item.suggested_product.category || 'Food';
-    let initialSubcategory = item.suggested_product.subcategory || '';
-
-    // Normalize any legacy or granular category to standard macro-categories
-    if (['Alcolici & Liquori', 'Birre', 'Vini & Spumanti', 'Soft Drink & Acque', 'Caffetteria'].includes(initialCategory)) {
-      initialSubcategory = initialSubcategory || initialCategory;
-      initialCategory = 'Beverage';
-    } else if (['Detergenti & Sanificazione', 'Monouso & Packaging'].includes(initialCategory)) {
-      initialSubcategory = initialSubcategory || initialCategory;
-      initialCategory = 'Materiali di consumo';
-    } else if (!CATEGORIES.includes(initialCategory)) {
-      initialCategory = 'Food';
-    }
-    fetchSubcategories(initialCategory);
+    // Nessuna categoria preselezionata per ripiego: se il server non sa proporla,
+    // l'operatore la sceglie (prima finiva tutto in "Food").
+    const suggestedCategory = item.suggested_product.category || '';
+    const initialCategory = CATEGORIES.includes(suggestedCategory)
+      ? suggestedCategory
+      : (LEGACY_CATEGORY[suggestedCategory] || '');
+    const initialSubcategory = item.suggested_product.subcategory || '';
+    if (initialCategory) fetchSubcategories(initialCategory);
 
     // Populate create form
     setCreateForm({
@@ -478,7 +511,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       sku_interno: autoSku,
       category: initialCategory,
       subcategory: initialSubcategory,
-      comparison_unit: item.suggested_product.comparison_unit && item.suggested_product.comparison_unit !== 'piece' ? item.suggested_product.comparison_unit : 'Pz',
+      comparison_unit: canonicalUnit(item.unita_misura) || canonicalUnit(item.suggested_product.comparison_unit) || 'Pz',
       prezzo_listino: rawPrice,
       unita_misura_listino: rawUom,
       data_inizio_validita: invoiceDate,
@@ -497,9 +530,13 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
   };
 
   // Submit: Inserisci in listino come nuovo
-  const handleResolveCreateNew = async (item: WorkQueueItem) => {
+  const handleResolveCreateNew = async (item: WorkQueueItem, allowSimilar = false) => {
     if (!createForm.canonical_name.trim()) {
       alert('Inserisci il nome del prodotto');
+      return;
+    }
+    if (!createForm.category) {
+      alert('Scegli la categoria del nuovo prodotto');
       return;
     }
 
@@ -509,19 +546,20 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       const payload = {
         invoice_line_ids: item.invoice_line_ids,
         action: 'create_canonical',
+        allow_similar: allowSimilar,
         canonical_data: {
           canonical_name: createForm.canonical_name.trim(),
           sku_interno: createForm.sku_interno.trim() || undefined,
-          category: createForm.category || undefined,
+          category: createForm.category,
           subcategory: createForm.subcategory.trim() || undefined,
-          comparison_unit: createForm.comparison_unit && createForm.comparison_unit !== 'piece' ? createForm.comparison_unit : 'Pz',
+          comparison_unit: canonicalUnit(createForm.comparison_unit) || 'Pz',
           prezzo_listino: createForm.prezzo_listino ? parseFloat(createForm.prezzo_listino) : undefined,
-          unita_misura_listino: createForm.unita_misura_listino || 'Pz',
+          unita_misura_listino: canonicalUnit(createForm.unita_misura_listino) || undefined,
           data_inizio_validita: createForm.data_inizio_validita || undefined,
         },
         insert_in_listino: true,
         prezzo_listino: createForm.prezzo_listino ? parseFloat(createForm.prezzo_listino) : undefined,
-        unita_misura_listino: createForm.unita_misura_listino || 'Pz',
+        unita_misura_listino: canonicalUnit(createForm.unita_misura_listino) || undefined,
         data_inizio_validita: createForm.data_inizio_validita || undefined,
       };
 
@@ -532,7 +570,24 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Errore durante la creazione del prodotto in listino');
+      if (res.status === 409 && data.detail?.code === 'similar_products') {
+        // Controllo doppioni sul catalogo: l'operatore conferma che è davvero un prodotto nuovo,
+        // altrimenti passa all'associazione con il primo simile già selezionato.
+        const similar: { product_id: number; canonical_name: string; score: number }[] = data.detail.similar_products || [];
+        const list = similar.map(s => `• ${s.canonical_name} (${Math.round(s.score)}%)`).join('\n');
+        if (window.confirm(`A catalogo esistono già prodotti simili:\n${list}\n\nOK = è un prodotto diverso, crealo comunque.\nAnnulla = associa la riga a un prodotto esistente.`)) {
+          setResolvingKey(null);
+          await handleResolveCreateNew(item, true);
+          return;
+        }
+        if (similar.length) {
+          setActiveMode('associate');
+          setSelectedExistingId(similar[0].product_id);
+          setAssociateSearch(similar[0].canonical_name);
+        }
+        return;
+      }
+      if (!res.ok) throw new Error(errorText(data.detail, 'Errore durante la creazione del prodotto in listino'));
 
       setActionSuccess(
         `✅ Prodotto "${createForm.canonical_name}" inserito con successo in Listino Master e associato al fornitore ${item.supplier_name}!`
@@ -659,7 +714,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           product_id: item.best_candidate!.product_id,
           insert_in_listino: true,
           prezzo_listino: item.prezzo_unitario || undefined,
-          unita_misura_listino: item.unita_misura || 'Pz',
+          unita_misura_listino: canonicalUnit(item.unita_misura) || undefined,
           data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
         }))
       };
@@ -689,6 +744,20 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
     }
   };
 
+  // Le risoluzioni massive proseguono anche se una voce viene rifiutata (doppione,
+  // categoria mancante): le voci rifiutate restano in coda e vanno mostrate.
+  const reportBulkErrors = (data: any) => {
+    const details: any[] = data?.error_details || [];
+    if (!details.length) return;
+    const similar = details.filter(d => d.detail?.code === 'similar_products').length;
+    const other = details.length - similar;
+    setError(
+      `${details.length} voci non risolte e rimaste in coda` +
+      (similar ? `: ${similar} hanno già un prodotto simile a catalogo (aprirle una per una)` : '') +
+      (other ? `${similar ? ';' : ':'} ${other} per altri motivi (es. categoria mancante)` : '') + '.'
+    );
+  };
+
   // Bulk Resolve: Insert All / Selected as New Products in Listino
   const handleResolveBulkAsNew = async (targetItems?: WorkQueueItem[], categoryOverride?: string) => {
     const itemsToResolve = targetItems || queueData?.items.filter(i => !i.best_candidate) || [];
@@ -716,7 +785,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
           const cat = bulkCategory;
           const subcat = item.suggested_product.subcategory || '';
           const rawPrice = item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined;
-          const rawUom = item.unita_misura || 'Pz';
+          const rawUom = canonicalUnit(item.unita_misura) || undefined;
           const invoiceDate = item.data_documento || item.latest_invoice_date || undefined;
 
           return {
@@ -726,7 +795,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
               canonical_name: rawClean,
               category: cat,
               subcategory: subcat || undefined,
-              comparison_unit: item.suggested_product.comparison_unit && item.suggested_product.comparison_unit !== 'piece' ? item.suggested_product.comparison_unit : 'Pz',
+              comparison_unit: canonicalUnit(item.unita_misura) || canonicalUnit(item.suggested_product.comparison_unit) || 'Pz',
               prezzo_listino: rawPrice,
               unita_misura_listino: rawUom,
               data_inizio_validita: invoiceDate,
@@ -746,13 +815,14 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Errore durante la creazione massiva');
+      if (!res.ok) throw new Error(errorText(data.detail, 'Errore durante la creazione massiva'));
 
-      setActionSuccess(`✅ Creati e inseriti a listino ${data.resolved_items || itemsToResolve.length} nuovi prodotti!`);
+      setActionSuccess(`✅ Creati e inseriti a listino ${data.resolved_items ?? 0} nuovi prodotti!`);
       setTimeout(() => setActionSuccess(null), 6000);
       setSelectedKeys(new Set());
       setBulkNewCategory('');
       await loadAll();
+      reportBulkErrors(data);
     } catch (err: any) {
       setError(err.message || 'Errore durante la registrazione massiva');
     } finally {
@@ -813,7 +883,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         product_id: selectedCandidateIds[item.work_key],
         insert_in_listino: true,
         prezzo_listino: item.prezzo_unitario || undefined,
-        unita_misura_listino: item.unita_misura || undefined,
+        unita_misura_listino: canonicalUnit(item.unita_misura) || undefined,
         data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
       }));
 
@@ -828,14 +898,14 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
             // Never generate random identifiers in the browser.
             category: item.suggested_product.category || undefined,
             subcategory: item.suggested_product.subcategory || undefined,
-            comparison_unit: suggestedUnit && suggestedUnit !== 'piece' ? suggestedUnit : (item.unita_misura || 'Pz'),
+            comparison_unit: canonicalUnit(item.unita_misura) || canonicalUnit(suggestedUnit) || 'Pz',
             prezzo_listino: item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined,
-            unita_misura_listino: item.unita_misura || undefined,
+            unita_misura_listino: canonicalUnit(item.unita_misura) || undefined,
             data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
           },
           insert_in_listino: true,
           prezzo_listino: item.prezzo_unitario && item.prezzo_unitario > 0 ? item.prezzo_unitario : undefined,
-          unita_misura_listino: item.unita_misura || undefined,
+          unita_misura_listino: canonicalUnit(item.unita_misura) || undefined,
           data_inizio_validita: item.data_documento || item.latest_invoice_date || undefined,
         };
       });
@@ -846,7 +916,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
         body: JSON.stringify({ items: [...associationPayload, ...creationPayload] }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Errore durante la risoluzione intelligente');
+      if (!res.ok) throw new Error(errorText(data.detail, 'Errore durante la risoluzione intelligente'));
 
       setShowSmartPlan(false);
       setSelectedKeys(new Set());
@@ -857,6 +927,7 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
       );
       setTimeout(() => setActionSuccess(null), 9000);
       await loadAll();
+      reportBulkErrors(data);
     } catch (err: any) {
       setError(err.message || 'Errore durante la risoluzione intelligente');
     } finally {
@@ -1942,8 +2013,33 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 outline: 'none'
                               }}
                             >
+                              <option value="" disabled>Scegli categoria…</option>
                               {CATEGORIES.map(cat => (
                                 <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 500 }}>
+                              Unità di confronto *
+                            </label>
+                            <select
+                              value={createForm.comparison_unit}
+                              onChange={e => setCreateForm(prev => ({ ...prev, comparison_unit: e.target.value }))}
+                              style={{
+                                width: '100%',
+                                padding: '10px 14px',
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border-glass)',
+                                borderRadius: 'var(--radius-md)',
+                                color: 'var(--text-primary)',
+                                fontSize: '0.9rem',
+                                outline: 'none'
+                              }}
+                            >
+                              {UNITS.map(unit => (
+                                <option key={unit} value={unit}>{unit}</option>
                               ))}
                             </select>
                           </div>
@@ -2092,11 +2188,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                             <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 500 }}>
                               Unità di Misura Listino
                             </label>
-                            <input
-                              type="text"
+                            <select
                               value={createForm.unita_misura_listino}
                               onChange={e => setCreateForm({ ...createForm, unita_misura_listino: e.target.value })}
-                              placeholder="Pz, Cassa, Kg, Lt, Bottiglia..."
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
@@ -2107,7 +2201,11 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
-                            />
+                            >
+                              {UNITS.map(unit => (
+                                <option key={unit} value={unit}>{unit}</option>
+                              ))}
+                            </select>
                           </div>
 
                           <div>
@@ -2307,11 +2405,9 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                             <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 500 }}>
                               Unità di Misura Listino
                             </label>
-                            <input
-                              type="text"
+                            <select
                               value={associateUomListino}
                               onChange={e => setAssociateUomListino(e.target.value)}
-                              placeholder="Pz, Cassa, Kg..."
                               style={{
                                 width: '100%',
                                 padding: '10px 14px',
@@ -2322,7 +2418,11 @@ export default function UnlistedProductsResolver({ onNavigate }: { onNavigate?: 
                                 fontSize: '0.9rem',
                                 outline: 'none'
                               }}
-                            />
+                            >
+                              {UNITS.map(unit => (
+                                <option key={unit} value={unit}>{unit}</option>
+                              ))}
+                            </select>
                           </div>
                         </div>
 

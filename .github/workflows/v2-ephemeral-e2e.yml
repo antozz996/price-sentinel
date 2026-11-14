@@ -112,9 +112,17 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_price_normalization.py' -v
 
-      - name: Unit - Volume read from product names
+      - name: Unit - Volume read from product names and no automatic link by name similarity
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_volume_matching_guards.py' -v
+
+      - name: Unit - Catalog guards (allowed units, required category, duplicate check)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_catalog_guards.py' -v
+
+      - name: Unit - Comparison unit stored in catalogue spelling on imports
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_comparison_unit_catalogue.py' -v
 
       - name: Unit - Description linked to two products is not a match
         working-directory: backend

@@ -15,9 +15,10 @@ from sqlalchemy import (
     JSON,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.database import Base
+from app.services.normalization import canonical_unit
 
 
 class Product(Base):
@@ -70,6 +71,12 @@ class Product(Base):
 
     def __repr__(self) -> str:
         return f"<Product {self.canonical_name}>"
+
+    @validates("comparison_unit")
+    def _store_catalogue_unit(self, _key, value):
+        # Ogni scrittura ORM (import fogli "Ct", vecchi default "piece", stringhe vuote)
+        # salva la forma del catalogo: Pz, CT, Kg, Lt o NULL. Le altre unità restano invariate.
+        return canonical_unit(value)
 
     @property
     def supplier_pack_sizes(self) -> list[int]:
