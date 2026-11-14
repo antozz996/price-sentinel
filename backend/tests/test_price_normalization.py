@@ -130,5 +130,66 @@ class PackFactorTest(unittest.TestCase):
         self.assertEqual(result.normalized_unit_price, Decimal("5.28"))
 
 
+class InvoiceDeltaTotalTest(unittest.TestCase):
+    """The line quantity is in invoice units: the total overcharge must be in invoice units too."""
+
+    @staticmethod
+    def line(price, qty, uom):
+        return SimpleNamespace(prezzo_unitario_fatturato=Decimal(price), sconto_percentuale=0, quantita=Decimal(qty),
+                               unita_misura_fattura=uom, descrizione_fornitore_raw="")
+
+    @staticmethod
+    def factor_alias(factor):
+        return SimpleNamespace(pack_qty=None, fattore_confezione=Decimal(factor), raw_description="", volume_ml=None, weight_g=None)
+
+    @staticmethod
+    def product_row(comparison_unit):
+        from app.models.products import Product
+        return Product(comparison_unit=comparison_unit, unit_count=1)
+
+    def total(self, result, listino, qty):
+        from app.services.matching import invoice_delta_total
+        return invoice_delta_total(result.normalized_unit_price - Decimal(listino), Decimal(qty), result)
+
+    def test_carton_of_30_with_factor_against_price_per_piece(self):
+        # Pane bao: 2 cartoni da 30 a 24,69 contro 0,65 al pezzo = 2 x (24,69 - 19,50).
+        result = normalize_price_for_comparison(self.line("24.69", "2", "CT"), self.product_row("Pz"),
+                                                alias=self.factor_alias("30"))
+        self.assertEqual(result.listino_units_per_invoice_unit, Decimal("30"))
+        self.assertEqual(self.total(result, "0.65", "2"), Decimal("10.38"))
+
+    def test_carton_split_by_pack_qty(self):
+        # Mini panino: cartone da 100 a 26,998 contro 0,25 al pezzo: 2 cartoni = 3,996, non 0,04.
+        result = normalize("26.998", "CT", "Pz", pack_qty=100)
+        self.assertEqual(result.listino_units_per_invoice_unit, Decimal("100"))
+        self.assertEqual(self.total(result, "0.25", "2"), Decimal("3.996"))
+
+    def test_kilo_against_carton_of_5_kg(self):
+        # Rustici: 5 kg a 5,7296 contro 26,80 il cartone da 5 kg = 5 x (5,7296 - 5,36).
+        result = normalize_price_for_comparison(self.line("5.7296", "5", "KG"), self.product_row("CT"),
+                                                alias=self.factor_alias("0.2"), target_comparison_unit="CT")
+        self.assertEqual(round(self.total(result, "26.80", "5"), 4), Decimal("1.8480"))
+
+    def test_piece_scaled_to_a_box_price_list(self):
+        # 54 calici a 0,96 contro 50,09 la confezione da 54 = 54 x 0,96 - 50,09.
+        result = normalize("0.96", "PZ", "CF", pack_qty=54)
+        self.assertEqual(round(self.total(result, "50.09", "54"), 4), Decimal("1.7500"))
+
+    def test_bottle_of_5_litres_against_price_per_litre(self):
+        pack = SimpleNamespace(pack_qty=None, raw_description="OLIO 5 LT", volume_ml=5000, weight_g=None)
+        result = normalize_price_for_comparison(Decimal("9.00"), Decimal("1"), "PZ", product("Lt"), pack)
+        self.assertEqual(result.listino_units_per_invoice_unit, Decimal("5"))
+        self.assertEqual(self.total(result, "1.60", "3"), Decimal("3.00"))
+
+    def test_same_unit_keeps_quantity_times_delta(self):
+        result = normalize("4.44", "PZ", "PZ")
+        self.assertEqual(result.listino_units_per_invoice_unit, Decimal("1"))
+        self.assertEqual(self.total(result, "4.10", "2"), Decimal("0.68"))
+
+    def test_zero_price_does_not_divide_by_zero(self):
+        result = normalize("0", "CT", "Pz", pack_qty=100)
+        self.assertEqual(result.listino_units_per_invoice_unit, Decimal("1"))
+
+
 if __name__ == "__main__":
     unittest.main()

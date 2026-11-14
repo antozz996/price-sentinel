@@ -2,15 +2,27 @@
 
 import enum
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.anomalie import Anomalia, AnomaliaArchiviata, StatoValidazione
 
 
+# An anomaly needs a total overcharge strictly above ten cents...
 MIN_ANOMALY_TOTAL = Decimal("0.10")
+# ...and, when the unit gap is known, at least half a cent per comparison unit.
+# Below that the gap is rounding of a normalised price (e.g. 8.1431 vs 8.14),
+# which on large quantities would otherwise cross the total threshold.
+MIN_ANOMALY_UNIT_DELTA = Decimal("0.005")
+# Same scale as anomalie.delta_prezzo / delta_totale (Numeric(12, 4)): the
+# creation rule and the SQL visibility filter must judge the same number.
+_STORED_SCALE = Decimal("0.0001")
+
+
+def _stored(value: Decimal | float | int) -> Decimal:
+    return Decimal(str(value)).quantize(_STORED_SCALE, rounding=ROUND_HALF_UP)
 
 # States in which nobody has acted on the anomaly yet. Anything else (a dispute,
 # a claim, a resolution) is an audit record and must not vanish on re-mapping.
@@ -41,15 +53,29 @@ async def invoice_in_check_scope(db: AsyncSession, xml_raw_id: int | None) -> bo
     return received is not None and received >= start
 
 
-def is_material_price_increase(delta_total: Decimal | float | int) -> bool:
-    """Return true only when the total overcharge reaches ten euro cents."""
-    return Decimal(str(delta_total)) >= MIN_ANOMALY_TOTAL
+def is_material_price_increase(
+    delta_total: Decimal | float | int,
+    delta_unit: Decimal | float | int | None = None,
+) -> bool:
+    """
+    True only when the total overcharge is above ten euro cents (0.10 exactly
+    is not an anomaly) and, if the unit gap is given, it is at least 0.005.
+    Both values are judged at the 4-decimal scale they are stored with.
+    """
+    if _stored(delta_total) <= MIN_ANOMALY_TOTAL:
+        return False
+    if delta_unit is not None and abs(_stored(delta_unit)) < MIN_ANOMALY_UNIT_DELTA:
+        return False
+    return True
 
 
 def operational_anomaly_filter():
     """SQL condition for anomalies shown operationally: material or still being handled."""
     return or_(
-        func.abs(Anomalia.delta_totale) >= MIN_ANOMALY_TOTAL,
+        and_(
+            func.abs(Anomalia.delta_totale) > MIN_ANOMALY_TOTAL,
+            func.abs(Anomalia.delta_prezzo) >= MIN_ANOMALY_UNIT_DELTA,
+        ),
         Anomalia.stato_validazione.in_(OPEN_WORKED_ANOMALY_STATES),
     )
 
