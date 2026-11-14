@@ -7,7 +7,7 @@ Spec §2.2 Steps 5-9:
   6. White-listing P.IVA fornitore
   7. TD01: parsing righe → matching → anomalie
   8. TD04: proposta chiusura anomalie aperte
-  9. TD08: archiviazione passiva
+  9. TD08 (nota di credito semplificata): archiviazione passiva
 """
 
 import logging
@@ -35,6 +35,27 @@ from app.services.xml_parser import FatturaParsata, RigaParsata
 from app.services.notifications import notify_manager_anomalies
 
 logger = logging.getLogger("price_sentinel.ingestion")
+
+# Stato restituito quando l'XML ha già una fattura: chi chiama lo conta come
+# "già presente" e non come nuova elaborazione.
+STATUS_GIA_PRESENTE = "gia_presente"
+
+
+async def lock_xml_raw_and_find_fattura(db: AsyncSession, xml_raw_id: int) -> int | None:
+    """Blocca la riga xml_raw (FOR UPDATE) e restituisce l'id della fattura già creata, se c'è.
+
+    Il lock dura fino alla fine della transazione esterna, quindi copre anche la
+    creazione della fattura fatta subito dopo dallo stesso chiamante.
+    """
+    await db.execute(
+        select(XMLRaw.id).where(XMLRaw.id == xml_raw_id).with_for_update()
+    )
+    return await db.scalar(
+        select(Fattura.id)
+        .where(Fattura.xml_raw_id == xml_raw_id)
+        .order_by(Fattura.id)
+        .limit(1)
+    )
 
 
 async def process_xml_raw(db: AsyncSession, xml_raw_id: int, parsed: FatturaParsata) -> dict:
@@ -65,6 +86,16 @@ async def process_xml_raw(db: AsyncSession, xml_raw_id: int, parsed: FatturaPars
         "status": "success",
         "errori": [],
     }
+
+    # ── Idempotenza: un XML produce al massimo una fattura ──
+    # Il lock sulla riga xml_raw serializza due elaborazioni concorrenti dello
+    # stesso XML (upload doppio, reprocess in parallelo): la seconda attende,
+    # trova la fattura creata dalla prima e si ferma senza duplicarla.
+    existing_fattura_id = await lock_xml_raw_and_find_fattura(db, xml_raw_id)
+    if existing_fattura_id is not None:
+        report["status"] = STATUS_GIA_PRESENTE
+        report["fattura_id"] = existing_fattura_id
+        return report
 
     # ── Validazione parsing ──
     if not parsed.is_valid:
@@ -108,7 +139,8 @@ async def process_xml_raw(db: AsyncSession, xml_raw_id: int, parsed: FatturaPars
         report.update(result)
 
     elif tipo == "TD08":
-        # Nota di Debito — archiviazione passiva con flag
+        # Nota di credito semplificata (SdI) — archiviazione passiva con flag;
+        # le analisi la trattano come TD04 (segno -1).
         result = await _process_td08(db, xml_raw_id, parsed, fornitore, location)
         report.update(result)
 
@@ -435,7 +467,7 @@ async def _process_td04(
 
 
 # ─────────────────────────────────────────────
-# TD08 — Nota di Debito (Spec §2.2 Step 9)
+# TD08 — Nota di credito semplificata (Spec §2.2 Step 9)
 # ─────────────────────────────────────────────
 
 async def _process_td08(
@@ -445,7 +477,7 @@ async def _process_td08(
     fornitore: Fornitore,
     location: Location,
 ) -> dict:
-    """Nota di debito — archiviazione passiva con flag per revisione manuale."""
+    """Nota di credito semplificata — archiviazione passiva con flag per revisione manuale."""
     fattura = Fattura(
         xml_raw_id=xml_raw_id,
         fornitore_id=fornitore.id,

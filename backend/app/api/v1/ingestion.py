@@ -26,7 +26,7 @@ from app.schemas.ingestion import (
     BatchHistoryItem,
     BatchSummary
 )
-from app.services.ingestion import process_xml_raw
+from app.services.ingestion import STATUS_GIA_PRESENTE, process_xml_raw
 from app.services.xml_parser import (
     parse_fattura_xml, 
     calcola_hash_idempotenza, 
@@ -133,16 +133,23 @@ async def upload_fatture(
                 parsed.data_documento
             )
             
+            # FOR UPDATE: two uploads of the same file wait for each other
+            # instead of both creating an invoice for the same XMLRaw.
             existing = await db.execute(
-                select(XMLRaw).where(XMLRaw.hash_idempotenza == hash_id)
+                select(XMLRaw)
+                .where(XMLRaw.hash_idempotenza == hash_id)
+                .order_by(XMLRaw.id)
+                .limit(1)
+                .with_for_update()
             )
-            xml_raw_existing = existing.scalar_one_or_none()
+            xml_raw_existing = existing.scalars().first()
             if xml_raw_existing:
-                # Check if a Fattura is linked to this XMLRaw
+                # Check if a Fattura is linked to this XMLRaw (first() tolerates
+                # legacy duplicates instead of failing the whole file).
                 res_fattura = await db.execute(
-                    select(Fattura).where(Fattura.xml_raw_id == xml_raw_existing.id)
+                    select(Fattura.id).where(Fattura.xml_raw_id == xml_raw_existing.id).limit(1)
                 )
-                existing_fattura = res_fattura.scalar_one_or_none()
+                existing_fattura = res_fattura.scalars().first()
                 if existing_fattura is not None:
                     batch.gia_presenti += 1
                     batch.file_elaborati += 1
@@ -153,6 +160,11 @@ async def upload_fatture(
                     async with db.begin_nested():
                         report = await process_xml_raw(db, xml_raw_existing.id, parsed)
                     status_report = report.get("status")
+                    if status_report == STATUS_GIA_PRESENTE:
+                        batch.gia_presenti += 1
+                        batch.file_elaborati += 1
+                        await db.commit()
+                        continue
                     if status_report == "fornitore_non_whitelistato":
                         piva = parsed.piva_cedente
                         nome = parsed.denominazione_cedente or "Fornitore Sconosciuto"
@@ -317,10 +329,16 @@ async def reprocess_parked(
                 batch.file_elaborati += 1
                 continue
 
+            # process_xml_raw locks the XMLRaw row (FOR UPDATE) and returns
+            # "gia_presente" when a concurrent run already created the invoice.
             async with db.begin_nested():
                 report = await process_xml_raw(db, xml_raw.id, parsed)
-            
+
             status_report = report.get("status")
+            if status_report == STATUS_GIA_PRESENTE:
+                batch.gia_presenti += 1
+                batch.file_elaborati += 1
+                continue
             if status_report == "fornitore_non_whitelistato":
                 piva = parsed.piva_cedente
                 nome = parsed.denominazione_cedente or "Fornitore Sconosciuto"

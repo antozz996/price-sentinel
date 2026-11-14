@@ -34,7 +34,7 @@ class TipoDocumento(str, enum.Enum):
     """Tipi documento FatturaPA — Spec §2.2."""
     TD01 = "TD01"  # Fattura immediata
     TD04 = "TD04"  # Nota di Credito
-    TD08 = "TD08"  # Nota di Debito
+    TD08 = "TD08"  # Nota di Credito semplificata (SdI): nelle analisi segno -1 come TD04
     TD24 = "TD24"  # Fattura differita (DDT)
     TD25 = "TD25"  # Fattura differita triangolare
 
@@ -179,6 +179,9 @@ class Fattura(Base):
     __table_args__ = (
         Index("ix_fatture_location_data", "location_id", "data_documento"),
         Index("ix_fatture_data_documento", "data_documento"),
+        # One invoice per XML. Existing databases get it from the
+        # fatture_xml_raw_unico migration or the startup guard in app.schema_guards.
+        Index("uq_fatture_xml_raw_id", "xml_raw_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

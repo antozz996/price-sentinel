@@ -108,6 +108,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_anomaly_policy.py' -v
 
+      - name: Unit - Import integrity (one invoice per XML, unique index, TD08)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_integrita_importazione.py' -v
+
       - name: Unit - Re-link and approval keep worked anomalies
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_refresh_line_anomaly.py' -v
