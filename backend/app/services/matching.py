@@ -97,6 +97,7 @@ def normalize_price_for_comparison(
         uom = getattr(invoice_line, "unita_misura_fattura", "") or ""
         descrizione = getattr(invoice_line, "descrizione_fornitore_raw", "") or ""
         alias_obj = alias
+        is_invoice_line = True
     else:
         # Nuova firma: (price, quantity, invoice_uom, product, alias)
         price = Decimal(str(price_or_line))
@@ -104,6 +105,7 @@ def normalize_price_for_comparison(
         uom = invoice_uom
         product_obj = product
         alias_obj = alias
+        is_invoice_line = False
         descrizione = ""
         if alias_obj:
             descrizione = getattr(alias_obj, "raw_description", "") or ""
@@ -138,6 +140,21 @@ def normalize_price_for_comparison(
         comp_unit = "kg"
     else:
         comp_unit = "piece"
+
+    # Fattore confezione impostato a mano sul collegamento fornitore-prodotto:
+    # una unità di fattura contiene N unità del listino (es. cartone da 500 in
+    # fattura, listino a confezione da 50). Vale solo per le righe di fattura:
+    # i prezzi di listino passano dalla firma con prezzo e quantità.
+    invoice_factor = getattr(alias_obj, "fattore_confezione", None) if is_invoice_line else None
+    if invoice_factor is not None and Decimal(str(invoice_factor)) > 0:
+        factor = Decimal(str(invoice_factor))
+        return NormalizedPriceResult(
+            normalized_unit_price=price / factor,
+            comparison_unit=comp_unit,
+            pack_qty=getattr(alias_obj, "pack_qty", None),
+            reliable=True,
+            explanation=f"Fattore confezione: 1 unità di fattura = {factor.normalize()} unità di listino",
+        )
 
     # 1. Risolvi pack_qty
     pack_qty = None

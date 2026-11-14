@@ -118,6 +118,10 @@ class SupplierProductAlias(Base):
     normalized_description: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     ean: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     pack_qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Unità di listino contenute in una unità di fattura (es. cartone da 500 in
+    # fattura, listino a confezione da 50: 10). Impostato a mano; usato solo per
+    # confrontare le righe di fattura con il listino.
+    fattore_confezione: Mapped[float | None] = mapped_column(Numeric(10, 4), nullable=True)
     volume_ml: Mapped[int | None] = mapped_column(Integer, nullable=True)
     weight_g: Mapped[int | None] = mapped_column(Integer, nullable=True)
     container_type: Mapped[str | None] = mapped_column(String(50), nullable=True)

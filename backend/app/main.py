@@ -74,6 +74,10 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE supplier_price_form_items "
                 "ADD COLUMN IF NOT EXISTS non_trattato BOOLEAN NOT NULL DEFAULT FALSE"
             ))
+            await conn.execute(text(
+                "ALTER TABLE supplier_product_aliases "
+                "ADD COLUMN IF NOT EXISTS fattore_confezione NUMERIC(10, 4)"
+            ))
     except Exception as e:
         logger.warning("Schema create_all notice: %s", e)
 

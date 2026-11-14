@@ -90,5 +90,45 @@ class PackUnitTest(unittest.TestCase):
         self.assertEqual(round(result.normalized_unit_price, 4), Decimal("1.0929"))
 
 
+class PackFactorTest(unittest.TestCase):
+    """fattore_confezione: one invoice unit holds N price-list units (invoice lines only)."""
+
+    @staticmethod
+    def line(price, uom=None, description="VASCHETTA OVALE IN POLPA 650ML PZ. 500"):
+        return SimpleNamespace(prezzo_unitario_fatturato=Decimal(price), sconto_percentuale=0, quantita=Decimal("2"),
+                               unita_misura_fattura=uom, descrizione_fornitore_raw=description)
+
+    @staticmethod
+    def product_row(comparison_unit="CT"):
+        from app.models.products import Product
+        return Product(comparison_unit=comparison_unit, unit_count=1)
+
+    @staticmethod
+    def factor_alias(factor):
+        return SimpleNamespace(pack_qty=None, fattore_confezione=factor, raw_description="", volume_ml=None, weight_g=None)
+
+    def test_carton_of_500_compared_with_price_list_per_50(self):
+        result = normalize_price_for_comparison(self.line("52.80"), self.product_row(), alias=self.factor_alias(Decimal("10")),
+                                                target_comparison_unit="CT")
+        self.assertTrue(result.reliable)
+        self.assertEqual(result.normalized_unit_price, Decimal("5.28"))
+
+    def test_bag_of_5_kg_compared_with_price_list_per_kg(self):
+        result = normalize_price_for_comparison(self.line("12.14", "PZ", "RISO SCOTTI 5 KG"), self.product_row("Kg"),
+                                                alias=self.factor_alias(Decimal("5")), target_comparison_unit="Kg")
+        self.assertTrue(result.reliable)
+        self.assertEqual(result.comparison_unit, "kg")
+        self.assertEqual(round(result.normalized_unit_price, 3), Decimal("2.428"))
+
+    def test_without_factor_behaviour_is_unchanged(self):
+        result = normalize_price_for_comparison(self.line("52.80"), self.product_row(), alias=self.factor_alias(None),
+                                                target_comparison_unit="CT")
+        self.assertEqual(result.normalized_unit_price, Decimal("52.80"))
+
+    def test_factor_is_ignored_for_price_list_prices(self):
+        result = normalize_price_for_comparison(Decimal("5.28"), Decimal("1"), "CT", product("CT"), self.factor_alias(Decimal("10")))
+        self.assertEqual(result.normalized_unit_price, Decimal("5.28"))
+
+
 if __name__ == "__main__":
     unittest.main()
