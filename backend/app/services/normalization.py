@@ -97,6 +97,65 @@ def normalize_uom(value) -> str:
     return "chilogrammi" if key in KG_UOM_CODES else key
 
 
+# Le quattro unità del catalogo (unità di confronto delle voci).
+CATALOG_UNITS = ("Pz", "CT", "Kg", "Lt")
+
+# Modi diversi di scrivere la STESSA unità (chiavi dopo normalize_uom, che già
+# espande "pz" -> "pezzi", "ct" -> "cartone", "lt" -> "litro", "kg"/"K." -> "chilogrammi").
+# Valgono in entrambe le modalità di canonical_unit.
+_UNIT_SPELLINGS = {
+    "Pz": frozenset({"pz", "pezzo", "pezzi", "piece", "pieces"}),
+    "CT": frozenset({"ct", "cartone", "cartoni"}),
+    "Kg": KG_UNITS | {"k"},
+    "Lt": frozenset({"l", "lt", "ltr", "litro", "litri", "liter", "litre"}),
+}
+
+# Unità diverse ma della stessa famiglia nel confronto prezzi (normalize_price_for_comparison):
+# CT vale per qualsiasi confezione, Pz per pezzo e bottiglia. Usate SOLO in modalità rigida
+# (API e schermata), dove l'unità deve per forza essere una delle quattro.
+_UNIT_FAMILY_SYNONYMS = {
+    "Pz": frozenset({
+        "unita", "unit", "nr", "n", "numero",
+        "bt", "btl", "bot", "bottiglia", "bottiglie", "bottle", "fl",
+    }),
+    "CT": frozenset({
+        "cs", "css", "cassa", "casse", "crt", "box",
+        "cf", "cnf", "conf", "confezione", "confezioni",
+    }),
+}
+
+
+class UnitNotAllowedError(ValueError):
+    """Unità di misura non riconducibile a Pz, CT, Kg o Lt."""
+
+
+def canonical_unit(value, *, strict: bool = False) -> Optional[str]:
+    """Forma canonica di un'unità di misura del catalogo. Vuoto -> None in entrambe le modalità.
+
+    - strict=True (API e schermata): il risultato è sempre Pz, CT, Kg o Lt. Accetta le
+      varianti di scrittura ("piece", "Ct", "KG", "LT") e le unità della stessa famiglia
+      ("NR", "BT" -> Pz; "conf", "CF", "cassa" -> CT). Un valore sconosciuto ("COL", "FS")
+      alza UnitNotAllowedError: meglio chiedere che indovinare.
+    - strict=False (salvataggi da import): corregge solo le varianti della stessa unità
+      ("Ct" -> CT, "piece" -> Pz, "KG" -> Kg, "LT" -> Lt). Le altre unità ("BT", "conf",
+      "COL") restano come sono, perché nel confronto prezzi hanno già il loro significato.
+    """
+    if value is None or not str(value).strip():
+        return None
+    key = normalize_uom(value).strip(" .")
+    for canonical, spellings in _UNIT_SPELLINGS.items():
+        if key in spellings:
+            return canonical
+    if not strict:
+        return str(value).strip()
+    for canonical, synonyms in _UNIT_FAMILY_SYNONYMS.items():
+        if key in synonyms:
+            return canonical
+    raise UnitNotAllowedError(
+        f"Unità «{value}» non ammessa: usare una tra {', '.join(CATALOG_UNITS)}"
+    )
+
+
 _BARE_LITRES = (0.2, 0.25, 0.33, 0.35, 0.375, 0.4, 0.5, 0.7, 0.75, 1.0, 1.5, 1.75, 2.0)
 # "100cl", "0,75LT", "24X250 ML", "1 LITRO": il numero non deve far parte di un
 # codice (lettera diversa da x prima) e l'unità non deve continuare in una parola.

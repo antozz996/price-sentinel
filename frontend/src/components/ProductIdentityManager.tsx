@@ -85,6 +85,23 @@ interface WorkQueueResponse {
   items: WorkQueueItem[]
 }
 
+// Unità di confronto ammesse dal server (normalization.canonical_unit, modalità rigida).
+const CATALOG_UNITS: { value: string; label: string }[] = [
+  { value: 'Pz', label: 'Pezzo (Pz)' },
+  { value: 'CT', label: 'Cartone / confezione (CT)' },
+  { value: 'Kg', label: 'Chilogrammo (Kg)' },
+  { value: 'Lt', label: 'Litro (Lt)' },
+]
+const UNIT_SYNONYMS: Record<string, string> = {
+  pz: 'Pz', pezzo: 'Pz', pezzi: 'Pz', piece: 'Pz', nr: 'Pz', bt: 'Pz', bottiglia: 'Pz', bottle: 'Pz',
+  ct: 'CT', cartone: 'CT', box: 'CT', cassa: 'CT', cf: 'CT', conf: 'CT', confezione: 'CT',
+  kg: 'Kg', k: 'Kg', lt: 'Lt', l: 'Lt', litro: 'Lt', litri: 'Lt',
+}
+function catalogUnit(value?: string | null): string | null {
+  const key = (value || '').trim().toLowerCase().replace(/\.+$/, '')
+  return UNIT_SYNONYMS[key] || null
+}
+
 export default function ProductIdentityManager() {
   const [activeSubTab, setActiveSubTab] = useState<'products' | 'candidates' | 'import'>('products')
   const [products, setProducts] = useState<Product[]>([])
@@ -281,7 +298,7 @@ export default function ProductIdentityManager() {
   const handleProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...productForm,
         volume_ml: productForm.volume_ml ? parseInt(productForm.volume_ml) : null,
         weight_g: productForm.weight_g ? parseInt(productForm.weight_g) : null,
@@ -293,6 +310,11 @@ export default function ProductIdentityManager() {
         variant: productForm.variant || null,
         container_type: productForm.container_type || null,
         supplier_form_note: productForm.supplier_form_note.trim() || null
+      }
+      // Il server accetta solo Pz/CT/Kg/Lt: una vecchia unità non modificata (es. "CP")
+      // non viene rimandata, così correggere il nome non fallisce per l'unità.
+      if (editingProduct && productForm.comparison_unit === (editingProduct.comparison_unit || '')) {
+        delete payload.comparison_unit
       }
 
       let res
@@ -312,7 +334,11 @@ export default function ProductIdentityManager() {
 
       if (!res.ok) {
         const errData = await res.json()
-        throw new Error(errData.detail || "Errore nel salvataggio del prodotto")
+        // Errori di validazione (es. unità non ammessa) arrivano come elenco.
+        const detail = Array.isArray(errData.detail)
+          ? errData.detail.map((d: any) => String(d.msg || '').replace(/^Value error, /, '')).join('; ')
+          : errData.detail
+        throw new Error(detail || "Errore nel salvataggio del prodotto")
       }
 
       setShowProductModal(false)
@@ -371,12 +397,12 @@ export default function ProductIdentityManager() {
       canonical_name: item.suggested_product.canonical_name,
       category: item.suggested_product.category || '',
       subcategory: '',
-      comparison_unit: item.suggested_product.comparison_unit || 'piece'
+      comparison_unit: catalogUnit(item.suggested_product.comparison_unit) || 'Pz'
     })
   }
 
-  const resolveWorkItem = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const resolveWorkItem = async (e: React.FormEvent | null, allowSimilar = false) => {
+    e?.preventDefault()
     if (!selectedWorkItem) return
     if (resolutionMode === 'associate_existing' && !selectedExistingProductId) {
       setResolutionError('Seleziona il prodotto canonico da associare.')
@@ -386,10 +412,15 @@ export default function ProductIdentityManager() {
       setResolutionError('Inserisci il nome canonico del prodotto.')
       return
     }
+    if (resolutionMode === 'create_canonical' && !quickProductForm.category.trim()) {
+      setResolutionError('Inserisci la categoria del nuovo prodotto.')
+      return
+    }
 
     const payload: Record<string, unknown> = {
       invoice_line_ids: selectedWorkItem.invoice_line_ids,
-      action: resolutionMode
+      action: resolutionMode,
+      allow_similar: allowSimilar
     }
     if (resolutionMode === 'associate_existing') {
       payload.product_id = Number(selectedExistingProductId)
@@ -413,6 +444,16 @@ export default function ProductIdentityManager() {
         body: JSON.stringify(payload)
       })
       const data = await res.json()
+      if (res.status === 409 && data.detail?.code === 'similar_products') {
+        const similar: { canonical_name: string; score: number }[] = data.detail.similar_products || []
+        const list = similar.map(s => `• ${s.canonical_name} (${Math.round(s.score)}%)`).join('\n')
+        if (window.confirm(`A catalogo esistono già prodotti simili:\n${list}\n\nOK = è un prodotto diverso, crealo comunque.\nAnnulla = torna indietro e associa la riga a un prodotto esistente.`)) {
+          setResolutionLoading(false)
+          await resolveWorkItem(null, true)
+          return
+        }
+        throw new Error('Creazione annullata: a catalogo ci sono già prodotti simili.')
+      }
       if (!res.ok) {
         const detail = typeof data.detail === 'string' ? data.detail : data.detail?.message
         throw new Error(detail || 'Impossibile risolvere il prodotto')
@@ -704,7 +745,7 @@ export default function ProductIdentityManager() {
                     weight_g: '',
                     unit_count: '1',
                     container_type: '',
-                    comparison_unit: 'piece',
+                    comparison_unit: 'Pz',
                     supplier_form_note: '',
                     is_commodity: false,
                     is_active: true
@@ -1736,12 +1777,9 @@ export default function ProductIdentityManager() {
                       onChange={e => setQuickProductForm({ ...quickProductForm, comparison_unit: e.target.value })}
                       style={{ padding: '11px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)', color: 'var(--text-primary)' }}
                     >
-                      <option value="Pz">Pezzo (Pz)</option>
-                      <option value="Ct">Cartone (Ct)</option>
-                      <option value="Lt">Litro (Lt)</option>
-                      <option value="Kg">Chilogrammo (Kg)</option>
-                      <option value="Bt">Bottiglia (Bt)</option>
-                      <option value="Box">Box / Cassa</option>
+                      {CATALOG_UNITS.map(unit => (
+                        <option key={unit.value} value={unit.value}>{unit.label}</option>
+                      ))}
                     </select>
                   </label>
                 </>
@@ -1992,13 +2030,16 @@ export default function ProductIdentityManager() {
                   onChange={e => setProductForm({ ...productForm, comparison_unit: e.target.value })}
                   style={{ padding: '10px', background: 'var(--bg-inset)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)' }}
                 >
-                  <option value="Pz" style={{ background: 'var(--bg-card)' }}>Pezzo (Pz)</option>
-                  <option value="Lt" style={{ background: 'var(--bg-card)' }}>Litro (Lt)</option>
-                  <option value="Kg" style={{ background: 'var(--bg-card)' }}>Chilogrammo (Kg)</option>
-                  <option value="Bt" style={{ background: 'var(--bg-card)' }}>Bottiglia (Bt)</option>
-                  <option value="Ct" style={{ background: 'var(--bg-card)' }}>Cartone (Ct)</option>
-                  <option value="Box" style={{ background: 'var(--bg-card)' }}>Box / Cassa</option>
-                  <option value="CP" style={{ background: 'var(--bg-card)' }}>Coppia (CP)</option>
+                  <option value="" style={{ background: 'var(--bg-card)' }}>Da definire</option>
+                  {CATALOG_UNITS.map(unit => (
+                    <option key={unit.value} value={unit.value} style={{ background: 'var(--bg-card)' }}>{unit.label}</option>
+                  ))}
+                  {productForm.comparison_unit && !CATALOG_UNITS.some(unit => unit.value === productForm.comparison_unit) && (
+                    // Vecchia unità salvata prima delle protezioni: resta finché non se ne sceglie una delle quattro.
+                    <option value={productForm.comparison_unit} disabled style={{ background: 'var(--bg-card)' }}>
+                      {productForm.comparison_unit} (da sostituire)
+                    </option>
+                  )}
                 </select>
               </div>
 

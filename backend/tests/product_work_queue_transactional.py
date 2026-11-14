@@ -37,9 +37,11 @@ async def run():
             WorkQueueResolutionRequest(
                 invoice_line_ids=line_ids,
                 action="create_canonical",
+                # Il prodotto di prova non va confrontato con il catalogo: si salta il controllo doppioni.
+                allow_similar=True,
                 canonical_data=WorkQueueResolutionProduct(
                     canonical_name="TRANSACTIONAL TEST PRODUCT",
-                    category="test",
+                    category="Food",
                     comparison_unit="piece",
                 ),
             ),

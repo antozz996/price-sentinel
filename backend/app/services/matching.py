@@ -489,9 +489,10 @@ async def resolve_invoice_line_product(
         if is_alias_matched:
             candidate_decision = "auto_match"
         else:
-            if score >= 90 and not block_flag:
-                candidate_decision = "auto_match"
-            elif score >= 70 and not block_flag:
+            # Senza codice, collegamento o EAN la somiglianza del nome non basta mai a
+            # collegare da sola una riga (e a confrontarla con un listino): con volume_ml
+            # compilato una variante (es. "RED 70 CL" contro "70 CL") supererebbe 90.
+            if score >= 70 and not block_flag:
                 candidate_decision = "needs_review"
             else:
                 candidate_decision = "parking"
