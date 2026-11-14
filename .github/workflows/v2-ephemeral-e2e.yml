@@ -115,6 +115,9 @@ jobs:
       - name: Unit - Shared purchase lines base (sign, net, units, conversion factor)
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_purchase_lines.py' -v
+      - name: Unit - Invoices, commercial agreements and price list from invoices (signed credit notes, invoiced price, units)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_analisi_spesa.py' -v
 
       - name: Unit - Re-link and approval keep worked anomalies
         working-directory: backend
