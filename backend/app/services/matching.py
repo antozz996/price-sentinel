@@ -18,6 +18,7 @@ from app.models.products import Product, SupplierProductAlias, MatchCandidate
 from app.services.normalization import (
     KG_UNITS,
     normalize_text,
+    normalize_uom,
     strip_lot_details,
     extract_candidate_attributes,
     extract_volume_ml,
@@ -137,7 +138,7 @@ def normalize_price_for_comparison(
             reliable=False,
             explanation="Unità di misura da confermare: il prezzo è registrato ma non confrontabile per unità",
         )
-    raw_comp_unit = normalize_text(str(confirmed_unit))
+    raw_comp_unit = normalize_uom(confirmed_unit)
     if raw_comp_unit in {"bottiglia", "bottiglie", "bot", "bt", "btl", "bottle"}:
         comp_unit = "bottle"
     # "cf" and "cnf" are how Italian invoices and price lists write "confezione".
@@ -181,7 +182,7 @@ def normalize_price_for_comparison(
     explanation = f"Normalizzazione per {comp_unit}"
     normalized_price = price
 
-    uom_normalized = normalize_text(str(uom or ""))
+    uom_normalized = normalize_uom(uom)
     package_uoms = {
         "cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione",
         "confezioni", "cf", "cnf", "crt", "css", "ct", "cs",
@@ -318,7 +319,18 @@ async def resolve_invoice_line_product(
     aliases_res = (await db.execute(stmt_aliases)).scalars().all()
     
     aliases_by_code = {a.supplier_code: a for a in aliases_res if a.supplier_code and a.status == "approved"}
-    aliases_by_desc = {a.normalized_description: a for a in aliases_res if a.status == "approved"}
+    # The same wording linked to two different products (a supplier writing one generic
+    # text for two origins, e.g. MELIUS "CUBEROLL ...") is evidence for neither: a dict
+    # would silently keep whichever link the database returned last. Only a wording
+    # that leads to a single product counts as a known description.
+    desc_products: dict[str, set[int]] = {}
+    for a in aliases_res:
+        if a.status == "approved":
+            desc_products.setdefault(a.normalized_description, set()).add(a.product_id)
+    aliases_by_desc = {
+        a.normalized_description: a for a in aliases_res
+        if a.status == "approved" and len(desc_products[a.normalized_description]) == 1
+    }
     # Links created from a price sheet carry no invoice wording (their text is the
     # internal SKU), so a supplier that invoices without article codes would never
     # be recognised. When the invoice line is written exactly like the catalog name
