@@ -112,6 +112,14 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_price_normalization.py' -v
 
+      - name: Unit - Volume read from product names
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_volume_matching_guards.py' -v
+
+      - name: Unit - Description linked to two products is not a match
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_matching_ambiguous_description.py' -v
+
       - name: Unit — Invoice XML per-unit discounts
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_xml_discounts.py' -v

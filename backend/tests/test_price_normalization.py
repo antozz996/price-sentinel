@@ -42,6 +42,37 @@ class KilogramUnitTest(unittest.TestCase):
         self.assertEqual(result.normalized_unit_price, Decimal("12"))
 
 
+class KilogramInvoiceCodeTest(unittest.TestCase):
+    """DAC writes "K." for the kilogram; FatturaPA files may carry the UN/ECE code "KGM"."""
+
+    def test_kilogram_codes_compare_per_kg(self):
+        for uom in ("K.", "k.", "K", "KGM", "Kgs"):
+            result = normalize_price_for_comparison(Decimal("19.30"), Decimal("1"), uom, product("Kg"), None)
+            self.assertTrue(result.reliable, uom)
+            self.assertEqual(result.comparison_unit, "kg", uom)
+            self.assertEqual(result.normalized_unit_price, Decimal("19.30"), uom)
+
+    def test_weight_in_the_description_is_not_applied_to_a_price_per_kg(self):
+        line = SimpleNamespace(pack_qty=None, raw_description="EDAMER DANUBIA X KG 2,70", volume_ml=None, weight_g=None)
+        result = normalize_price_for_comparison(Decimal("4.49"), Decimal("2"), "K.", product("Kg"), line)
+        self.assertTrue(result.reliable)
+        self.assertEqual(result.normalized_unit_price, Decimal("4.49"))
+
+    def test_kilogram_code_is_not_a_price_per_piece(self):
+        result = normalize_price_for_comparison(Decimal("19.30"), Decimal("1"), "K.", product("Pz"), None)
+        self.assertFalse(result.reliable)
+
+    def test_price_list_unit_k_dot_means_kg(self):
+        result = normalize("4.49", "KG", "K.")
+        self.assertTrue(result.reliable)
+        self.assertEqual(result.comparison_unit, "kg")
+
+    def test_other_units_are_unchanged(self):
+        from app.services.normalization import normalize_uom
+        for raw, expected in (("KG", "chilogrammi"), ("CT", "cartone"), ("PZ", "pezzi"), ("N.", "n."), ("", "")):
+            self.assertEqual(normalize_uom(raw), expected, raw)
+
+
 class WeightPricePerPieceTest(unittest.TestCase):
     """A price per kg/litre on a product compared per piece must not pass as a price per piece."""
 

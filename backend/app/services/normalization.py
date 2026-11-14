@@ -12,6 +12,12 @@ from typing import Optional
 # must accept both forms, otherwise kilograms silently fall back to "piece".
 KG_UNITS = frozenset({"kg", "chilo", "chili", "kilo", "chilogrammo", "chilogrammi", "kilogrammo", "kilogrammi"})
 
+# Kilogram codes that normalize_text() leaves untouched: DAC invoices write "K."
+# and FatturaPA files may carry the UN/ECE code "KGM". Without this mapping a
+# price per kg is either never checked (product in Kg) or compared as a price
+# per piece (product in Pz).
+KG_UOM_CODES = frozenset({"k", "k.", "kgm", "kgs"})
+
 
 def normalize_text(text: str) -> str:
     """
@@ -85,58 +91,62 @@ def normalize_text(text: str) -> str:
     return normalized
 
 
+def normalize_uom(value) -> str:
+    """normalize_text() for a unit of measure, with the kilogram codes folded into "chilogrammi"."""
+    key = normalize_text(str(value or ""))
+    return "chilogrammi" if key in KG_UOM_CODES else key
+
+
+_BARE_LITRES = (0.2, 0.25, 0.33, 0.35, 0.375, 0.4, 0.5, 0.7, 0.75, 1.0, 1.5, 1.75, 2.0)
+# "100cl", "0,75LT", "24X250 ML", "1 LITRO": il numero non deve far parte di un
+# codice (lettera diversa da x prima) e l'unità non deve continuare in una parola.
+_VOLUME_VALUE_FIRST = re.compile(r"(?<![a-wyz0-9])(\d+(?:\.\d+)?)\s*(ml|cl|lt|l|cc|litro|litri|lit)(?![a-z])")
+# "CL 100", "CL.100", "LT.1", "cl70": al massimo 4 cifre (CC100156 è un codice) e
+# mai seguito da pz/pezzi ("tg. L 100 pezzi" è la taglia dei guanti).
+_VOLUME_UNIT_FIRST = re.compile(
+    r"\b(ml|cl|lt|l|cc)\.?\s*(\d{1,4}(?:\.\d+)?)(?![\d.]*\d)(?![a-wyz])(?!\s*(?:pz|pezzi|pezzo)\b)"
+)
+# "VODKA 0,70", "ACQUA 0,50X24": decimale senza unità, mai seguito da peso o misura.
+_VOLUME_BARE_DECIMAL = re.compile(
+    r"(?<![\w.])([0-2]\.\d{1,3})(?![\d.])(?!\s*(?:kg|g|gr|cm|mm|mt|m|%|x\s*\d+\s*(?:cm|mm)))"
+)
+
+
+def _volume_to_ml(value: float, unit: str) -> int:
+    if unit in ("ml", "cc"):
+        return int(round(value))
+    if unit == "cl":
+        # "0.33 CL", "CL 1,50", "CL 1.75": i fornitori scrivono i litri con l'etichetta CL.
+        if value < 5 and value != int(value):
+            return int(round(value * 1000))
+        return int(round(value * 10))
+    return int(round(value * 1000))
+
+
 def extract_volume_ml(text: str) -> Optional[int]:
     """
     Estrae il volume espresso in millilitri (ml) dalla descrizione.
     Riconosce:
-    - 100cl, cl 100 -> 1000
-    - 1lt, lt 1, 1 l -> 1000
-    - 1000ml -> 1000
+    - 100cl, cl 100, CL.100 -> 1000
+    - 1lt, lt 1, LT.1, 1 l, 1 LITRO -> 1000
+    - 1000ml, 24X250 ML -> 1000, 250
     - 80cc -> 80
-    - Fallback per volumi decimali senza unità (es. 0,50 -> 500ml)
+    - 0.33 CL, CL 1,50 -> 330, 1500 (litri scritti con l'etichetta CL)
+    - Fallback per volumi decimali senza unità (es. 0,50 -> 500ml, 0,70 -> 700ml)
+    Non scambia per volumi taglie ("tg. L 100 pezzi"), codici ("CC100156",
+    "ST91A07L") o pesi ("1,5 KG").
     """
-    cleaned = text.lower()
-    # Converte virgole in punti nei numeri
-    cleaned = re.sub(r"(\d+),(\d+)", r"\1.\2", cleaned)
+    if not text:
+        return None
+    cleaned = re.sub(r"(\d+),(\d+)", r"\1.\2", text.lower())
 
-    # 1. Pattern <valore><unita> (es. "100cl", "1lt", "0.75l", "1000ml", "80cc")
-    pattern1 = r"(\d+(?:\.\d+)?)\s*(ml|cl|lt|l|cc)\b"
-    for val_str, unit in re.findall(pattern1, cleaned):
-        try:
-            val = float(val_str)
-            if unit in ("ml", "cc"):
-                return int(val)
-            elif unit == "cl":
-                return int(val * 10)
-            elif unit in ("lt", "l"):
-                return int(val * 1000)
-        except ValueError:
-            pass
-
-    # 2. Pattern <unita><valore> (es. "cl 100", "lt 1", "l 1.5", "ml 1000", "cc 80")
-    pattern2 = r"\b(ml|cl|lt|l|cc)\s*(\d+(?:\.\d+)?)"
-    for unit, val_str in re.findall(pattern2, cleaned):
-        try:
-            val = float(val_str)
-            if unit in ("ml", "cc"):
-                return int(val)
-            elif unit == "cl":
-                return int(val * 10)
-            elif unit in ("lt", "l"):
-                return int(val * 1000)
-        except ValueError:
-            pass
-
-    # 3. Fallback per volumi decimali standalone (es. "0.50" o "1.5")
-    pattern3 = r"\b(0\.\d+|1\.\d+|2\.\d+)\b"
-    for val_str in re.findall(pattern3, cleaned):
-        try:
-            val = float(val_str)
-            if val in (0.2, 0.25, 0.33, 0.4, 0.5, 0.75, 1.0, 1.5, 2.0, 0.50):
-                return int(val * 1000)
-        except ValueError:
-            pass
-
+    for val_str, unit in _VOLUME_VALUE_FIRST.findall(cleaned):
+        return _volume_to_ml(float(val_str), unit)
+    for unit, val_str in _VOLUME_UNIT_FIRST.findall(cleaned):
+        return _volume_to_ml(float(val_str), unit)
+    for val_str in _VOLUME_BARE_DECIMAL.findall(cleaned):
+        if float(val_str) in _BARE_LITRES:
+            return int(round(float(val_str) * 1000))
     return None
 
 
