@@ -300,7 +300,7 @@ def execute_v1_migration_rehearsal(admin_dsn: str) -> bool:
     try:
         with connection.cursor() as cursor:
             cursor.execute("select version_num from alembic_version")
-            if cursor.fetchone() != ("alias_fattore_confezione",):
+            if cursor.fetchone() != ("fatture_xml_raw_unico",):
                 print("FAIL: unexpected V2 Alembic head", flush=True)
                 return False
             cursor.execute(
@@ -316,6 +316,10 @@ def execute_v1_migration_rehearsal(admin_dsn: str) -> bool:
             )
             if cursor.fetchone() != (5,):
                 print("FAIL: V2 supplier form columns missing", flush=True)
+                return False
+            cursor.execute("select to_regclass('public.uq_fatture_xml_raw_id')")
+            if cursor.fetchone() == (None,):
+                print("FAIL: unique index on fatture(xml_raw_id) missing", flush=True)
                 return False
     finally:
         connection.close()

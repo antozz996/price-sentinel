@@ -15,6 +15,7 @@ from sqlalchemy import text
 from app.api.v1.router import api_router
 from app.config import settings
 from app.database import async_session_factory, engine, Base
+from app.schema_guards import ensure_unique_invoice_per_xml
 from app.services.automation import run_operational_monitor
 
 
@@ -80,6 +81,14 @@ async def lifespan(app: FastAPI):
             ))
     except Exception as e:
         logger.warning("Schema create_all notice: %s", e)
+
+    # One invoice per XML: created only when no duplicates remain, so a
+    # database that still has them starts anyway (with a warning).
+    try:
+        async with engine.begin() as conn:
+            await ensure_unique_invoice_per_xml(conn)
+    except Exception as e:
+        logger.warning("Unique invoice-per-XML index notice: %s", e)
 
     automation_task = (
         asyncio.create_task(_automation_loop())
