@@ -25,13 +25,15 @@ from app.models.disputes import (
     DisputeCreditNoteAllocation,
     DisputeSupplierResponse,
 )
-from app.models.fatture import Fattura, RigaFattura, TipoDocumento
+from app.models.fatture import Fattura, RigaFattura
 from app.models.purchase_order_reconciliation import (
     LiquidStockVenueMapping,
     PurchaseOrderReconciliation,
     PurchaseOrderReconciliationAnomaly,
 )
 from app.models.utenti import Utente
+# Note di credito: TD04 e TD08 (nota di credito semplificata SdI).
+from app.services.purchase_lines import CREDIT_NOTE_TYPES
 from app.schemas.disputes import (
     CommunicationPrepare,
     CreditNoteCreate,
@@ -44,6 +46,25 @@ from app.schemas.disputes import (
 
 ZERO = Decimal("0")
 TERMINAL_CASE_STATUSES = {"closed", "cancelled"}
+# Anomalie prezzo (registro legacy) che si possono mettere in una pratica.
+# Restano fuori: accettata (il manager ha accettato il nuovo prezzo),
+# proposta_aggiornamento (si aggiorna il listino, non si contesta) e risolta.
+DISPUTABLE_ANOMALY_STATES = (
+    StatoValidazione.da_verificare,
+    StatoValidazione.in_parking,
+    StatoValidazione.contestata,
+    StatoValidazione.in_reclamo,
+)
+# Pratiche inviate e ancora aperte: solo qui c'e' davvero qualcosa "da recuperare".
+# Le bozze non sono mai state contestate, le respinte/chiuse/annullate sono finite.
+OUTSTANDING_CASE_STATUSES = (
+    "sent",
+    "supplier_replied",
+    "credit_note_expected",
+    "partially_recovered",
+)
+# Pratiche che contano nelle classifiche e nel trend (stessa base di "Contestato").
+NOT_LIVE_CASE_STATUSES = ("draft", "cancelled")
 CASE_TRANSITIONS = {
     "draft": {"ready_to_send", "cancelled"},
     "ready_to_send": {"sent", "cancelled"},
@@ -297,7 +318,7 @@ async def _resolve_legacy_selection(db: AsyncSession, selection) -> dict:
     if not row:
         raise HTTPException(status_code=404, detail="legacy_anomaly_not_found")
     anomaly, line, invoice = row
-    if anomaly.stato_validazione == StatoValidazione.risolta:
+    if anomaly.stato_validazione not in DISPUTABLE_ANOMALY_STATES:
         raise HTTPException(status_code=409, detail="anomaly_not_disputable")
     claimed = _money(selection.claimed_amount or anomaly.delta_totale)
     if claimed <= ZERO:
@@ -499,6 +520,8 @@ async def transition_case(
     case.updated_at = _now()
     if target_status == "sent":
         await mark_source_anomalies_in_dispute(db, case, actor)
+    if target_status in TERMINAL_CASE_STATUSES:
+        await sync_legacy_anomalies(db, case, actor)
     await _audit(
         db,
         case,
@@ -550,6 +573,53 @@ async def mark_source_anomalies_in_dispute(
                 actor.id if actor.ruolo.value == "admin" else None
             )
             anomaly.gestito_at = _now()
+
+
+async def sync_legacy_anomalies(
+    db: AsyncSession, case: DisputeCase, actor: Utente
+) -> None:
+    """Allinea il registro anomalie (tabella anomalie) allo stato della pratica.
+
+    Le note di credito registrate nella pratica vivono in dispute_credit_notes;
+    senza questo passaggio l'anomalia restava in_reclamo per sempre e la card
+    KPI "In reclamo" continuava a contarla anche dopo il recupero.
+
+    - riga recuperata per intero (recovered >= claimed): anomalia risolta;
+    - pratica chiusa: anomalia risolta (la contestazione e' finita, recuperato o no);
+    - pratica annullata: un'anomalia in_reclamo torna contestata (non e' piu' in
+      reclamo presso il fornitore, ma il rincaro resta).
+    """
+    rows_by_anomaly = {
+        row.legacy_anomaly_id: row for row in case.anomalies if row.legacy_anomaly_id
+    }
+    if not rows_by_anomaly:
+        return
+    anomalies = (
+        await db.scalars(
+            select(Anomalia).where(Anomalia.id.in_(list(rows_by_anomaly)))
+        )
+    ).all()
+    now = _now()
+    admin_id = actor.id if actor.ruolo.value == "admin" else None
+    for anomaly in anomalies:
+        row = rows_by_anomaly[anomaly.id]
+        if anomaly.stato_validazione == StatoValidazione.risolta:
+            continue
+        fully_recovered = _money(row.claimed_amount) > ZERO and _money(
+            row.recovered_amount
+        ) >= _money(row.claimed_amount)
+        if fully_recovered or case.status == "closed":
+            target = StatoValidazione.risolta
+        elif (
+            case.status == "cancelled"
+            and anomaly.stato_validazione == StatoValidazione.in_reclamo
+        ):
+            target = StatoValidazione.contestata
+        else:
+            continue
+        anomaly.stato_validazione = target
+        anomaly.gestito_da_admin_id = admin_id
+        anomaly.gestito_at = now
 
 
 async def set_recognition(
@@ -878,7 +948,7 @@ async def create_credit_note(
         if not invoice:
             raise HTTPException(status_code=404, detail="credit_note_invoice_not_found")
         if (
-            invoice.tipo_documento != TipoDocumento.TD04
+            invoice.tipo_documento not in CREDIT_NOTE_TYPES
             or invoice.location_id != case.location_id
             or invoice.fornitore_id != case.supplier_id
             or invoice.numero_documento != payload.document_number
@@ -959,6 +1029,8 @@ async def create_credit_note(
         if case.recovered_amount == case.requested_amount
         else "partially_recovered"
     )
+    # Una riga recuperata per intero chiude anche l'anomalia nel registro legacy.
+    await sync_legacy_anomalies(db, case, actor)
     case.version += 1
     case.updated_by = actor.id
     case.updated_at = now
