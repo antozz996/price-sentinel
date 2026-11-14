@@ -1069,22 +1069,11 @@ async def resolve_parked_line(
                 compared_price = norm_price_res.normalized_unit_price
                 delta = compared_price - Decimal(str(listino.prezzo_pattuito))
                 delta_total = invoice_delta_total(delta, riga.quantita, norm_price_res)
-                if is_material_price_increase(delta_total, delta) and await invoice_in_check_scope(db, fattura.xml_raw_id):
-                    await archive_and_remove_anomalies(
-                        db, Anomalia.riga_fattura_id == riga.id, reason="riassociazione"
-                    )
-
-                    anomalia = Anomalia(
-                        riga_fattura_id=riga.id,
-                        delta_prezzo=delta,
-                        delta_totale=delta_total,
-                        prezzo_listino_snapshot=listino.prezzo_pattuito,
-                        prezzo_fatturato_snapshot=compared_price,
-                        stato_validazione=StatoValidazione.da_verificare,
-                    )
-                    db.add(anomalia)
-                else:
-                    await remove_stale_unworked_anomalies(db, riga.id)
+                from app.services.anomaly_policy import refresh_line_anomaly
+                await refresh_line_anomaly(
+                    db, riga_fattura_id=riga.id, xml_raw_id=fattura.xml_raw_id, listino_price=listino.prezzo_pattuito,
+                    compared_price=compared_price, delta_unit=delta, delta_total=delta_total, reason="riassociazione",
+                )
                     
     elif payload.action == "create_canonical":
         if not payload.canonical_data:

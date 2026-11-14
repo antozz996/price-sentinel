@@ -128,3 +128,39 @@ async def remove_stale_unworked_anomalies(db: AsyncSession, riga_fattura_id: int
         *stale_unworked_anomaly_conditions(riga_fattura_id),
         reason="riassociazione_sotto_soglia",
     )
+
+
+async def refresh_line_anomaly(
+    db: AsyncSession,
+    *,
+    riga_fattura_id: int,
+    xml_raw_id: int | None,
+    listino_price,
+    compared_price,
+    delta_unit,
+    delta_total,
+    reason: str,
+) -> bool:
+    """Recompute the anomaly of one invoice line after a re-link or an approval.
+
+    Only unworked anomalies (to verify / parked) are archived: a dispute, a claim
+    or a resolution stays where it is, and while one remains no new anomaly is
+    created (one anomaly per line). Returns True when a new anomaly was added.
+    """
+    await archive_and_remove_anomalies(db, *stale_unworked_anomaly_conditions(riga_fattura_id), reason=reason)
+    if not is_material_price_increase(delta_total, delta_unit):
+        return False
+    if not await invoice_in_check_scope(db, xml_raw_id):
+        return False
+    remaining = await db.scalar(select(Anomalia.id).where(Anomalia.riga_fattura_id == riga_fattura_id).limit(1))
+    if remaining is not None:
+        return False
+    db.add(Anomalia(
+        riga_fattura_id=riga_fattura_id,
+        delta_prezzo=delta_unit,
+        delta_totale=delta_total,
+        prezzo_listino_snapshot=listino_price,
+        prezzo_fatturato_snapshot=compared_price,
+        stato_validazione=StatoValidazione.da_verificare,
+    ))
+    return True
