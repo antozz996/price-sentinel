@@ -135,22 +135,22 @@ async def run_matching_tests():
 
         # ── CASO 1: "GIN HENDRICK'S CL 100" (Auto-match attributi) ──
         res1 = await resolve_invoice_line_product(db, forn.id, "GIN HENDRICK'S CL 100")
-        assert res1["decision"] == "auto_match", f"Decisione errata: {res1['decision']}"
+        assert res1["decision"] == "needs_review", f"Decisione errata: {res1['decision']}"
         assert res1["product_id"] == prod_hendricks.id, "Mancato match con Hendrick's"
-        print(f"  ✅ Caso 1: 'GIN HENDRICK'S CL 100' -> auto_match con Hendrick's Gin 1L (ID={res1['product_id']})")
+        print(f"  ✅ Caso 1: 'GIN HENDRICK'S CL 100' -> needs_review con Hendrick's Gin 1L (ID={res1['product_id']})")
 
         # ── CASO 2: "HENDRICKS GIN LT 1" (Auto-match attributi) ──
         res2 = await resolve_invoice_line_product(db, forn.id, "HENDRICKS GIN LT 1")
-        assert res2["decision"] == "auto_match", f"Decisione errata: {res2['decision']}"
+        assert res2["decision"] == "needs_review", f"Decisione errata: {res2['decision']}"
         assert res2["product_id"] == prod_hendricks.id, "Mancato match con Hendrick's"
-        print(f"  ✅ Caso 2: 'HENDRICKS GIN LT 1' -> auto_match con Hendrick's Gin 1L")
+        print(f"  ✅ Caso 2: 'HENDRICKS GIN LT 1' -> needs_review con Hendrick's Gin 1L")
 
         # ── CASO 3: "GIN HENDRIX 1000ML" (Needs review / No codice fornitore) ──
         res3 = await resolve_invoice_line_product(db, forn.id, "GIN HENDRIX 1000ML")
         # In questo caso la descrizione contiene un typo sul brand (hendrix -> hendrick's)
-        # e ha un punteggio alto, ma deve essere auto_match se supera soglia 90
-        assert res3["decision"] == "auto_match", f"Decisione errata: {res3['decision']}"
-        print(f"  ✅ Caso 3: 'GIN HENDRIX 1000ML' -> auto_match (corretto brand ed volume)")
+        # e ha un punteggio alto, ma senza codice la sola somiglianza del nome resta da confermare (PR #143)
+        assert res3["decision"] == "needs_review", f"Decisione errata: {res3['decision']}"
+        print(f"  ✅ Caso 3: 'GIN HENDRIX 1000ML' -> needs_review (brand e volume giusti, ma senza codice serve conferma)")
 
         # ── CASO 4: "KEGLEVICH FRAGOLA LT 1" vs "KEGLEVICH PESCA LT 1" (Variant mismatch block) ──
         res4 = await resolve_invoice_line_product(db, forn.id, "KEGLEVICH FRAGOLA LT 1")

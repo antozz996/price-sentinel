@@ -1189,36 +1189,13 @@ async def _load_catalog_index(db: AsyncSession) -> dict[str, Any]:
 
 
 async def _refresh_queue_line_anomaly(db, line, invoice, listino, compared_price, delta, delta_total) -> None:
-    """Ricalcola l'anomalia di una riga risolta dalla coda prodotti.
-
-    Archivia solo le anomalie non ancora lavorate (da verificare o in parcheggio):
-    una contestazione, un reclamo o una risoluzione restano dove sono. Se ne resta
-    una lavorata non se ne crea un'altra (una sola anomalia per riga).
-    """
-    from app.services.anomaly_policy import (
-        archive_and_remove_anomalies,
-        invoice_in_check_scope,
-        is_material_price_increase,
-        stale_unworked_anomaly_conditions,
+    """Ricalcola l'anomalia di una riga risolta dalla coda prodotti (vedi refresh_line_anomaly)."""
+    from app.services.anomaly_policy import refresh_line_anomaly
+    await refresh_line_anomaly(
+        db, riga_fattura_id=line.id, xml_raw_id=invoice.xml_raw_id, listino_price=listino.prezzo_pattuito,
+        compared_price=compared_price, delta_unit=delta, delta_total=delta_total, reason="risoluzione_coda",
+        below_threshold_reason="risoluzione_coda",
     )
-    await archive_and_remove_anomalies(
-        db, *stale_unworked_anomaly_conditions(line.id), reason="risoluzione_coda"
-    )
-    if not is_material_price_increase(delta_total, delta):
-        return
-    if not await invoice_in_check_scope(db, invoice.xml_raw_id):
-        return
-    worked = await db.scalar(select(Anomalia.id).where(Anomalia.riga_fattura_id == line.id).limit(1))
-    if worked is not None:
-        return
-    db.add(Anomalia(
-        riga_fattura_id=line.id,
-        delta_prezzo=delta,
-        delta_totale=delta_total,
-        prezzo_listino_snapshot=listino.prezzo_pattuito,
-        prezzo_fatturato_snapshot=compared_price,
-        stato_validazione=StatoValidazione.da_verificare,
-    ))
 
 
 async def _resolve_single_work_item(
@@ -1658,29 +1635,11 @@ async def approve_candidate(
                         compared_price = norm_price_res.normalized_unit_price
                         delta = compared_price - Decimal(str(listino.prezzo_pattuito))
                         delta_total = invoice_delta_total(delta, riga.quantita, norm_price_res)
-                        from app.services.anomaly_policy import (
-                            archive_and_remove_anomalies,
-                            invoice_in_check_scope,
-                            is_material_price_increase,
-                            remove_stale_unworked_anomalies,
+                        from app.services.anomaly_policy import refresh_line_anomaly
+                        await refresh_line_anomaly(
+                            db, riga_fattura_id=riga.id, xml_raw_id=fattura.xml_raw_id, listino_price=listino.prezzo_pattuito,
+                            compared_price=compared_price, delta_unit=delta, delta_total=delta_total, reason="approvazione_proposta",
                         )
-                        if is_material_price_increase(delta_total, delta) and await invoice_in_check_scope(db, fattura.xml_raw_id):
-                            # Archivia e sostituisce le vecchie anomalie
-                            await archive_and_remove_anomalies(
-                                db, Anomalia.riga_fattura_id == riga.id, reason="approvazione_proposta"
-                            )
-                            # Crea nuova anomalia
-                            anomalia = Anomalia(
-                                riga_fattura_id=riga.id,
-                                delta_prezzo=delta,
-                                delta_totale=delta_total,
-                                prezzo_listino_snapshot=listino.prezzo_pattuito,
-                                prezzo_fatturato_snapshot=compared_price,
-                                stato_validazione=StatoValidazione.da_verificare,
-                            )
-                            db.add(anomalia)
-                        else:
-                            await remove_stale_unworked_anomalies(db, riga.id)
             # Calcola prezzi ed eventuali anomalie... (riga)
             pass
 
