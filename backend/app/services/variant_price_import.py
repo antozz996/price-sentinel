@@ -65,10 +65,9 @@ def cut_offer_rows_at(rows, effective_date: date) -> None:
         if row.data_scadenza is None or row.data_scadenza < effective_date:
             continue
         if row.data_inizio_validita >= effective_date:
-            raise ValueError(
-                f"Prezzo {row.id} valido dal {row.data_inizio_validita.isoformat()}: "
-                "la nuova decorrenza deve essere successiva"
-            )
+            # Starts on or after the new date (e.g. a confirmation form re-sent with
+            # the same start): it cannot end the day before, keep the previous behaviour.
+            continue
         row.data_scadenza = cutoff
 
 
@@ -246,10 +245,7 @@ async def commit_variant_preview(db: AsyncSession, preview: SmartPriceSheetPrevi
                 ListinoMaster.data_scadenza.is_not(None),
                 ListinoMaster.data_scadenza >= effective_date,
             ).with_for_update())).all()
-            try:
-                cut_offer_rows_at(expiring, effective_date)
-            except ValueError as exc:
-                raise HTTPException(409, str(exc)) from exc
+            cut_offer_rows_at(expiring, effective_date)
         if current:
             current.data_scadenza = effective_date - timedelta(days=1)
             result["updated"] += 1

@@ -34,10 +34,9 @@ class OfferRenewalTest(unittest.TestCase):
         cut_offer_rows_at([old], date(2026, 11, 29))
         self.assertEqual(old.data_scadenza, date(2026, 11, 28))
 
-    def test_row_starting_on_or_after_the_new_start_is_refused(self):
+    def test_row_starting_on_or_after_the_new_start_is_left_untouched(self):
         newer = row(date(2026, 11, 23), date(2026, 11, 29), row_id=7)
-        with self.assertRaises(ValueError):
-            cut_offer_rows_at([newer], date(2026, 11, 23))
+        cut_offer_rows_at([newer], date(2026, 11, 23))
         self.assertEqual(newer.data_scadenza, date(2026, 11, 29))
 
     def test_open_row_is_left_to_the_current_price_logic(self):
