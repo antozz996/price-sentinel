@@ -332,6 +332,7 @@ def line_conversion(
     unita_misura: Optional[str] = None,
     descrizione: Optional[str] = None,
     target_unit: Optional[str] = None,
+    strict_pack: bool = True,
 ) -> LineConversion:
     """Fattore di conversione di una riga verso l'unità di confronto della voce.
 
@@ -339,6 +340,8 @@ def line_conversion(
     default non è una confezione nota, e senza confezione/unità certa reliable=False.
     Il fattore non dipende dal prezzo (vale anche per gli omaggi a prezzo 0).
     target_unit: unità di confronto diversa da products.comparison_unit (es. listino).
+    strict_pack=False solo dove il prezzo si confronta con i listini e con il
+    controllo anomalie (Listino Smart), che usano la stessa regola non rigida.
     """
     if product is None:
         return UNRELIABLE_NO_PRODUCT
@@ -352,7 +355,7 @@ def line_conversion(
         descrizione_fornitore_raw=descrizione or "",
     )
     result = normalize_price_for_comparison(
-        line, product, alias=alias, target_comparison_unit=target_unit, strict_pack=True
+        line, product, alias=alias, target_comparison_unit=target_unit, strict_pack=strict_pack
     )
     target = unit_family(target_unit or product.comparison_unit)
     if not result.reliable:

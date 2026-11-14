@@ -147,6 +147,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_correzioni_minori.py' -v
 
+      - name: Unit - Listino Smart (converted spot, recommendation, price sheet without unit changes)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_smart.py' -v
+
       - name: Unit — Invoice XML per-unit discounts
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_xml_discounts.py' -v

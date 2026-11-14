@@ -51,6 +51,7 @@ from app.services.sheet_sync_dry_run import stage_snapshot
 from app.services.normalized_price_workbook import parse_normalized_price_workbook, parse_normalized_sheet_values
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 from app.services.matching import normalize_price_for_comparison
+from app.services.smart_price_spot import SpotLine, compute_spot_offers, spot_lines_query
 
 
 router = APIRouter()
@@ -192,7 +193,7 @@ async def matrix(
     today = date.today()
 
     active_prices = []
-    spot_prices = []
+    spot_prices: dict[tuple[str, int], dict] = {}
     assessments = []
     policies = []
     if skus and supplier_ids:
@@ -217,28 +218,27 @@ async def matrix(
                 )
             )
         ).all()
-        valid_spot_price = func.coalesce(
-            func.nullif(RigaFattura.prezzo_netto_normalizzato, 0),
-            RigaFattura.prezzo_unitario_fatturato,
-            0,
-        )
-        spot_prices = (
-            await db.execute(
-                select(
-                    RigaFattura.sku_interno,
-                    Fattura.fornitore_id,
-                    func.min(valid_spot_price).label("price"),
+        # Spot = ultimo prezzo fatturato per sede, convertito nell'unità di
+        # confronto (services.smart_price_spot). Righe dalla base comune: niente
+        # note di credito, omaggi, righe/SKU esclusi; tenant e sede filtrati.
+        spot_rows = (await db.execute(
+            spot_lines_query(user, skus=skus, supplier_ids=supplier_ids, location_id=scope)
+        )).all()
+        spot_aliases = (
+            await db.scalars(
+                select(SupplierProductAlias).options(noload("*")).where(
+                    SupplierProductAlias.product_id.in_(product_ids),
+                    SupplierProductAlias.supplier_id.in_(supplier_ids),
+                    SupplierProductAlias.status == "approved",
                 )
-                .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-                .where(
-                    RigaFattura.sku_interno.in_(skus),
-                    Fattura.fornitore_id.in_(supplier_ids),
-                    valid_spot_price > 0,
-                    RigaFattura.is_omaggio.is_not(True),
-                )
-                .group_by(RigaFattura.sku_interno, Fattura.fornitore_id)
             )
         ).all()
+        spot_prices = compute_spot_offers(
+            (SpotLine(*row) for row in spot_rows),
+            {product.sku_interno: product for product in products if product.sku_interno},
+            spot_aliases,
+            today,
+        )
     if product_ids:
         assessment_scope = ProductSupplierAssessment.location_id.is_(None)
         policy_scope = ProductPurchasePolicy.location_id.is_(None)
@@ -332,16 +332,10 @@ async def matrix(
 
     variant_pairs = {(sku, offer["supplier_id"]) for sku, variants in variant_offers_by_sku.items() for offer in variants}
     prices: dict[tuple[str, int], dict] = {}
-    for sku, supplier_id, price in spot_prices:
+    for (sku, supplier_id), spot_offer in spot_prices.items():
         if (sku, supplier_id) in variant_pairs:
             continue
-        prices[(sku, supplier_id)] = {
-            "supplier_id": supplier_id,
-            "unit_price_normalized": f"{Decimal(str(price)):.4f}",
-            "price": f"{Decimal(str(price)):.4f}",
-            "source_type": "spot",
-            "uom": None,
-        }
+        prices[(sku, supplier_id)] = spot_offer
     for row in active_prices:
         key = (row.sku_interno, row.fornitore_id)
         if key in variant_pairs:
@@ -352,7 +346,11 @@ async def matrix(
             if not variant or variant["comparison_price"] is None:
                 continue
             previous = prices.get(key)
-            if previous and Decimal(previous["unit_price_normalized"]) <= Decimal(variant["comparison_price"]):
+            if (
+                previous
+                and previous.get("unit_price_normalized") is not None
+                and Decimal(previous["unit_price_normalized"]) <= Decimal(variant["comparison_price"])
+            ):
                 continue
             prices[key] = {
                 "supplier_id": row.fornitore_id,
@@ -766,14 +764,22 @@ async def preview_cell(
     if not product or not supplier:
         raise HTTPException(404, "Prodotto o fornitore non trovato")
     scope = _scope_location(user, payload.location_id)
-    text_value = f"Prodotto\t{supplier.nome_azienda}\n{product.canonical_name}\t{payload.price}"
+    # The unit chosen in the cell editor is part of the row: without the unit
+    # column the product's comparison unit would silently replace it
+    # (19,67 / CT saved as 19,67 / Pz).
+    cell_uom = " ".join(payload.uom.split())
+    text_value = (
+        f"Prodotto\tUnità di misura\t{supplier.nome_azienda}\n"
+        f"{product.canonical_name}\t{cell_uom}\t{payload.price}"
+    )
     preview = await build_price_preview(
         db,
         text_value=text_value,
         supplier_mapping={supplier.nome_azienda: supplier.id},
         product_mapping={product.canonical_name: product.id},
         effective_date=payload.effective_date,
-        default_uom=payload.uom,
+        default_uom=cell_uom,
+        allow_unit_assignment=True,
         location_id=scope,
         actor_id=user.id,
     )
