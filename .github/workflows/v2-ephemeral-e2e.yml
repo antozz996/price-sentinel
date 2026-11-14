@@ -112,6 +112,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_price_normalization.py' -v
 
+      - name: Unit - Weekly price form renewal does not overlap prices
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_offer_renewal.py' -v
+
       - name: Unit — Invoice XML per-unit discounts
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_xml_discounts.py' -v
