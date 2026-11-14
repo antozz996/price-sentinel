@@ -36,7 +36,7 @@ class RefreshLineAnomalyTest(unittest.TestCase):
         _added, archive = run(db)
         archive.assert_awaited_once()
         args, kwargs = archive.call_args
-        self.assertEqual(kwargs["reason"], "prova")
+        self.assertEqual(kwargs["reason"], "prova")  # replaced by a new anomaly
         # Same conditions as stale_unworked_anomaly_conditions: never a bare "riga_fattura_id == x".
         expected = [str(c) for c in anomaly_policy.stale_unworked_anomaly_conditions(7)]
         self.assertEqual([str(c) for c in args[1:]], expected)
@@ -62,6 +62,7 @@ class RefreshLineAnomalyTest(unittest.TestCase):
         added, archive = run(db, delta_unit="0.10", delta_total="0.10")
         self.assertFalse(added)
         archive.assert_awaited_once()
+        self.assertEqual(archive.call_args.kwargs["reason"], "riassociazione_sotto_soglia")
         db.add.assert_not_called()
 
     def test_invoice_outside_check_scope(self):

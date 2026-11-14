@@ -1194,6 +1194,7 @@ async def _refresh_queue_line_anomaly(db, line, invoice, listino, compared_price
     await refresh_line_anomaly(
         db, riga_fattura_id=line.id, xml_raw_id=invoice.xml_raw_id, listino_price=listino.prezzo_pattuito,
         compared_price=compared_price, delta_unit=delta, delta_total=delta_total, reason="risoluzione_coda",
+        below_threshold_reason="risoluzione_coda",
     )
 
 

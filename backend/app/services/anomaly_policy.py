@@ -140,17 +140,21 @@ async def refresh_line_anomaly(
     delta_unit,
     delta_total,
     reason: str,
+    below_threshold_reason: str = "riassociazione_sotto_soglia",
 ) -> bool:
     """Recompute the anomaly of one invoice line after a re-link or an approval.
 
     Only unworked anomalies (to verify / parked) are archived: a dispute, a claim
     or a resolution stays where it is, and while one remains no new anomaly is
-    created (one anomaly per line). Returns True when a new anomaly was added.
+    created (one anomaly per line). The archive reason says whether the anomaly was
+    replaced (reason) or cleared because the price is back in line
+    (below_threshold_reason). Returns True when a new anomaly was added.
     """
-    await archive_and_remove_anomalies(db, *stale_unworked_anomaly_conditions(riga_fattura_id), reason=reason)
-    if not is_material_price_increase(delta_total, delta_unit):
-        return False
-    if not await invoice_in_check_scope(db, xml_raw_id):
+    material = is_material_price_increase(delta_total, delta_unit) and await invoice_in_check_scope(db, xml_raw_id)
+    await archive_and_remove_anomalies(
+        db, *stale_unworked_anomaly_conditions(riga_fattura_id), reason=reason if material else below_threshold_reason
+    )
+    if not material:
         return False
     remaining = await db.scalar(select(Anomalia.id).where(Anomalia.riga_fattura_id == riga_fattura_id).limit(1))
     if remaining is not None:
