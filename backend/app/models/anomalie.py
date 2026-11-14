@@ -6,6 +6,7 @@ Spec §5.2: Anomalie con snapshot prezzi, NoteDiCredito con importo recuperato.
 
 import enum
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -21,6 +22,19 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+def comparison_quantity(delta_totale, delta_prezzo, quantita) -> Decimal | None:
+    """Quantità nell'unità di confronto dei prezzi snapshot.
+
+    I due snapshot e delta_prezzo sono per unità di listino, la quantità della
+    riga è per unità di fattura: PANE BAO 2 CT da 30 = 60 Pz, perché
+    delta_totale (10,842) = delta_prezzo (0,1807) x 60. Senza delta unitario
+    resta la quantità della fattura.
+    """
+    if delta_prezzo is None or Decimal(str(delta_prezzo)) == 0 or delta_totale is None:
+        return None if quantita is None else Decimal(str(quantita))
+    return (Decimal(str(delta_totale)) / Decimal(str(delta_prezzo))).quantize(Decimal("0.0001"))
 
 
 class StatoValidazione(str, enum.Enum):
@@ -122,6 +136,24 @@ class Anomalia(Base):
     @property
     def quantita(self) -> float | None:
         return self.riga_fattura.quantita if self.riga_fattura else None
+
+    @property
+    def quantita_confronto(self) -> Decimal | None:
+        """Quantità nell'unità del listino: delta_totale = delta_prezzo x quantita_confronto."""
+        return comparison_quantity(self.delta_totale, self.delta_prezzo, self.quantita)
+
+    @property
+    def unita_fattura(self) -> str | None:
+        return self.riga_fattura.unita_misura_fattura if self.riga_fattura else None
+
+    @property
+    def comparison_unit(self) -> str | None:
+        """Unità dei due prezzi snapshot (Pz, CT, Kg, Lt): la imposta l'API che legge le anomalie."""
+        return self.__dict__.get("_comparison_unit")
+
+    @comparison_unit.setter
+    def comparison_unit(self, value: str | None) -> None:
+        self.__dict__["_comparison_unit"] = value
 
     @property
     def codice_fornitore(self) -> str | None:

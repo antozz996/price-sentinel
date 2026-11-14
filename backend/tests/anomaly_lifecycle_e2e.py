@@ -23,7 +23,7 @@ from app.api.deps import get_current_user
 from app.api.v1.anomalie import get_anomalia, list_anomalie
 from app.api.v1.disputes import list_dispute_candidates
 from app.api.v1.fatture import ResolveActionPayload, get_fattura, list_fatture, resolve_parked_line
-from app.api.v1.intelligence import get_kpi, get_price_trend, get_price_trends, get_pricing_audit, get_variance_loss
+from app.api.v1.intelligence import export_dispute_excel, get_kpi, get_price_trend, get_price_trends, get_variance_loss
 from app.api.v1.product_identity import approve_candidate
 from app.database import async_session_factory
 from app.models.anomalie import Anomalia, AnomaliaArchiviata, NotaDiCredito, StatoValidazione
@@ -451,23 +451,45 @@ async def check_anomaly_check_start() -> None:
             settings.ANOMALY_CHECK_START = datetime.now(timezone.utc) + timedelta(minutes=1)
             waste = await get_variance_loss(_admin=ADMIN, db=db)
             check("waste ignores purchases uploaded before the start date", waste == [])
-            audit = await get_pricing_audit(location_id=None, anno=None, soglia=0.0, limit=10, offset=0, _admin=ADMIN, db=db)
-            check("price increases ignore invoices uploaded before the start date", audit["total"] == 0)
         finally:
             settings.ANOMALY_CHECK_START = original
 
 
 async def check_price_history_endpoints() -> None:
     async with async_session_factory() as db:
-        trend = await get_price_trend("OUTLIER", _user=ADMIN, db=db)
+        trend = await get_price_trend("OUTLIER", fornitore_id=None, _user=ADMIN, db=db)
         check("product price history opens", trend is not None)
-        audit = await get_pricing_audit(location_id=None, anno=None, soglia=5.0, limit=10, offset=0, _admin=ADMIN, db=db)
-        check("pricing audit works without filters", isinstance(audit, dict))
         trends = await get_price_trends(skus="OUTLIER", start_date=None, end_date=None,
                                         location_ids=None, fornitore_ids=None, _user=ADMIN, db=db)
         history = trends["OUTLIER"]["history"]
         check("every price point links to its invoice", bool(history) and all(
             point["fattura_id"] and point["numero_documento"] for point in history))
+        check("price history has only the SKU's own lines, excluded line left out",
+              sorted(point["prezzo_pagato"] for point in history) == [10.0, 12.0])
+        check("each point carries the supplier's price list valid on its date",
+              all(point["confrontabile"] and point["prezzo_contratto"] == 10.0 and point["unita_confronto"] == "Pz"
+                  for point in history))
+        check("single-supplier series shows the current price list",
+              trends["OUTLIER"]["prezzo_contratto_corrente"] == 10.0)
+
+        # The dispute dossier lists exactly the anomalies shown in the validation room.
+        from io import BytesIO
+
+        import openpyxl
+
+        from app.services.dispute_dossier import dossier_total, load_dossier_rows
+
+        visible = await list_anomalie(response=Response(), stato="da_verificare", limit=200, offset=0,
+                                      current_user=ADMIN, db=db)
+        rows = await load_dossier_rows(db, ADMIN, stato=StatoValidazione.da_verificare)
+        check("dossier has one row per visible anomaly", sorted(r.anomalia_id for r in rows) == sorted(a.id for a in visible))
+        check("dossier total equals the visible anomalies' overcharge",
+              dossier_total(rows) == sum((Decimal(str(a.delta_totale)) for a in visible), Decimal("0")))
+        response = await export_dispute_excel(location_id=None, anno=None, stato="da_verificare", _user=ADMIN, db=db)
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        sheet = openpyxl.load_workbook(BytesIO(body))["Rincari da contestare"]
+        check("dossier Excel total row matches", abs(Decimal(str(sheet.cell(row=sheet.max_row, column=14).value))
+                                                    - dossier_total(rows)) < Decimal("0.0001"))
 
 
 def check_cors_exposes_pagination_total() -> None:
