@@ -39,7 +39,8 @@ from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.location import Location
 from app.models.products import MatchCandidate, Product, SupplierProductAlias
-from app.services.ingestion import _process_td04
+from app.models.automation import AutomationAlert
+from app.services.ingestion import _process_td04, _process_td08
 from app.services.normalization import normalize_text
 
 DSN = os.environ["TEST_DATABASE_DSN"]
@@ -359,7 +360,9 @@ async def check_credit_note(micro_open_id: int, micro_claim_id: int, material_id
         location = await db.get(Location, 1)
         result = await _process_td04(db, xml.id, parsed, fornitore, location)
         await db.commit()
-    check("credit note reconciles exactly the claim and the material anomaly", result["anomalie_riconciliate"] == 2)
+    proposed = {item["anomalia_id"] for item in result["proposte_chiusura"]}
+    check("credit note closes nothing automatically", result["anomalie_riconciliate"] == 0)
+    check("credit note proposes exactly the claim and the material anomaly", proposed == {micro_claim_id, material_id})
 
     async with async_session_factory() as db:
         states = {
@@ -369,10 +372,37 @@ async def check_credit_note(micro_open_id: int, micro_claim_id: int, material_id
             )
         }
         credited = set(await db.scalars(select(NotaDiCredito.anomalia_id)))
+        alerts = {
+            row.entity_id: row
+            for row in await db.scalars(
+                select(AutomationAlert).where(AutomationAlert.alert_type == "credit_note_proposal")
+            )
+        }
     check("credit note ignores unworked rounding noise", states[micro_open_id] == StatoValidazione.da_verificare)
-    check("credit note closes an open micro-claim", states[micro_claim_id] == StatoValidazione.risolta)
-    check("credit note closes a material anomaly", states[material_id] == StatoValidazione.risolta)
-    check("credit records match the closed anomalies", credited == {micro_claim_id, material_id})
+    check("an imported credit note leaves the micro-claim open", states[micro_claim_id] == StatoValidazione.in_reclamo)
+    check("an imported credit note leaves the material anomaly open", states[material_id] != StatoValidazione.risolta)
+    check("an imported credit note records no recovered money", credited == set())
+    check(
+        "each proposal is an open alert for the manager",
+        set(alerts) == {str(micro_claim_id), str(material_id)}
+        and all(alert.status == "open" and alert.location_id == 1 for alert in alerts.values()),
+    )
+
+    # TD08 (nota di credito semplificata) follows the same path as a TD04.
+    parsed.numero_documento = "CI-SYNTH-NC-TD08"
+    async with async_session_factory() as db:
+        xml = await Fixture(db).xml("td08")
+        fornitore = await db.get(Fornitore, 1)
+        location = await db.get(Location, 1)
+        result = await _process_td08(db, xml.id, parsed, fornitore, location)
+        await db.commit()
+        td08 = await db.get(Fattura, result["fattura_id"])
+    check(
+        "TD08 is stored as a credit note and only proposes",
+        result["status"] == "td08_registrata"
+        and td08.tipo_documento == TipoDocumento.TD08
+        and {item["anomalia_id"] for item in result["proposte_chiusura"]} == {micro_claim_id, material_id},
+    )
 
 
 async def check_variance_counts_each_line_once() -> None:
@@ -398,7 +428,7 @@ async def check_variance_counts_each_line_once() -> None:
         await db.commit()
 
     async with async_session_factory() as db:
-        rows = await get_variance_loss(_admin=ADMIN, db=db)
+        rows = (await get_variance_loss(_admin=ADMIN, db=db))["righe"]
     row = next(item for item in rows if item["sku_interno"] == "MULTI-SUPPLIER")
     check("variance counts each invoice line once", row["numero_acquisti"] == 2)
     check("variance is not multiplied by active price lists", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
@@ -417,11 +447,19 @@ async def check_excluded_lines_do_not_set_reference_price() -> None:
         await db.commit()
 
     async with async_session_factory() as db:
-        rows = await get_variance_loss(_admin=ADMIN, db=db)
+        rows = (await get_variance_loss(_admin=ADMIN, db=db))["righe"]
     row = next(item for item in rows if item["sku_interno"] == "OUTLIER")
     check("an excluded line does not become the reference price", Decimal(str(row["prezzo_minimo"])) == Decimal("10.0"))
     check("waste is measured against the real reference price", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
-    check("an excluded line still counts as a purchase", row["numero_acquisti"] == 3)
+    check("an excluded line leaves the waste totals too", row["numero_acquisti"] == 2)
+    check("waste is measured against the listino valid at the line date", row["fonte_riferimento"] == "listino")
+
+    from app.api.v1.intelligence import get_efficiency_leaderboard
+
+    async with async_session_factory() as db:
+        board = await get_efficiency_leaderboard(_admin=ADMIN, db=db)
+    check("efficiency leaderboard runs on PostgreSQL", bool(board) and board[0]["rank"] == 1
+          and all(item["totali"] >= item["ottimali"] for item in board))
 
 
 async def check_anomaly_check_start() -> None:
@@ -450,7 +488,15 @@ async def check_anomaly_check_start() -> None:
         try:
             settings.ANOMALY_CHECK_START = datetime.now(timezone.utc) + timedelta(minutes=1)
             waste = await get_variance_loss(_admin=ADMIN, db=db)
+<<<<<<< HEAD
             check("waste ignores purchases uploaded before the start date", waste == [])
+=======
+            check("waste ignores purchases uploaded before the start date", waste["righe"] == [])
+            check("waste states the date it counts from",
+                  waste["periodo_dal"] == settings.ANOMALY_CHECK_START.date().isoformat())
+            audit = await get_pricing_audit(location_id=None, anno=None, soglia=0.0, limit=10, offset=0, _admin=ADMIN, db=db)
+            check("price increases ignore invoices uploaded before the start date", audit["total"] == 0)
+>>>>>>> origin/main
         finally:
             settings.ANOMALY_CHECK_START = original
 

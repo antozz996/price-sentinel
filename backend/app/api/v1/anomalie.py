@@ -309,6 +309,18 @@ async def registra_nota_credito(
             detail="NC registrabile solo su anomalie in stato 'in_reclamo'",
         )
 
+    # Un'anomalia dentro una pratica ha la sua nota di credito nella pratica
+    # (Contestazioni): registrarla anche qui la conterebbe due volte.
+    from app.models.disputes import DisputeCaseAnomaly
+    in_case = await db.scalar(
+        select(DisputeCaseAnomaly.id).where(DisputeCaseAnomaly.legacy_anomaly_id == data.anomalia_id)
+    )
+    if in_case is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Anomalia in una pratica di contestazione: registra la nota di credito nella pratica",
+        )
+
     # Crea NC
     nc = NotaDiCredito(
         anomalia_id=data.anomalia_id,

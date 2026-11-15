@@ -10,103 +10,20 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-def generate_vendor_passport_pdf(vendor_data: dict) -> bytes:
-    """
-    Genera un PDF 'Vendor Passport' in memory-buffer.
-    Parametri attesi in vendor_data:
-      - 'vendor_name': str
-      - 'assorbimento': list of dicts (es. [{'cat': 'Spirits', 'volume': '500 L'}, ...])
-      - 'frequenza': str
-      - 'location_servite': int
-    
-    IMPORTANT: Nesun prezzo viene esposto. Solo volumi.
-    """
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=A4, 
-        rightMargin=40, leftMargin=40, topMargin=50, bottomMargin=50
-    )
-    
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'MainTitle', 
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor("#1A202C"),
-        spaceAfter=20,
-    )
-    subtitle_style = ParagraphStyle(
-        'SubTitle',
-        parent=styles['Normal'],
-        fontSize=12,
-        textColor=colors.HexColor("#718096"),
-        spaceAfter=30,
-    )
-    
-    elements = []
-    
-    # Intestazione Strategica
-    elements.append(Paragraph("<b>PRICE SENTINEL</b> - VENDOR PASSPORT", title_style))
-    elements.append(Paragraph(
-        "Rapporto Direzionale per l'Analisi della Capacità di Assorbimento<br/>"
-        "<i>Documento strettamente confidenziale per finalità negoziali</i>", subtitle_style)
-    )
-    elements.append(Spacer(1, 0.2 * inch))
-    
-    # Informazioni Generali
-    elements.append(Paragraph(f"<b>Analisi relativa al Fornitore:</b> {vendor_data.get('vendor_name', 'N/A')}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Location servite dal fornitore:</b> {vendor_data.get('location_servite', 0)} Sedi", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Frequenza media riordino:</b> {vendor_data.get('frequenza', 'N/A')}", styles["Normal"]))
-    elements.append(Spacer(1, 0.3 * inch))
-    
-    # Tabella Assorbimento Volumi
-    elements.append(Paragraph("<b>Capacità di Assorbimento Volumi (No Prezzi Inclusi)</b>", styles["Heading3"]))
-    
-    # Costruiamo i dati della tabella
-    data_matrix = [["Categoria", "Volume Totale Periodo", "Unità"]]
-    for item in vendor_data.get("assorbimento", []):
-        data_matrix.append([
-            item.get("categoria", "Altro"),
-            str(item.get("volume", 0)),
-            item.get("unita", "")
-        ])
-        
-    table = Table(data_matrix, colWidths=[2.5*inch, 2.5*inch, 1*inch])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2B6CB0")),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#EDF2F7")),
-        ('GRID', (0, 0), (-1, -1), 1, colors.white),
-    ]))
-    
-    elements.append(table)
-    elements.append(Spacer(1, 0.5 * inch))
-    
-    # Disclaimer
-    disclaimer = Paragraph(
-        "<font size=8 color=gray>Questo documento attesta esclusivamente la "
-        "capacità di assorbimento logistico-merceologica del gruppo. "
-        "I prezzi di acquisto storici sono omessi per garantire la "
-        "massima neutralità nelle dinamiche di asta al ribasso.</font>",
-        styles["Normal"]
-    )
-    elements.append(disclaimer)
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.read()
-
-
 def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: str = "") -> bytes:
     """
     Genera un PDF di riepilogo delle fatture che compongono il consumo di uno o più SKU.
     """
     import io
     from datetime import datetime
+    import html
+    from xml.sax.saxutils import escape as _xml_escape
+
+    from app.services.consumption_report import format_quantity, invoice_totals, quantities_text
+
+    def escape(value) -> str:
+        # Testo da fattura dentro un Paragraph: niente markup, ma "&amp;" resta "&".
+        return _xml_escape(html.unescape(str(value or "")))
     
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -158,9 +75,9 @@ def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: s
     # Header
     elements.append(Paragraph("<b>PRICE SENTINEL</b> - RIEPILOGO FATTURE DI CONSUMO", title_style))
     elements.append(Paragraph(
-        f"<b>Analisi articolo/i:</b> {title}<br/>"
+        f"<b>Analisi articolo/i:</b> {escape(title)}<br/>"
         f"<i>Report generato il {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</i>" + 
-        (f"<br/><b>Filtri attivi:</b> {filter_desc}" if filter_desc else ""), 
+        (f"<br/><b>Filtri attivi:</b> {escape(filter_desc)}" if filter_desc else ""), 
         subtitle_style
     ))
     elements.append(Spacer(1, 10))
@@ -177,9 +94,8 @@ def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: s
         Paragraph("Totale", header_cell_style),
     ]]
     
-    totale_quantita = 0.0
     totale_spesa = 0.0
-    
+
     for inv in invoices:
         data_doc = inv.get("data_documento", "")
         # Format date as DD/MM/YYYY if YYYY-MM-DD
@@ -193,34 +109,40 @@ def generate_consumption_invoices_pdf(title: str, invoices: list, filter_desc: s
         pu = inv.get("prezzo_unitario", 0.0)
         tot = inv.get("spesa_totale", 0.0)
         
-        totale_quantita += qta
         totale_spesa += tot
-        
+        unita = inv.get("unita_misura") or ""
+        numero = escape(str(inv.get("numero_documento", "")))
+        if inv.get("is_reso"):
+            numero += "<br/><i>nota di credito</i>"
+
         data_matrix.append([
             Paragraph(data_doc_formatted, cell_style),
-            Paragraph(str(inv.get("numero_documento", "")), cell_style),
-            Paragraph(str(inv.get("location_nome", "")), cell_style),
-            Paragraph(str(inv.get("fornitore_nome", "")), cell_style),
-            Paragraph(str(inv.get("prodotto_descrizione", "")), cell_style),
-            Paragraph(f"{qta:,.1f}", cell_style),
+            Paragraph(numero, cell_style),
+            Paragraph(escape(str(inv.get("location_nome", ""))), cell_style),
+            Paragraph(escape(str(inv.get("fornitore_nome", ""))), cell_style),
+            Paragraph(escape(str(inv.get("prodotto_descrizione", ""))), cell_style),
+            # Quantità con la sua unità e con il segno (i resi sono negativi).
+            Paragraph(escape(f"{format_quantity(qta)} {unita}".strip()), cell_style),
             Paragraph(f"€ {pu:,.2f}", cell_style),
             Paragraph(f"€ {tot:,.2f}", cell_style),
         ])
-        
-    # Append Total row
+
+    # Totale: una quantità per unità, mai sommate tra loro ("5.940 Lt + 6 PZ").
+    has_summary = all("unita_riepilogo" in inv for inv in invoices)
+    totale_quantita = quantities_text(invoice_totals(invoices)) if invoices and has_summary else ""
     data_matrix.append([
         Paragraph("<b>TOTALE COMPLESSIVO</b>", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph("", cell_bold_style),
-        Paragraph(f"<b>{totale_quantita:,.1f}</b>", cell_bold_style),
+        Paragraph(f"<b>{escape(totale_quantita)}</b>", cell_bold_style),
         Paragraph("", cell_bold_style),
         Paragraph(f"<b>€ {totale_spesa:,.2f}</b>", cell_bold_style),
     ])
-    
+
     # Page width is 595. Margins are 30 on each side. Printable is 535 points.
-    col_widths = [55, 55, 75, 75, 125, 40, 50, 60]
+    col_widths = [50, 55, 70, 70, 110, 65, 50, 65]
     
     table = Table(data_matrix, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([

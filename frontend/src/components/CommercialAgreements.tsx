@@ -15,17 +15,35 @@ interface AgreementItem {
   descrizione: string;
   fornitore_id: number;
   fornitore_nome: string;
-  unita_misura: string;
+  unita_misura: string | null;
   prezzo_pattuito: number;
   pfa_tipo: string;
   pfa_valore: number | null;
   pfa_scaglioni: PFAScaglioneInfo[];
   netto_rientro_contratto: number | null;
-  quantita_acquistata: number;
+  // null: righe in unità non convertibili nell'unità dell'accordo (unita_non_omogenee).
+  quantita_acquistata: number | null;
   totale_fatturato: number;
-  rientro_accumulato: number;
-  netto_rientro_medio: number;
+  rientro_accumulato: number | null;
+  netto_rientro_medio: number | null;
+  unita_non_omogenee?: boolean;
+  righe_non_convertibili?: number;
+  periodo_da?: string | null;
+  periodo_a?: string | null;
 }
+
+// Periodo predefinito: anno solare in corso fino a oggi (date locali, formato yyyy-mm-dd).
+const isoLocalDate = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const TODAY = new Date();
+const DEFAULT_DATA_DA = `${TODAY.getFullYear()}-01-01`;
+const DEFAULT_DATA_A = isoLocalDate(TODAY);
+const formatDateIt = (iso: string) => {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+};
+const unitKey = (unit: string | null | undefined) => (unit || '').trim().toUpperCase();
+const MIXED_UNITS_TITLE = 'Unità non omogenee: alcune righe non si convertono nell\'unità dell\'accordo';
 
 interface Fornitore { id: number; nome_azienda: string; }
 interface Location { id: number; nome_struttura: string; }
@@ -41,8 +59,8 @@ export default function CommercialAgreements() {
   // Filters
   const [filterFornitore, setFilterFornitore] = useState('');
   const [filterLocation, setFilterLocation] = useState('');
-  const [filterDataDa, setFilterDataDa] = useState('');
-  const [filterDataA, setFilterDataA] = useState('');
+  const [filterDataDa, setFilterDataDa] = useState(DEFAULT_DATA_DA);
+  const [filterDataA, setFilterDataA] = useState(DEFAULT_DATA_A);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modal / Management State
@@ -292,10 +310,26 @@ export default function CommercialAgreements() {
   });
 
   // Calculate aggregated stats
-  const totalVolume = filteredAgreements.reduce((sum, ag) => sum + Number(ag.quantita_acquistata), 0);
+  // Il volume si somma solo se tutti gli accordi visibili hanno la stessa unità e una
+  // quantità affidabile: BT + CT + KG non danno un numero sensato.
+  const volumeUnits = new Set(filteredAgreements.map(ag => unitKey(ag.unita_misura)));
+  const volumeComparable = filteredAgreements.length > 0
+    && volumeUnits.size === 1
+    && !volumeUnits.has('')
+    && filteredAgreements.every(ag => ag.quantita_acquistata !== null);
+  const totalVolume = volumeComparable
+    ? filteredAgreements.reduce((sum, ag) => sum + Number(ag.quantita_acquistata), 0)
+    : null;
+  const volumeUnitLabel = volumeComparable ? (filteredAgreements[0].unita_misura || '') : '';
   const totalSpent = filteredAgreements.reduce((sum, ag) => sum + Number(ag.totale_fatturato), 0);
-  const totalRebate = filteredAgreements.reduce((sum, ag) => sum + Number(ag.rientro_accumulato), 0);
-  const averageDiscountPct = totalSpent > 0 ? (totalRebate / totalSpent) * 100 : 0;
+  const rebateKnown = filteredAgreements.filter(ag => ag.rientro_accumulato !== null);
+  const rebatePartial = rebateKnown.length < filteredAgreements.length;
+  const totalRebate = rebateKnown.reduce((sum, ag) => sum + Number(ag.rientro_accumulato), 0);
+  const spentWithRebate = rebateKnown.reduce((sum, ag) => sum + Number(ag.totale_fatturato), 0);
+  const averageDiscountPct = spentWithRebate > 0 ? (totalRebate / spentWithRebate) * 100 : 0;
+  const periodLabel = filterDataDa || filterDataA
+    ? `${filterDataDa ? `dal ${formatDateIt(filterDataDa)}` : ''} ${filterDataA ? `al ${formatDateIt(filterDataA)}` : ''}`.trim()
+    : `dal 01/01/${TODAY.getFullYear()} a oggi`;
 
   const selectStyle: React.CSSProperties = {
     padding: '10px 12px', background: 'var(--bg-inset)', border: '1px solid var(--line)',
@@ -389,7 +423,7 @@ export default function CommercialAgreements() {
             <div style={{ fontSize: '1.75rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               € {totalSpent.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Fatturato Sotto Accordo</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Fatturato Sotto Accordo ({periodLabel})</div>
           </div>
         </div>
 
@@ -401,7 +435,9 @@ export default function CommercialAgreements() {
             <div style={{ fontSize: '1.75rem', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               € {totalRebate.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Rientro Maturato Stimato</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }} title={rebatePartial ? MIXED_UNITS_TITLE : undefined}>
+              Rientro Maturato Stimato{rebatePartial ? ' (parziale: unità non omogenee)' : ''}
+            </div>
           </div>
         </div>
 
@@ -411,9 +447,11 @@ export default function CommercialAgreements() {
           </div>
           <div>
             <div style={{ fontSize: '1.75rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-              {totalVolume.toLocaleString('it-IT', { maximumFractionDigits: 2 })}
+              {totalVolume === null ? '—' : `${totalVolume.toLocaleString('it-IT', { maximumFractionDigits: 2 })} ${volumeUnitLabel}`}
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>Volume Acquistato Totale</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }} title={totalVolume === null ? 'Il totale si mostra solo se tutti gli accordi visibili hanno la stessa unità' : undefined}>
+              Volume Acquistato Totale{totalVolume === null && filteredAgreements.length > 0 ? ' (unità diverse)' : ''}
+            </div>
           </div>
         </div>
 
@@ -481,7 +519,7 @@ export default function CommercialAgreements() {
                   let pfaBadgeColor = 'var(--text-primary)';
 
                   if (ag.pfa_tipo === 'fisso') {
-                    pfaLabel = `-${Number(ag.pfa_valore).toFixed(2)} € / ${ag.unita_misura}`;
+                    pfaLabel = `-${Number(ag.pfa_valore).toFixed(2)} € / ${ag.unita_misura || 'unità n.d.'}`;
                     pfaBadgeBg = 'var(--ok-bg)';
                     pfaBadgeColor = 'var(--ok)';
                   } else if (ag.pfa_tipo === 'percentuale') {
@@ -528,14 +566,22 @@ export default function CommercialAgreements() {
                         € {ag.netto_rientro_contratto !== null ? Number(ag.netto_rientro_contratto).toFixed(2) : '—'}
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        {Number(ag.quantita_acquistata).toFixed(1)} <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ag.unita_misura}</span>
+                        {ag.quantita_acquistata === null ? (
+                          <span title={`${MIXED_UNITS_TITLE} (${ag.righe_non_convertibili ?? 0} righe)`} style={{ color: 'var(--warn)', fontSize: '0.8rem' }}>
+                            unità non omogenee
+                          </span>
+                        ) : (
+                          <>
+                            {Number(ag.quantita_acquistata).toLocaleString('it-IT', { maximumFractionDigits: 2 })} <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{ag.unita_misura}</span>
+                          </>
+                        )}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {Number(ag.totale_fatturato).toFixed(2)}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {Number(ag.totale_fatturato).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 500, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {Number(ag.rientro_accumulato).toFixed(2)}
+                        {ag.rientro_accumulato === null ? '—' : `€ ${Number(ag.rientro_accumulato).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {Number(ag.netto_rientro_medio).toFixed(2)}
+                        {ag.netto_rientro_medio === null ? '—' : `€ ${Number(ag.netto_rientro_medio).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`}
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>

@@ -103,6 +103,8 @@ const panel: React.CSSProperties = {
   padding: 18,
 }
 
+const CANDIDATE_PAGE = 100
+
 const money = (value: string | number | undefined) =>
   new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
     .format(Number(value || 0))
@@ -140,6 +142,7 @@ export default function DisputeManagement() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [moreCandidates, setMoreCandidates] = useState(false)
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [communication, setCommunication] = useState<Communication | null>(null)
@@ -175,10 +178,19 @@ export default function DisputeManagement() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load() }, [])
 
-  const loadCandidates = async () => {
+  // Candidates come in pages: beyond the first page the older anomalies stay
+  // reachable with "Carica altre" (before, a fixed limit of 200 hid them).
+  const loadCandidates = async (append = false) => {
     setBusy(true); setError('')
     try {
-      setCandidates(await fetchWithAuth('/disputes/candidates?limit=200'))
+      const offset = append ? candidates.length : 0
+      const page: Candidate[] = await fetchWithAuth(`/disputes/candidates?limit=${CANDIDATE_PAGE}&offset=${offset}`)
+      setCandidates(current => {
+        if (!append) return page
+        const seen = new Set(current.map(item => `${item.source}:${item.id}`))
+        return [...current, ...page.filter(item => !seen.has(`${item.source}:${item.id}`))]
+      })
+      setMoreCandidates(page.length === CANDIDATE_PAGE)
       setShowCreate(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Anomalie non disponibili')
@@ -381,7 +393,7 @@ export default function DisputeManagement() {
     {notice&&<div style={{...panel,borderColor:'var(--ok-border)',color:'var(--ok)'}}><CheckCircle2 size={16}/> {notice}</div>}
     {dashboard&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10}}>
       {[
-        ['Anomalie',dashboard.total_anomalies],['Contestato',money(dashboard.total_contested)],
+        ['Anomalie in pratiche',dashboard.total_anomalies],['Contestato',money(dashboard.total_contested)],
         ['Riconosciuto',money(dashboard.total_recognized)],['Recuperato',money(dashboard.total_recovered)],
         ['Da recuperare',money(dashboard.total_outstanding)],['Pratiche aperte',dashboard.open_cases],
         ['Scadute',dashboard.overdue_cases],['NC mancanti',dashboard.missing_credit_notes],
@@ -403,6 +415,7 @@ export default function DisputeManagement() {
             <input className="ds-input" aria-label={`Importo ${item.description||item.reason}`} type="number" min=".01" step=".01" value={claimAmounts[key]??item.amount??''} onClick={event=>event.stopPropagation()} onChange={event=>setClaimAmounts(current=>({...current,[key]:event.target.value}))} style={{width:115,fontFamily:'var(--font-mono)',fontVariantNumeric:'tabular-nums'}}/>
           </label>
         })}
+        {moreCandidates&&<button className="btn" onClick={()=>void loadCandidates(true)} disabled={busy}>Carica altre anomalie ({candidates.length} mostrate)</button>}
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12}}>
         <strong>Totale selezionato: {money(selectedClaim)}</strong>

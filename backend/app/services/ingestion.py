@@ -6,8 +6,8 @@ Spec §2.2 Steps 5-9:
   5. TipoDocumento routing (TD01/TD04/TD08)
   6. White-listing P.IVA fornitore
   7. TD01: parsing righe → matching → anomalie
-  8. TD04: proposta chiusura anomalie aperte
-  9. TD08 (nota di credito semplificata): archiviazione passiva
+  8. TD04: proposta chiusura anomalie aperte (avviso, nessuna chiusura automatica)
+  9. TD08 (nota di credito semplificata): stesso trattamento della TD04
 """
 
 import logging
@@ -33,6 +33,7 @@ from app.services.matching import match_riga, MatchResult
 from app.services.normalization import normalize_text
 from app.services.xml_parser import FatturaParsata, RigaParsata
 from app.services.notifications import notify_manager_anomalies
+from app.services.purchase_lines import CREDIT_NOTE_TYPES
 
 logger = logging.getLogger("price_sentinel.ingestion")
 
@@ -134,13 +135,13 @@ async def process_xml_raw(db: AsyncSession, xml_raw_id: int, parsed: FatturaPars
         report.update(result)
 
     elif tipo == "TD04":
-        # Nota di Credito fornitore — proposta chiusura anomalie
+        # Nota di Credito fornitore — solo proposta di chiusura anomalie
         result = await _process_td04(db, xml_raw_id, parsed, fornitore, location)
         report.update(result)
 
     elif tipo == "TD08":
-        # Nota di credito semplificata (SdI) — archiviazione passiva con flag;
-        # le analisi la trattano come TD04 (segno -1).
+        # Nota di credito semplificata (SdI): stesso trattamento della TD04
+        # (righe, matching, proposta di chiusura); nelle analisi segno -1.
         result = await _process_td08(db, xml_raw_id, parsed, fornitore, location)
         report.update(result)
 
@@ -313,8 +314,73 @@ async def _process_td01(
 
 
 # ─────────────────────────────────────────────
-# TD04 — Nota di Credito (Spec §2.2 Step 8)
+# TD04 / TD08 — Note di Credito (Spec §2.2 Step 8-9)
 # ─────────────────────────────────────────────
+
+# Avviso operativo creato per ogni abbinamento proposto tra una nota di credito
+# importata e un'anomalia aperta. Non e' tra i tipi gestiti dal monitor: resta
+# finche' qualcuno non lo prende in carico.
+CREDIT_NOTE_PROPOSAL_ALERT = "credit_note_proposal"
+
+# Anomalie che una nota di credito potrebbe riguardare (stessi stati di prima).
+CREDIT_NOTE_PROPOSAL_STATES = (
+    StatoValidazione.da_verificare,
+    StatoValidazione.in_parking,
+    StatoValidazione.contestata,
+    StatoValidazione.in_reclamo,
+)
+
+
+def propose_credit_note_matches(righe, pending_anomalies) -> list[dict]:
+    """Abbina le righe di una nota di credito alle anomalie aperte, senza decidere nulla.
+
+    Per codice articolo e, in mancanza, per descrizione contenuta (come prima).
+    Ogni anomalia compare al massimo una volta. Il valore della riga e' il netto
+    di fattura della base comune (pu x (1 - sconto/100) x quantita), in positivo.
+    """
+    from app.services.purchase_lines import line_net_unit_price
+
+    pending = list(pending_anomalies)
+    proposals: list[dict] = []
+    for riga in righe:
+        valore = abs(
+            line_net_unit_price(riga.prezzo_unitario, riga.sconto_percentuale)
+            * Decimal(str(riga.quantita or 0))
+        )
+        if valore == Decimal("0"):
+            continue
+        matched, how = None, None
+        if riga.codice_articolo:
+            matched = next(
+                (
+                    anom for anom in pending
+                    if anom.riga_fattura
+                    and anom.riga_fattura.codice_fornitore_raw == riga.codice_articolo
+                ),
+                None,
+            )
+            how = "codice" if matched else None
+        if matched is None and riga.descrizione:
+            desc_clean = riga.descrizione.strip().lower()
+            for anom in pending:
+                anom_desc = ((anom.riga_fattura.descrizione_fornitore_raw if anom.riga_fattura else None) or "").strip().lower()
+                if desc_clean and anom_desc and (desc_clean in anom_desc or anom_desc in desc_clean):
+                    matched, how = anom, "descrizione"
+                    break
+        if matched is None:
+            continue
+        pending.remove(matched)
+        proposals.append({
+            "anomalia_id": matched.id,
+            "abbinamento": how,
+            "riga_nota": riga.numero_linea,
+            "descrizione_nota": riga.descrizione,
+            "valore_riga_nota": str(valore.quantize(Decimal("0.01"))),
+            "rincaro_anomalia": str(Decimal(str(matched.delta_totale)).quantize(Decimal("0.01"))),
+            "descrizione_anomalia": matched.riga_fattura.descrizione_fornitore_raw if matched.riga_fattura else None,
+        })
+    return proposals
+
 
 async def _process_td04(
     db: AsyncSession,
@@ -322,14 +388,23 @@ async def _process_td04(
     parsed: FatturaParsata,
     fornitore: Fornitore,
     location: Location,
+    tipo_documento: TipoDocumento = TipoDocumento.TD04,
 ) -> dict:
     """
-    Nota di credito da fornitore — cerca anomalie aperte
-    e le propone per chiusura automatica.
+    Nota di credito da fornitore (TD04, o TD08 semplificata con lo stesso trattamento).
+
+    Registra la nota e le righe e cerca le anomalie aperte dello stesso fornitore
+    e sede che potrebbe riguardare. NON chiude nessuna anomalia e non crea
+    NotaDiCredito: una nota di credito e' quasi sempre un reso di merce
+    (es. "Vs Reso Ns Fattura n. 136"), non lo storno del rincaro, e prima un
+    reso chiudeva l'anomalia come "risolta" gonfiando "Soldi recuperati".
+    Ogni abbinamento diventa una proposta (avviso operativo); la nota si
+    registra a mano nella pratica di contestazione.
     """
-    from app.models.anomalie import Anomalia, StatoValidazione, NotaDiCredito
-    from app.models.fatture import RigaFattura
-    from datetime import date as date_type
+    from sqlalchemy.orm import selectinload
+    from app.models.automation import AutomationAlert
+    from app.services.anomaly_policy import operational_anomaly_filter
+    from app.services.matching import match_riga
 
     fattura = Fattura(
         xml_raw_id=xml_raw_id,
@@ -338,18 +413,16 @@ async def _process_td04(
         numero_documento=parsed.numero_documento,
         data_documento=_parse_date(parsed.data_documento),
         data_ricezione_sdi=_parse_date(parsed.data_ricezione_sdi or parsed.data_documento),
-        tipo_documento=TipoDocumento.TD04,
+        tipo_documento=tipo_documento,
         totale_imponibile=parsed.totale_imponibile,
     )
     db.add(fattura)
     await db.flush()
 
     # Salva le righe per reference e prova ad abbinare gli SKU
-    from app.services.matching import match_riga
     for riga_parsed in parsed.righe:
         sku = None
         stato = StatoMatching.no_match
-        
         try:
             match_res = await match_riga(
                 db=db,
@@ -365,16 +438,12 @@ async def _process_td04(
             if match_res.matched or match_res.senza_listino:
                 sku = match_res.sku_interno
                 stato = StatoMatching.matched
-        except Exception as e:
-            # Fallback safe
+        except Exception:
+            # Fallback safe: la riga resta senza SKU
             pass
-            
-        riga_db = _create_riga_fattura(fattura.id, riga_parsed, stato, sku)
-        db.add(riga_db)
+        db.add(_create_riga_fattura(fattura.id, riga_parsed, stato, sku))
 
-    # ── Caricamento Anomalie Aperte dello stesso Fornitore e Location ──
-    from sqlalchemy.orm import selectinload
-    from app.services.anomaly_policy import operational_anomaly_filter
+    # ── Anomalie aperte dello stesso fornitore e sede ──
     anomalie_query = (
         select(Anomalia)
         .options(selectinload(Anomalia.riga_fattura))
@@ -384,91 +453,51 @@ async def _process_td04(
             and_(
                 Fattura.fornitore_id == fornitore.id,
                 Fattura.location_id == location.id,
-                Anomalia.stato_validazione.in_([
-                    StatoValidazione.da_verificare,
-                    StatoValidazione.in_parking,
-                    StatoValidazione.contestata,
-                    StatoValidazione.in_reclamo,
-                ]),
-                # Una nota di credito non deve chiudere rumore di arrotondamento
-                # mai lavorato, ma deve poter chiudere un reclamo gia' aperto.
+                Anomalia.stato_validazione.in_(CREDIT_NOTE_PROPOSAL_STATES),
+                # Niente proposte sul rumore di arrotondamento mai lavorato.
                 operational_anomaly_filter(),
             )
         )
+        .order_by(Anomalia.id)
     )
-    res = await db.execute(anomalie_query)
-    pending_anomalies = list(res.scalars().all())
+    pending_anomalies = list((await db.execute(anomalie_query)).scalars().all())
+    proposals = propose_credit_note_matches(parsed.righe, pending_anomalies)
 
-    reconciled_count = 0
-    total_reconciled_amount = Decimal("0")
-
-    # ── Reconciliation Algorithm ──
-    for riga_parsed in parsed.righe:
-        # Importo totale del credito per questa riga
-        credito_valore = abs(riga_parsed.prezzo_netto_normalizzato * riga_parsed.quantita)
-        if credito_valore == Decimal("0"):
-            continue
-
-        matched_anomalia = None
-
-        # 1. Trova anomalia per codice articolo
-        if riga_parsed.codice_articolo:
-            for anom in pending_anomalies:
-                if anom.riga_fattura and anom.riga_fattura.codice_fornitore_raw == riga_parsed.codice_articolo:
-                    matched_anomalia = anom
-                    break
-
-        # 2. Fallback su descrizione simile
-        if not matched_anomalia and riga_parsed.descrizione:
-            desc_clean = riga_parsed.descrizione.strip().lower()
-            for anom in pending_anomalies:
-                if anom.riga_fattura and anom.riga_fattura.descrizione_fornitore_raw:
-                    anom_desc = anom.riga_fattura.descrizione_fornitore_raw.strip().lower()
-                    if desc_clean in anom_desc or anom_desc in desc_clean:
-                        matched_anomalia = anom
-                        break
-
-        # Se troviamo un match, effettuiamo lo storno e segniamo l'anomalia come risolta
-        if matched_anomalia:
-            importo_recuperato = min(credito_valore, Decimal(str(matched_anomalia.delta_totale)))
-            
-            # Trova l'id di un admin esistente nel database (evitando fk crash se seq > 1)
-            from app.models.utenti import Utente, RuoloUtente
-            admin_res = await db.execute(
-                select(Utente.id).where(Utente.ruolo == RuoloUtente.admin).limit(1)
+    now = datetime.now(timezone.utc)
+    tipo = tipo_documento.value
+    for proposal in proposals:
+        db.add(
+            AutomationAlert(
+                dedupe_key=f"{CREDIT_NOTE_PROPOSAL_ALERT}:{fattura.id}:{proposal['anomalia_id']}",
+                alert_type=CREDIT_NOTE_PROPOSAL_ALERT,
+                severity="info",
+                status="open",
+                location_id=location.id,
+                entity_type="anomaly",
+                entity_id=str(proposal["anomalia_id"]),
+                title="Nota di credito da verificare",
+                message=(
+                    f"La nota di credito {tipo} n. {fattura.numero_documento} del "
+                    f"{fattura.data_documento:%d/%m/%Y} potrebbe riguardare l'anomalia "
+                    f"#{proposal['anomalia_id']} (rincaro € {proposal['rincaro_anomalia']}, "
+                    f"riga nota € {proposal['valore_riga_nota']}). Nessuna chiusura "
+                    "automatica: se storna il rincaro, registrala nella pratica di contestazione."
+                ),
+                details={"fattura_id": fattura.id, "tipo_documento": tipo, **proposal},
+                first_detected_at=now,
+                last_detected_at=now,
+                created_at=now,
+                updated_at=now,
             )
-            admin_id = admin_res.scalar() or 1
-
-            # Crea il record NotaDiCredito nel DB
-            nc_record = NotaDiCredito(
-                anomalia_id=matched_anomalia.id,
-                importo_recuperato=float(importo_recuperato),
-                data_emissione_nc=fattura.data_documento,
-                data_registrazione=date_type.today(),
-                numero_nc=fattura.numero_documento,
-                registrato_da_admin_id=admin_id,
-            )
-            db.add(nc_record)
-
-            # Transizione dello stato a risolta
-            matched_anomalia.stato_validazione = StatoValidazione.risolta
-            
-            # Rimuovi dalla lista dei pendenti per evitare doppi matching
-            pending_anomalies.remove(matched_anomalia)
-            reconciled_count += 1
-            total_reconciled_amount += importo_recuperato
+        )
 
     return {
-        "status": "td04_registrata",
+        "status": f"{tipo.lower()}_registrata",
         "fattura_id": fattura.id,
-        "anomalie_riconciliate": reconciled_count,
-        "totale_recuperato": float(total_reconciled_amount)
+        "anomalie_riconciliate": 0,
+        "proposte_chiusura": proposals,
     }
 
-
-# ─────────────────────────────────────────────
-# TD08 — Nota di credito semplificata (Spec §2.2 Step 9)
-# ─────────────────────────────────────────────
 
 async def _process_td08(
     db: AsyncSession,
@@ -477,25 +506,10 @@ async def _process_td08(
     fornitore: Fornitore,
     location: Location,
 ) -> dict:
-    """Nota di credito semplificata — archiviazione passiva con flag per revisione manuale."""
-    fattura = Fattura(
-        xml_raw_id=xml_raw_id,
-        fornitore_id=fornitore.id,
-        location_id=location.id,
-        numero_documento=parsed.numero_documento,
-        data_documento=_parse_date(parsed.data_documento),
-        data_ricezione_sdi=_parse_date(parsed.data_ricezione_sdi or parsed.data_documento),
-        tipo_documento=TipoDocumento.TD08,
-        totale_imponibile=parsed.totale_imponibile,
+    """Nota di credito semplificata (SdI): stesso trattamento della TD04."""
+    return await _process_td04(
+        db, xml_raw_id, parsed, fornitore, location, tipo_documento=TipoDocumento.TD08
     )
-    db.add(fattura)
-    await db.flush()
-
-    for riga_parsed in parsed.righe:
-        riga_db = _create_riga_fattura(fattura.id, riga_parsed, StatoMatching.matched, None)
-        db.add(riga_db)
-
-    return {"status": "td08_archiviata", "fattura_id": fattura.id}
 
 
 # ─────────────────────────────────────────────
@@ -600,7 +614,7 @@ async def _is_known_non_product(db: AsyncSession, fornitore_id: int, riga, cache
             .join(Fattura, Fattura.id == RigaFattura.fattura_id)
             .where(
                 Fattura.fornitore_id == fornitore_id,
-                Fattura.tipo_documento != TipoDocumento.TD04,
+                Fattura.tipo_documento.notin_(CREDIT_NOTE_TYPES),
                 RigaFattura.stato_matching == StatoMatching.no_match,
                 func.coalesce(RigaFattura.codice_fornitore_raw, "") == "",
             )

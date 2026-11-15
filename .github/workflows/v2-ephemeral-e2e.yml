@@ -115,6 +115,21 @@ jobs:
       - name: Unit - Shared purchase lines base (sign, net, units, conversion factor)
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_purchase_lines.py' -v
+      - name: Unit - Invoices, commercial agreements and price list from invoices (signed credit notes, invoiced price, units)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_analisi_spesa.py' -v
+
+      - name: Unit - Dashboard waste and leaderboard (reference per unit, listino at row date, no credit notes)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_variance_loss.py' -v
+
+      - name: Unit - Consumption and top products (credit notes, units, Excel equals screen, POST selection)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_consumption_report.py' -v
+
+      - name: Unit - Disputes, credit notes (TD04/TD08), monitor and anomaly KPI
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_contestazioni_note_credito.py' -v
 
       - name: Unit - Price trend per SKU in price-list unit and dispute dossier from anomalies
         working-directory: backend
@@ -150,6 +165,10 @@ jobs:
       - name: Unit - Minor fixes (normalized supplier choice, price closing, units, worked anomalies, archived suppliers)
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_correzioni_minori.py' -v
+
+      - name: Unit - Listino Smart (converted spot, recommendation, price sheet without unit changes)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_smart.py' -v
 
       - name: Unit — Invoice XML per-unit discounts
         working-directory: backend
