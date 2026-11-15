@@ -18,7 +18,7 @@ from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import SmartPriceSheetPreview
-from app.services.normalization import infer_new_product_category, normalize_text
+from app.services.normalization import infer_new_product_category, normalize_text, unit_family
 from app.services.supplier_catalog_scope import load_supplier_catalog_scope
 
 
@@ -80,7 +80,8 @@ def parse_clipboard_table(text_value: str) -> dict:
         if any(cell.strip() for cell in row)
     ]
     first_header = normalize_text(rows[0][0]) if rows and rows[0] else ""
-    has_order_name = first_header.startswith("nome rapido") or first_header in {
+    # The sheet header is "Nome informale / rapido ordine (facoltativo)".
+    has_order_name = first_header.startswith(("nome rapido", "nome informale")) or first_header in {
         "nome ordine",
         "nome semplice",
         "order name",
@@ -135,6 +136,41 @@ def _price_string(value: Decimal | None) -> str | None:
     return f"{value:.4f}" if value is not None else None
 
 
+def classify_price_change(
+    current_price,
+    current_uom: str | None,
+    new_price: Decimal,
+    new_uom: str | None,
+    *,
+    allow_unit_assignment: bool = False,
+) -> tuple[str, str | None]:
+    """Esito di una cella del foglio rispetto al listino attivo: (azione, motivo).
+
+    azione: create, update, unchanged oppure error (bloccante).
+    - stesso prezzo e stessa famiglia di unità (PZ/Pz, CF/CT): unchanged;
+    - stesso prezzo e famiglia diversa (19,67 CT -> 19,67 Pz): error, perché il
+      numero cambierebbe significato senza essere convertito;
+    - stesso prezzo su un listino senza unità: unchanged con motivo
+      unit_assignment, salvo conferma esplicita (allow_unit_assignment, la
+      modifica della singola cella dalla Matrice);
+    - prezzo diverso: update nell'unità della riga.
+    """
+    if current_price is None:
+        return "create", None
+    if Decimal(str(current_price)) != new_price:
+        return "update", None
+    old = (current_uom or "").strip()
+    new = (new_uom or "").strip()
+    if old == new:
+        return "unchanged", None
+    if not old:
+        return ("update", None) if allow_unit_assignment else ("unchanged", "unit_assignment")
+    old_family, new_family = unit_family(old), unit_family(new)
+    if old_family is not None and old_family == new_family:
+        return "unchanged", None
+    return "error", "uom_change_without_price_change"
+
+
 async def build_price_preview(
     db: AsyncSession,
     *,
@@ -147,6 +183,7 @@ async def build_price_preview(
     create_missing_products: bool = True,
     category: str | None = None,
     subcategory: str | None = None,
+    allow_unit_assignment: bool = False,
     location_id: int | None,
     actor_id: int,
 ) -> SmartPriceSheetPreview:
@@ -464,6 +501,7 @@ async def build_price_preview(
         prices_by_pair[(price.sku_interno, price.fornitore_id)].append(price)
 
     changes: list[dict] = []
+    warnings: list[dict] = []
     seen_pairs: dict[tuple, int] = {}
     for source_row, product, mapping_method in resolved_rows:
         for index, header in enumerate(parsed["supplier_headers"]):
@@ -558,11 +596,44 @@ async def build_price_preview(
                 or (None if allow_missing_uom else "Pz")
             )
 
-            same = bool(
-                current
-                and Decimal(str(current.prezzo_pattuito)) == price
-                and current.unita_misura == row_uom
+            action, reason = classify_price_change(
+                current.prezzo_pattuito if current else None,
+                current.unita_misura if current else None,
+                price,
+                row_uom,
+                allow_unit_assignment=allow_unit_assignment,
             )
+            if action == "error":
+                errors.append(
+                    {
+                        "type": reason,
+                        "row": source_row["row_number"],
+                        "product_id": getattr(product, "id", None),
+                        "supplier_id": getattr(supplier, "id", None),
+                        "column": header,
+                        "message": (
+                            f"{product.canonical_name} · {supplier.nome_azienda}: il listino attuale è "
+                            f"{_price_string(Decimal(str(current.prezzo_pattuito)))} / {current.unita_misura}. "
+                            f"Lo stesso prezzo a {row_uom} cambierebbe il significato: "
+                            "converti il prezzo nell'unità della colonna C o lascia la cella vuota."
+                        ),
+                    }
+                )
+                continue
+            if reason == "unit_assignment":
+                warnings.append(
+                    {
+                        "type": reason,
+                        "row": source_row["row_number"],
+                        "product_id": getattr(product, "id", None),
+                        "supplier_id": getattr(supplier, "id", None),
+                        "message": (
+                            f"{product.canonical_name} · {supplier.nome_azienda}: listino senza unità, "
+                            f"prezzo invariato. L'unità {row_uom} non viene assegnata dal foglio: "
+                            "confermala modificando la cella dalla Matrice."
+                        ),
+                    }
+                )
 
             change_entry = {
                 "row": source_row["row_number"],
@@ -580,7 +651,8 @@ async def build_price_preview(
                 "uom": row_uom,
                 "category": category or getattr(product, "category", None),
                 "subcategory": subcategory or getattr(product, "subcategory", None),
-                "action": "unchanged" if same else ("update" if current else "create"),
+                "old_uom": current.unita_misura if current else None,
+                "action": action,
             }
 
             if pair in seen_pairs:
@@ -605,6 +677,7 @@ async def build_price_preview(
         "order_name_changes": list(order_name_changes_by_product.values()),
         "changes": changes,
         "errors": errors,
+        "warnings": warnings,
         "counts": counts,
         "can_commit": not errors and bool(changes or order_name_changes_by_product),
     }

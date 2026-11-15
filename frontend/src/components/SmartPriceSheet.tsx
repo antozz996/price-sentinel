@@ -10,6 +10,12 @@ type Offer = {
   price: string
   uom?: string | null
   source_type: 'contratto' | 'spot'
+  // Prezzo nell'unità di confronto della voce; null = fuori classifica.
+  unit_price_normalized?: string | null
+  comparison_reliable?: boolean
+  conversion_note?: string | null
+  invoice_date?: string | null
+  stale?: boolean
   eligible: boolean
   exclusion_reasons: string[]
   assessment: { status: string; quality_score: number }
@@ -60,9 +66,11 @@ type Preview = {
     old_price?: string | null
     new_price: string
     uom: string
+    old_uom?: string | null
     action: 'create' | 'update' | 'unchanged'
   }>
   errors: Array<{ type: string; row?: number; header?: string; reference?: string; message: string; supplier_id?: number; category?: string | null }>
+  warnings?: Array<{ type: string; row?: number; message: string }>
   supplier_mapping: Array<{ header: string; supplier_id?: number | null; supplier_name?: string | null; method: string }>
   product_mapping: Array<{ reference: string; product_id?: number | null; canonical_name?: string | null; method: string }>
   order_name_changes?: Array<{ product_id: number; canonical_name: string; old_order_name?: string | null; new_order_name: string }>
@@ -87,7 +95,28 @@ const tabs = [
 ] as const
 
 function money(value?: string | null) {
-  return value ? `€ ${Number(value).toFixed(2)}` : '—'
+  return value ? `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
+}
+
+function shortDate(value?: string | null) {
+  if (!value) return ''
+  const [year, month, day] = value.slice(0, 10).split('-')
+  return `${day}/${month}/${year}`
+}
+
+// Stessa famiglia di unità del backend (services.normalization.unit_family):
+// Pz = pezzo/bottiglia, CT = qualsiasi confezione, Kg, Lt. null = vuota o sconosciuta.
+const UNIT_FAMILIES: Record<string, string> = {}
+for (const [family, spellings] of Object.entries({
+  Pz: ['pz', 'pezzo', 'pezzi', 'piece', 'pieces', 'unita', 'unit', 'nr', 'n', 'numero', 'bt', 'btl', 'bot', 'bottiglia', 'bottiglie', 'bottle', 'fl'],
+  CT: ['ct', 'cartone', 'cartoni', 'cs', 'css', 'cassa', 'casse', 'crt', 'box', 'cf', 'cnf', 'conf', 'confezione', 'confezioni'],
+  Kg: ['kg', 'k', 'kgm', 'kgs', 'kilo', 'chilo', 'chili', 'chilogrammi', 'chilogrammo', 'kilogrammi'],
+  Lt: ['l', 'lt', 'ltr', 'litro', 'litri', 'liter', 'litre'],
+})) for (const spelling of spellings) UNIT_FAMILIES[spelling] = family
+
+function unitFamily(value?: string | null): string | null {
+  const key = (value || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, '').replace(/^\.+|\.+$/g, '')
+  return key ? UNIT_FAMILIES[key] || null : null
 }
 
 function errorMessage(error: unknown) {
@@ -111,22 +140,97 @@ function blankSheet(rows = MIN_SHEET_ROWS, columns = MIN_SHEET_COLUMNS): string[
   )
 }
 
-function sheetFromMatrix(matrix: MatrixResponse): string[][] {
+type SheetHints = Record<string, string>
+
+// Precarica SOLO i listini già espressi nella famiglia di unità della colonna C.
+// Gli spot (prezzi di fattura), i listini senza unità o in un'altra unità restano
+// celle vuote con il prezzo come suggerimento: una cella vuota non scrive nulla,
+// mentre un valore precaricato verrebbe letto come prezzo nell'unità della colonna C.
+function sheetFromMatrix(matrix: MatrixResponse): { grid: string[][]; hints: SheetHints } {
   const suppliers = matrix.suppliers || []
+  const hints: SheetHints = {}
   const rows = [
     ['Nome informale / rapido ordine (facoltativo)', 'Prodotto reale', 'Unità di misura', ...suppliers.map(supplier => supplier.name)],
-    ...matrix.rows.map(row => [
-      row.order_name || '',
-      row.canonical_name,
-      row.comparison_unit || 'Pz',
-      ...suppliers.map(supplier => row.offers[String(supplier.id)]?.price || ''),
-    ]),
+    ...matrix.rows.map((row, index) => {
+      const columnC = row.comparison_unit || 'Pz'
+      return [
+        row.order_name || '',
+        row.canonical_name,
+        columnC,
+        ...suppliers.map((supplier, supplierIndex) => {
+          const offer = row.offers[String(supplier.id)]
+          if (!offer) return ''
+          const family = unitFamily(offer.uom)
+          if (offer.source_type === 'contratto' && family && family === unitFamily(columnC)) return offer.price
+          const key = `${index + 1}:${supplierIndex + 3}`
+          hints[key] = offer.source_type === 'spot'
+            ? `fattura ${money(offer.price)}${offer.uom ? ` / ${offer.uom}` : ''}`
+            : `listino ${money(offer.price)} / ${offer.uom || 'unità mancante'}`
+          return ''
+        }),
+      ]
+    }),
   ]
   const rowCount = Math.max(MIN_SHEET_ROWS, rows.length)
   const columnCount = Math.max(MIN_SHEET_COLUMNS, suppliers.length + 3)
-  return Array.from({ length: rowCount }, (_, rowIndex) =>
+  const grid = Array.from({ length: rowCount }, (_, rowIndex) =>
     Array.from({ length: columnCount }, (_, columnIndex) => rows[rowIndex]?.[columnIndex] || ''),
   )
+  return { grid, hints }
+}
+
+// Testo per l'anteprima con le sole celle modificate rispetto al foglio precaricato.
+// Senza foglio precaricato (foglio vuoto o incollato) si invia tutto come prima.
+function changedSheetForPreview(sheet: string[][], baseline?: string[][]): { text: string; changedCells: number; changedOrderNames: number } {
+  const value = (grid: string[][] | undefined, row: number, column: number) => (grid?.[row]?.[column] || '').trim()
+  if (!baseline) {
+    const changedCells = sheet.slice(1).reduce((total, row) => total + row.slice(3).filter(cell => cell.trim()).length, 0)
+    const changedOrderNames = sheet.slice(1).filter(row => row[0]?.trim()).length
+    return { text: sheetText(sheet), changedCells, changedOrderNames }
+  }
+  const width = sheet[0]?.length || 0
+  const columnMoved = (column: number) => value(sheet, 0, column) !== value(baseline, 0, column)
+  const rowMoved = (row: number) => value(sheet, row, 1) !== value(baseline, row, 1)
+  const cellChanged = (row: number, column: number) => {
+    const current = value(sheet, row, column)
+    return Boolean(current) && (rowMoved(row) || columnMoved(column) || current !== value(baseline, row, column))
+  }
+  const orderChanged = (row: number) => Boolean(value(sheet, row, 0)) && (rowMoved(row) || value(sheet, row, 0) !== value(baseline, row, 0))
+  const keptRows: number[] = []
+  const keptColumns = new Set<number>()
+  let changedCells = 0
+  let changedOrderNames = 0
+  for (let row = 1; row < sheet.length; row += 1) {
+    let keep = false
+    for (let column = 3; column < width; column += 1) {
+      if (cellChanged(row, column)) { keep = true; keptColumns.add(column); changedCells += 1 }
+    }
+    if (orderChanged(row)) { keep = true; changedOrderNames += 1 }
+    if (keep) keptRows.push(row)
+  }
+  const columns = [0, 1, 2, ...Array.from(keptColumns).sort((a, b) => a - b)]
+  const lines = [
+    columns.map(column => sheet[0][column] || '').join('\t'),
+    ...keptRows.map(row => columns.map(column => {
+      if (column === 0) return orderChanged(row) ? value(sheet, row, 0) : ''
+      if (column < 3) return value(sheet, row, column)
+      return cellChanged(row, column) ? value(sheet, row, column) : ''
+    }).join('\t')),
+  ]
+  return { text: lines.join('\n'), changedCells, changedOrderNames }
+}
+
+async function fetchAllMatrixPages(category: string, subcategory?: string): Promise<MatrixResponse> {
+  // Food ha 968 voci attive: una sola pagina da 500 ne perdeva 468.
+  const base = `/smart-price-sheet/matrix?limit=500&category=${encodeURIComponent(category)}${subcategory && subcategory !== 'all' ? `&subcategory=${encodeURIComponent(subcategory)}` : ''}`
+  const first = await fetchWithAuth(`${base}&offset=0`) as MatrixResponse
+  const rows = [...first.rows]
+  while (rows.length < first.total) {
+    const next = await fetchWithAuth(`${base}&offset=${rows.length}`) as MatrixResponse
+    if (!next.rows.length) break
+    rows.push(...next.rows)
+  }
+  return { ...first, rows }
 }
 
 function sheetText(sheet: string[][]): string {
@@ -160,9 +264,12 @@ const MACRO_CATEGORIES = [
   { id: 'Beverage', label: 'Beverage', icon: '🍹', color: 'var(--accent-text)', bg: 'var(--accent-bg)', border: 'var(--accent)' },
   { id: 'Food', label: 'Food', icon: '🍽️', color: 'var(--warn)', bg: 'var(--warn-bg)', border: 'var(--warn)' },
   { id: 'Materiali', label: 'Materiali di consumo', icon: '📦', color: 'var(--ok)', bg: 'var(--ok-bg)', border: 'var(--ok)' },
+  { id: 'Attrezzatura', label: 'Attrezzatura', icon: '🔧', color: 'var(--info)', bg: 'var(--info-bg)', border: 'var(--info)' },
+  { id: 'Gelati confezionati', label: 'Gelati confezionati', icon: '🍦', color: 'var(--info)', bg: 'var(--info-bg)', border: 'var(--info)' },
 ] as const
 
 type MacroCategory = typeof MACRO_CATEGORIES[number]['id']
+const MATRIX_PAGE_SIZE = 100
 
 export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]['id']>('matrix')
@@ -181,14 +288,28 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   const [activeCategorySheet, setActiveCategorySheet] = useState<MacroCategory>('Beverage')
   const [activeSubcategorySheet, setActiveSubcategorySheet] = useState<string>('all')
-  const [categorySheets, setCategorySheets] = useState<Record<string, string[][]>>({
-    'Beverage': blankSheet(),
-    'Food': blankSheet(),
-    'Materiali': blankSheet(),
-  })
+  const [categorySheets, setCategorySheets] = useState<Record<string, string[][]>>(
+    () => Object.fromEntries(MACRO_CATEGORIES.map(category => [category.id, blankSheet()])),
+  )
+  // Foglio come è stato precaricato (per inviare solo le celle modificate) e
+  // suggerimenti delle celle lasciate vuote (spot e listini in un'altra unità).
+  const [sheetBaselines, setSheetBaselines] = useState<Record<string, string[][]>>({})
+  const [sheetHints, setSheetHints] = useState<Record<string, SheetHints>>({})
 
   const currentSheetKey = activeSubcategorySheet !== 'all' ? `${activeCategorySheet}:${activeSubcategorySheet}` : activeCategorySheet
   const sheet = categorySheets[currentSheetKey] || blankSheet()
+  const currentHints = sheetHints[currentSheetKey] || {}
+  const sheetChanges = useMemo(
+    () => changedSheetForPreview(sheet, sheetBaselines[currentSheetKey]),
+    [sheet, sheetBaselines, currentSheetKey],
+  )
+
+  function storeLoadedSheet(key: string, data: MatrixResponse) {
+    const { grid, hints } = sheetFromMatrix(data)
+    setCategorySheets(prev => ({ ...prev, [key]: grid }))
+    setSheetBaselines(prev => ({ ...prev, [key]: grid }))
+    setSheetHints(prev => ({ ...prev, [key]: hints }))
+  }
 
   function setSheet(updater: string[][] | ((current: string[][]) => string[][])) {
     setCategorySheets(prev => {
@@ -235,7 +356,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       const currentOffset = customOffset !== undefined ? customOffset : offset
       const currentCat = customCategory !== undefined ? customCategory : selectedMatrixCategory
       const currentSubcat = customSubcategory !== undefined ? customSubcategory : selectedMatrixSubcategory
-      const query = new URLSearchParams({ limit: '100', offset: String(currentOffset) })
+      const query = new URLSearchParams({ limit: String(MATRIX_PAGE_SIZE), offset: String(currentOffset) })
       if (search.trim()) query.set('search', search.trim())
       if (currentCat && currentCat !== 'all') query.set('category', currentCat)
       if (currentSubcat && currentSubcat !== 'all') query.set('subcategory', currentSubcat)
@@ -271,20 +392,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   async function loadFullPriceSheet() {
     setLoading(true); setError(null)
     try {
-      const [bevData, foodData, matData] = await Promise.all([
-        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Beverage') as Promise<MatrixResponse>,
-        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Food') as Promise<MatrixResponse>,
-        fetchWithAuth('/smart-price-sheet/matrix?limit=500&offset=0&category=Materiali') as Promise<MatrixResponse>,
-      ])
-
-      setCategorySheets(prev => ({
-        ...prev,
-        'Beverage': sheetFromMatrix(bevData),
-        'Food': sheetFromMatrix(foodData),
-        'Materiali': sheetFromMatrix(matData),
-      }))
+      const loaded = await Promise.all(MACRO_CATEGORIES.map(category => fetchAllMatrixPages(category.id)))
+      MACRO_CATEGORIES.forEach((category, index) => storeLoadedSheet(category.id, loaded[index]))
       setSheetInitialized(true)
-      setNotice(`Fogli precaricati: Beverage (${bevData.rows.length}), Food (${foodData.rows.length}), Materiali di consumo (${matData.rows.length}).`)
+      setNotice(`Fogli precaricati con i soli listini nell'unità della colonna C: ${MACRO_CATEGORIES.map((category, index) => `${category.label} (${loaded[index].rows.length})`).join(', ')}. Spot e listini in un'altra unità restano vuoti con il prezzo come suggerimento.`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -436,7 +547,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       const data = await fetchWithAuth('/smart-price-sheet/preview', {
         method: 'POST',
         body: JSON.stringify({
-          text: sheetText(sheet),
+          // Solo le celle modificate: un prezzo precaricato e non toccato non si riscrive.
+          text: sheetChanges.text,
           supplier_mapping: supplierMapping,
           product_mapping: productMapping,
           effective_date: effectiveDate,
@@ -525,17 +637,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
     setLoading(true); setError(null)
     try {
-      let url = `/smart-price-sheet/matrix?limit=500&offset=0&category=${encodeURIComponent(cat)}`
-      if (sub !== 'all') {
-        url += `&subcategory=${encodeURIComponent(sub)}`
-      }
-      const data = await fetchWithAuth(url) as MatrixResponse
+      const data = await fetchAllMatrixPages(cat, sub)
       setSheetCatalog(data)
-      const newSheet = sheetFromMatrix(data)
-      setCategorySheets(prev => ({
-        ...prev,
-        [key]: newSheet
-      }))
+      storeLoadedSheet(key, data)
       const suppCount = data.suppliers?.length || 0
       setNotice(`Foglio "${cat}${sub !== 'all' ? ` · ${sub}` : ''}" caricato con ${data.rows.length} prodotti attivi e ${suppCount} fornitori collegati.`)
     } catch (err) {
@@ -557,8 +661,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     setPreview(null); setSupplierMapping({}); setProductMapping({})
   }
 
-  const hasSheetPrices = sheet.slice(1).some(row => row.slice(3).some(cell => cell.trim()))
-  const hasOrderNames = sheet.slice(1).some(row => row[0]?.trim())
+  const hasSheetPrices = sheetChanges.changedCells > 0
+  const hasOrderNames = sheetChanges.changedOrderNames > 0
 
   function isSheetCellEligibleFor(grid: string[][], rowIndex: number, columnIndex: number) {
     const catalog = sheetCatalog || matrix
@@ -630,6 +734,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             }}><Building2 size={14} /> Configura settore</button>}
           </div>
         ))}
+        {(preview.warnings || []).map((item, index) => (
+          <div key={`w${index}`} style={{ color: 'var(--warn)', fontSize: 13 }}>Riga {item.row || '—'}: {item.message}</div>
+        ))}
         {preview.supplier_mapping.filter(item => !item.supplier_id && item.method !== 'auto_create').map(item => (
           <label key={item.header} style={{ display: 'grid', gridTemplateColumns: 'minmax(180px,1fr) 2fr', gap: 12, alignItems: 'center' }}>
             <span>Colonna “{item.header}”</span>
@@ -658,7 +765,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <table className="ds-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead><tr><th style={{ textAlign: 'left' }}>Prodotto</th><th>Fornitore</th><th>UoM</th><th>Prima</th><th>Dopo</th><th>Esito</th></tr></thead>
             <tbody>{preview.changes.slice(0, 300).map((item, index) => <tr key={index}>
-              <td style={{ padding: 8 }}>{item.product_name}</td><td style={{ textAlign: 'center' }}>{item.supplier_name}</td><td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--accent-text)' }}>{item.uom}</td><td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(item.old_price)}</td><td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(item.new_price)}</td><td style={{ textAlign: 'center' }}>{item.action}</td>
+              <td style={{ padding: 8 }}>{item.product_name}</td><td style={{ textAlign: 'center' }}>{item.supplier_name}</td><td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--accent-text)' }}>{item.old_uom && item.old_uom !== item.uom ? `${item.old_uom} → ${item.uom}` : item.uom}</td><td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(item.old_price)}</td><td style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(item.new_price)}</td><td style={{ textAlign: 'center' }}>{item.action}</td>
             </tr>)}</tbody>
           </table>
         </div>
@@ -862,7 +969,13 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   disabled={!isAdmin}
                   onClick={() => {
                     if (isAdmin) {
-                      setEditing({ product: row, supplier, price: offer?.price || '', uom: offer?.uom || row.comparison_unit || 'Pz' })
+                      // Un prezzo di fattura non diventa listino da solo: per gli spot il prezzo resta da scrivere.
+                      setEditing({
+                        product: row,
+                        supplier,
+                        price: offer?.source_type === 'contratto' ? offer.price : '',
+                        uom: offer?.source_type === 'contratto' && offer.uom ? offer.uom : row.comparison_unit || 'Pz',
+                      })
                       setForceLabel(row.policy?.preferred_supplier_id === supplier.id ? (row.policy?.reason || '') : '')
                     }
                   }}
@@ -882,7 +995,18 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                   }}
                 >
                   {offer ? <>
-                    <strong style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(offer.price)}</strong>
+                    <strong style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{money(offer.price)}{offer.uom ? ` / ${offer.uom}` : ''}</strong>
+                    {offer.unit_price_normalized != null && (offer.unit_price_normalized !== offer.price || unitFamily(offer.uom) !== unitFamily(row.comparison_unit)) && (
+                      <small title={offer.conversion_note || undefined} style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-secondary)' }}>= {money(offer.unit_price_normalized)} / {row.comparison_unit || 'Pz'}</small>
+                    )}
+                    {offer.unit_price_normalized == null && (
+                      <small title={offer.conversion_note || undefined} style={{ color: 'var(--warn)', fontWeight: 600 }}>
+                        non confrontabile · {offer.source_type === 'contratto' && !offer.uom ? 'unità mancante' : 'conversione incerta'}
+                      </small>
+                    )}
+                    {offer.source_type === 'spot' && offer.invoice_date && (
+                      <small style={{ color: offer.stale ? 'var(--warn)' : 'var(--text-secondary)' }}>fattura {shortDate(offer.invoice_date)}{offer.stale ? ' · vecchio' : ''}</small>
+                    )}
                     <div style={{ fontSize: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                       {isForced ? (
                         <span style={{ color: 'var(--warn)', fontWeight: 700, background: 'var(--bg-inset)', padding: '1px 5px', borderRadius: 4 }}>
@@ -902,7 +1026,11 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             })}
           </tr>)}</tbody>
         </table></div>}
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}><button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 50))}>Indietro</button><button className="btn" disabled={!matrix || offset + 50 >= matrix.total} onClick={() => setOffset(offset + 50)}>Avanti</button></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - MATRIX_PAGE_SIZE))}>Indietro</button>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{matrix?.total ? `${offset + 1}–${Math.min(offset + MATRIX_PAGE_SIZE, matrix.total)} di ${matrix.total}` : '0 di 0'}</span>
+          <button className="btn" disabled={!matrix || offset + MATRIX_PAGE_SIZE >= matrix.total} onClick={() => setOffset(offset + MATRIX_PAGE_SIZE)}>Avanti</button>
+        </div>
       </div>
 
       {editing && (
@@ -1135,16 +1263,17 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
                 <th style={{ width: 44, minWidth: 44, height: 36, position: 'sticky', left: 0, zIndex: 4, textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-inset)', borderRight: '1px solid var(--line-strong)', borderBottom: '1px solid var(--line)', fontWeight: 500 }}>{rowIndex + 1}</th>
                 {row.map((cell, columnIndex) => {
                   const eligible = isSheetCellEligible(rowIndex, columnIndex)
+                  const hint = currentHints[`${rowIndex}:${columnIndex}`]
                   const width = columnIndex === 0 ? 170 : columnIndex === 1 ? 260 : columnIndex === 2 ? 110 : 150
                   return <td key={columnIndex} style={{ padding: 0, minWidth: width, borderRight: '1px solid var(--line)', borderBottom: '1px solid var(--line)', background: !eligible ? 'var(--bg-app)' : rowIndex === 0 ? 'var(--accent-bg)' : columnIndex < 3 ? 'var(--bg-inset)' : 'transparent' }}>
                     <input
                       aria-label={`Cella ${columnLabel(columnIndex)}${rowIndex + 1}`}
                       value={cell}
                       disabled={!eligible}
-                      title={!eligible ? 'Fornitore fuori dal settore di questo prodotto' : undefined}
+                      title={!eligible ? 'Fornitore fuori dal settore di questo prodotto' : hint ? `${hint}: non precaricato. Scrivi il prezzo nell'unità della colonna C per salvarlo.` : undefined}
                       onChange={event => updateSheetCell(rowIndex, columnIndex, event.target.value)}
                       onPaste={event => pasteIntoSheet(event, rowIndex, columnIndex)}
-                      placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale' : columnIndex === 2 ? 'Unità di misura' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale del prodotto' : columnIndex === 2 ? 'Es. Pz, Lt, Kg' : eligible ? '—' : 'fuori settore'}
+                      placeholder={rowIndex === 0 ? (columnIndex === 0 ? 'Nome rapido (facoltativo)' : columnIndex === 1 ? 'Prodotto reale' : columnIndex === 2 ? 'Unità di misura' : 'Nome fornitore') : columnIndex === 0 ? 'Es. GUANTI' : columnIndex === 1 ? 'Descrizione reale del prodotto' : columnIndex === 2 ? 'Es. Pz, Lt, Kg' : !eligible ? 'fuori settore' : hint || '—'}
                       style={{ width: '100%', minWidth: width, height: 36, boxSizing: 'border-box', padding: '0 10px', border: 0, outline: 'none', color: eligible ? 'var(--text-primary)' : 'var(--text-muted)', background: 'transparent', fontWeight: rowIndex === 0 || columnIndex < 3 ? 600 : 400, textAlign: columnIndex > 2 && rowIndex > 0 ? 'right' : 'left', cursor: eligible ? 'text' : 'not-allowed' }}
                       onFocus={event => { event.currentTarget.style.boxShadow = 'inset 0 0 0 2px var(--accent)' }}
                       onBlur={event => { event.currentTarget.style.boxShadow = 'none' }}
@@ -1170,8 +1299,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             <span style={{ color: autoCreateProducts ? 'var(--accent-text)' : 'inherit' }}>✨ <b>Crea automaticamente</b> prodotti mancanti</span>
           </label>
           <button className="btn btn-primary" disabled={(!hasSheetPrices && !hasOrderNames) || loading} onClick={createPastePreview} style={{ alignSelf: 'flex-end' }}><ClipboardPaste size={16} /> Controlla modifiche</button>
-          <span style={{ color: 'var(--text-secondary)', fontSize: 12, maxWidth: 350 }}>
-            L'unità di misura viene determinata dalla colonna <b>C (Unità di misura)</b> o dall'anagrafica.
+          <span style={{ color: 'var(--text-secondary)', fontSize: 12, maxWidth: 420 }}>
+            {sheetChanges.changedCells} prezzi modificati · {sheetChanges.changedOrderNames} nomi rapidi. Si inviano solo le celle cambiate; un prezzo vale nell'unità della colonna <b>C (Unità di misura)</b>. Le celle grigie suggerite (fattura o listino in un'altra unità) non vengono salvate.
           </span>
         </div>
       </div>
