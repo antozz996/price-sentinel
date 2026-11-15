@@ -20,8 +20,24 @@ from app.models.fatture import Fattura
 from app.models.ordini import Ordine
 from app.models.location import Location
 from app.services.auth import hash_password, create_access_token
+from app.services.purchase_lines import CREDIT_NOTE_TYPES, sign_sql
 
 router = APIRouter()
+
+
+def invoice_totals_select():
+    """Fatture (TD01/TD24/...), note di credito (TD04/TD08) e volume con segno.
+
+    Nel database le note di credito hanno totale positivo: il volume transato le
+    sottrae (segno della base comune purchase_lines), il conteggio le tiene a parte.
+    """
+    is_credit = Fattura.tipo_documento.in_(CREDIT_NOTE_TYPES)
+    return select(
+        func.count(Fattura.id).filter(~is_credit).label("invoices"),
+        func.count(Fattura.id).filter(is_credit).label("credit_notes"),
+        func.coalesce(func.sum(sign_sql(Fattura.tipo_documento) * Fattura.totale_imponibile), 0).label("spend_volume"),
+        func.coalesce(func.sum(Fattura.totale_imponibile).filter(is_credit), 0).label("credit_notes_volume"),
+    )
 
 # Fail closed: no default superadmin token, including on staging.
 # Operators must provision a random, unique 32+ character token separately.
@@ -76,19 +92,21 @@ async def get_god_overview(
 ) -> Dict[str, Any]:
     tenants = (await db.scalars(select(TenantInstance).order_by(TenantInstance.id))).all()
     
-    tot_fatture = (await db.scalars(select(func.count(Fattura.id)))).first() or 0
+    invoices = (await db.execute(invoice_totals_select())).one()
     tot_ordini = (await db.scalars(select(func.count(Ordine.id)))).first() or 0
     tot_utenti = (await db.scalars(select(func.count(Utente.id)))).first() or 0
     tot_locations = (await db.scalars(select(func.count(Location.id)))).first() or 0
-    tot_volume = (await db.scalars(select(func.coalesce(func.sum(Fattura.totale_imponibile), 0)))).first() or 0
 
     return {
         "total_tenants": len(tenants),
-        "total_invoices": tot_fatture,
+        # Fatture e note di credito contate a parte; il volume è al netto dei resi.
+        "total_invoices": int(invoices.invoices or 0),
+        "total_credit_notes": int(invoices.credit_notes or 0),
+        "total_credit_notes_volume": float(invoices.credit_notes_volume or 0),
         "total_orders": tot_ordini,
         "total_users": tot_utenti,
         "total_locations": tot_locations,
-        "total_spend_volume": float(tot_volume),
+        "total_spend_volume": float(invoices.spend_volume or 0),
         "system_status": "operational",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "database_connected": True
@@ -105,10 +123,9 @@ async def list_all_tenants(
 
     for t in tenants:
         t_id = t.id
-        n_fatture = (await db.scalars(select(func.count(Fattura.id)).where(Fattura.tenant_id == t_id))).first() or 0
+        invoices = (await db.execute(invoice_totals_select().where(Fattura.tenant_id == t_id))).one()
         n_ordini = (await db.scalars(select(func.count(Ordine.id)).where(Ordine.tenant_id == t_id))).first() or 0
         n_utenti = (await db.scalars(select(func.count(Utente.id)).where(Utente.tenant_id == t_id))).first() or 0
-        vol = (await db.scalars(select(func.coalesce(func.sum(Fattura.totale_imponibile), 0)).where(Fattura.tenant_id == t_id))).first() or 0
 
         # Verifica se l'admin utente esiste
         admin_user = (await db.scalars(select(Utente).where(Utente.email == t.admin_email))).first()
@@ -124,10 +141,11 @@ async def list_all_tenants(
             "access_url": t.access_url,
             "status": t.status or "attiva",
             "created_at": t.created_at.isoformat() if t.created_at else None,
-            "invoices_count": n_fatture,
+            "invoices_count": int(invoices.invoices or 0),
+            "credit_notes_count": int(invoices.credit_notes or 0),
             "orders_count": n_ordini,
             "users_count": n_utenti,
-            "spend_volume": float(vol),
+            "spend_volume": float(invoices.spend_volume or 0),
             "admin_active": admin_user.attivo if admin_user else False,
         })
 
