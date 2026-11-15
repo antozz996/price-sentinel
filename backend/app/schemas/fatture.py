@@ -76,6 +76,11 @@ class RigaFatturaResponse(BaseModel):
     pfa_valore: Decimal | None = None
     netto_rientro: Decimal | None = None
 
+    # Prezzo netto di fattura (pu x (1 - sconto/100)) e importo riga
+    # (quantita x prezzo netto, negativo per le note di credito TD04/TD08).
+    prezzo_netto_fattura: Decimal | None = None
+    importo_riga: Decimal | None = None
+
     # Dettaglio dell'eventuale scostamento prezzo associato alla riga.
     anomalia_id: int | None = None
     anomalia_stato: str | None = None
