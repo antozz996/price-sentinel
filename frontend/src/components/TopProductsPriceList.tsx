@@ -2,16 +2,36 @@ import { useState, useEffect } from 'react';
 import { FileSpreadsheet, TrendingUp, Coins, Package, ShoppingCart, Calendar, ArrowUpDown } from 'lucide-react';
 import { API_BASE, getHeaders } from '../api';
 
+interface QuantityPart {
+  unita: string;
+  convertita: boolean;
+  quantita: number;
+}
+
 interface ProductItem {
   sku_interno: string;
   descrizione: string;
-  quantita_totale: number;
-  quantita_omaggio: number;
-  unita_misura: string;
+  fornitori: string;
+  // Valori unici solo se tutte le righe della voce stanno in una sola unità, altrimenti null.
+  quantita_totale: number | null;
+  quantita_omaggio: number | null;
+  quantita_resa: number | null;
+  unita_misura: string | null;
+  prezzo_medio: number | null;
+  quantita_per_unita: QuantityPart[];
   spesa_totale: number;
-  numero_acquisti: number;
-  prezzo_medio: number;
+  numero_fatture: number;
+  solo_resi: boolean;
 }
+
+interface TopProductsResponse {
+  prodotti: ProductItem[];
+  totale_spesa: number;
+  numero_prodotti: number;
+}
+
+const fmtQty = (value: number) => value.toLocaleString('it-IT', { maximumFractionDigits: 2 });
+const fmtEur = (value: number) => `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 interface SupplierItem {
   id: number;
@@ -26,6 +46,9 @@ interface LocationItem {
 export default function TopProductsPriceList() {
   // State for data
   const [products, setProducts] = useState<ProductItem[]>([]);
+  // Spesa netta e numero di TUTTE le voci filtrate, calcolati dal server (non solo le prime N).
+  const [allSpend, setAllSpend] = useState<number>(0);
+  const [allCount, setAllCount] = useState<number>(0);
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
   const [locations, setLocations] = useState<LocationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +97,10 @@ export default function TopProductsPriceList() {
           headers: getHeaders()
         });
         if (res.ok) {
-          setProducts(await res.json());
+          const data: TopProductsResponse = await res.json();
+          setProducts(data.prodotti);
+          setAllSpend(data.totale_spesa);
+          setAllCount(data.numero_prodotti);
         }
       } catch (err) {
         console.error('Error fetching top products list', err);
@@ -120,9 +146,12 @@ export default function TopProductsPriceList() {
   };
 
   // Helper calculation for KPI cards
-  const totalSpend = products.reduce((sum, p) => sum + p.spesa_totale, 0);
-  const totalVolume = products.reduce((sum, p) => sum + p.quantita_totale, 0);
-  const avgUnitPrice = totalVolume > 0 ? totalSpend / totalVolume : 0;
+  // Quantità e costo medio hanno senso solo se tutte le voci in elenco sono nella stessa unità.
+  const units = new Set(products.flatMap(p => p.quantita_per_unita.map(q => q.unita)));
+  const singleUnit = units.size === 1 && products.every(p => p.quantita_totale !== null) ? [...units][0] : null;
+  const listSpend = products.reduce((sum, p) => sum + p.spesa_totale, 0);
+  const totalVolume = singleUnit ? products.reduce((sum, p) => sum + (p.quantita_totale ?? 0), 0) : null;
+  const avgUnitPrice = totalVolume && totalVolume > 0 ? listSpend / totalVolume : null;
 
   const handleLocationToggle = (id: number) => {
     if (selectedLocations.includes(id)) {
@@ -152,8 +181,11 @@ export default function TopProductsPriceList() {
             <Package size={24} />
           </div>
           <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Articoli Listino</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{products.length}</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prodotti in elenco</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+              {products.length}
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 400 }}> di {allCount}</span>
+            </div>
           </div>
         </div>
 
@@ -163,9 +195,12 @@ export default function TopProductsPriceList() {
             <Coins size={24} />
           </div>
           <div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Volume Spesa</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Spesa netta totale (tutti i prodotti)</div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-              € {totalSpend.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {fmtEur(allSpend)}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              in elenco {fmtEur(listSpend)}, note di credito sottratte
             </div>
           </div>
         </div>
@@ -178,7 +213,7 @@ export default function TopProductsPriceList() {
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quantità Totale</div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-              {totalVolume.toLocaleString('it-IT', { maximumFractionDigits: 0 })}
+              {totalVolume === null ? `unità miste (${units.size})` : `${fmtQty(totalVolume)} ${singleUnit}`}
             </div>
           </div>
         </div>
@@ -191,7 +226,7 @@ export default function TopProductsPriceList() {
           <div>
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Costo Medio Unità</div>
             <div style={{ fontSize: '1.6rem', fontWeight: 600, marginTop: '4px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-              € {avgUnitPrice.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {avgUnitPrice === null ? 'n.d.' : `${fmtEur(avgUnitPrice)} / ${singleUnit}`}
             </div>
           </div>
         </div>
@@ -371,7 +406,7 @@ export default function TopProductsPriceList() {
           <div>
             <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Elenco Benchmark Listino</h3>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Mostra i prezzi medi storici dei {products.length} prodotti più acquistati in base ai filtri attivi.
+              Mostra i prezzi medi netti dei {products.length} prodotti più acquistati in base ai filtri attivi. Le note di credito sono sottratte; le unità che non si possono convertire restano separate (*).
             </p>
           </div>
           
@@ -397,9 +432,10 @@ export default function TopProductsPriceList() {
                 <th style={{ padding: '16px 12px', textAlign: 'center', width: '60px', borderBottom: '1px solid var(--line)' }}>Pos.</th>
                 <th style={{ padding: '16px 12px', width: '120px', borderBottom: '1px solid var(--line)' }}>SKU Interno</th>
                 <th style={{ padding: '16px 12px', borderBottom: '1px solid var(--line)' }}>Descrizione Prodotto</th>
+                <th style={{ padding: '16px 12px', borderBottom: '1px solid var(--line)' }}>Fornitori</th>
                 <th style={{ padding: '16px 12px', textAlign: 'center', width: '80px', borderBottom: '1px solid var(--line)' }}>U.M.</th>
                 <th style={{ padding: '16px 12px', textAlign: 'right', width: '130px', borderBottom: '1px solid var(--line)' }}>Quantità Totale</th>
-                <th style={{ padding: '16px 12px', textAlign: 'right', width: '110px', borderBottom: '1px solid var(--line)' }}>N. Acquisti</th>
+                <th style={{ padding: '16px 12px', textAlign: 'right', width: '110px', borderBottom: '1px solid var(--line)' }} title="Fatture d'acquisto distinte (le note di credito non contano)">N. Fatture</th>
                 <th style={{ padding: '16px 12px', textAlign: 'right', width: '140px', color: 'var(--text-primary)', fontWeight: 600, borderBottom: '1px solid var(--line)' }}>Prezzo Medio</th>
                 <th style={{ padding: '16px 12px', textAlign: 'right', width: '140px', borderBottom: '1px solid var(--line)' }}>Spesa Totale</th>
               </tr>
@@ -407,13 +443,13 @@ export default function TopProductsPriceList() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     Caricamento dati in corso...
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                     Nessun prodotto trovato per i criteri di ricerca impostati.
                   </td>
                 </tr>
@@ -448,20 +484,37 @@ export default function TopProductsPriceList() {
                       <td style={{ padding: '12px 10px', fontWeight: 500, color: 'var(--text-primary)' }}>
                         {p.descrizione || 'N/A'}
                       </td>
+                      <td style={{ padding: '12px 10px', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+                        {p.fornitori}
+                      </td>
                       <td style={{ padding: '12px 10px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                        {p.unita_misura}
+                        {p.unita_misura ?? 'unità diverse'}
                       </td>
                       <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        {p.quantita_totale.toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                        {p.quantita_totale !== null ? (
+                          fmtQty(p.quantita_totale)
+                        ) : (
+                          p.quantita_per_unita.map((q, i) => (
+                            <div key={i} title={q.convertita ? 'Convertito nell’unità della voce' : 'Non convertito: confezione non nota'}>
+                              {fmtQty(q.quantita)} {q.unita}{!q.convertita && ' *'}
+                            </div>
+                          ))
+                        )}
+                        {(p.quantita_resa ?? 0) > 0 && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--warn)' }} title="Quantità resa con note di credito, già sottratta">
+                            di cui resi: -{fmtQty(p.quantita_resa ?? 0)}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '12px 10px', textAlign: 'right', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        {p.numero_acquisti}
+                        {p.numero_fatture}
+                        {p.solo_resi && <div style={{ fontSize: '0.72rem', color: 'var(--warn)' }}>solo resi</div>}
                       </td>
                       <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {p.prezzo_medio.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {p.prezzo_medio === null ? 'n.d.' : fmtEur(p.prezzo_medio)}
                       </td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right', color: 'var(--text-primary)', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        € {p.spesa_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td style={{ padding: '12px 10px', textAlign: 'right', color: p.spesa_totale < 0 ? 'var(--warn)' : 'var(--text-primary)', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                        {fmtEur(p.spesa_totale)}
                       </td>
                     </tr>
                   );

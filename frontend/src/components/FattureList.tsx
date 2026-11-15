@@ -27,6 +27,10 @@ interface RigaFattura {
   prezzo_unitario_fatturato: number;
   quantita: number;
   prezzo_netto_normalizzato: number;
+  sconto_percentuale?: number | null;
+  // Prezzo netto di fattura e importo riga calcolati dal server (negativo per le note di credito).
+  prezzo_netto_fattura?: number | null;
+  importo_riga?: number | null;
   unita_misura_fattura: string | null;
   aliquota_iva: number | null;
   stato_matching: string;
@@ -42,6 +46,23 @@ interface RigaFattura {
 }
 
 interface Fornitore { id: number; nome_azienda: string; }
+
+// TD04 e TD08 (nota di credito semplificata SdI) riducono la spesa: importi negativi.
+const isCreditNote = (tipo: string | null | undefined) => tipo === 'TD04' || tipo === 'TD08';
+
+const formatEuro = (value: number) =>
+  `${value < 0 ? '-' : ''}€${Math.abs(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Prezzo per unità di fattura: pu x (1 - sconto/100), mai il prezzo convertito a pezzo.
+const lineNetPrice = (r: RigaFattura) =>
+  r.prezzo_netto_fattura != null
+    ? Number(r.prezzo_netto_fattura)
+    : Number(r.prezzo_unitario_fatturato) * (1 - Number(r.sconto_percentuale || 0) / 100);
+
+const lineAmount = (r: RigaFattura, tipo: string) =>
+  r.importo_riga != null
+    ? Number(r.importo_riga)
+    : (isCreditNote(tipo) ? -1 : 1) * lineNetPrice(r) * Number(r.quantita);
 interface Location { id: number; nome_struttura: string; }
 
 const MARKERS = [
@@ -413,11 +434,18 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                             )}
                           </div>
                         </td>
-                        <td style={{ ...tdStyle, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{f.numero_documento}</td>
+                        <td style={{ ...tdStyle, fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                          {f.numero_documento}
+                          {isCreditNote(f.tipo_documento) && (
+                            <span title={`Nota di credito (${f.tipo_documento})`} style={{ marginLeft: '8px', background: 'var(--ok-bg)', color: 'var(--ok)', padding: '1px 8px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>
+                              NC
+                            </span>
+                          )}
+                        </td>
                         <td style={tdStyle}>{new Date(f.data_documento).toLocaleDateString('it-IT')}</td>
                         <td style={tdStyle}>{f.fornitore_nome}</td>
                         <td style={tdStyle}>{f.location_nome}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€{f.totale_imponibile.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: isCreditNote(f.tipo_documento) ? 'var(--ok)' : undefined }}>{formatEuro((isCreditNote(f.tipo_documento) ? -1 : 1) * Number(f.totale_imponibile))}</td>
                         <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{f.n_righe}</td>
                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                           {f.n_anomalie > 0 ? (
@@ -464,21 +492,24 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                                         <td style={{ ...tdStyle, fontSize: '0.85rem' }}>{r.descrizione_fornitore_raw || '—'}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{r.codice_fornitore_raw || '—'}</td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                                          <div>€{Number(r.prezzo_netto_normalizzato).toFixed(2)}</div>
-                                          {r.netto_rientro !== undefined && r.netto_rientro !== null && Number(r.netto_rientro) !== Number(r.prezzo_netto_normalizzato) && (
+                                          <div>{formatEuro(lineNetPrice(r))}</div>
+                                          {r.netto_rientro !== undefined && r.netto_rientro !== null && Number(r.netto_rientro) !== lineNetPrice(r) && (
                                             <div style={{
                                               fontSize: '0.72rem', color: 'var(--ok)', fontWeight: 600, marginTop: '2px',
                                               display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '3px'
                                             }}>
-                                              <span>Net: €{Number(r.netto_rientro).toFixed(2)}</span>
+                                              <span>Net: {formatEuro(Number(r.netto_rientro))}</span>
                                               <span style={{ fontSize: '0.65rem', background: 'var(--ok-bg)', padding: '1px 5px', borderRadius: '999px' }}>
                                                 {r.pfa_tipo === 'fisso' ? `-${Number(r.pfa_valore).toFixed(2)}€` : `-${(Number(r.pfa_valore)*100).toFixed(0)}%`}
                                               </span>
                                             </div>
                                           )}
                                         </td>
-                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{Number(r.quantita).toFixed(2)}</td>
-                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€{Number(r.prezzo_netto_normalizzato * r.quantita).toFixed(2)}</td>
+                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                                          {Number(r.quantita).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
+                                          {r.unita_misura_fattura && <span style={{ marginLeft: '4px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.unita_misura_fattura}</span>}
+                                        </td>
+                                        <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatEuro(lineAmount(r, f.tipo_documento))}</td>
                                         <td style={{ ...tdStyle, textAlign: 'center' }}>
                                           <span style={{
                                             padding: '2px 8px', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600,
