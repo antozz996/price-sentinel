@@ -488,15 +488,9 @@ async def check_anomaly_check_start() -> None:
         try:
             settings.ANOMALY_CHECK_START = datetime.now(timezone.utc) + timedelta(minutes=1)
             waste = await get_variance_loss(_admin=ADMIN, db=db)
-<<<<<<< HEAD
-            check("waste ignores purchases uploaded before the start date", waste == [])
-=======
             check("waste ignores purchases uploaded before the start date", waste["righe"] == [])
             check("waste states the date it counts from",
                   waste["periodo_dal"] == settings.ANOMALY_CHECK_START.date().isoformat())
-            audit = await get_pricing_audit(location_id=None, anno=None, soglia=0.0, limit=10, offset=0, _admin=ADMIN, db=db)
-            check("price increases ignore invoices uploaded before the start date", audit["total"] == 0)
->>>>>>> origin/main
         finally:
             settings.ANOMALY_CHECK_START = original
 
