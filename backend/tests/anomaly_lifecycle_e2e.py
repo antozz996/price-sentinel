@@ -398,7 +398,7 @@ async def check_variance_counts_each_line_once() -> None:
         await db.commit()
 
     async with async_session_factory() as db:
-        rows = await get_variance_loss(_admin=ADMIN, db=db)
+        rows = (await get_variance_loss(_admin=ADMIN, db=db))["righe"]
     row = next(item for item in rows if item["sku_interno"] == "MULTI-SUPPLIER")
     check("variance counts each invoice line once", row["numero_acquisti"] == 2)
     check("variance is not multiplied by active price lists", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
@@ -417,11 +417,19 @@ async def check_excluded_lines_do_not_set_reference_price() -> None:
         await db.commit()
 
     async with async_session_factory() as db:
-        rows = await get_variance_loss(_admin=ADMIN, db=db)
+        rows = (await get_variance_loss(_admin=ADMIN, db=db))["righe"]
     row = next(item for item in rows if item["sku_interno"] == "OUTLIER")
     check("an excluded line does not become the reference price", Decimal(str(row["prezzo_minimo"])) == Decimal("10.0"))
     check("waste is measured against the real reference price", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
-    check("an excluded line still counts as a purchase", row["numero_acquisti"] == 3)
+    check("an excluded line leaves the waste totals too", row["numero_acquisti"] == 2)
+    check("waste is measured against the listino valid at the line date", row["fonte_riferimento"] == "listino")
+
+    from app.api.v1.intelligence import get_efficiency_leaderboard
+
+    async with async_session_factory() as db:
+        board = await get_efficiency_leaderboard(_admin=ADMIN, db=db)
+    check("efficiency leaderboard runs on PostgreSQL", bool(board) and board[0]["rank"] == 1
+          and all(item["totali"] >= item["ottimali"] for item in board))
 
 
 async def check_anomaly_check_start() -> None:
@@ -450,7 +458,9 @@ async def check_anomaly_check_start() -> None:
         try:
             settings.ANOMALY_CHECK_START = datetime.now(timezone.utc) + timedelta(minutes=1)
             waste = await get_variance_loss(_admin=ADMIN, db=db)
-            check("waste ignores purchases uploaded before the start date", waste == [])
+            check("waste ignores purchases uploaded before the start date", waste["righe"] == [])
+            check("waste states the date it counts from",
+                  waste["periodo_dal"] == settings.ANOMALY_CHECK_START.date().isoformat())
             audit = await get_pricing_audit(location_id=None, anno=None, soglia=0.0, limit=10, offset=0, _admin=ADMIN, db=db)
             check("price increases ignore invoices uploaded before the start date", audit["total"] == 0)
         finally:

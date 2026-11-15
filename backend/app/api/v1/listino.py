@@ -610,6 +610,119 @@ async def import_multi_supplier(
 # Estrazione Listino da Storico Fatture
 # ─────────────────────────────────────────────
 
+def group_invoice_price_lines(rows, conversions, supplier_name: str, price_strategy: str) -> list[dict]:
+    """Raggruppa le righe d'acquisto (purchase_lines_select, dalla più recente) in voci di listino.
+
+    - prezzo = netto di fattura pu x (1 - sconto/100), mai prezzo_netto_normalizzato;
+    - riga collegata con conversione affidabile: una voce per (SKU, fattore), cioè per
+      confezione fisica, anche se il fornitore scrive CT o CNF; l'unità mostrata è la
+      più frequente;
+    - riga collegata senza conversione affidabile: (SKU, unità normalizzata);
+    - riga non collegata: (codice, descrizione, unità normalizzata).
+    Unità diverse con confezioni diverse restano voci separate: i prezzi non si mescolano.
+    """
+    from app.services.purchase_lines import conversion_key
+
+    supp_prefix = "".join(c for c in supplier_name[:3] if c.isalnum()).upper() or "SKU"
+    grouped: dict[tuple, dict] = {}
+    for row in rows:
+        clean_desc = (row.descrizione or "").strip()
+        if not clean_desc:
+            continue
+        clean_code = (row.codice_fornitore or "").strip()
+        unit = row.unita
+        if row.sku_interno:
+            conversion = conversions.get(conversion_key(row))
+            if conversion is not None and conversion.reliable and conversion.factor is not None:
+                key = ("sku", row.sku_interno, "factor", conversion.factor)
+            else:
+                key = ("sku", row.sku_interno, "unit", unit)
+        else:
+            key = ("raw", clean_code.upper(), clean_desc.upper(), unit)
+
+        group = grouped.get(key)
+        if group is None:
+            group = grouped[key] = {
+                "sku_interno": row.sku_interno or (
+                    f"{supp_prefix}-{clean_code}" if clean_code
+                    else f"{supp_prefix}-{clean_desc[:12].replace(' ', '-').upper()}"
+                ),
+                "descrizione": clean_desc,
+                "codice_fornitore": clean_code or None,
+                "units": {},
+                "prices": [],
+                "quantities": [],
+                "latest_price": Decimal(str(row.netto_unitario or 0)),
+                "latest_date": row.data_documento,
+            }
+        group["units"][unit] = group["units"].get(unit, 0) + 1
+        group["prices"].append(Decimal(str(row.netto_unitario or 0)))
+        group["quantities"].append(Decimal(str(row.quantita or 0)))
+
+    items = []
+    for group in grouped.values():
+        prices = group["prices"]
+        qtys = group["quantities"]
+        if price_strategy == "min":
+            chosen_price = min(prices)
+        elif price_strategy == "avg":
+            total_qty = sum(qtys)
+            chosen_price = (
+                sum(p * q for p, q in zip(prices, qtys)) / total_qty if total_qty > 0
+                else sum(prices) / len(prices)
+            ).quantize(Decimal("0.0001"))
+        else:
+            chosen_price = group["latest_price"]
+        # Most frequent unit; ties go to the most recent one (first seen).
+        unit = max(group["units"], key=lambda u: group["units"][u])
+        if unit == "N.D.":
+            unit = ""  # unknown unit: never guess "Pz" in a price list meant to be imported
+        latest_date = group["latest_date"]
+        items.append({
+            "sku_interno": group["sku_interno"],
+            "descrizione": group["descrizione"],
+            "codice_fornitore": group["codice_fornitore"],
+            "prezzo_pattuito": float(chosen_price),
+            "unita_misura": unit,
+            "data_inizio_validita": latest_date.strftime("%d/%m/%Y") if latest_date else date.today().strftime("%d/%m/%Y"),
+            "ultima_data": latest_date.strftime("%d/%m/%Y") if latest_date else "",
+            "totale_acquistato": float(sum(qtys)),
+            "occorrenze": len(prices),
+        })
+    return items
+
+
+async def extract_invoice_price_items(db, user, fornitore, price_strategy: str) -> list[dict]:
+    """Righe d'acquisto pagate del fornitore (base comune purchase_lines) raggruppate in voci."""
+    from sqlalchemy import exists
+    from app.models.esclusi import RigaEsclusaStatistiche
+    from app.models.fatture import Fattura, RigaFattura, TipoDocumento
+    from app.services import purchase_lines as pl
+
+    stmt = (
+        pl.purchase_lines_select(
+            user,
+            fornitore_ids=[fornitore.id],
+            # Le voci escluse dall'analisi restano nel listino del fornitore; le righe
+            # escluse dalle statistiche (errori di fatturazione) no.
+            include_excluded=True,
+            include_credit_notes=False,
+        )
+        .where(
+            Fattura.tipo_documento.in_([TipoDocumento.TD01, TipoDocumento.TD24, TipoDocumento.TD25]),
+            pl.counts_for_average_sql(),
+            ~exists().where(RigaEsclusaStatistiche.riga_fattura_id == RigaFattura.id),
+            RigaFattura.descrizione_fornitore_raw.is_not(None),
+        )
+    )
+    lines = stmt.subquery("righe_listino")
+    conversions = await pl.load_conversions(db, lines)
+    rows = (await db.execute(
+        select(lines).order_by(lines.c.data_documento.desc(), lines.c.riga_id.desc())
+    )).all()
+    return group_invoice_price_lines(rows, conversions, fornitore.nome_azienda, price_strategy)
+
+
 @router.get(
     "/extract-from-invoices/{fornitore_id}",
     summary="Estrai Listino da Storico Fatture",
@@ -623,89 +736,12 @@ async def extract_listino_from_invoices(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.fornitori import Fornitore
-    from app.models.fatture import Fattura, RigaFattura, TipoDocumento
-    from decimal import Decimal
 
     fornitore = await db.get(Fornitore, fornitore_id, options=_fornitore_noload(Fornitore))
     if not fornitore:
         raise HTTPException(status_code=404, detail="Fornitore non trovato")
 
-    stmt = (
-        select(
-            RigaFattura.codice_fornitore_raw,
-            RigaFattura.descrizione_fornitore_raw,
-            RigaFattura.unita_misura_fattura,
-            RigaFattura.prezzo_netto_normalizzato,
-            RigaFattura.quantita,
-            RigaFattura.sku_interno,
-            Fattura.data_documento,
-            Fattura.numero_documento,
-        )
-        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
-        .where(
-            Fattura.fornitore_id == fornitore_id,
-            Fattura.tipo_documento.in_([TipoDocumento.TD01, TipoDocumento.TD24, TipoDocumento.TD25]),
-            RigaFattura.is_omaggio.is_(False),
-            RigaFattura.descrizione_fornitore_raw.is_not(None),
-        )
-        .order_by(Fattura.data_documento.desc(), RigaFattura.id.desc())
-    )
-    rows = (await db.execute(stmt)).all()
-
-    grouped = {}
-    for code, desc, uom, price, qty, sku, doc_date, doc_num in rows:
-        clean_desc = (desc or "").strip()
-        if not clean_desc:
-            continue
-        clean_code = (code or "").strip()
-        key = (clean_code.upper(), clean_desc.upper(), (uom or "Pz").upper())
-
-        if key not in grouped:
-            supp_prefix = "".join(c for c in fornitore.nome_azienda[:3] if c.isalnum()).upper() or "SKU"
-            clean_sku = sku or (f"{supp_prefix}-{clean_code}" if clean_code else f"{supp_prefix}-{clean_desc[:12].replace(' ', '-').upper()}")
-            grouped[key] = {
-                "sku_interno": clean_sku,
-                "descrizione": clean_desc,
-                "codice_fornitore": clean_code or None,
-                "unita_misura": uom or "Pz",
-                "prices": [],
-                "quantities": [],
-                "dates": [],
-                "latest_price": price or Decimal("0"),
-                "latest_date": doc_date,
-                "latest_doc": doc_num,
-            }
-
-        grouped[key]["prices"].append(Decimal(str(price or 0)))
-        grouped[key]["quantities"].append(Decimal(str(qty or 1)))
-        if doc_date:
-            grouped[key]["dates"].append(doc_date)
-
-    items = []
-    for g in grouped.values():
-        prices = g["prices"]
-        qtys = g["quantities"]
-
-        if price_strategy == "min":
-            chosen_price = min(prices) if prices else Decimal("0")
-        elif price_strategy == "avg":
-            total_spend = sum(p * q for p, q in zip(prices, qtys))
-            total_qty = sum(qtys)
-            chosen_price = (total_spend / total_qty).quantize(Decimal("0.0001")) if total_qty > 0 else (sum(prices) / len(prices)).quantize(Decimal("0.0001"))
-        else:
-            chosen_price = g["latest_price"]
-
-        items.append({
-            "sku_interno": g["sku_interno"],
-            "descrizione": g["descrizione"],
-            "codice_fornitore": g["codice_fornitore"],
-            "prezzo_pattuito": float(chosen_price),
-            "unita_misura": g["unita_misura"],
-            "data_inizio_validita": g["latest_date"].strftime("%d/%m/%Y") if g["latest_date"] else date.today().strftime("%d/%m/%Y"),
-            "ultima_data": g["latest_date"].strftime("%d/%m/%Y") if g["latest_date"] else "",
-            "totale_acquistato": float(sum(qtys)),
-            "occorrenze": len(prices),
-        })
+    items = await extract_invoice_price_items(db, _admin, fornitore, price_strategy)
 
     items.sort(key=lambda x: x["descrizione"])
 

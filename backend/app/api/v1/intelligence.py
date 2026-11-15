@@ -27,6 +27,7 @@ from app.services.pdf_generator import generate_vendor_passport_pdf, generate_co
 from app.schemas.approvazioni import ApprovazionePrezzoCreate, ApprovazionePrezzoResponse
 from app.services.anomaly_policy import operational_anomaly_filter
 from app.services import consumption_report
+from app.services.variance_loss import efficiency_leaderboard_select, load_variance_loss
 
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -999,51 +1000,13 @@ async def get_efficiency_leaderboard(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    tenant_id = getattr(_admin, "tenant_id", 1) or 1
-    sql = """
-    WITH hist_min AS (
-        SELECT 
-            rf.sku_interno,
-            MIN(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as hist_prezzo_min
-        FROM righe_fattura rf
-        JOIN fatture f ON rf.fattura_id = f.id
-        WHERE rf.sku_interno IS NOT NULL
-          AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
-          AND rf.is_omaggio IS NOT TRUE
-          AND rf.id NOT IN (SELECT riga_fattura_id FROM righe_escluse_statistiche)
-          AND f.tenant_id = :tenant_id
-        GROUP BY rf.sku_interno
-    ),
-    purchases AS (
-        SELECT 
-            f.location_id,
-            COALESCE(loc.nome_struttura, 'Sede Non Assegnata') as nome_struttura,
-            rf.id as riga_id,
-            COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) as price,
-            hm.hist_prezzo_min,
-            CASE WHEN COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) <= (hm.hist_prezzo_min * 1.05) THEN 1 ELSE 0 END as is_optimal
-        FROM righe_fattura rf
-        JOIN hist_min hm ON rf.sku_interno = hm.sku_interno
-        JOIN fatture f ON rf.fattura_id = f.id
-        LEFT JOIN location loc ON f.location_id = loc.id
-        WHERE rf.sku_interno IS NOT NULL
-          AND f.tenant_id = :tenant_id
-          AND rf.is_omaggio IS NOT TRUE
-          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
-    )
-    SELECT 
-        location_id,
-        nome_struttura,
-        COUNT(riga_id) as totali,
-        SUM(is_optimal) as ottimali,
-        ROUND((SUM(is_optimal)::numeric / COUNT(riga_id)::numeric) * 100, 2) as score
-    FROM purchases
-    GROUP BY location_id, nome_struttura
-    ORDER BY score DESC
+    """Quota di acquisti pagati entro il 5% del minimo per (voce, unità di fattura).
+
+    Base comune services.purchase_lines: tenant, niente note di credito né omaggi,
+    righe e voci escluse fuori sia dal minimo sia dal conteggio.
     """
-    res = await db.execute(text(sql), {"tenant_id": tenant_id})
-    
+    res = await db.execute(efficiency_leaderboard_select(_admin))
+
     leaderboard = []
     for i, r in enumerate(res.all()):
         rank = i + 1
@@ -1053,7 +1016,7 @@ async def get_efficiency_leaderboard(
             "medal": medal,
             "location_id": r.location_id,
             "nome_struttura": r.nome_struttura,
-            "totali": r.totali,
+            "totali": int(r.totali or 0),
             "ottimali": int(r.ottimali or 0),
             "score": float(r.score or 0)
         })
@@ -1066,66 +1029,12 @@ async def get_variance_loss(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Calcola lo spreco finanziario (variance loss) causato dagli acquisti effettuati a un prezzo 
-    superiore al prezzo minimo storico registrato per ciascun articolo standard (SKU).
+    Spreco = acquisti pagati sopra il riferimento: listino del fornitore valido alla
+    data della riga se confrontabile, altrimenti il minimo pagato per (voce, unità
+    di fattura). Conta le fatture caricate da ANOMALY_CHECK_START (periodo_dal).
+    Regole e dettagli in services/variance_loss.py.
     """
-    sql = """
-    WITH min_prices AS (
-        SELECT 
-            sku_interno, 
-            MIN(COALESCE(NULLIF(prezzo_netto_normalizzato, 0), prezzo_unitario_fatturato, 0)) AS min_price
-        FROM righe_fattura
-        WHERE sku_interno IS NOT NULL 
-          AND COALESCE(NULLIF(prezzo_netto_normalizzato, 0), prezzo_unitario_fatturato, 0) > 0
-          AND sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-          AND is_omaggio IS NOT TRUE
-          AND id NOT IN (SELECT riga_fattura_id FROM righe_escluse_statistiche)
-        GROUP BY sku_interno
-    )
-    SELECT 
-        r.sku_interno,
-        -- One SKU can have an active price list per supplier: read the name with a
-        -- subquery, because a join would multiply every invoice line in the totals.
-        COALESCE(
-            (SELECT MAX(lm.descrizione) FROM listino_master lm WHERE lm.sku_interno = r.sku_interno AND lm.data_scadenza IS NULL),
-            MAX(r.descrizione_fornitore_raw),
-            r.sku_interno
-        ) AS prodotto_nome,
-        COALESCE(MAX(f.nome_azienda), 'ND') AS fornitore_nome,
-        COUNT(r.id) AS numero_acquisti,
-        SUM(r.quantita) AS quantita_totale,
-        mp.min_price AS prezzo_minimo,
-        AVG(COALESCE(NULLIF(r.prezzo_netto_normalizzato, 0), r.prezzo_unitario_fatturato, 0)) AS prezzo_medio,
-        SUM(GREATEST(0, COALESCE(NULLIF(r.prezzo_netto_normalizzato, 0), r.prezzo_unitario_fatturato, 0) - mp.min_price) * r.quantita) AS spreco_totale
-    FROM righe_fattura r
-    JOIN min_prices mp ON r.sku_interno = mp.sku_interno
-    LEFT JOIN fatture ft ON r.fattura_id = ft.id
-    LEFT JOIN fornitori f ON ft.fornitore_id = f.id
-    WHERE r.sku_interno IS NOT NULL
-      AND r.is_omaggio IS NOT TRUE
-      -- Waste counts only purchases uploaded since the price check restarted;
-      -- the reference minimum still comes from the whole history.
-      AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR ft.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
-    GROUP BY r.sku_interno, mp.min_price
-    HAVING SUM(GREATEST(0, COALESCE(NULLIF(r.prezzo_netto_normalizzato, 0), r.prezzo_unitario_fatturato, 0) - mp.min_price) * r.quantita) > 0
-    ORDER BY spreco_totale DESC
-    LIMIT 10;
-    """
-    res = await db.execute(text(sql), {"check_start": settings.ANOMALY_CHECK_START})
-    
-    results = []
-    for r in res.all():
-        results.append({
-            "sku_interno": r.sku_interno,
-            "prodotto_nome": r.prodotto_nome,
-            "fornitore_nome": r.fornitore_nome,
-            "numero_acquisti": int(r.numero_acquisti or 0),
-            "quantita_totale": float(r.quantita_totale or 0),
-            "prezzo_minimo": float(r.prezzo_minimo or 0),
-            "prezzo_medio": float(r.prezzo_medio or 0),
-            "spreco_totale": float(r.spreco_totale or 0)
-        })
-    return results
+    return await load_variance_loss(db, _admin, settings.ANOMALY_CHECK_START)
 
 
 # ─────────────────────────────────────────────
