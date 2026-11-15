@@ -26,6 +26,7 @@ from fastapi.responses import Response, StreamingResponse
 from app.services.pdf_generator import generate_vendor_passport_pdf, generate_consumption_invoices_pdf
 from app.schemas.approvazioni import ApprovazionePrezzoCreate, ApprovazionePrezzoResponse
 from app.services.anomaly_policy import operational_anomaly_filter
+from app.services.anomaly_kpi import kpi_anomalies_statement, kpi_recovered_statement
 from app.services import consumption_report
 from app.services.variance_loss import efficiency_leaderboard_select, load_variance_loss
 
@@ -43,44 +44,18 @@ async def get_kpi(
 ) -> dict[str, Any]:
     """
     Ritorna gli indicatori economici:
-    - Euro Recuperati Totali (NC registrate)
-    - Euro In Contestazione (Anomalie in_reclamo)
+    - Euro Recuperati Totali (NC legacy + note registrate nelle pratiche)
+    - Euro In Contestazione (Anomalie in_reclamo, al netto del gia' recuperato)
     - Euro A Rischio (Anomalie contestate ma non ancora in reclamo)
+    - Euro Attesa Manager (da_verificare)
+    Stesso perimetro della lista anomalie: vedi services/anomaly_kpi.py.
     """
     tenant_id = getattr(_admin, "tenant_id", None)
     if tenant_id is None:
         raise HTTPException(status_code=403, detail="Tenant amministratore non configurato")
 
-    # Tenant ownership belongs to Fattura, not Anomalia. Follow the
-    # anomaly -> invoice row -> invoice relation for a scoped aggregate.
-    anomalie_stmt = (
-        select(
-            func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.in_reclamo, Anomalia.delta_totale), else_=0)), 0).label("in_contestazione"),
-            func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.contestata, Anomalia.delta_totale), else_=0)), 0).label("a_rischio"),
-            func.coalesce(func.sum(case((Anomalia.stato_validazione == StatoValidazione.da_verificare, Anomalia.delta_totale), else_=0)), 0).label("attesa_manager"),
-        )
-        .select_from(Anomalia)
-        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
-        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(Fattura.tenant_id == tenant_id)
-        .where(operational_anomaly_filter())
-    )
-
-    anomalie_res = await db.execute(anomalie_stmt)
-    anomalie_row = anomalie_res.one()
-
-    # Credit note ownership is inherited via NotaDiCredito -> Anomalia
-    # -> RigaFattura -> Fattura. Never filter nonexistent tenant columns.
-    recup_stmt = (
-        select(func.coalesce(func.sum(NotaDiCredito.importo_recuperato), 0))
-        .select_from(NotaDiCredito)
-        .join(Anomalia, NotaDiCredito.anomalia_id == Anomalia.id)
-        .join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)
-        .join(Fattura, RigaFattura.fattura_id == Fattura.id)
-        .where(Fattura.tenant_id == tenant_id)
-    )
-    recuperati_res = await db.execute(recup_stmt)
-    recuperati = recuperati_res.scalar()
+    anomalie_row = (await db.execute(kpi_anomalies_statement(_admin))).one()
+    recuperati = (await db.execute(kpi_recovered_statement(_admin))).scalar()
 
     return {
         "euro_recuperati": float(recuperati),

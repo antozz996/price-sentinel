@@ -93,6 +93,30 @@ def seed_conditions() -> str:
             due_date=current_date,
             updated_at=now()-interval '8 days'
         where id=%s;
+
+        -- The missing credit note timer starts from the last economic event
+        -- of the case (status change, recognition, credit note), not from
+        -- updated_at: move those synthetic events back as well.
+        update dispute_audit_events
+        set created_at=now()-interval '8 days'
+        where dispute_case_id=%s;
+
+        -- A credit note dated today for the same supplier and venue must not
+        -- count as an invoice candidate for the waiting order.
+        insert into xml_raw(
+          id,payload,hash_idempotenza,source,stato_ingestion,data_ricezione
+        ) values (
+          90,'<credit immutable="90"/>',repeat('e',64),'upload_manuale',
+          'parsato',now()
+        );
+        insert into fatture(
+          id,xml_raw_id,fornitore_id,location_id,numero_documento,
+          data_documento,data_ricezione_sdi,tipo_documento,totale_imponibile,
+          marker
+        ) values (
+          90,90,1,1,'NC-AUTOMATION',current_date,current_date,'TD04',5,
+          'nessuno'
+        );
         """,
         (
             RECONCILIATION,
@@ -101,6 +125,7 @@ def seed_conditions() -> str:
             RECONCILIATION,
             SUPPLIER_ORDER,
             str(uuid4()),
+            case_id,
             case_id,
             case_id,
         ),
@@ -151,6 +176,23 @@ async def run() -> None:
                 "credit_note_missing",
                 "integration_event_failed",
             }.issubset(types),
+        )
+
+        candidate_alert = next(
+            item for item in alerts
+            if item["alert_type"] == "invoice_candidate_available"
+        )
+        check(
+            "credit notes are not counted as invoice candidates",
+            candidate_alert["details"]["candidate_count"] == 1,
+        )
+        stalled_alert = next(
+            item for item in alerts
+            if item["alert_type"] == "reconciliation_stalled"
+        )
+        check(
+            "stalled message uses the configured days",
+            "tre giorni" not in stalled_alert["message"],
         )
 
         response = await client.get(

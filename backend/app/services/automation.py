@@ -7,9 +7,10 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.anomalie import Anomalia, StatoValidazione
 from app.models.automation import AutomationAlert, AutomationRun
-from app.models.disputes import DisputeCase
-from app.models.fatture import Fattura
+from app.models.disputes import DisputeAuditEvent, DisputeCase
+from app.models.fatture import Fattura, RigaFattura
 from app.models.liquidstock_integration import LiquidStockIntegrationEvent
 from app.models.onboarding import LocationReconciliationSettings
 from app.models.purchase_order_reconciliation import (
@@ -18,7 +19,23 @@ from app.models.purchase_order_reconciliation import (
     PurchaseOrderReconciliationAnomaly,
 )
 from app.models.utenti import Utente
+from app.services.anomaly_kpi import sku_not_excluded_sql
+from app.services.anomaly_policy import operational_anomaly_filter
+from app.services.purchase_lines import CREDIT_NOTE_TYPES
 
+
+# Anomalie prezzo da fattura ancora da decidere o contestate: possono generare
+# l'avviso "anomalia importante" sopra la soglia della sede.
+IMPORTANT_INVOICE_ANOMALY_STATES = (
+    StatoValidazione.da_verificare,
+    StatoValidazione.contestata,
+)
+# Eventi di audit che cambiano la situazione economica di una pratica.
+ECONOMIC_CASE_EVENTS = (
+    "case_status_changed",
+    "recognition_recorded",
+    "credit_note_recorded",
+)
 
 MANAGED_ALERT_TYPES = {
     "reconciliation_stalled",
@@ -89,7 +106,8 @@ async def _detect_alerts(db: AsyncSession) -> list[DetectedAlert]:
                 entity_id=str(reconciliation.id),
                 title="Riconciliazione ferma",
                 message=(
-                    "L’ordine attende una fattura compatibile da oltre tre giorni."
+                    "L’ordine attende una fattura compatibile da oltre "
+                    f"{stalled_days} giorni."
                 ),
                 details={
                     "status": reconciliation.status,
@@ -122,6 +140,8 @@ async def _detect_alerts(db: AsyncSession) -> list[DetectedAlert]:
             select(func.count(Fattura.id)).where(
                 Fattura.location_id == mapping.location_id,
                 Fattura.fornitore_id == reconciliation.supplier_id,
+                # Una nota di credito (TD04/TD08) non e' la fattura dell'ordine.
+                Fattura.tipo_documento.notin_(CREDIT_NOTE_TYPES),
                 Fattura.data_documento >= reconciliation.created_at.date(),
                 ~Fattura.id.in_(
                     select(PurchaseOrderReconciliation.fattura_id).where(
@@ -201,6 +221,51 @@ async def _detect_alerts(db: AsyncSession) -> list[DetectedAlert]:
             )
         )
 
+    # Anomalie prezzo da fattura (tabella anomalie): prima non generavano mai un
+    # avviso, qualunque fosse l'importo. Stesso perimetro della lista anomalie.
+    invoice_rows = (
+        await db.execute(
+            select(Anomalia, Fattura.location_id)
+            .join(RigaFattura, RigaFattura.id == Anomalia.riga_fattura_id)
+            .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+            .where(
+                Anomalia.stato_validazione.in_(IMPORTANT_INVOICE_ANOMALY_STATES),
+                operational_anomaly_filter(),
+                sku_not_excluded_sql(),
+            )
+        )
+    ).all()
+    for anomaly, location_id in invoice_rows:
+        settings = settings_by_location.get(location_id)
+        threshold = (
+            Decimal(settings.important_anomaly_threshold)
+            if settings
+            else Decimal("50")
+        )
+        amount = Decimal(str(anomaly.delta_totale))
+        if amount < threshold:
+            continue
+        found.append(
+            DetectedAlert(
+                dedupe_key=f"important_anomaly:fattura:{anomaly.id}",
+                alert_type="important_anomaly",
+                severity="critical",
+                location_id=location_id,
+                entity_type="anomaly",
+                entity_id=str(anomaly.id),
+                title="Anomalia economica importante",
+                message=(
+                    "È richiesta una revisione manuale per un rincaro in fattura "
+                    f"di € {amount:.2f}."
+                ),
+                details={
+                    "anomaly_type": "price_overcharge",
+                    "delta_totale": str(anomaly.delta_totale),
+                    "stato_validazione": anomaly.stato_validazione.value,
+                },
+            )
+        )
+
     due_cases = (
         await db.scalars(
             select(DisputeCase).where(
@@ -244,10 +309,33 @@ async def _detect_alerts(db: AsyncSession) -> list[DetectedAlert]:
             )
         )
     ).all()
+    # Il timer "nota mancante" parte dall'ultimo evento economico della pratica
+    # (cambio di stato, riconoscimento, nota registrata), non da updated_at che
+    # si sposta con qualsiasi modifica (titolo, allegato, nota interna).
+    last_economic_event = {}
+    if missing_notes:
+        last_economic_event = dict(
+            (
+                await db.execute(
+                    select(
+                        DisputeAuditEvent.dispute_case_id,
+                        func.max(DisputeAuditEvent.created_at),
+                    )
+                    .where(
+                        DisputeAuditEvent.dispute_case_id.in_(
+                            [case.id for case in missing_notes]
+                        ),
+                        DisputeAuditEvent.action.in_(ECONOMIC_CASE_EVENTS),
+                    )
+                    .group_by(DisputeAuditEvent.dispute_case_id)
+                )
+            ).all()
+        )
     for case in missing_notes:
         settings = settings_by_location.get(case.location_id)
         missing_days = settings.missing_credit_note_days if settings else 7
-        if case.updated_at >= now - timedelta(days=missing_days):
+        started = last_economic_event.get(case.id) or case.updated_at
+        if started >= now - timedelta(days=missing_days):
             continue
         found.append(
             DetectedAlert(

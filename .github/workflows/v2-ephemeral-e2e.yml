@@ -127,6 +127,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_consumption_report.py' -v
 
+      - name: Unit - Disputes, credit notes (TD04/TD08), monitor and anomaly KPI
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_contestazioni_note_credito.py' -v
+
       - name: Unit - Re-link and approval keep worked anomalies
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_refresh_line_anomaly.py' -v

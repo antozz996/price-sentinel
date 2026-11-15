@@ -20,5 +20,15 @@ def invoice_tenant_filter(user):
     return Fattura.tenant_id == tenant_id
 
 
+def location_tenant_filter(user):
+    """SQL condition limiting locations to the tenant of this user (no tenant = tenant 1)."""
+    from app.models.location import Location
+
+    tenant_id = user_tenant_id(user)
+    if tenant_id == DEFAULT_TENANT_ID:
+        return or_(Location.tenant_id == tenant_id, Location.tenant_id.is_(None))
+    return Location.tenant_id == tenant_id
+
+
 def invoice_belongs_to_user(fattura: Fattura, user) -> bool:
     return (fattura.tenant_id or DEFAULT_TENANT_ID) == user_tenant_id(user)

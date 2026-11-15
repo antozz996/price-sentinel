@@ -39,7 +39,8 @@ from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.location import Location
 from app.models.products import MatchCandidate, Product, SupplierProductAlias
-from app.services.ingestion import _process_td04
+from app.models.automation import AutomationAlert
+from app.services.ingestion import _process_td04, _process_td08
 from app.services.normalization import normalize_text
 
 DSN = os.environ["TEST_DATABASE_DSN"]
@@ -359,7 +360,9 @@ async def check_credit_note(micro_open_id: int, micro_claim_id: int, material_id
         location = await db.get(Location, 1)
         result = await _process_td04(db, xml.id, parsed, fornitore, location)
         await db.commit()
-    check("credit note reconciles exactly the claim and the material anomaly", result["anomalie_riconciliate"] == 2)
+    proposed = {item["anomalia_id"] for item in result["proposte_chiusura"]}
+    check("credit note closes nothing automatically", result["anomalie_riconciliate"] == 0)
+    check("credit note proposes exactly the claim and the material anomaly", proposed == {micro_claim_id, material_id})
 
     async with async_session_factory() as db:
         states = {
@@ -369,10 +372,37 @@ async def check_credit_note(micro_open_id: int, micro_claim_id: int, material_id
             )
         }
         credited = set(await db.scalars(select(NotaDiCredito.anomalia_id)))
+        alerts = {
+            row.entity_id: row
+            for row in await db.scalars(
+                select(AutomationAlert).where(AutomationAlert.alert_type == "credit_note_proposal")
+            )
+        }
     check("credit note ignores unworked rounding noise", states[micro_open_id] == StatoValidazione.da_verificare)
-    check("credit note closes an open micro-claim", states[micro_claim_id] == StatoValidazione.risolta)
-    check("credit note closes a material anomaly", states[material_id] == StatoValidazione.risolta)
-    check("credit records match the closed anomalies", credited == {micro_claim_id, material_id})
+    check("an imported credit note leaves the micro-claim open", states[micro_claim_id] == StatoValidazione.in_reclamo)
+    check("an imported credit note leaves the material anomaly open", states[material_id] != StatoValidazione.risolta)
+    check("an imported credit note records no recovered money", credited == set())
+    check(
+        "each proposal is an open alert for the manager",
+        set(alerts) == {str(micro_claim_id), str(material_id)}
+        and all(alert.status == "open" and alert.location_id == 1 for alert in alerts.values()),
+    )
+
+    # TD08 (nota di credito semplificata) follows the same path as a TD04.
+    parsed.numero_documento = "CI-SYNTH-NC-TD08"
+    async with async_session_factory() as db:
+        xml = await Fixture(db).xml("td08")
+        fornitore = await db.get(Fornitore, 1)
+        location = await db.get(Location, 1)
+        result = await _process_td08(db, xml.id, parsed, fornitore, location)
+        await db.commit()
+        td08 = await db.get(Fattura, result["fattura_id"])
+    check(
+        "TD08 is stored as a credit note and only proposes",
+        result["status"] == "td08_registrata"
+        and td08.tipo_documento == TipoDocumento.TD08
+        and {item["anomalia_id"] for item in result["proposte_chiusura"]} == {micro_claim_id, material_id},
+    )
 
 
 async def check_variance_counts_each_line_once() -> None:
