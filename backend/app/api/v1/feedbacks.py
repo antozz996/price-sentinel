@@ -6,6 +6,7 @@ e all'admin di gestire le segnalazioni e l'esclusione dal listino.
 
 from datetime import datetime
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select, func, and_, or_, desc
@@ -19,6 +20,7 @@ from app.models.products import Product, ProductFeedback
 from app.models.ordini import Ordine, RigaOrdine
 from app.models.listino import ListinoMaster
 from app.models.fornitori import Fornitore
+from app.services.product_review_stats import OrderIndex, best_current_listini, usual_suppliers
 
 router = APIRouter()
 
@@ -62,7 +64,11 @@ class ProductReviewItemResponse(BaseModel):
     subcategory: Optional[str]
     brand: Optional[str]
     comparison_unit: Optional[str]
+    # Miglior listino valido oggi (fornitore non archiviato, prezzo nell'unità di confronto)
     prezzo_riferimento: Optional[float] = None
+    prezzo_riferimento_unita: Optional[str] = None
+    miglior_listino_fornitore: Optional[str] = None
+    # Fornitore con più righe di fattura (TD01/TD24) negli ultimi 12 mesi
     fornitore_abituale: Optional[str] = None
     
     # Statistiche Recensioni
@@ -111,31 +117,22 @@ async def get_prodotti_per_recensione(
     if user.location_id:
         order_filter = or_(Ordine.user_id == user.id, Ordine.location_id == user.location_id)
 
+    # Una riga per (ordine, voce): l'omaggio 5+1 è una seconda riga dello stesso
+    # ordine e non è un secondo ordine.
     order_lines_rows = (await db.execute(
         select(
+            RigaOrdine.ordine_id,
             RigaOrdine.product_id,
             RigaOrdine.sku_interno,
-            func.count(RigaOrdine.id).label("n_ordini"),
-            func.max(Ordine.data_ordine).label("ultimo_ordine")
+            Ordine.data_ordine,
         )
         .join(Ordine, Ordine.id == RigaOrdine.ordine_id)
         .where(order_filter)
-        .group_by(RigaOrdine.product_id, RigaOrdine.sku_interno)
+        .distinct()
     )).all()
-
-    ordered_prod_stats: dict[str | int, dict] = {}
-    ordered_ids_set: set[int] = set()
-    ordered_skus_set: set[str] = set()
-
-    for ol in order_lines_rows:
-        n_ord = int(ol.n_ordini) if ol.n_ordini else 1
-        ult_dt = ol.ultimo_ordine.isoformat() if ol.ultimo_ordine else None
-        if ol.product_id:
-            ordered_ids_set.add(ol.product_id)
-            ordered_prod_stats[ol.product_id] = {"n_ordini": n_ord, "ultimo_ordine": ult_dt}
-        if ol.sku_interno:
-            ordered_skus_set.add(ol.sku_interno)
-            ordered_prod_stats[ol.sku_interno] = {"n_ordini": n_ord, "ultimo_ordine": ult_dt}
+    order_index = OrderIndex(order_lines_rows)
+    ordered_ids_set = order_index.product_ids
+    ordered_skus_set = order_index.skus
 
     # 2. Query prodotti
     prod_query = select(Product).where(Product.is_active.is_(True))
@@ -196,19 +193,12 @@ async def get_prodotti_per_recensione(
     for f in all_feedbacks:
         feedbacks_by_prod.setdefault(f.product_id, []).append(f)
 
-    # Carica info fornitore abituale e listino
+    # Fornitore abituale (acquisti reali) e miglior listino valido oggi (prezzo
+    # nell'unità di confronto): due informazioni diverse, prima confuse in una.
     sku_list = [p.sku_interno for p in products if p.sku_interno]
-    listini = (await db.scalars(
-        select(ListinoMaster)
-        .where(ListinoMaster.sku_interno.in_(sku_list))
-        .order_by(ListinoMaster.prezzo_pattuito.asc())
-        .options(noload(ListinoMaster.pfa_scaglioni), noload(ListinoMaster.uom_conversioni))
-    )).all() if sku_list else []
-
-    listino_map: dict[str, ListinoMaster] = {}
-    for lm in listini:
-        if lm.sku_interno and lm.sku_interno not in listino_map:
-            listino_map[lm.sku_interno] = lm
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    usual_supplier = await usual_suppliers(db, user, sku_list, today)
+    listino_map = await best_current_listini(db, products, today)
 
     fornitori_rows = (await db.execute(select(Fornitore.id, Fornitore.nome_azienda))).all()
     forn_name_map = {row.id: row.nome_azienda for row in fornitori_rows}
@@ -222,10 +212,9 @@ async def get_prodotti_per_recensione(
         avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
 
         # Statistiche ordine operatore
-        st = ordered_prod_stats.get(p.id) or (ordered_prod_stats.get(p.sku_interno) if p.sku_interno else None)
-        ord_me = st is not None
-        num_ord = st["n_ordini"] if st else 0
-        ult_ord_dt = st["ultimo_ordine"] if st else None
+        num_ord, ult_ord = order_index.stats(p.id, p.sku_interno)
+        ord_me = num_ord > 0
+        ult_ord_dt = ult_ord.isoformat() if ult_ord else None
         can_review = is_admin or ord_me
 
         # Mio feedback
@@ -280,7 +269,9 @@ async def get_prodotti_per_recensione(
             continue
 
         lm = listino_map.get(p.sku_interno or "")
-        sup_name = forn_name_map.get(lm.fornitore_id) if lm and lm.fornitore_id else None
+        usual_id = usual_supplier.get(p.sku_interno or "")
+        sup_name = forn_name_map.get(usual_id) if usual_id else None
+        best_name = forn_name_map.get(lm.fornitore_id) if lm and lm.fornitore_id else None
         price = float(lm.prezzo_pattuito) if lm and lm.prezzo_pattuito is not None else None
 
         results.append(
@@ -294,7 +285,9 @@ async def get_prodotti_per_recensione(
                 brand=p.brand,
                 comparison_unit=p.comparison_unit,
                 prezzo_riferimento=price,
+                prezzo_riferimento_unita=(lm.unita_misura or None) if lm else None,
                 fornitore_abituale=sup_name,
+                miglior_listino_fornitore=best_name,
                 totale_feedback=len(p_feeds),
                 positivi_si=pos,
                 negativi_no=neg,

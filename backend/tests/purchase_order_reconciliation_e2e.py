@@ -36,11 +36,13 @@ def seed():
         insert into xml_raw(id,payload,hash_idempotenza,source,stato_ingestion,data_ricezione) values
           (1,'<x/>','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','upload_manuale','parsato',now()),
           (2,'<x/>','bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','upload_manuale','parsato',now()),
-          (3,'<x/>','cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc','upload_manuale','parsato',now());
+          (3,'<x/>','cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc','upload_manuale','parsato',now()),
+          (4,'<x/>','dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd','upload_manuale','parsato',now());
         insert into fatture(id,xml_raw_id,fornitore_id,location_id,numero_documento,data_documento,data_ricezione_sdi,tipo_documento,totale_imponibile,marker) values
           (1,1,1,1,'INV-VALID','2026-07-24','2026-07-24','TD01',200,'nessuno'),
           (2,2,1,2,'INV-WRONG-VENUE','2026-07-24','2026-07-24','TD01',10,'nessuno'),
-          (3,3,2,1,'INV-WRONG-SUPPLIER','2026-07-24','2026-07-24','TD01',10,'nessuno');
+          (3,3,2,1,'INV-WRONG-SUPPLIER','2026-07-24','2026-07-24','TD01',10,'nessuno'),
+          (4,4,1,1,'NC-SAME-SUPPLIER','2026-07-25','2026-07-25','TD04',50,'nessuno');
         insert into righe_fattura(id,fattura_id,numero_linea,codice_fornitore_raw,descrizione_fornitore_raw,sku_interno,prezzo_unitario_fatturato,sconto_percentuale,prezzo_netto_normalizzato,quantita,unita_misura_fattura,is_omaggio,stato_matching) values
           (1,1,1,'EXACT','Exact','SKU1',5,0,5,5,'pz',false,'matched'),
           (2,1,2,'ALIAS-2','Alias',null,4,0,4,6,'pz',false,'matched'),
@@ -63,7 +65,8 @@ async def run():
   async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://testserver') as client:
     async def call(method,path,body=None): return await client.request(method,path,headers=headers,json=body)
     r=await call('POST','/api/v1/reconciliations/venue-mappings',{'liquidstock_venue_id':VENUE_A,'location_id':1}); check('venue mapping',r.status_code==200)
-    r=await call('GET',f'/api/v1/reconciliations/orders/{PO_A}/invoice-candidates'); check('invoice candidates are suggestions only',r.status_code==200 and [item['id'] for item in r.json()]==[1])
+    r=await call('GET',f'/api/v1/reconciliations/orders/{PO_A}/invoice-candidates'); check('invoice candidates are suggestions only, credit notes excluded',r.status_code==200 and [item['id'] for item in r.json()]==[1])
+    r=await call('POST',f'/api/v1/reconciliations/orders/{PO_A}/invoice',{'fattura_id':4}); check('credit note cannot be attached to an order',r.status_code==409 and 'credit_note_not_attachable' in r.text)
     r=await call('POST',f'/api/v1/reconciliations/orders/{PO_A}/invoice',{'fattura_id':2}); check('cross venue blocked',r.status_code==409)
     r=await call('POST',f'/api/v1/reconciliations/orders/{PO_A}/invoice',{'fattura_id':3}); check('cross supplier blocked',r.status_code==409)
     r=await call('POST',f'/api/v1/reconciliations/orders/{PO_A}/invoice',{'fattura_id':1,'price_tolerance_absolute':.01,'price_tolerance_percent':1}); check('valid invoice association',r.status_code==200); rid=r.json()['id']
@@ -84,13 +87,19 @@ async def run():
     check('price tolerance',statuses[6]['match_status']=='matched')
     check('unordered item',statuses[7]['anomaly_type']=='unordered_item')
     check('fuzzy is candidate only',statuses[8]['match_status']=='ambiguous' and statuses[8]['match_method']=='candidate_only')
-    check('duplicate invoice line',statuses[1]['anomaly_type']=='duplicate_invoice_line')
+    # Two identical lines for an order line of 5 received: the first covers the order,
+    # only the second (all excess) is a duplicate.
+    check('repeated line within the order is matched',statuses[1]['match_status']=='matched' and statuses[1]['quantity_delta'] is not None and float(statuses[1]['quantity_delta'])==0)
+    check('duplicate invoice line',statuses[9]['anomaly_type']=='duplicate_invoice_line')
+    check('price overcharge amount in listino units',float(statuses[4]['disputed_amount'])==4.0 and statuses[4]['candidate_evidence']['price_check']['status']=='ok')
+    check('receipt registered',statuses[4]['candidate_evidence']['receipt_status']=='received')
     check('missing invoice item',any(i['anomaly_type']=='missing_invoice_item' for i in data['items']))
     fuzzy=statuses[8]; candidate=fuzzy['candidate_evidence']['fallback_candidates'][0]
     r=await call('POST',f"/api/v1/reconciliations/{rid}/items/{fuzzy['id']}/resolve",{'action':'confirm','liquidstock_item_id':candidate['liquidstock_item_id'],'product_id':candidate['product_id']}); check('fuzzy confirmation is explicit',r.status_code==200 and any(i['id']==fuzzy['id'] and i['match_method']=='manual_confirmation' for i in r.json()['items']))
     check('confirmed candidate removes missing placeholder',sum(1 for i in r.json()['items'] if i.get('liquidstock_item_id')==candidate['liquidstock_item_id'])==1)
     duplicate=next(i for i in r.json()['items'] if i.get('anomaly_type')=='duplicate_invoice_line')
     r=await call('POST',f"/api/v1/reconciliations/{rid}/items/{duplicate['id']}/resolve",{'action':'ignore'}); check('duplicate can be reviewed',r.status_code==200)
+    r=await call('POST',f"/api/v1/reconciliations/{rid}/items/{statuses[4]['id']}/resolve",{'action':'ignore'}); check('ignored line is no longer disputed',r.status_code==200 and any(i['id']==statuses[4]['id'] and i['match_status']=='ignored' and i['disputed_amount'] is None for i in r.json()['items']))
     over=next(i for i in data['items'] if i['anomaly_type']=='quantity_overbilled')
     r=await call('POST',f"/api/v1/reconciliations/{rid}/items/{over['id']}/resolve",{'action':'create_anomaly'}); check('anomaly created',r.status_code==200 and len(r.json()['anomalies'])==1)
     r=await call('POST',f"/api/v1/reconciliations/{rid}/items/{over['id']}/resolve",{'action':'create_anomaly'}); check('anomaly idempotent',r.status_code==200 and len(r.json()['anomalies'])==1)

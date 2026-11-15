@@ -48,6 +48,9 @@ interface ProductReviewItem {
   brand?: string | null;
   comparison_unit?: string | null;
   prezzo_riferimento?: number | null;
+  prezzo_riferimento_unita?: string | null;
+  miglior_listino_fornitore?: string | null;
+  // Fornitore con più righe di fattura negli ultimi 12 mesi
   fornitore_abituale?: string | null;
   totale_feedback: number;
   positivi_si: number;
@@ -474,7 +477,17 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                     {prod.fornitore_abituale && (
                       <>
                         <span style={{ color: 'var(--text-muted)' }}>•</span>
-                        <span style={{ color: 'var(--text-secondary)' }}>Fornitore: <strong style={{ color: 'var(--text-primary)' }}>{prod.fornitore_abituale}</strong></span>
+                        <span style={{ color: 'var(--text-secondary)' }}>Fornitore abituale: <strong style={{ color: 'var(--text-primary)' }}>{prod.fornitore_abituale}</strong></span>
+                      </>
+                    )}
+                    {prod.miglior_listino_fornitore && prod.prezzo_riferimento != null && (
+                      <>
+                        <span style={{ color: 'var(--text-muted)' }}>•</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>
+                          Miglior listino: <strong style={{ color: 'var(--text-primary)' }}>{prod.miglior_listino_fornitore}</strong>{' '}
+                          € {prod.prezzo_riferimento.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                          {prod.prezzo_riferimento_unita ? ` / ${prod.prezzo_riferimento_unita}` : ''}
+                        </span>
                       </>
                     )}
                   </div>

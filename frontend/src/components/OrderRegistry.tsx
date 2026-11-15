@@ -31,8 +31,24 @@ interface OrderItemSummary {
   spesa_totale: number;
   stato: string;
   n_righe: number;
+  // Solo righe a collo (cartone/confezione/cassa), omaggi compresi
   totale_colli: number;
+  colli_omaggio?: number;
+  // Quantità per unità normalizzata (CT, CNF, KG, LT, PZ...): non si sommano tra loro
+  quantita_per_uom?: Record<string, number>;
 }
+
+// Unità che contano come colli (stesso elenco del backend, services/order_quantities.py)
+const PACK_UNITS = new Set(['CT', 'CNF', 'CS', 'COL', 'COLLI', 'COLLO', 'BOX', 'CASSA', 'CASSE']);
+
+const formatQty = (value: number) => value.toLocaleString('it-IT', { maximumFractionDigits: 3 });
+
+// "30 KG · 24 PZ": quantità delle righe non a collo, ognuna nella sua unità
+const otherUnitsLabel = (perUom: Record<string, number> | undefined) =>
+  Object.entries(perUom || {})
+    .filter(([unit, qty]) => !PACK_UNITS.has(unit) && qty)
+    .map(([unit, qty]) => `${formatQty(qty)} ${unit}`)
+    .join(' · ');
 
 interface OrderDetailRow {
   id: number;
@@ -145,6 +161,12 @@ export default function OrderRegistry(props?: { isAdmin?: boolean; selectedOrder
   // KPIs
   const totalSpend = useMemo(() => orders.reduce((sum, o) => sum + (o.spesa_totale || 0), 0), [orders]);
   const totalPackages = useMemo(() => orders.reduce((sum, o) => sum + (o.totale_colli || 0), 0), [orders]);
+  const totalFreePackages = useMemo(() => orders.reduce((sum, o) => sum + (o.colli_omaggio || 0), 0), [orders]);
+  const totalOtherUnits = useMemo(() => {
+    const perUom: Record<string, number> = {};
+    orders.forEach(o => Object.entries(o.quantita_per_uom || {}).forEach(([unit, qty]) => { perUom[unit] = (perUom[unit] || 0) + qty; }));
+    return otherUnitsLabel(perUom);
+  }, [orders]);
   const totalSuppliersCount = useMemo(() => new Set(orders.map(o => o.fornitore_id)).size, [orders]);
 
   const getSectorBadge = (settore: string) => {
@@ -185,8 +207,15 @@ export default function OrderRegistry(props?: { isAdmin?: boolean; selectedOrder
             <Layers size={22} />
           </div>
           <div>
-            <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600 }}>Totale Colli Ordinati</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{totalPackages}</div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 600 }}>Colli ordinati (cartoni e confezioni)</div>
+            <div style={{ fontSize: '1.4rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatQty(totalPackages)}</div>
+            {(totalFreePackages > 0 || totalOtherUnits) && (
+              <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem' }}>
+                {totalFreePackages > 0 && `di cui ${formatQty(totalFreePackages)} omaggio`}
+                {totalFreePackages > 0 && totalOtherUnits && ' · '}
+                {totalOtherUnits && `altre unità: ${totalOtherUnits}`}
+              </div>
+            )}
           </div>
         </div>
 
@@ -387,7 +416,10 @@ export default function OrderRegistry(props?: { isAdmin?: boolean; selectedOrder
                       </td>
 
                       <td style={{ padding: '14px 18px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{o.n_righe}</strong> art. ({o.totale_colli} colli)
+                        <strong style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{o.n_righe}</strong> art. ({formatQty(o.totale_colli)} colli{o.colli_omaggio ? `, di cui ${formatQty(o.colli_omaggio)} omaggio` : ''})
+                        {otherUnitsLabel(o.quantita_per_uom) && (
+                          <div style={{ fontSize: '0.72rem' }}>+ {otherUnitsLabel(o.quantita_per_uom)}</div>
+                        )}
                       </td>
 
                       <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: 'var(--status-green)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>

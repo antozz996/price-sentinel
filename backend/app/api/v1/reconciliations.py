@@ -1,6 +1,7 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
@@ -17,10 +18,19 @@ from app.models.products import Product
 from app.models.purchase_order_reconciliation import LiquidStockVenueMapping, PurchaseOrderReconciliation, PurchaseOrderReconciliationItem
 from app.models.utenti import Utente
 from app.schemas.purchase_order_reconciliation import AttachInvoiceInput, CloseReconciliationInput, InvoiceCandidateOut, OrderCandidateOut, ReconciliationAnomalyOut, ReconciliationDetailOut, ReconciliationItemOut, ResolveItemInput, VenueMappingInput
+from app.services.purchase_lines import CREDIT_NOTE_TYPES
 from app.services.purchase_order_reconciliation import ReconciliationError, attach_invoice, confirm_candidate, create_anomaly, detach_invoice, ensure_reconciliation, run_matching
 from app.services.supplier_identity_equivalence import supplier_scope
 
 router = APIRouter()
+ROME = ZoneInfo("Europe/Rome")
+
+
+def rome_day_bounds(date_from: date | None, date_to: date | None) -> tuple[datetime | None, datetime | None]:
+    """Days of the filter in Italian time: [date_from 00:00 Rome, date_to + 1 day 00:00 Rome)."""
+    start = datetime.combine(date_from, time.min, tzinfo=ROME) if date_from else None
+    end = datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=ROME) if date_to else None
+    return start, end
 
 
 async def mapping(db: AsyncSession, venue_id: UUID):
@@ -114,8 +124,9 @@ async def orders(venue_id: UUID | None = None, supplier_id: int | None = Query(d
     if venue_id: stmt = stmt.where(LiquidStockSupplierOrder.liquidstock_venue_id == venue_id)
     if supplier_id: stmt = stmt.where(LiquidStockSupplierOrder.supplier_id == supplier_id)
     if status: stmt = stmt.where(or_(PurchaseOrderReconciliation.status == status, LiquidStockSupplierOrder.status == status))
-    if date_from: stmt = stmt.where(LiquidStockSupplierOrder.sent_at >= datetime.combine(date_from, datetime.min.time(), tzinfo=timezone.utc))
-    if date_to: stmt = stmt.where(LiquidStockSupplierOrder.sent_at <= datetime.combine(date_to, datetime.max.time(), tzinfo=timezone.utc))
+    start, end = rome_day_bounds(date_from, date_to)
+    if start: stmt = stmt.where(LiquidStockSupplierOrder.sent_at >= start)
+    if end: stmt = stmt.where(LiquidStockSupplierOrder.sent_at < end)
     output = []
     for order, reconciliation in (await db.execute(stmt.order_by(LiquidStockSupplierOrder.updated_at.desc()).limit(250))).all():
         try: await authorize(db, user, order.liquidstock_venue_id)
@@ -141,7 +152,9 @@ async def candidates(supplier_order_id: UUID, db: AsyncSession = Depends(get_db)
         select(Fattura).where(
             Fattura.fornitore_id.in_(supplier_ids),
             Fattura.location_id == venue_map.location_id,
-        ).order_by(Fattura.data_documento.desc()).limit(100)
+            # A credit note is not the invoice of an order (attach_invoice refuses it too).
+            ~Fattura.tipo_documento.in_(CREDIT_NOTE_TYPES),
+        ).order_by(Fattura.data_documento.desc(), Fattura.id.desc()).limit(100)
     )).all()
     order_products = set((await db.scalars(select(LiquidStockSupplierOrderItem.product_id).where(LiquidStockSupplierOrderItem.supplier_order_id == order.id, LiquidStockSupplierOrderItem.product_id.is_not(None)))).all())
     product_skus = set((await db.scalars(select(Product.sku_interno).where(Product.id.in_(order_products)))).all()) if order_products else set()
@@ -226,7 +239,7 @@ async def resolve(rid: UUID, item_id: int, payload: ResolveItemInput, db: AsyncS
     if row.status == "closed": raise HTTPException(409, "closed_reconciliation_is_immutable")
     item = await db.scalar(select(PurchaseOrderReconciliationItem).where(PurchaseOrderReconciliationItem.id == item_id, PurchaseOrderReconciliationItem.reconciliation_id == row.id))
     if not item: raise HTTPException(404, "reconciliation_item_not_found")
-    if payload.action == "ignore": item.match_status = "ignored"; item.anomaly_type = None; item.notes = payload.notes
+    if payload.action == "ignore": item.match_status = "ignored"; item.anomaly_type = None; item.disputed_amount = None; item.notes = payload.notes
     elif payload.action == "create_anomaly":
         try: await create_anomaly(db, row, item, payload.notes)
         except ReconciliationError as error: raise HTTPException(error.status, error.code)

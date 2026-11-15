@@ -18,6 +18,7 @@ interface TenantItem {
   status: string;
   created_at?: string | null;
   invoices_count: number;
+  credit_notes_count?: number;
   orders_count: number;
   users_count: number;
   spend_volume: number;
@@ -27,6 +28,8 @@ interface TenantItem {
 interface OverviewStats {
   total_tenants: number;
   total_invoices: number;
+  total_credit_notes?: number;
+  total_credit_notes_volume?: number;
   total_orders: number;
   total_users: number;
   total_locations: number;
@@ -517,10 +520,10 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
               <FileText size={16} color="var(--info)" /> FATTURE GLOBALI
             </div>
             <div style={{ fontSize: '1.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
-              {overview?.total_invoices || 0}
+              {(overview?.total_invoices || 0).toLocaleString('it-IT')}
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Totale documenti nel sistema
+              Fatture nel sistema · più {(overview?.total_credit_notes || 0).toLocaleString('it-IT')} note di credito
             </div>
           </div>
 
@@ -553,10 +556,10 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
               <Euro size={16} color="var(--ok)" /> VOLUME TRANSATO
             </div>
             <div style={{ fontSize: '1.8rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--ok)' }}>
-              € {((overview?.total_spend_volume || 0) / 1000).toFixed(1)}k
+              € {((overview?.total_spend_volume || 0) / 1000).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k
             </div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Imponibile complessivo
+              Imponibile al netto delle note di credito (€ {((overview?.total_credit_notes_volume || 0) / 1000).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k)
             </div>
           </div>
         </div>
@@ -669,7 +672,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', fontSize: '0.8rem' }}>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{t.invoices_count}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Fatture</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Fatture{t.credit_notes_count ? ` (+${t.credit_notes_count} NC)` : ''}</div>
                   </div>
 
                   <div style={{ textAlign: 'center' }}>
@@ -684,7 +687,7 @@ export default function GodModeControlRoom({ onExit }: { onExit?: () => void }) 
 
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ fontWeight: 600, color: 'var(--ok)', fontSize: '1rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {t.spend_volume.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Imponibile</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Imponibile netto NC</div>
                   </div>
                 </div>
 

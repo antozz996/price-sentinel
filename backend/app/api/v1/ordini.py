@@ -29,6 +29,7 @@ from app.models.purchase_policy import ProductPurchasePolicy, SupplierCategoryCa
 from app.models.categories import MasterCategory
 from app.models.utenti import Utente
 from app.services.normalization import normalize_text
+from app.services.order_quantities import order_quantity_summary
 from app.services.purchase_recommendation import cheapest_comparable_listino
 
 router = APIRouter()
@@ -1180,8 +1181,8 @@ async def list_ordini(
             "ricevuto_da_nome": o.ricevuto_da.nome_completo if o.ricevuto_da else None,
             "note_ricezione": o.note_ricezione,
             "n_righe": len(o.righe),
-            "totale_colli": sum(float(r.quantita) for r in o.righe),
-            "totale_colli_ricevuti": sum(float(r.quantita_ricevuta or 0) for r in o.righe)
+            # kg, pezzi, litri e cartoni non si sommano: colli solo a collo, il resto per unità
+            **order_quantity_summary(o.righe),
         }
         for o in ordini
     ]
@@ -1347,7 +1348,7 @@ async def get_order_notifications(
             "stato": o.stato,
             "stato_ricezione": o.stato_ricezione,
             "n_righe": len(o.righe),
-            "totale_colli": sum(float(r.quantita) for r in o.righe),
+            "totale_colli": order_quantity_summary(o.righe)["totale_colli"],
         })
 
     return {
