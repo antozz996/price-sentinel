@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Search, X, Calendar, Download, ArrowUpDown, Info, TrendingUp } from 'lucide-react'
 import { fetchWithAuth } from '../api'
+import { PriceTrendPoint, PriceTrendSeries, formatEuro, isLinePoint, pointPriceLabel } from '../priceTrend'
 
 interface ProductSku {
   sku_interno: string
@@ -14,23 +15,34 @@ interface SelectedProduct {
   color: string
 }
 
-interface HistoryPoint {
+// Each point is one invoice line of that SKU. prezzo_pagato is converted to the
+// supplier's price-list unit (null when the conversion is not reliable) and
+// prezzo_contratto is that supplier's price list valid on the document date.
+type HistoryPoint = PriceTrendPoint
+type SkuTrend = PriceTrendSeries
+
+interface TableRow {
+  sku: string
+  label: string
+  color: string
   data: string
-  prezzo_pagato: number
+  /** Converted price (price-list unit); null when not comparable. */
+  prezzo_pagato: number | null
   quantita: number
   fornitore: string
   location: string
   prezzo_contratto: number | null
   fattura_id?: number | null
   numero_documento?: string | null
+  point?: HistoryPoint
+  unita_contratto?: string | null
 }
 
-interface SkuTrend {
-  sku_interno: string
-  prodotto_nome: string
-  prezzo_contratto_corrente: number | null
-  history: HistoryPoint[]
-}
+// Delta only for a converted purchase against its own supplier's list on that date.
+const deltaOf = (r: TableRow): number | null =>
+  r.point && isLinePoint(r.point) && r.prezzo_contratto && r.prezzo_pagato !== null
+    ? (r.prezzo_pagato - r.prezzo_contratto) / r.prezzo_contratto
+    : null
 
 interface TrendDataMap {
   [sku: string]: SkuTrend
@@ -85,10 +97,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
       sku: string
       label: string
       color: string
-      price: number
+      price: number | null
       contractPrice: number | null
       supplier: string
       location: string
+      point: HistoryPoint
     }[]
   } | null>(null)
 
@@ -257,31 +270,39 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
 
   // 4. Custom SVG Chart Mathematics & Rendering
   const renderChart = () => {
-    // Collect all valid points from loaded trend data
+    // Only converted purchases go on the lines; returns (credit notes) are separate
+    // markers and lines that cannot be converted stay in the table in their invoice unit.
     const allSeriesPoints: { sku: string; timestamp: number; price: number; point: HistoryPoint; color: string; label: string }[] = []
-    
+    const returnPoints: typeof allSeriesPoints = []
+    const units = new Set<string>()
+
     selectedProducts.forEach(p => {
       const data = getProductTrend(p.sku)
       if (data && data.history) {
         data.history.forEach(h => {
-          const timestamp = new Date(h.data).getTime()
-          allSeriesPoints.push({
+          if (!h.confrontabile || h.prezzo_pagato === null) return
+          const item = {
             sku: p.sku,
-            timestamp,
+            timestamp: new Date(h.data).getTime(),
             price: h.prezzo_pagato,
             point: h,
             color: p.color,
             label: p.label
-          })
+          }
+          if (h.unita_confronto) units.add(h.unita_confronto)
+          if (h.is_reso) returnPoints.push(item)
+          else allSeriesPoints.push(item)
         })
       }
     })
+    const axisUnit = units.size === 1 ? ` / ${[...units][0]}` : ''
 
     if (allSeriesPoints.length === 0) {
+      // Products without a current price list must not disappear: show them too.
       const contractProducts = selectedProducts.map(p => ({
         product: p,
         trend: getProductTrend(p.sku)
-      })).filter(item => item.trend && item.trend.prezzo_contratto_corrente !== null)
+      })).filter(item => item.trend)
 
       return (
         <div style={{
@@ -300,7 +321,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <TrendingUp size={28} style={{ opacity: 0.5, color: 'var(--accent-text)' }} />
             <span style={{ fontSize: '0.95rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-              Nessuna fattura di acquisto registrata per i filtri impostati.
+              Nessun acquisto confrontabile con il listino per i filtri impostati (eventuali righe non convertibili sono nella tabella).
             </span>
           </div>
 
@@ -330,10 +351,17 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>SKU: {product.sku}</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Prezzo a Listino</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 600, color: product.color, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      {trend?.prezzo_contratto_corrente?.toFixed(2)} €
-                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', display: 'block' }}>Listino valido oggi</span>
+                    {(trend?.fornitori || []).filter(f => f.prezzo_contratto_corrente !== null).length > 0 ? (
+                      (trend?.fornitori || []).filter(f => f.prezzo_contratto_corrente !== null).map(f => (
+                        <span key={f.fornitore_id} style={{ display: 'block', fontSize: '0.95rem', fontWeight: 600, color: product.color, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                          {formatEuro(f.prezzo_contratto_corrente)} / {f.unita_contratto || 'n.d.'}
+                          {f.fornitore && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginLeft: '6px' }}>{f.fornitore}</span>}
+                        </span>
+                      ))
+                    ) : (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>nessun listino</span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -344,8 +372,8 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
     }
 
     // Determine Global Min/Max bounds for scaling
-    const timestamps = allSeriesPoints.map(pt => pt.timestamp)
-    const prices = allSeriesPoints.map(pt => pt.price)
+    const timestamps = [...allSeriesPoints, ...returnPoints].map(pt => pt.timestamp)
+    const prices = [...allSeriesPoints, ...returnPoints].map(pt => pt.price)
     
     // Also include contract prices in the Y boundary check to prevent clipping of contract guide lines
     selectedProducts.forEach(p => {
@@ -436,7 +464,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
         const data = getProductTrend(p.sku)
         if (data && data.history) {
           // Find the transaction closest to this date for this SKU, or on this exact date
-          const skuPointsOnDate = data.history.filter(h => h.data === closestDateStr)
+          const skuPointsOnDate = data.history.filter(h => h.data === closestDateStr && h.confrontabile && h.prezzo_pagato !== null)
           if (skuPointsOnDate.length > 0) {
             skuPointsOnDate.forEach(sp => {
               hoveredPoints.push({
@@ -444,9 +472,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                 label: p.label,
                 color: p.color,
                 price: sp.prezzo_pagato,
-                contractPrice: data.prezzo_contratto_corrente,
+                // The supplier's own price list on that date, not today's list of any supplier.
+                contractPrice: sp.is_reso ? null : sp.prezzo_contratto,
                 supplier: sp.fornitore,
-                location: sp.location
+                location: sp.location,
+                point: sp
               })
             })
           }
@@ -478,6 +508,11 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
 
     return (
       <div style={{ position: 'relative' }}>
+        {units.size > 1 && (
+          <div style={{ fontSize: '0.8rem', color: 'var(--warn)', marginBottom: '8px' }}>
+            Prezzi in unità diverse ({[...units].join(', ')}): ogni fornitore ha la sua linea nell'unità del proprio listino. Filtra un fornitore per confrontarli.
+          </div>
+        )}
         <svg
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           width="100%"
@@ -513,7 +548,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                   fill="var(--text-secondary)"
                   style={{ fontSize: '10px', fontFamily: 'inherit' }}
                 >
-                  {val.toFixed(2)} €
+                  {val.toFixed(2)} €{axisUnit}
                 </text>
               </g>
             )
@@ -572,7 +607,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                       opacity="0.8"
                       style={{ fontSize: '8.5px', fontWeight: 500 }}
                     >
-                      Listino {p.sku}: {data.prezzo_contratto_corrente.toFixed(2)} €
+                      Listino attuale {p.sku}: {formatEuro(data.prezzo_contratto_corrente)}{data.unita_contratto_corrente ? ` / ${data.unita_contratto_corrente}` : ''}
                     </text>
                   </g>
                 )
@@ -586,52 +621,60 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             const data = getProductTrend(p.sku)
             if (!data || !data.history || data.history.length === 0) return null
 
-            // Map and sort historical coordinates chronologically
-            const pts = data.history
-              .map(h => ({
-                x: getX(new Date(h.data).getTime()),
-                y: getY(h.prezzo_pagato),
-                price: h.prezzo_pagato,
-                raw: h
-              }))
-              .sort((a, b) => a.x - b.x)
-
-            // Build path string
-            const pathD = pts.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`).join(' ')
+            // One line per supplier (and unit): joining different suppliers made a
+            // saw-tooth line without any real price change.
+            const series = new Map<string, { x: number; y: number }[]>()
+            data.history
+              .filter(isLinePoint)
+              .forEach(h => {
+                const key = `${h.fornitore_id}|${h.unita_confronto || ''}`
+                if (!series.has(key)) series.set(key, [])
+                series.get(key)!.push({ x: getX(new Date(h.data).getTime()), y: getY(h.prezzo_pagato as number) })
+              })
+            const returns = data.history
+              .filter(h => h.is_reso && h.confrontabile && h.prezzo_pagato !== null)
+              .map(h => ({ x: getX(new Date(h.data).getTime()), y: getY(h.prezzo_pagato as number) }))
 
             return (
               <g key={`trend-series-${p.sku}`}>
-                {/* Neon Glow underlay line */}
-                <path
-                  d={pathD}
-                  fill="none"
-                  stroke={p.color}
-                  strokeWidth="6"
-                  opacity="0.15"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Main solid line */}
-                <path
-                  d={pathD}
-                  fill="none"
-                  stroke={p.color}
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Interactive circles */}
-                {pts.map((pt, index) => (
-                  <circle
-                    key={`dot-${p.sku}-${index}`}
-                    cx={pt.x}
-                    cy={pt.y}
-                    r="4"
-                    fill={p.color}
-                    stroke="var(--bg-card)"
+                {[...series.entries()].map(([key, pts], seriesIndex) => {
+                  pts.sort((a, b) => a.x - b.x)
+                  const pathD = pts.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`).join(' ')
+                  const dash = seriesIndex === 0 ? undefined : `${4 + seriesIndex * 2} 4`
+                  return (
+                    <g key={`trend-line-${p.sku}-${key}`}>
+                      <path d={pathD} fill="none" stroke={p.color} strokeWidth="6" opacity="0.15" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d={pathD} fill="none" stroke={p.color} strokeWidth="2.5" strokeDasharray={dash} strokeLinecap="round" strokeLinejoin="round" />
+                      {pts.map((pt, index) => (
+                        <circle
+                          key={`dot-${p.sku}-${key}-${index}`}
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="4"
+                          fill={p.color}
+                          stroke="var(--bg-card)"
+                          strokeWidth="1.5"
+                          style={{ transition: 'r 0.15s ease' }}
+                        />
+                      ))}
+                    </g>
+                  )
+                })}
+                {/* Returns (credit notes): hollow diamonds, never part of the line */}
+                {returns.map((pt, index) => (
+                  <rect
+                    key={`reso-${p.sku}-${index}`}
+                    x={pt.x - 4}
+                    y={pt.y - 4}
+                    width="8"
+                    height="8"
+                    transform={`rotate(45 ${pt.x} ${pt.y})`}
+                    fill="var(--bg-card)"
+                    stroke={p.color}
                     strokeWidth="1.5"
-                    style={{ transition: 'r 0.15s ease' }}
-                  />
+                  >
+                    <title>Reso (nota di credito)</title>
+                  </rect>
                 ))}
               </g>
             )
@@ -651,8 +694,8 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                 strokeDasharray="3 3"
               />
               {/* Pulsing circles on intersection points */}
-              {hoverData.points.map((pt, idx) => {
-                const ptY = getY(pt.price)
+              {hoverData.points.filter(pt => pt.price !== null).map((pt, idx) => {
+                const ptY = getY(pt.price as number)
                 return (
                   <g key={`hover-pulse-${idx}`}>
                     <circle
@@ -713,7 +756,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {hoverData.points.map((pt, idx) => {
-                const deltaStr = pt.contractPrice
+                const deltaStr = pt.contractPrice && pt.price !== null
                   ? (((pt.price - pt.contractPrice) / pt.contractPrice) * 100).toFixed(1)
                   : null
 
@@ -727,14 +770,20 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                     </div>
                     <div style={{ paddingLeft: '14px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Prezzo Pagato:</span>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{pt.price.toFixed(2)} €</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>{pt.point.is_reso ? 'Reso (nota di credito):' : 'Prezzo Pagato:'}</span>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{pointPriceLabel(pt.point)}</span>
                       </div>
+                      {pt.point.unita_fattura !== pt.point.unita_confronto && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.8 }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>In fattura:</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{formatEuro(pt.point.prezzo_fattura)} / {pt.point.unita_fattura}</span>
+                        </div>
+                      )}
                       {pt.contractPrice !== null && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Prezzo Contratto:</span>
+                          <span style={{ color: 'var(--text-secondary)' }}>Listino del fornitore:</span>
                           <span style={{ color: 'var(--text-secondary)' }}>
-                            {pt.contractPrice.toFixed(2)} € 
+                            {formatEuro(pt.contractPrice)}
                             {deltaStr && (
                               <span style={{
                                 marginLeft: '6px',
@@ -769,19 +818,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
 
   // 5. Raw Transactions Table Construction
   const getTableData = () => {
-    const rows: {
-      sku: string
-      label: string
-      color: string
-      data: string
-      prezzo_pagato: number
-      quantita: number
-      fornitore: string
-      location: string
-      prezzo_contratto: number | null
-      fattura_id?: number | null
-      numero_documento?: string | null
-    }[] = []
+    const rows: TableRow[] = []
 
     selectedProducts.forEach(p => {
       const data = getProductTrend(p.sku)
@@ -792,26 +829,31 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
             label: p.label,
             color: p.color,
             data: h.data,
-            prezzo_pagato: h.prezzo_pagato,
-            quantita: h.quantita,
+            prezzo_pagato: h.confrontabile ? h.prezzo_pagato : null,
+            // Returns are shown with a minus sign: they are not purchases.
+            quantita: h.is_reso ? -h.quantita : h.quantita,
             fornitore: h.fornitore,
             location: h.location,
             prezzo_contratto: h.prezzo_contratto,
             fattura_id: h.fattura_id,
-            numero_documento: h.numero_documento
+            numero_documento: h.numero_documento,
+            point: h
           })
         })
-      } else if (data && data.prezzo_contratto_corrente !== null) {
-        rows.push({
-          sku: p.sku,
-          label: p.label,
-          color: p.color,
-          data: 'A Contratto',
-          prezzo_pagato: data.prezzo_contratto_corrente,
-          quantita: 0,
-          fornitore: 'Listino Master',
-          location: 'Tutte le sedi',
-          prezzo_contratto: data.prezzo_contratto_corrente
+      } else if (data) {
+        (data.fornitori || []).filter(f => f.prezzo_contratto_corrente !== null).forEach(f => {
+          rows.push({
+            sku: p.sku,
+            label: p.label,
+            color: p.color,
+            data: 'A Contratto',
+            prezzo_pagato: f.prezzo_contratto_corrente,
+            quantita: 0,
+            fornitore: f.fornitore || 'Listino Master',
+            location: 'Tutte le sedi',
+            prezzo_contratto: f.prezzo_contratto_corrente,
+            unita_contratto: f.unita_contratto
+          })
         })
       }
     })
@@ -834,10 +876,8 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
       let valB: any = b[sortField as keyof typeof b]
 
       if (sortField === 'delta') {
-        const deltaA = a.prezzo_contratto ? (a.prezzo_pagato - a.prezzo_contratto) / a.prezzo_contratto : -9999
-        const deltaB = b.prezzo_contratto ? (b.prezzo_pagato - b.prezzo_contratto) / b.prezzo_contratto : -9999
-        valA = deltaA
-        valB = deltaB
+        valA = deltaOf(a) ?? -9999
+        valB = deltaOf(b) ?? -9999
       }
 
       if (valA === null || valA === undefined) return 1
@@ -871,21 +911,26 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
     const rows = getTableData()
     if (rows.length === 0) return
 
-    const headersList = ['Data', 'SKU', 'Prodotto', 'Fornitore', 'Sede', 'Quantita', 'Prezzo Pagato (€)', 'Prezzo Contratto (€)', 'Delta (%)']
+    const headersList = ['Data', 'Tipo', 'SKU', 'Prodotto', 'Fornitore', 'Sede', 'Quantita', 'U.M. fattura', 'Prezzo fattura (€)', 'Prezzo confrontato (€)', 'Unità confronto', 'Listino fornitore alla data (€)', 'Delta (%)']
     const csvRows = [headersList.join(';')]
+    const num = (v: number | null | undefined, digits = 4) => (v === null || v === undefined ? '' : v.toFixed(digits).replace('.', ','))
 
     rows.forEach(r => {
-      const delta = r.prezzo_contratto ? (((r.prezzo_pagato - r.prezzo_contratto) / r.prezzo_contratto) * 100).toFixed(2) : ''
+      const delta = deltaOf(r)
       const rowData = [
         r.data,
+        r.point ? (r.point.is_reso ? 'Reso' : 'Acquisto') : 'Listino',
         r.sku,
         `"${r.label.replace(/"/g, '""')}"`,
         `"${r.fornitore.replace(/"/g, '""')}"`,
         `"${r.location.replace(/"/g, '""')}"`,
-        r.quantita,
-        r.prezzo_pagato.toFixed(2),
-        r.prezzo_contratto ? r.prezzo_contratto.toFixed(2) : '',
-        delta
+        num(r.quantita, 2),
+        r.point?.unita_fattura ?? '',
+        num(r.point?.prezzo_fattura),
+        num(r.prezzo_pagato),
+        r.point ? (r.point.confrontabile ? (r.point.unita_confronto ?? '') : 'non convertibile') : (r.unita_contratto ?? ''),
+        num(r.prezzo_contratto),
+        delta === null ? '' : num(delta * 100, 2)
       ]
       csvRows.push(rowData.join(';'))
     })
@@ -1217,7 +1262,7 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                       Prezzo Pagato <ArrowUpDown size={12} style={{ marginLeft: '4px', verticalAlign: 'middle' }} />
                     </th>
                     <th style={{ padding: '12px 10px', cursor: 'pointer', fontWeight: 500 }} onClick={() => handleSort('prezzo_contratto')}>
-                      Prezzo Contratto <ArrowUpDown size={12} style={{ marginLeft: '4px', verticalAlign: 'middle' }} />
+                      Listino alla data <ArrowUpDown size={12} style={{ marginLeft: '4px', verticalAlign: 'middle' }} />
                     </th>
                     <th style={{ padding: '12px 10px', cursor: 'pointer', fontWeight: 500 }} onClick={() => handleSort('delta')}>
                       Delta <ArrowUpDown size={12} style={{ marginLeft: '4px', verticalAlign: 'middle' }} />
@@ -1227,8 +1272,9 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                 </thead>
                 <tbody>
                   {tableRows.map((r, idx) => {
-                    const isListinoBaseline = r.data === 'A Contratto' || r.quantita === 0
-                    const delta = (!isListinoBaseline && r.prezzo_contratto) ? ((r.prezzo_pagato - r.prezzo_contratto) / r.prezzo_contratto) * 100 : null
+                    const isListinoBaseline = !r.point
+                    const deltaRatio = deltaOf(r)
+                    const delta = deltaRatio === null ? null : deltaRatio * 100
                     const parsedDate = isListinoBaseline
                       ? 'A Listino'
                       : (isNaN(new Date(r.data).getTime()) ? r.data : new Date(r.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }))
@@ -1247,18 +1293,33 @@ export default function PriceTrendAnalyzer({ onOpenInvoice }: { onOpenInvoice?: 
                         </td>
                         <td style={{ padding: '12px 10px', opacity: 0.85 }}>{r.fornitore}</td>
                         <td style={{ padding: '12px 10px', opacity: 0.85 }}>{r.location}</td>
-                        <td style={{ padding: '12px 10px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{isListinoBaseline ? '-' : r.quantita}</td>
+                        <td style={{ padding: '12px 10px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                          {isListinoBaseline ? '-' : `${r.quantita.toLocaleString('it-IT')} ${r.point?.unita_fattura ?? ''}`}
+                        </td>
                         <td style={{ padding: '12px 10px', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                          {isListinoBaseline ? '-' : `${r.prezzo_pagato.toFixed(2)} €`}
+                          {isListinoBaseline ? '-' : (
+                            <>
+                              {pointPriceLabel(r.point!)}
+                              {r.point!.confrontabile && r.point!.unita_fattura !== r.point!.unita_confronto && (
+                                <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-secondary)' }}>
+                                  in fattura {formatEuro(r.point!.prezzo_fattura)} / {r.point!.unita_fattura}
+                                </span>
+                              )}
+                            </>
+                          )}
                         </td>
                         <td style={{ padding: '12px 10px', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                          {r.prezzo_contratto ? `${r.prezzo_contratto.toFixed(2)} €` : '-'}
+                          {r.prezzo_contratto
+                            ? `${formatEuro(r.prezzo_contratto)} / ${(r.point ? r.point.unita_confronto : r.unita_contratto) || 'n.d.'}`
+                            : '-'}
                         </td>
                         <td style={{ padding: '12px 10px' }}>
                           {isListinoBaseline ? (
                             <span className="badge" style={{ background: 'var(--accent-bg)', color: 'var(--accent-text)', border: '1px solid var(--accent-border)' }}>
                               Listino Base
                             </span>
+                          ) : r.point?.is_reso ? (
+                            <span className="badge badge-yellow">Reso</span>
                           ) : delta !== null ? (
                             <span className={`badge ${delta > 0 ? 'badge-red' : delta < 0 ? 'badge-green' : 'badge-yellow'}`}>
                               {delta > 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`}

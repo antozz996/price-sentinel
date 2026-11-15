@@ -11,6 +11,11 @@ export interface Anomalia {
   fornitore_id?: number;
   codice_fornitore?: string;
   quantita?: number;
+  // quantita is in invoice units; snapshot prices and delta_prezzo are per
+  // comparison_unit, so delta_totale = delta_prezzo x quantita_confronto.
+  quantita_confronto?: number | string | null;
+  unita_fattura?: string | null;
+  comparison_unit?: string | null;
   descrizione_orig?: string;
   sku_interno?: string;
   fornitore_nome?: string;

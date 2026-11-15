@@ -109,6 +109,9 @@ def seed() -> None:
                    'upload_manuale','parsato',now()),
                   (4,'<credit immutable="4"/>',
                    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+                   'upload_manuale','parsato',now()),
+                  (5,'<credit immutable="5"/>',
+                   'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
                    'upload_manuale','parsato',now());
 
                 insert into fatture(
@@ -119,7 +122,8 @@ def seed() -> None:
                   (1,1,1,1,'INV-A','2026-07-20','2026-07-20','TD01',50,'contestata'),
                   (2,2,1,2,'INV-B','2026-07-20','2026-07-20','TD01',20,'contestata'),
                   (3,3,1,1,'NC-A-2','2026-07-28','2026-07-28','TD04',15,'nessuno'),
-                  (4,4,1,2,'NC-WRONG','2026-07-28','2026-07-28','TD04',15,'nessuno');
+                  (4,4,1,2,'NC-WRONG','2026-07-28','2026-07-28','TD04',15,'nessuno'),
+                  (5,5,1,1,'NC-TD08-4','2026-07-29','2026-07-29','TD08',3,'nessuno');
 
                 insert into righe_fattura(
                   id,fattura_id,numero_linea,codice_fornitore_raw,
@@ -129,7 +133,9 @@ def seed() -> None:
                   is_omaggio,stato_matching
                 ) values
                   (1,1,1,'SKU-A','Prodotto contestato A','SKU-A',15,0,15,2,'pz',false,'matched'),
-                  (2,2,1,'SKU-B','Prodotto contestato B','SKU-B',10,0,10,2,'pz',false,'matched');
+                  (2,2,1,'SKU-B','Prodotto contestato B','SKU-B',10,0,10,2,'pz',false,'matched'),
+                  (3,1,2,'SKU-C','Prezzo accettato C','SKU-C',13,0,13,2,'pz',false,'matched'),
+                  (4,1,3,'SKU-D','Prodotto contestato D','SKU-D',4,0,4,3,'pz',false,'matched');
 
                 insert into anomalie(
                   id,riga_fattura_id,delta_prezzo,delta_totale,
@@ -137,7 +143,9 @@ def seed() -> None:
                   stato_validazione
                 ) values
                   (1,1,5,10,10,15,'contestata'),
-                  (2,2,2,4,8,10,'contestata');
+                  (2,2,2,4,8,10,'contestata'),
+                  (3,3,3,6,10,13,'accettata'),
+                  (4,4,1,3,3,4,'contestata');
                 """
             )
             cursor.execute(
@@ -550,6 +558,110 @@ async def run() -> None:
             "economic dashboard reconciles recovery",
             response.status_code == 200
             and dashboard["total_recovered"] == "25.000000"
+            and dashboard["total_outstanding"] == "10.000000",
+        )
+
+        # Rapporto M12/B12: candidates come in stable pages and an anomaly
+        # accepted by the manager (new price accepted) is not disputable.
+        pages = []
+        for offset in (0, 1, 2):
+            response = await call(
+                "GET",
+                f"/api/v1/disputes/candidates?source=legacy&limit=1&offset={offset}",
+                headers=admin,
+            )
+            pages.append([item["id"] for item in response.json()])
+        check(
+            "legacy candidates are paginated without repeats",
+            pages[0] and pages[1] and pages[2] == []
+            and set(pages[0]) | set(pages[1]) == {2, 4}
+            and not set(pages[0]) & set(pages[1]),
+        )
+        response = await call(
+            "POST",
+            "/api/v1/disputes",
+            headers=admin,
+            body={"title": "Accepted price", "anomalies": [{"legacy_anomaly_id": 3}]},
+        )
+        check("accepted anomaly cannot be disputed", response.status_code == 409)
+
+        # Rapporto M13: a draft is not a claim yet.
+        response = await call(
+            "POST",
+            "/api/v1/disputes",
+            headers=admin,
+            body={"title": "Draft only", "anomalies": [{"legacy_anomaly_id": 2}]},
+        )
+        check("draft legacy case created", response.status_code == 201)
+        response = await call("GET", "/api/v1/disputes/dashboard", headers=admin)
+        dashboard = response.json()
+        check(
+            "drafts stay out of outstanding amount and rankings",
+            response.status_code == 200
+            and dashboard["total_outstanding"] == "10.000000"
+            and sum(float(row["requested"]) for row in dashboard["by_supplier"]) == 35
+            and sum(float(row["requested"]) for row in dashboard["monthly_trend"]) == 35,
+        )
+
+        # Rapporto M14: a credit note recorded in the case closes the legacy
+        # anomaly too; a TD08 is accepted as a credit note like a TD04.
+        response = await call(
+            "POST",
+            "/api/v1/disputes",
+            body={"title": "Legacy D", "anomalies": [{"legacy_anomaly_id": 4}]},
+        )
+        case_d = response.json()
+        response = await call(
+            "POST",
+            f"/api/v1/disputes/{case_d['id']}/transition",
+            body={"expected_version": case_d["version"], "target_status": "ready_to_send"},
+        )
+        case_d = response.json()
+        response = await call(
+            "POST", f"/api/v1/disputes/{case_d['id']}/communications", body={"channel": "copy"}
+        )
+        response = await call(
+            "POST",
+            f"/api/v1/disputes/{case_d['id']}/communications/{response.json()['id']}/events",
+            body={"action": "confirmed"},
+        )
+        check(
+            "legacy anomaly D in reclamo after send",
+            response.status_code == 200
+            and scalar("select stato_validazione::text from anomalie where id=4") == "in_reclamo",
+        )
+        response = await call(
+            "POST",
+            "/api/v1/anomalie/note-credito",
+            headers=admin,
+            body={"anomalia_id": 4, "importo_recuperato": "3.00", "data_emissione_nc": "2026-07-29"},
+        )
+        check("legacy credit note register refuses an anomaly in a case", response.status_code == 409)
+        response = await call(
+            "POST",
+            f"/api/v1/disputes/{case_d['id']}/credit-notes",
+            body={
+                "document_number": "NC-TD08-4",
+                "issue_date": "2026-07-29",
+                "total_amount": "3.00",
+                "source": "imported",
+                "fattura_id": 5,
+                "allocations": [{"case_anomaly_id": case_d["anomalies"][0]["id"], "amount": "3.00"}],
+            },
+        )
+        check(
+            "TD08 credit note fully recovers the case",
+            response.status_code == 201 and response.json()["status"] == "recovered",
+        )
+        check(
+            "full recovery closes the legacy anomaly",
+            scalar("select stato_validazione::text from anomalie where id=4") == "risolta",
+        )
+        response = await call("GET", "/api/v1/disputes/dashboard", headers=admin)
+        dashboard = response.json()
+        check(
+            "dashboard counts the recovered TD08 note",
+            float(dashboard["total_recovered"]) == 28
             and dashboard["total_outstanding"] == "10.000000",
         )
 

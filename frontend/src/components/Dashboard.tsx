@@ -21,19 +21,45 @@ interface LeaderboardItem {
 
 interface VarianceLossItem {
   sku_interno: string;
+  unita: string;
   prodotto_nome: string;
   fornitore_nome: string;
   numero_acquisti: number;
   quantita_totale: number;
-  prezzo_minimo: number;
+  prezzo_minimo: number | null;
+  prezzo_riferimento: number | null;
+  fonte_riferimento: 'listino' | 'minimo' | 'misto' | null;
   prezzo_medio: number;
   spreco_totale: number;
+}
+
+interface VarianceLossResponse {
+  periodo_dal: string | null;
+  righe: VarianceLossItem[];
+}
+
+const REFERENCE_LABELS: Record<string, string> = {
+  listino: 'listino',
+  minimo: 'minimo pagato',
+  misto: 'listino / minimo',
+};
+
+function formatUnitPrice(value: number | null): string {
+  if (value === null || value === undefined) return 'n.d.';
+  return `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+}
+
+function formatPeriodStart(isoDate: string | null): string {
+  if (!isoDate) return '';
+  const [year, month, day] = isoDate.slice(0, 10).split('-');
+  return `${day}/${month}/${year}`;
 }
 
 export default function Dashboard() {
   const [kpi, setKpi] = useState<KPI | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardItem[]>([]);
   const [varianceLoss, setVarianceLoss] = useState<VarianceLossItem[]>([]);
+  const [variancePeriodStart, setVariancePeriodStart] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -53,8 +79,10 @@ export default function Dashboard() {
         if (Array.isArray(leaderboardData)) {
           setLeaderboard(leaderboardData);
         }
-        if (Array.isArray(varianceData)) {
-          setVarianceLoss(varianceData);
+        const variance = varianceData as VarianceLossResponse | null;
+        if (variance && Array.isArray(variance.righe)) {
+          setVarianceLoss(variance.righe);
+          setVariancePeriodStart(variance.periodo_dal ?? null);
         }
       } catch (error: any) {
         if (error.name !== 'AbortError') {
@@ -99,11 +127,11 @@ export default function Dashboard() {
       subtitle: 'Contenziosi aperti con i fornitori'
     },
     { 
-      title: 'Spreco Mensile Rilevato', 
-      value: `€ ${Number(kpi?.euro_a_rischio || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 
-      icon: <AlertCircle color="var(--crit)" size={20} />, 
+      title: 'Contestate (a rischio)',
+      value: `€ ${Number(kpi?.euro_a_rischio || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      icon: <AlertCircle color="var(--crit)" size={20} />,
       bg: 'var(--status-red-bg)',
-      subtitle: 'Rincari da verificare questo mese'
+      subtitle: 'Anomalie contestate non ancora in reclamo (totale, non mensile)'
     },
     { 
       title: 'Attesa Validazione', 
@@ -266,9 +294,11 @@ export default function Dashboard() {
                 <th style={{ padding: '10px 8px' }}>Prodotto</th>
                 <th style={{ padding: '10px 8px' }}>Fornitore</th>
                 <th style={{ padding: '10px 8px', textAlign: 'center' }}>N. Acquisti</th>
-                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Prezzo Minimo</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Prezzo Riferimento</th>
                 <th style={{ padding: '10px 8px', textAlign: 'right' }}>Prezzo Medio</th>
-                <th style={{ padding: '10px 8px', textAlign: 'right' }}>Spreco Totale (YTD)</th>
+                <th style={{ padding: '10px 8px', textAlign: 'right' }}>
+                  {variancePeriodStart ? `Spreco dal ${formatPeriodStart(variancePeriodStart)}` : 'Spreco (tutto lo storico)'}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -280,25 +310,32 @@ export default function Dashboard() {
                 </tr>
               ) : (
                 varianceLoss.map((item) => (
-                  <tr key={item.sku_interno} style={{ borderBottom: '1px solid var(--line)', fontSize: '0.88rem' }}>
+                  <tr key={`${item.sku_interno}-${item.unita}`} style={{ borderBottom: '1px solid var(--line)', fontSize: '0.88rem' }}>
                     <td style={{ padding: '12px 8px', fontWeight: 500 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                         <span>{item.prodotto_nome}</span>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.sku_interno}</span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{item.sku_interno} · prezzi a {item.unita}</span>
                       </div>
                     </td>
                     <td style={{ padding: '12px 8px', color: 'var(--text-secondary)' }}>{item.fornitore_nome}</td>
                     <td style={{ padding: '12px 8px', textAlign: 'center', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{item.numero_acquisti}</td>
                     <td style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--ok)', fontWeight: 500, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      € {item.prezzo_minimo.toFixed(2)}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                        <span>{formatUnitPrice(item.prezzo_riferimento)} / {item.unita}</span>
+                        {item.fonte_riferimento && (
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>
+                            {REFERENCE_LABELS[item.fonte_riferimento] ?? item.fonte_riferimento}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'right', color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      € {item.prezzo_medio.toFixed(2)}
+                      {formatUnitPrice(item.prezzo_medio)} / {item.unita}
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                         <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                          -€ {item.spreco_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          € {item.spreco_totale.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         <div style={{ width: '100px', height: '5px', background: 'var(--crit-bg)', borderRadius: '3px', overflow: 'hidden', border: '1px solid var(--crit-border)' }}>
                           <div style={{ 

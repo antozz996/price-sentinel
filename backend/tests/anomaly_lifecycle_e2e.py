@@ -23,7 +23,7 @@ from app.api.deps import get_current_user
 from app.api.v1.anomalie import get_anomalia, list_anomalie
 from app.api.v1.disputes import list_dispute_candidates
 from app.api.v1.fatture import ResolveActionPayload, get_fattura, list_fatture, resolve_parked_line
-from app.api.v1.intelligence import get_kpi, get_price_trend, get_price_trends, get_pricing_audit, get_variance_loss
+from app.api.v1.intelligence import export_dispute_excel, get_kpi, get_price_trend, get_price_trends, get_variance_loss
 from app.api.v1.product_identity import approve_candidate
 from app.database import async_session_factory
 from app.models.anomalie import Anomalia, AnomaliaArchiviata, NotaDiCredito, StatoValidazione
@@ -39,7 +39,8 @@ from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.location import Location
 from app.models.products import MatchCandidate, Product, SupplierProductAlias
-from app.services.ingestion import _process_td04
+from app.models.automation import AutomationAlert
+from app.services.ingestion import _process_td04, _process_td08
 from app.services.normalization import normalize_text
 
 DSN = os.environ["TEST_DATABASE_DSN"]
@@ -359,7 +360,9 @@ async def check_credit_note(micro_open_id: int, micro_claim_id: int, material_id
         location = await db.get(Location, 1)
         result = await _process_td04(db, xml.id, parsed, fornitore, location)
         await db.commit()
-    check("credit note reconciles exactly the claim and the material anomaly", result["anomalie_riconciliate"] == 2)
+    proposed = {item["anomalia_id"] for item in result["proposte_chiusura"]}
+    check("credit note closes nothing automatically", result["anomalie_riconciliate"] == 0)
+    check("credit note proposes exactly the claim and the material anomaly", proposed == {micro_claim_id, material_id})
 
     async with async_session_factory() as db:
         states = {
@@ -369,10 +372,37 @@ async def check_credit_note(micro_open_id: int, micro_claim_id: int, material_id
             )
         }
         credited = set(await db.scalars(select(NotaDiCredito.anomalia_id)))
+        alerts = {
+            row.entity_id: row
+            for row in await db.scalars(
+                select(AutomationAlert).where(AutomationAlert.alert_type == "credit_note_proposal")
+            )
+        }
     check("credit note ignores unworked rounding noise", states[micro_open_id] == StatoValidazione.da_verificare)
-    check("credit note closes an open micro-claim", states[micro_claim_id] == StatoValidazione.risolta)
-    check("credit note closes a material anomaly", states[material_id] == StatoValidazione.risolta)
-    check("credit records match the closed anomalies", credited == {micro_claim_id, material_id})
+    check("an imported credit note leaves the micro-claim open", states[micro_claim_id] == StatoValidazione.in_reclamo)
+    check("an imported credit note leaves the material anomaly open", states[material_id] != StatoValidazione.risolta)
+    check("an imported credit note records no recovered money", credited == set())
+    check(
+        "each proposal is an open alert for the manager",
+        set(alerts) == {str(micro_claim_id), str(material_id)}
+        and all(alert.status == "open" and alert.location_id == 1 for alert in alerts.values()),
+    )
+
+    # TD08 (nota di credito semplificata) follows the same path as a TD04.
+    parsed.numero_documento = "CI-SYNTH-NC-TD08"
+    async with async_session_factory() as db:
+        xml = await Fixture(db).xml("td08")
+        fornitore = await db.get(Fornitore, 1)
+        location = await db.get(Location, 1)
+        result = await _process_td08(db, xml.id, parsed, fornitore, location)
+        await db.commit()
+        td08 = await db.get(Fattura, result["fattura_id"])
+    check(
+        "TD08 is stored as a credit note and only proposes",
+        result["status"] == "td08_registrata"
+        and td08.tipo_documento == TipoDocumento.TD08
+        and {item["anomalia_id"] for item in result["proposte_chiusura"]} == {micro_claim_id, material_id},
+    )
 
 
 async def check_variance_counts_each_line_once() -> None:
@@ -398,7 +428,7 @@ async def check_variance_counts_each_line_once() -> None:
         await db.commit()
 
     async with async_session_factory() as db:
-        rows = await get_variance_loss(_admin=ADMIN, db=db)
+        rows = (await get_variance_loss(_admin=ADMIN, db=db))["righe"]
     row = next(item for item in rows if item["sku_interno"] == "MULTI-SUPPLIER")
     check("variance counts each invoice line once", row["numero_acquisti"] == 2)
     check("variance is not multiplied by active price lists", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
@@ -417,11 +447,19 @@ async def check_excluded_lines_do_not_set_reference_price() -> None:
         await db.commit()
 
     async with async_session_factory() as db:
-        rows = await get_variance_loss(_admin=ADMIN, db=db)
+        rows = (await get_variance_loss(_admin=ADMIN, db=db))["righe"]
     row = next(item for item in rows if item["sku_interno"] == "OUTLIER")
     check("an excluded line does not become the reference price", Decimal(str(row["prezzo_minimo"])) == Decimal("10.0"))
     check("waste is measured against the real reference price", Decimal(str(row["spreco_totale"])) == Decimal("2.0"))
-    check("an excluded line still counts as a purchase", row["numero_acquisti"] == 3)
+    check("an excluded line leaves the waste totals too", row["numero_acquisti"] == 2)
+    check("waste is measured against the listino valid at the line date", row["fonte_riferimento"] == "listino")
+
+    from app.api.v1.intelligence import get_efficiency_leaderboard
+
+    async with async_session_factory() as db:
+        board = await get_efficiency_leaderboard(_admin=ADMIN, db=db)
+    check("efficiency leaderboard runs on PostgreSQL", bool(board) and board[0]["rank"] == 1
+          and all(item["totali"] >= item["ottimali"] for item in board))
 
 
 async def check_anomaly_check_start() -> None:
@@ -450,24 +488,48 @@ async def check_anomaly_check_start() -> None:
         try:
             settings.ANOMALY_CHECK_START = datetime.now(timezone.utc) + timedelta(minutes=1)
             waste = await get_variance_loss(_admin=ADMIN, db=db)
-            check("waste ignores purchases uploaded before the start date", waste == [])
-            audit = await get_pricing_audit(location_id=None, anno=None, soglia=0.0, limit=10, offset=0, _admin=ADMIN, db=db)
-            check("price increases ignore invoices uploaded before the start date", audit["total"] == 0)
+            check("waste ignores purchases uploaded before the start date", waste["righe"] == [])
+            check("waste states the date it counts from",
+                  waste["periodo_dal"] == settings.ANOMALY_CHECK_START.date().isoformat())
         finally:
             settings.ANOMALY_CHECK_START = original
 
 
 async def check_price_history_endpoints() -> None:
     async with async_session_factory() as db:
-        trend = await get_price_trend("OUTLIER", _user=ADMIN, db=db)
+        trend = await get_price_trend("OUTLIER", fornitore_id=None, _user=ADMIN, db=db)
         check("product price history opens", trend is not None)
-        audit = await get_pricing_audit(location_id=None, anno=None, soglia=5.0, limit=10, offset=0, _admin=ADMIN, db=db)
-        check("pricing audit works without filters", isinstance(audit, dict))
         trends = await get_price_trends(skus="OUTLIER", start_date=None, end_date=None,
                                         location_ids=None, fornitore_ids=None, _user=ADMIN, db=db)
         history = trends["OUTLIER"]["history"]
         check("every price point links to its invoice", bool(history) and all(
             point["fattura_id"] and point["numero_documento"] for point in history))
+        check("price history has only the SKU's own lines, excluded line left out",
+              sorted(point["prezzo_pagato"] for point in history) == [10.0, 12.0])
+        check("each point carries the supplier's price list valid on its date",
+              all(point["confrontabile"] and point["prezzo_contratto"] == 10.0 and point["unita_confronto"] == "Pz"
+                  for point in history))
+        check("single-supplier series shows the current price list",
+              trends["OUTLIER"]["prezzo_contratto_corrente"] == 10.0)
+
+        # The dispute dossier lists exactly the anomalies shown in the validation room.
+        from io import BytesIO
+
+        import openpyxl
+
+        from app.services.dispute_dossier import dossier_total, load_dossier_rows
+
+        visible = await list_anomalie(response=Response(), stato="da_verificare", limit=200, offset=0,
+                                      current_user=ADMIN, db=db)
+        rows = await load_dossier_rows(db, ADMIN, stato=StatoValidazione.da_verificare)
+        check("dossier has one row per visible anomaly", sorted(r.anomalia_id for r in rows) == sorted(a.id for a in visible))
+        check("dossier total equals the visible anomalies' overcharge",
+              dossier_total(rows) == sum((Decimal(str(a.delta_totale)) for a in visible), Decimal("0")))
+        response = await export_dispute_excel(location_id=None, anno=None, stato="da_verificare", _user=ADMIN, db=db)
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        sheet = openpyxl.load_workbook(BytesIO(body))["Rincari da contestare"]
+        check("dossier Excel total row matches", abs(Decimal(str(sheet.cell(row=sheet.max_row, column=14).value))
+                                                    - dossier_total(rows)) < Decimal("0.0001"))
 
 
 def check_cors_exposes_pagination_total() -> None:

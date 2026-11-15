@@ -151,12 +151,17 @@ jobs:
           assert len(matches)==1
           snippet=ast.get_source_segment(src,matches[0])
           assert snippet is not None
-          assert "Anomalia.tenant_id" not in snippet
-          assert "NotaDiCredito.tenant_id" not in snippet
-          assert snippet.count(".join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)") == 2
-          assert snippet.count(".join(Fattura, RigaFattura.fattura_id == Fattura.id)") == 2
-          assert snippet.count(".where(Fattura.tenant_id == tenant_id)") == 2
           assert 'raise HTTPException(status_code=403' in snippet
+          # The KPI queries live in services/anomaly_kpi.py (same scope as the anomaly list).
+          assert "kpi_anomalies_statement(_admin)" in snippet
+          assert "kpi_recovered_statement(_admin)" in snippet
+          kpi=Path("backend/app/services/anomaly_kpi.py").read_text()
+          assert "Anomalia.tenant_id" not in kpi
+          assert "NotaDiCredito.tenant_id" not in kpi
+          assert kpi.count(".join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id)") == 2
+          assert kpi.count(".join(Fattura, RigaFattura.fattura_id == Fattura.id)") == 2
+          assert kpi.count("invoice_tenant_filter(user)") == 2
+          assert "location_tenant_filter(user)" in kpi
           smoke=Path("backend/scripts/smoke_v2_staging.py").read_text()
           assert "time.monotonic()" in smoke
           assert 'type(exc).__name__' in smoke

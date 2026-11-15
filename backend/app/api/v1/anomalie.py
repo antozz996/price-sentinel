@@ -46,30 +46,17 @@ async def list_anomalie(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.fatture import RigaFattura, Fattura
-    from app.models.fornitori import Fornitore
+    from app.services.dispute_dossier import comparison_units, visible_anomaly_conditions
 
-    from app.models.esclusi import SKUEscluso
-
+    # Same conditions as the dispute dossier: tenant, excluded SKUs, materiality
+    # (micro-deltas stay visible only while someone handles them), manager's site.
     query = select(Anomalia).join(RigaFattura, Anomalia.riga_fattura_id == RigaFattura.id).join(
         Fattura, RigaFattura.fattura_id == Fattura.id
     ).options(
         selectinload(Anomalia.riga_fattura).selectinload(RigaFattura.fattura).selectinload(Fattura.fornitore)
     ).where(
-        and_(
-            invoice_tenant_filter(current_user),
-            RigaFattura.sku_interno.is_(None) |
-            ~RigaFattura.sku_interno.in_(select(SKUEscluso.sku_interno)),
-            # Micro-deltas remain stored for audit and stay visible only while
-            # someone is still handling them.
-            operational_anomaly_filter(),
-        )
+        and_(*visible_anomaly_conditions(current_user, StatoValidazione(stato) if stato else None))
     ).order_by(Anomalia.id.desc())
-
-    if stato:
-        query = query.where(Anomalia.stato_validazione == StatoValidazione(stato))
-
-    if current_user.ruolo.value == "manager":
-        query = query.where(Fattura.location_id == current_user.location_id)
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -80,7 +67,14 @@ async def list_anomalie(
     # Slice results
     query = query.limit(limit).offset(offset)
     result = await db.execute(query)
-    return result.scalars().all()
+    anomalie = result.scalars().all()
+    units = await comparison_units(db, [
+        (a.id, a.riga_fattura.sku_interno, a.riga_fattura.fattura.fornitore_id, a.riga_fattura.fattura.data_documento)
+        for a in anomalie if a.riga_fattura is not None and a.riga_fattura.fattura is not None
+    ])
+    for anomalia in anomalie:
+        anomalia.comparison_unit = units.get(anomalia.id)
+    return anomalie
 
 
 @router.get(
@@ -313,6 +307,18 @@ async def registra_nota_credito(
         raise HTTPException(
             status_code=400,
             detail="NC registrabile solo su anomalie in stato 'in_reclamo'",
+        )
+
+    # Un'anomalia dentro una pratica ha la sua nota di credito nella pratica
+    # (Contestazioni): registrarla anche qui la conterebbe due volte.
+    from app.models.disputes import DisputeCaseAnomaly
+    in_case = await db.scalar(
+        select(DisputeCaseAnomaly.id).where(DisputeCaseAnomaly.legacy_anomaly_id == data.anomalia_id)
+    )
+    if in_case is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Anomalia in una pratica di contestazione: registra la nota di credito nella pratica",
         )
 
     # Crea NC

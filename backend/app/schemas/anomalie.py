@@ -28,6 +28,11 @@ class AnomaliaResponse(BaseModel):
     descrizione_orig: str | None = None
     fornitore_nome: str | None = None
     quantita: Decimal | None = None
+    # quantita è in unità di fattura; i prezzi snapshot e delta_prezzo sono per
+    # comparison_unit: delta_totale = delta_prezzo x quantita_confronto.
+    quantita_confronto: Decimal | None = None
+    unita_fattura: str | None = None
+    comparison_unit: str | None = None
     codice_fornitore: str | None = None
     fornitore_id: int | None = None
     sku_interno: str | None = None

@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 from io import BytesIO
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
@@ -15,16 +16,16 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload, selectinload
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import get_current_user, require_manager
 from app.database import get_db
-from app.models.anomalie import Anomalia, StatoValidazione
+from app.models.anomalie import Anomalia
 from app.services.anomaly_policy import operational_anomaly_filter
-from app.services.tenant_scope import invoice_tenant_filter
+from app.services.tenant_scope import invoice_tenant_filter, location_tenant_filter
 from app.models.disputes import (
     DisputeAttachment,
     DisputeCase,
@@ -57,6 +58,9 @@ from app.schemas.disputes import (
 )
 from app.services.dispute_pdf import generate_dispute_pdf
 from app.services.disputes import (
+    DISPUTABLE_ANOMALY_STATES,
+    NOT_LIVE_CASE_STATUSES,
+    OUTSTANDING_CASE_STATUSES,
     assert_location_access,
     create_attachment,
     create_case,
@@ -82,14 +86,24 @@ async def list_dispute_candidates(
     supplier_id: int | None = Query(None),
     source: str | None = Query(None, pattern="^(reconciliation|legacy)$"),
     limit: int = Query(100, ge=1, le=250),
+    # Annotated: anche chiamata direttamente (test) l'offset di default vale 0.
+    offset: Annotated[int, Query(ge=0, le=100_000)] = 0,
     user: Utente = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Anomalie ancora contestabili, a pagine (limit/offset).
+
+    Le due fonti hanno lo stesso ordinamento (data desc, id desc): per la pagina
+    richiesta basta leggere da ciascuna le prime offset+limit righe, unirle e
+    tagliare. Prima c'era solo un limit fisso e oltre 200 anomalie le piu'
+    vecchie non si potevano mai mettere in pratica.
+    """
     if user.ruolo.value != "admin":
         location_id = user.location_id
     if location_id is not None:
         assert_location_access(user, location_id)
 
+    window = offset + limit
     rows: list[dict] = []
     if source in {None, "reconciliation"}:
         statement = (
@@ -130,8 +144,9 @@ async def list_dispute_candidates(
             )
         result = await db.execute(
             statement.order_by(
-                PurchaseOrderReconciliationAnomaly.created_at.desc()
-            ).limit(limit)
+                PurchaseOrderReconciliationAnomaly.created_at.desc(),
+                PurchaseOrderReconciliationAnomaly.id.desc(),
+            ).limit(window)
         )
         for anomaly, reconciliation, mapping in result.all():
             rows.append(
@@ -168,7 +183,9 @@ async def list_dispute_candidates(
             )
             .where(
                 DisputeCaseAnomaly.id.is_(None),
-                Anomalia.stato_validazione != StatoValidazione.risolta,
+                # Stessa whitelist della creazione pratica: un'anomalia accettata
+                # dal manager (nuovo prezzo accettato) non e' contestabile.
+                Anomalia.stato_validazione.in_(DISPUTABLE_ANOMALY_STATES),
                 operational_anomaly_filter(),
                 invoice_tenant_filter(user),
             )
@@ -177,7 +194,11 @@ async def list_dispute_candidates(
             statement = statement.where(Fattura.location_id == location_id)
         if supplier_id is not None:
             statement = statement.where(Fattura.fornitore_id == supplier_id)
-        result = await db.execute(statement.order_by(Anomalia.id.desc()).limit(limit))
+        result = await db.execute(
+            statement.order_by(
+                Fattura.data_documento.desc(), Anomalia.id.desc()
+            ).limit(window)
+        )
         for anomaly, line, invoice in result.all():
             rows.append(
                 {
@@ -194,8 +215,23 @@ async def list_dispute_candidates(
                     "created_at": invoice.data_documento,
                 }
             )
-    rows.sort(key=lambda item: str(item["created_at"]), reverse=True)
-    return rows[:limit]
+    return merge_candidate_page(rows, offset, limit)
+
+
+def merge_candidate_page(rows: list[dict], offset: int, limit: int) -> list[dict]:
+    """Ordina le candidate delle due fonti in modo stabile e restituisce una pagina."""
+    rows.sort(
+        key=lambda item: (str(item["created_at"]), item["source"], item["id"]),
+        reverse=True,
+    )
+    return rows[offset : offset + limit]
+
+
+def case_tenant_filter(user):
+    """Pratiche del tenant dell'utente (le sedi senza tenant sono del tenant 1)."""
+    return DisputeCase.location_id.in_(
+        select(Location.id).where(location_tenant_filter(user))
+    )
 
 
 @router.get("/dashboard", response_model=DisputeDashboardOut)
@@ -208,9 +244,12 @@ async def dispute_dashboard(
         location_id = user.location_id
     if location_id is not None:
         assert_location_access(user, location_id)
-    case_filter = (
-        DisputeCase.location_id == location_id if location_id is not None else True
+    case_filter = and_(
+        case_tenant_filter(user),
+        DisputeCase.location_id == location_id if location_id is not None else true(),
     )
+    # Bozze e pratiche annullate non sono contestazioni: fuori da classifiche e trend.
+    live_case = DisputeCase.status.notin_(NOT_LIVE_CASE_STATUSES)
     amounts = (
         await db.execute(
             select(
@@ -221,7 +260,7 @@ async def dispute_dashboard(
                 DisputeCase,
                 DisputeCase.id == DisputeCaseAnomaly.dispute_case_id,
             )
-            .where(case_filter)
+            .where(case_filter, DisputeCase.status != "cancelled")
         )
     ).one()
     totals = (
@@ -248,8 +287,9 @@ async def dispute_dashboard(
                     0,
                 ),
                 func.coalesce(
+                    # "Da recuperare": solo pratiche inviate e ancora aperte.
                     func.sum(DisputeCase.unrecovered_amount).filter(
-                        DisputeCase.status != "cancelled"
+                        DisputeCase.status.in_(OUTSTANDING_CASE_STATUSES)
                     ),
                     0,
                 ),
@@ -287,7 +327,7 @@ async def dispute_dashboard(
                     "recovered"
                 ),
             )
-            .where(case_filter)
+            .where(case_filter, live_case)
             .group_by(column)
             .order_by(func.sum(DisputeCase.requested_amount).desc())
         )
@@ -312,7 +352,7 @@ async def dispute_dashboard(
                 DisputeCase,
                 DisputeCase.id == DisputeCaseAnomaly.dispute_case_id,
             )
-            .where(case_filter)
+            .where(case_filter, live_case)
             .group_by(DisputeCaseAnomaly.reason_snapshot)
             .order_by(func.sum(DisputeCaseAnomaly.claimed_amount).desc())
         )
@@ -325,7 +365,7 @@ async def dispute_dashboard(
                 func.coalesce(func.sum(DisputeCase.requested_amount), 0),
                 func.coalesce(func.sum(DisputeCase.recovered_amount), 0),
             )
-            .where(case_filter)
+            .where(case_filter, live_case)
             .group_by(month_bucket)
             .order_by(month_bucket)
         )

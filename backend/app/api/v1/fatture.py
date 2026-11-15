@@ -4,6 +4,7 @@ Read-only con filtri per location/fornitore/tipo + marker management.
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
@@ -25,6 +26,15 @@ from app.services.anomaly_policy import (
     is_material_price_increase,
     remove_stale_unworked_anomalies,
     operational_anomaly_filter,
+)
+from app.services.purchase_lines import (
+    AliasIndex,
+    document_sign,
+    is_free_sql,
+    line_conversion,
+    line_net_unit_price,
+    sign_sql,
+    signed_amount_sql,
 )
 from app.services.tenant_scope import invoice_belongs_to_user, invoice_tenant_filter
 
@@ -79,7 +89,8 @@ async def list_fatture(
         .group_by(
             Fattura.id, Fornitore.nome_azienda, Location.nome_struttura
         )
-        .order_by(Fattura.data_documento.desc())
+        # Fattura.id breaks ties: with LIMIT/OFFSET an unstable order repeats or skips invoices.
+        .order_by(Fattura.data_documento.desc(), Fattura.id.desc())
     )
 
     conditions = []
@@ -151,15 +162,8 @@ async def list_fatture(
 
     amount_res = await db.execute(
         select(
-            func.coalesce(
-                func.sum(
-                    case(
-                        (Fattura.tipo_documento == TipoDocumento.TD04, -Fattura.totale_imponibile),
-                        else_=Fattura.totale_imponibile,
-                    )
-                ),
-                0,
-            )
+            # TD04 and TD08 (simplified credit note) are subtracted.
+            func.coalesce(func.sum(sign_sql(Fattura.tipo_documento) * Fattura.totale_imponibile), 0)
         ).where(Fattura.id.in_(matching_ids))
     )
     response.headers["X-Total-Amount"] = str(amount_res.scalar())
@@ -320,85 +324,130 @@ async def list_righe_fattura(
         riga.delta_prezzo = anomaly.delta_prezzo if anomaly else None
         riga.delta_totale = anomaly.delta_totale if anomaly else None
 
-    # Resolve commercial agreement (PFA) details for each matched line item
-    skus = [r.sku_interno for r in righe if r.sku_interno]
-    if skus:
-        from app.models.listino import ListinoMaster, PFATipo
-        from decimal import Decimal
-        listino_query = select(ListinoMaster).where(
-            and_(
-                ListinoMaster.fornitore_id == fattura.fornitore_id,
-                ListinoMaster.sku_interno.in_(skus),
-                ListinoMaster.data_inizio_validita <= fattura.data_documento,
-                (ListinoMaster.data_scadenza.is_(None) | (ListinoMaster.data_scadenza >= fattura.data_documento))
-            )
-        ).options(selectinload(ListinoMaster.pfa_scaglioni))
-        listino_res = await db.execute(listino_query)
-        listini = listino_res.scalars().all()
-        sku_to_listino = {lst.sku_interno: lst for lst in listini}
+    # Prezzo e importo di fattura: pu x (1 - sconto/100), mai prezzo_netto_normalizzato
+    # (su alcune righe storiche contiene il prezzo già convertito a pezzo).
+    # Le note di credito TD04/TD08 hanno importo negativo.
+    segno = document_sign(fattura.tipo_documento)
+    for riga in righe:
+        riga.prezzo_netto_fattura = line_net_unit_price(riga.prezzo_unitario_fatturato, riga.sconto_percentuale)
+        riga.importo_riga = segno * riga.prezzo_netto_fattura * Decimal(str(riga.quantita or 0))
 
-        # Pre-query cumulative year-to-date spent per SKU for scaglioni if there are scaglioni agreements
-        has_scaglioni = any(l.pfa_tipo == PFATipo.scaglioni for l in listini)
-        sku_to_cumulative_spent = {}
-        if has_scaglioni:
-            year_start = date(fattura.data_documento.year, 1, 1)
-            spent_query = select(
-                RigaFattura.sku_interno,
-                func.sum(
-                    func.coalesce(
-                        # Subtract if credit note, else add
-                        func.distinct(
-                            func.case(
-                                (Fattura.tipo_documento == "TD04", -RigaFattura.prezzo_netto_normalizzato * RigaFattura.quantita),
-                                else_=RigaFattura.prezzo_netto_normalizzato * RigaFattura.quantita
-                            )
-                        ),
-                        Decimal("0.0")
-                    )
-                )
-            ).join(Fattura).where(
-                and_(
-                    Fattura.fornitore_id == fattura.fornitore_id,
-                    RigaFattura.sku_interno.in_(skus),
-                    Fattura.data_documento >= year_start,
-                    Fattura.data_documento <= fattura.data_documento
-                )
-            ).group_by(RigaFattura.sku_interno)
-            spent_res = await db.execute(spent_query)
-            for row in spent_res.all():
-                sku_to_cumulative_spent[row[0]] = Decimal(str(row[1] or "0.0"))
-
-        for riga in righe:
-            if riga.sku_interno in sku_to_listino:
-                lst = sku_to_listino[riga.sku_interno]
-                riga.pfa_tipo = lst.pfa_tipo.value if (lst.pfa_tipo and hasattr(lst.pfa_tipo, 'value')) else lst.pfa_tipo
-                riga.pfa_valore = lst.pfa_valore
-                
-                # Calculate the netto_rientro unit price
-                prezzo_netto = Decimal(str(riga.prezzo_netto_normalizzato if riga.prezzo_netto_normalizzato is not None else (riga.prezzo_unitario_fatturato or 0)))
-                if lst.pfa_tipo == PFATipo.fisso and lst.pfa_valore:
-                    riga.netto_rientro = prezzo_netto - Decimal(str(lst.pfa_valore))
-                elif lst.pfa_tipo == PFATipo.percentuale and lst.pfa_valore:
-                    riga.netto_rientro = prezzo_netto * (Decimal("1.0") - Decimal(str(lst.pfa_valore)))
-                elif lst.pfa_tipo == PFATipo.scaglioni and lst.pfa_scaglioni:
-                    cumulative = sku_to_cumulative_spent.get(riga.sku_interno, Decimal("0.0"))
-                    active_pct = Decimal("0.0")
-                    for sc in lst.pfa_scaglioni:
-                        soglia_da = Decimal(str(sc.soglia_da))
-                        soglia_a = Decimal(str(sc.soglia_a)) if sc.soglia_a is not None else None
-                        if cumulative >= soglia_da:
-                            if soglia_a is None or cumulative < soglia_a:
-                                active_pct = Decimal(str(sc.valore_percentuale))
-                                break
-                    if active_pct == Decimal("0.0") and lst.pfa_scaglioni:
-                        matching_scs = [sc for sc in lst.pfa_scaglioni if cumulative >= Decimal(str(sc.soglia_da))]
-                        if matching_scs:
-                            matching_scs.sort(key=lambda x: x.soglia_da, reverse=True)
-                            active_pct = Decimal(str(matching_scs[0].valore_percentuale))
-                    
-                    riga.netto_rientro = prezzo_netto * (Decimal("1.0") - active_pct)
-
+    await _attach_pfa_net_prices(db, fattura, righe, current_user)
     return righe
+
+
+def scaglione_percentage(scaglioni, spent: Decimal) -> Decimal:
+    """Percentuale dello scaglione raggiunto con la spesa indicata (0 se nessuno)."""
+    for sc in scaglioni:
+        soglia_da = Decimal(str(sc.soglia_da))
+        soglia_a = Decimal(str(sc.soglia_a)) if sc.soglia_a is not None else None
+        if spent >= soglia_da and (soglia_a is None or spent < soglia_a):
+            return Decimal(str(sc.valore_percentuale))
+    # Fallback: highest threshold met when the ranges leave gaps.
+    reached = [sc for sc in scaglioni if spent >= Decimal(str(sc.soglia_da))]
+    if reached:
+        return Decimal(str(max(reached, key=lambda sc: Decimal(str(sc.soglia_da))).valore_percentuale))
+    return Decimal("0")
+
+
+def scaglioni_spent_query(fornitore_id: int, skus, year_start: date, until: date, current_user):
+    """Spesa dell'anno per SKU per gli scaglioni PFA.
+
+    SUM(CASE ...) con sqlalchemy.case (func.case con else_ dava TypeError) e senza
+    DISTINCT (due righe con lo stesso importo sono due acquisti). Importo dal prezzo
+    di fattura, segno -1 per TD04/TD08, omaggi esclusi.
+    """
+    return (
+        select(RigaFattura.sku_interno, func.coalesce(func.sum(signed_amount_sql()), 0))
+        .join(Fattura, Fattura.id == RigaFattura.fattura_id)
+        .where(
+            Fattura.fornitore_id == fornitore_id,
+            RigaFattura.sku_interno.in_(skus),
+            ~is_free_sql(),
+            Fattura.data_documento >= year_start,
+            Fattura.data_documento <= until,
+            invoice_tenant_filter(current_user),
+        )
+        .group_by(RigaFattura.sku_interno)
+    )
+
+
+async def _attach_pfa_net_prices(db, fattura, righe, current_user) -> None:
+    """Prezzo netto dopo il premio di fine anno (PFA) per le righe con un accordo.
+
+    Base: prezzo di fattura per unità di fattura. Un PFA fisso è espresso per unità
+    di listino: si converte nell'unità della riga con il fattore del collegamento
+    (line_conversion); se la conversione non è affidabile il Net non si mostra.
+    """
+    skus = sorted({r.sku_interno for r in righe if r.sku_interno})
+    if not skus:
+        return
+    from app.models.listino import ListinoMaster, PFATipo
+    from app.models.products import Product, SupplierProductAlias
+
+    listino_query = select(ListinoMaster).where(
+        and_(
+            ListinoMaster.fornitore_id == fattura.fornitore_id,
+            ListinoMaster.sku_interno.in_(skus),
+            ListinoMaster.data_inizio_validita <= fattura.data_documento,
+            (ListinoMaster.data_scadenza.is_(None) | (ListinoMaster.data_scadenza >= fattura.data_documento))
+        )
+    ).options(selectinload(ListinoMaster.pfa_scaglioni))
+    listini = (await db.execute(listino_query)).scalars().all()
+    sku_to_listino = {lst.sku_interno: lst for lst in listini if lst.pfa_tipo}
+    if not sku_to_listino:
+        return
+
+    sku_to_cumulative_spent: dict[str, Decimal] = {}
+    if any(lst.pfa_tipo == PFATipo.scaglioni for lst in sku_to_listino.values()):
+        year_start = date(fattura.data_documento.year, 1, 1)
+        spent_res = await db.execute(scaglioni_spent_query(
+            fattura.fornitore_id, list(sku_to_listino), year_start, fattura.data_documento, current_user
+        ))
+        for sku, spent in spent_res.all():
+            sku_to_cumulative_spent[sku] = Decimal(str(spent or 0))
+
+    products: dict[str, Product] = {}
+    alias_index = AliasIndex([])
+    fixed_skus = [sku for sku, lst in sku_to_listino.items() if lst.pfa_tipo == PFATipo.fisso]
+    if fixed_skus:
+        products = {
+            p.sku_interno: p
+            for p in (await db.execute(
+                select(Product).options(noload("*")).where(Product.sku_interno.in_(fixed_skus))
+            )).scalars().all()
+        }
+        alias_index = AliasIndex((await db.execute(
+            select(SupplierProductAlias).options(noload("*"))
+            .where(SupplierProductAlias.supplier_id == fattura.fornitore_id)
+        )).scalars().all())
+
+    for riga in righe:
+        lst = sku_to_listino.get(riga.sku_interno)
+        if lst is None:
+            continue
+        riga.pfa_tipo = getattr(lst.pfa_tipo, "value", lst.pfa_tipo)
+        riga.pfa_valore = lst.pfa_valore
+        prezzo = riga.prezzo_netto_fattura
+        if lst.pfa_tipo == PFATipo.fisso and lst.pfa_valore:
+            product = products.get(riga.sku_interno)
+            alias = alias_index.resolve(
+                fattura.fornitore_id, getattr(product, "id", None),
+                riga.codice_fornitore_raw, riga.descrizione_fornitore_raw,
+            )
+            conversion = line_conversion(
+                product=product, alias=alias, unita_misura=riga.unita_misura_fattura,
+                descrizione=riga.descrizione_fornitore_raw, target_unit=lst.unita_misura or None,
+            )
+            riga.netto_rientro = (
+                prezzo - Decimal(str(lst.pfa_valore)) * conversion.factor
+                if conversion.reliable and conversion.factor is not None else None
+            )
+        elif lst.pfa_tipo == PFATipo.percentuale and lst.pfa_valore:
+            riga.netto_rientro = prezzo * (Decimal("1") - Decimal(str(lst.pfa_valore)))
+        elif lst.pfa_tipo == PFATipo.scaglioni and lst.pfa_scaglioni:
+            cumulative = sku_to_cumulative_spent.get(riga.sku_interno, Decimal("0"))
+            riga.netto_rientro = prezzo * (Decimal("1") - scaglione_percentage(lst.pfa_scaglioni, cumulative))
 
 
 @router.get(
