@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Anomalia, API_BASE, getHeaders } from '../api';
+import { PriceTrendSeries, downloadWithAuth, formatEuro, isLinePoint, pointPriceLabel } from '../priceTrend';
 import { AlertTriangle, MessageSquare, Download, Check, Save, Sparkles, RefreshCw, TrendingUp } from 'lucide-react';
 import Pagination from './Pagination';
+
+// Snapshot prices are per comparison unit; the invoice quantity is per invoice unit.
+const comparisonQuantity = (ano: Anomalia): number => Number(ano.quantita_confronto ?? ano.quantita ?? 0);
+const unitLabel = (ano: Anomalia): string => ano.comparison_unit || 'unità di listino';
+const trendKey = (sku: string, fornitoreId?: number | null) => `${sku}|${fornitoreId ?? ''}`;
 
 export default function ValidationRoom() {
   const [anomalie, setAnomalie] = useState<Anomalia[]>([]);
@@ -13,8 +19,10 @@ export default function ValidationRoom() {
 
   // Timeline analytics states
   const [expandedTrends, setExpandedTrends] = useState<{ [anomaliaId: number]: boolean }>({});
-  const [trendData, setTrendData] = useState<{ [sku: string]: any }>({});
-  const [loadingTrend, setLoadingTrend] = useState<{ [sku: string]: boolean }>({});
+  // Keyed by sku|supplier: the trend of an anomaly shows only its own supplier.
+  const [trendData, setTrendData] = useState<{ [key: string]: PriceTrendSeries | null }>({});
+  const [loadingTrend, setLoadingTrend] = useState<{ [key: string]: boolean }>({});
+  const [exporting, setExporting] = useState(false);
 
   // Pagination states
   const [limit, setLimit] = useState(25);
@@ -143,7 +151,7 @@ export default function ValidationRoom() {
   };
 
   // Toggle visual trend
-  const toggleTrend = async (anomaliaId: number, sku: string) => {
+  const toggleTrend = async (anomaliaId: number, sku: string, fornitoreId?: number | null) => {
     if (expandedTrends[anomaliaId]) {
       setExpandedTrends({ ...expandedTrends, [anomaliaId]: false });
       return;
@@ -151,37 +159,54 @@ export default function ValidationRoom() {
 
     setExpandedTrends({ ...expandedTrends, [anomaliaId]: true });
 
-    if (trendData[sku]) return; // already loaded
+    const key = trendKey(sku, fornitoreId);
+    if (trendData[key]) return; // already loaded
 
     try {
-      setLoadingTrend(prev => ({ ...prev, [sku]: true }));
-      const res = await fetch(`${API_BASE}/intelligence/price-trend/${sku}`, { headers: getHeaders() });
+      setLoadingTrend(prev => ({ ...prev, [key]: true }));
+      const params = new URLSearchParams({ skus: sku });
+      if (fornitoreId) params.set('fornitore_ids', String(fornitoreId));
+      const res = await fetch(`${API_BASE}/intelligence/price-trends?${params}`, { headers: getHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setTrendData(prev => ({ ...prev, [sku]: data }));
+        setTrendData(prev => ({ ...prev, [key]: data?.[sku] ?? null }));
       }
     } catch (err) {
       console.error("Error loading trend data", err);
     } finally {
-      setLoadingTrend(prev => ({ ...prev, [sku]: false }));
+      setLoadingTrend(prev => ({ ...prev, [key]: false }));
     }
   };
 
   // Generates 1-click WhatsApp preformatted message
   const handleWhatsAppDispute = (ano: Anomalia) => {
-    const qtaStr = Number(ano.quantita || 1).toFixed(2);
-    const listinoStr = Number(ano.prezzo_listino_snapshot).toFixed(2);
-    const fatturaStr = Number(ano.prezzo_fatturato_snapshot).toFixed(2);
-    const deltaStr = Number(ano.delta_totale).toFixed(2);
-    
-    const message = `Ciao, volevo segnalare un rincaro riscontrato sul vostro ultimo documento per il prodotto "${ano.descrizione_orig}". Il prezzo concordato da listino è di € ${listinoStr}, ma in fattura è stato addebitato € ${fatturaStr}. Su una quantità di ${qtaStr} unità, questo comporta una differenza da stornare pari a € ${deltaStr}.\nVi chiediamo cortesemente di emettere nota di credito correttiva. Grazie!`;
-    
+    // Quantity in the same unit as the two prices, so price difference x quantity = total.
+    const unit = unitLabel(ano);
+    const qtaStr = comparisonQuantity(ano).toLocaleString('it-IT', { maximumFractionDigits: 2 });
+    const invoiceQty = Number(ano.quantita ?? 0);
+    const invoiceQtyStr = invoiceQty !== comparisonQuantity(ano) && ano.unita_fattura
+      ? ` (${invoiceQty.toLocaleString('it-IT', { maximumFractionDigits: 2 })} ${ano.unita_fattura} in fattura)`
+      : '';
+    const listinoStr = formatEuro(Number(ano.prezzo_listino_snapshot));
+    const fatturaStr = formatEuro(Number(ano.prezzo_fatturato_snapshot));
+    const deltaStr = formatEuro(Number(ano.delta_totale));
+
+    const message = `Ciao, volevo segnalare un rincaro riscontrato sul vostro ultimo documento per il prodotto "${ano.descrizione_orig}". Il prezzo concordato da listino è di ${listinoStr} / ${unit}, ma in fattura è stato addebitato ${fatturaStr} / ${unit}. Su una quantità di ${qtaStr} ${unit}${invoiceQtyStr}, questo comporta una differenza da stornare pari a ${deltaStr}.\nVi chiediamo cortesemente di emettere nota di credito correttiva. Grazie!`;
+
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
 
-  const handleExportExcel = () => {
-    window.open(`${API_BASE}/intelligence/export-dispute-excel?soglia=5`, '_blank');
+  // The dossier lists exactly the anomalies of this panel (same filters as the list).
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      await downloadWithAuth('/intelligence/export-dispute-excel', 'dossier_contestazione_rincari.xlsx');
+    } catch (err) {
+      alert(`Impossibile scaricare il dossier Excel: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (loading) return <div style={{ color: 'var(--text-secondary)', padding: '24px' }}>Caricamento anomalie...</div>;
@@ -198,8 +223,8 @@ export default function ValidationRoom() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn" onClick={handleExportExcel} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-elevated)', borderColor: 'var(--line-strong)' }}>
-            <Download size={16} /> Esporta Dossier Excel
+          <button className="btn" onClick={handleExportExcel} disabled={exporting} title="Le anomalie di questo pannello, una riga ciascuna: il totale è la somma dei sovrapprezzi" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-elevated)', borderColor: 'var(--line-strong)' }}>
+            <Download size={16} /> {exporting ? 'Preparazione…' : 'Esporta Dossier Excel'}
           </button>
           <button className="btn btn-primary" onClick={() => fetchAnomalie()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <RefreshCw size={16} /> Refresh ({total})
@@ -218,8 +243,10 @@ export default function ValidationRoom() {
             const rincaroPercentuale = ((Number(ano.prezzo_fatturato_snapshot) - Number(ano.prezzo_listino_snapshot)) / Number(ano.prezzo_listino_snapshot) * 100);
             const isTrendOpen = expandedTrends[ano.id] || false;
             const sku = ano.sku_interno || selectedSkus[ano.id] || "";
-            const currentTrend = trendData[sku];
-            const isTrendLoading = loadingTrend[sku] || false;
+            const currentTrend = trendData[trendKey(sku, ano.fornitore_id)];
+            const isTrendLoading = loadingTrend[trendKey(sku, ano.fornitore_id)] || false;
+            const unit = unitLabel(ano);
+            const qtyConfronto = comparisonQuantity(ano);
 
             return (
               <div key={ano.id} className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', borderLeft: '4px solid var(--crit)' }}>
@@ -250,26 +277,31 @@ export default function ValidationRoom() {
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Fatturato Netto</span>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      € {Number(ano.prezzo_fatturato_snapshot).toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ cad</span>
+                      {formatEuro(Number(ano.prezzo_fatturato_snapshot))} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ {unit}</span>
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Baseline Listino</span>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      € {Number(ano.prezzo_listino_snapshot).toFixed(2)} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ cad</span>
+                      {formatEuro(Number(ano.prezzo_listino_snapshot))} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ {unit}</span>
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Differenza Unitaria</span>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      + € {Number(ano.delta_prezzo).toFixed(2)}
+                      + € {Number(ano.delta_prezzo).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ {unit}</span>
                     </div>
                   </div>
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Volume Acquistato</span>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      {Number(ano.quantita).toFixed(2)} unità
+                      {qtyConfronto.toLocaleString('it-IT', { maximumFractionDigits: 2 })} {unit}
                     </div>
+                    {Number(ano.quantita ?? 0) !== qtyConfronto && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block' }}>
+                        ({Number(ano.quantita ?? 0).toLocaleString('it-IT', { maximumFractionDigits: 2 })} {ano.unita_fattura || ''} in fattura)
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -341,7 +373,7 @@ export default function ValidationRoom() {
                   <div style={{ borderTop: '1px solid var(--line)', paddingTop: '12px' }}>
                     <button 
                       className="btn" 
-                      onClick={() => toggleTrend(ano.id, sku)} 
+                      onClick={() => toggleTrend(ano.id, sku, ano.fornitore_id)}
                       style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--accent-bg)', borderColor: 'var(--accent-border)', color: 'var(--accent-text)' }}
                     >
                       <TrendingUp size={14} /> {isTrendOpen ? "Nascondi Trend Storico" : "Visualizza Trend Storico"}
@@ -355,15 +387,19 @@ export default function ValidationRoom() {
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '12px' }}>Caricamento dati analitici...</div>
                         ) : currentTrend && currentTrend.history && currentTrend.history.length > 0 ? (
                           (() => {
-                            const history = currentTrend.history;
-                            const prices = history.map((h: any) => h.prezzo_pagato);
+                            // Only this supplier's lines, converted to its price-list unit; returns
+                            // and lines that cannot be converted stay in the list below, not on the chart.
+                            const allPoints = currentTrend.history;
+                            const history = allPoints.filter(isLinePoint);
+                            const prices = history.map(h => h.prezzo_pagato as number);
                             const activeContract = currentTrend.prezzo_contratto_corrente;
-                            
-                            const allPrices = [...prices];
+                            const chartUnit = currentTrend.unita_contratto_corrente || history[0]?.unita_confronto || '';
+
+                            const allPrices = [...prices, ...history.map(h => h.prezzo_contratto).filter((v): v is number => v !== null)];
                             if (activeContract) allPrices.push(activeContract);
-                            
-                            const maxPrice = Math.max(...allPrices) * 1.15;
-                            const minPrice = Math.min(...allPrices) * 0.85;
+
+                            const maxPrice = allPrices.length ? Math.max(...allPrices) * 1.15 : 1;
+                            const minPrice = allPrices.length ? Math.min(...allPrices) * 0.85 : 0;
                             const priceRange = maxPrice - minPrice || 1;
 
                             return (
@@ -385,16 +421,24 @@ export default function ValidationRoom() {
                                       }}
                                     >
                                       <span style={{ position: 'absolute', right: '4px', top: '-18px', fontSize: '0.7rem', color: 'var(--ok)', background: 'var(--bg-card)', padding: '2px 4px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                                        Contratto: € {activeContract.toFixed(2)}
+                                        Contratto attuale: {formatEuro(activeContract)} / {chartUnit}
                                       </span>
                                     </div>
                                   )}
 
+                                  {history.length === 0 && (
+                                    <div style={{ alignSelf: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      Nessun acquisto convertibile nell'unità del listino: vedi l'elenco qui sotto.
+                                    </div>
+                                  )}
+
                                   {/* Price Trend Points */}
-                                  {history.map((pt: any, idx: number) => {
-                                    const pointHeight = ((pt.prezzo_pagato - minPrice) / priceRange) * 120;
+                                  {history.map((pt, idx) => {
+                                    const price = pt.prezzo_pagato as number;
+                                    const pointHeight = ((price - minPrice) / priceRange) * 120;
                                     const formattedDate = new Date(pt.data).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
-                                    const isOvercharge = activeContract && pt.prezzo_pagato > activeContract;
+                                    // Red only against the price list valid on that invoice's date.
+                                    const isOvercharge = pt.prezzo_contratto !== null && price > pt.prezzo_contratto;
 
                                     return (
                                       <div 
@@ -426,7 +470,7 @@ export default function ValidationRoom() {
 
                                         {/* Hover Tooltip / Detail bubble */}
                                         <div className="trend-tooltip" style={{ fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '6px', textAlign: 'center' }}>
-                                          <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>€ {pt.prezzo_pagato.toFixed(2)}</div>
+                                          <div style={{ fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatEuro(price)}</div>
                                           <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{formattedDate}</div>
                                         </div>
                                       </div>
@@ -436,19 +480,26 @@ export default function ValidationRoom() {
 
                                 {/* Tabular Chronological List for high precision */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
-                                  {history.map((pt: any, idx: number) => (
-                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem' }}>
-                                      <span style={{ color: 'var(--text-secondary)' }}>
-                                        📅 {new Date(pt.data).toLocaleDateString('it-IT')}
-                                      </span>
-                                      <span>
-                                        Fornitore: <strong>{pt.fornitore}</strong>
-                                      </span>
-                                      <span style={{ fontWeight: 600, color: activeContract && pt.prezzo_pagato > activeContract ? 'var(--crit)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                                        € {pt.prezzo_pagato.toFixed(2)} / cad (Qta: {pt.quantita})
-                                      </span>
-                                    </div>
-                                  ))}
+                                  {allPoints.map((pt, idx) => {
+                                    const over = isLinePoint(pt) && pt.prezzo_contratto !== null && (pt.prezzo_pagato as number) > pt.prezzo_contratto;
+                                    return (
+                                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', padding: '6px 12px', background: 'var(--bg-inset)', borderRadius: 'var(--radius-sm)', fontSize: '0.8rem', opacity: isLinePoint(pt) ? 1 : 0.75 }}>
+                                        <span style={{ color: 'var(--text-secondary)' }}>
+                                          📅 {new Date(pt.data).toLocaleDateString('it-IT')}
+                                          {pt.is_reso && <strong style={{ marginLeft: '6px', color: 'var(--warn)' }}>RESO (nota di credito)</strong>}
+                                        </span>
+                                        <span>
+                                          Fornitore: <strong>{pt.fornitore}</strong>
+                                        </span>
+                                        <span style={{ fontWeight: 600, color: over ? 'var(--crit)' : 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                                          {pointPriceLabel(pt)}
+                                          {pt.confrontabile && pt.unita_fattura !== pt.unita_confronto && ` (fatt. ${formatEuro(pt.prezzo_fattura)} / ${pt.unita_fattura})`}
+                                          {` · Qta ${pt.quantita.toLocaleString('it-IT')} ${pt.unita_fattura}`}
+                                          {pt.prezzo_contratto !== null && pt.confrontabile && ` · listino ${formatEuro(pt.prezzo_contratto)}`}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );

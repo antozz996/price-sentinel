@@ -205,206 +205,51 @@ async def list_approvazioni(
     return res.scalars().all()
 
 
-def _extract_informative_keywords(text: str) -> list[str]:
-    """Estrae parole chiave e radici significative escludendo stop words e unità di misura."""
-    import re
-    if not text:
-        return []
-
-    # Gli identificativi tecnici (es. SKU-1111014-515, SG3-..., CAN-...)
-    # non sono descrizioni di prodotto. Estrarre "sku"/"can" e usarlo con
-    # ILIKE farebbe corrispondere prodotti completamente diversi che condividono
-    # soltanto il prefisso tecnico.
-    compact_text = text.strip()
-    if (
-        re.search(r"\\d", compact_text)
-        and re.search(r"[-_]", compact_text)
-        and len(compact_text.split()) <= 2
-    ):
-        return []
-    stop_words = {
-        'bev', 'pet', 'per', 'con', 'del', 'dei', 'delle', 'della', 'degli', 'allo', 'alla',
-        'alle', 'agli', 'vol', 'cl', 'lt', 'ml', 'gr', 'kg', 'bt', 'pz', 'crt',
-        'pac', 'conf', 'cassa', 'bar', 'rist', 'doc', 'dop', 'igp', 'igt', 'san', 'sant',
-        'red', 'blue', 'gold', 'plus', 'pro', 'max', 'min', 'net', 'lord', 'art', 'cod',
-        'x', 'da', 'di', 'in', 'su', 'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una',
-        'sku'
-    }
-    cleaned = re.sub(r'[^a-zA-Z\s]', ' ', text.lower())
-    words = []
-    for w in cleaned.split():
-        w_s = w.strip()
-        if len(w_s) >= 3 and w_s not in stop_words and not w_s.endswith(('cl', 'lt', 'ml', 'gr', 'kg')):
-            # Normalizzazione radici comuni bevande (arancia/arancio -> aranc, mirtillo -> mirtill, ecc.)
-            if w_s.startswith(('aranci', 'aranc', 'ara.')):
-                words.append('aran')
-            elif w_s.startswith('anana'):
-                words.append('anan')
-            elif w_s.startswith('mirtill'):
-                words.append('mirtill')
-            elif w_s.startswith('albicoc') or w_s == 'alb':
-                words.append('alb')
-            elif w_s.startswith('pesc'):
-                words.append('pesc')
-            else:
-                words.append(w_s)
-    return list(dict.fromkeys(words))
+def _parse_date(value: str | None) -> date | None:
+    # Called as a plain function the FastAPI Query() default arrives here: treat it as missing.
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
-async def _resolve_sku_metadata(sku_list: list[str], db: AsyncSession):
-    from app.models.products import Product, SupplierProductAlias
-    from app.models.alias import AliasProdotto
-
-    sku_synonyms: dict[str, set[str]] = {sku: {sku.lower().strip()} for sku in sku_list}
-    sku_keywords: dict[str, list[str]] = {}
-    canonical_names: dict[str, str] = {}
-    contracts: dict[str, Any] = {}
-
-    for sku in sku_list:
-        s_low = sku.lower().strip()
-        kws = _extract_informative_keywords(sku)
-        sku_keywords[sku] = kws
-
-        # 1. Risoluzione da Product e SupplierProductAlias
-        conds = [
-            Product.sku_interno == sku,
-            func.lower(func.trim(Product.sku_interno)) == s_low,
-            Product.canonical_name == sku,
-            func.lower(func.trim(Product.canonical_name)) == s_low,
-            SupplierProductAlias.raw_description == sku,
-            func.lower(func.trim(SupplierProductAlias.raw_description)) == s_low,
-            SupplierProductAlias.supplier_code == sku,
-            func.lower(func.trim(SupplierProductAlias.supplier_code)) == s_low,
-        ]
-        if len(kws) >= 2:
-            conds.append(and_(*[Product.canonical_name.ilike(f"%{kw}%") for kw in kws]))
-            conds.append(and_(*[SupplierProductAlias.raw_description.ilike(f"%{kw}%") for kw in kws]))
-        elif len(kws) == 1:
-            conds.append(Product.canonical_name.ilike(f"%{kws[0]}%"))
-            conds.append(SupplierProductAlias.raw_description.ilike(f"%{kws[0]}%"))
-
-        prod_stmt = (
-            select(Product.id, Product.sku_interno, Product.canonical_name)
-            .outerjoin(SupplierProductAlias, Product.id == SupplierProductAlias.product_id)
-            .where(or_(*conds))
-            .distinct()
-        )
-        prod_res = await db.execute(prod_stmt)
-        matched_products = prod_res.all()
-
-        for p_id, p_sku, p_name in matched_products:
-            if p_sku:
-                sku_synonyms[sku].add(p_sku.lower().strip())
-            if p_name:
-                sku_synonyms[sku].add(p_name.lower().strip())
-                if sku not in canonical_names:
-                    canonical_names[sku] = p_name
-
-            if p_id:
-                alias_stmt = select(SupplierProductAlias.raw_description, SupplierProductAlias.supplier_code).where(SupplierProductAlias.product_id == p_id)
-                alias_res = await db.execute(alias_stmt)
-                for a_desc, a_code in alias_res.all():
-                    if a_desc:
-                        sku_synonyms[sku].add(a_desc.lower().strip())
-                    if a_code:
-                        sku_synonyms[sku].add(a_code.lower().strip())
-
-        # 2. Risoluzione da AliasProdotto
-        alias_p_conds = [
-            AliasProdotto.sku_interno == sku,
-            func.lower(func.trim(AliasProdotto.sku_interno)) == s_low,
-            AliasProdotto.codice_fornitore_originale == sku,
-            func.lower(func.trim(AliasProdotto.codice_fornitore_originale)) == s_low,
-        ]
-        if len(kws) >= 2:
-            alias_p_conds.append(and_(*[AliasProdotto.sku_interno.ilike(f"%{kw}%") for kw in kws]))
-        alias_p_stmt = select(AliasProdotto.sku_interno, AliasProdotto.codice_fornitore_originale).where(or_(*alias_p_conds))
-        alias_p_res = await db.execute(alias_p_stmt)
-        for ap_sku, ap_code in alias_p_res.all():
-            if ap_sku:
-                sku_synonyms[sku].add(ap_sku.lower().strip())
-            if ap_code:
-                sku_synonyms[sku].add(ap_code.lower().strip())
-
-        # 3. Risoluzione da ListinoMaster
-        lm_conds = [
-            ListinoMaster.sku_interno == sku,
-            func.lower(func.trim(ListinoMaster.sku_interno)) == s_low,
-            ListinoMaster.descrizione == sku,
-            func.lower(func.trim(ListinoMaster.descrizione)) == s_low,
-            SupplierProductAlias.supplier_code == sku,
-            func.lower(func.trim(SupplierProductAlias.supplier_code)) == s_low,
-            SupplierProductAlias.raw_description == sku,
-            func.lower(func.trim(SupplierProductAlias.raw_description)) == s_low,
-        ]
-        if len(kws) >= 2:
-            lm_conds.append(and_(*[ListinoMaster.descrizione.ilike(f"%{kw}%") for kw in kws]))
-        elif len(kws) == 1:
-            lm_conds.append(ListinoMaster.descrizione.ilike(f"%{kws[0]}%"))
-
-        lm_stmt = (
-            select(ListinoMaster)
-            .outerjoin(
-                SupplierProductAlias,
-                ListinoMaster.supplier_product_alias_id == SupplierProductAlias.id,
-            )
-            .where(or_(*lm_conds))
-        )
-        lm_res = await db.execute(lm_stmt)
-        for l in lm_res.scalars().all():
-            if l.sku_interno:
-                sku_synonyms[sku].add(l.sku_interno.lower().strip())
-            if l.descrizione:
-                sku_synonyms[sku].add(l.descrizione.lower().strip())
-            if l.data_scadenza is None or sku not in contracts:
-                contracts[sku] = l
-
-    return sku_synonyms, sku_keywords, canonical_names, contracts
+def _parse_ids(value: str | None) -> list[int] | None:
+    if not isinstance(value, str) or not value:
+        return None
+    ids = [int(part.strip()) for part in value.split(",") if part.strip().isdigit()]
+    return ids or None
 
 
 @router.get("/price-trend/{sku_interno}", summary="Trend Storico Prezzi per SKU")
 async def get_price_trend(
     sku_interno: str,
+    fornitore_id: int | None = Query(None, description="Solo le righe di questo fornitore"),
     _user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.esclusi import SKUEscluso
+    from app.services.price_trend import load_price_trends
 
-    # Verifica se è escluso
     chk = await db.execute(
         select(SKUEscluso.sku_interno).where(
-            or_(
-                SKUEscluso.sku_interno == sku_interno,
-                func.lower(func.trim(SKUEscluso.sku_interno)) == sku_interno.lower().strip()
-            )
+            func.lower(func.trim(SKUEscluso.sku_interno)) == sku_interno.lower().strip()
         )
     )
-    if chk.scalar_one_or_none():
+    if chk.scalars().first():
         raise HTTPException(status_code=400, detail="Prodotto escluso dalle analisi")
 
-    # Called as a plain function: optional filters must be passed explicitly,
-    # otherwise they keep their FastAPI Query() defaults instead of None.
-    trends_map = await get_price_trends(
-        skus=sku_interno,
-        start_date=None,
-        end_date=None,
-        location_ids=None,
-        fornitore_ids=None,
-        _user=_user,
-        db=db,
+    trends_map = await load_price_trends(
+        db, _user, [sku_interno], fornitore_ids=[fornitore_id] if isinstance(fornitore_id, int) else None
     )
-    if sku_interno in trends_map:
-        return trends_map[sku_interno]
-    
-    # Fallback if mapped under a different key
-    for k, v in trends_map.items():
-        return v
-
-    return {
+    return trends_map.get(sku_interno) or {
         "sku_interno": sku_interno,
         "prodotto_nome": sku_interno,
         "prezzo_contratto_corrente": None,
-        "history": []
+        "unita_contratto_corrente": None,
+        "fornitori": [],
+        "history": [],
     }
 
 
@@ -418,297 +263,26 @@ async def get_price_trends(
     _user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Split SKUs
+    """Trend per SKU: solo le righe di quello SKU, prezzo nell'unità del listino del fornitore.
+
+    Ogni punto ha prezzo_fattura/unita_fattura (come in fattura), prezzo_pagato/
+    unita_confronto (convertito, None se la conversione non è affidabile),
+    prezzo_contratto (listino dello stesso fornitore valido alla data) e is_reso
+    per le note di credito. prezzo_contratto_corrente è valorizzato solo quando
+    la serie ha un fornitore solo; i contratti per fornitore sono in "fornitori".
+    """
+    from app.services.price_trend import load_price_trends
+
     sku_list = [s.strip() for s in skus.split(",") if s.strip()]
-    if not sku_list:
-        return {}
-
-    # Filtra SKU esclusi
-    from app.models.esclusi import SKUEscluso
-
-    stmt_ex = select(SKUEscluso.sku_interno).where(
-        or_(
-            SKUEscluso.sku_interno.in_(sku_list),
-            func.lower(func.trim(SKUEscluso.sku_interno)).in_([s.lower() for s in sku_list])
-        )
+    return await load_price_trends(
+        db,
+        _user,
+        sku_list,
+        start_date=_parse_date(start_date),
+        end_date=_parse_date(end_date),
+        location_ids=_parse_ids(location_ids),
+        fornitore_ids=_parse_ids(fornitore_ids),
     )
-    res_ex = await db.execute(stmt_ex)
-    excluded = set(s.lower() for s in res_ex.scalars().all())
-    sku_list = [s for s in sku_list if s.lower() not in excluded]
-    if not sku_list:
-        return {}
-
-    sku_synonyms, sku_keywords, canonical_names, contracts = await _resolve_sku_metadata(sku_list, db)
-
-    all_search_terms = list(set().union(*sku_synonyms.values()))
-    valid_price = func.coalesce(func.nullif(RigaFattura.prezzo_netto_normalizzato, 0), RigaFattura.prezzo_unitario_fatturato, 0)
-
-    # Costruisci le clausole di matching su righe fattura
-    sku_matching_clauses = []
-    if all_search_terms:
-        sku_matching_clauses.append(func.lower(func.trim(RigaFattura.sku_interno)).in_(all_search_terms))
-        sku_matching_clauses.append(func.lower(func.trim(RigaFattura.descrizione_fornitore_raw)).in_(all_search_terms))
-        sku_matching_clauses.append(func.lower(func.trim(RigaFattura.codice_fornitore_raw)).in_(all_search_terms))
-
-    for sku, kws in sku_keywords.items():
-        if len(kws) >= 2:
-            sku_matching_clauses.append(and_(*[RigaFattura.descrizione_fornitore_raw.ilike(f"%{kw}%") for kw in kws]))
-            sku_matching_clauses.append(and_(*[RigaFattura.sku_interno.ilike(f"%{kw}%") for kw in kws]))
-        elif len(kws) == 1:
-            sku_matching_clauses.append(RigaFattura.descrizione_fornitore_raw.ilike(f"%{kws[0]}%"))
-            sku_matching_clauses.append(RigaFattura.sku_interno.ilike(f"%{kws[0]}%"))
-
-    # Recupera lo storico degli acquisti cronologicamente con filtri
-    stmt = (
-        select(
-            Fattura.id.label("fattura_id"),
-            Fattura.numero_documento,
-            Fattura.data_documento,
-            Fattura.location_id,
-            Fattura.fornitore_id,
-            RigaFattura.sku_interno,
-            RigaFattura.descrizione_fornitore_raw,
-            RigaFattura.codice_fornitore_raw,
-            valid_price.label("prezzo_pagato"),
-            func.coalesce(RigaFattura.quantita, 1).label("quantita"),
-            func.coalesce(Fornitore.nome_azienda, "Fornitore non associato").label("fornitore_nome"),
-            func.coalesce(Location.nome_struttura, "Tutte le sedi").label("location_nome")
-        )
-        .join(RigaFattura, RigaFattura.fattura_id == Fattura.id)
-        .outerjoin(Fornitore, Fattura.fornitore_id == Fornitore.id)
-        .outerjoin(Location, Fattura.location_id == Location.id)
-        .where(
-            and_(
-                valid_price > 0,
-                or_(*sku_matching_clauses)
-            )
-        )
-    )
-
-    # Applica i filtri opzionali
-    if start_date:
-        try:
-            s_dt = date.fromisoformat(start_date)
-            stmt = stmt.where(Fattura.data_documento >= s_dt)
-        except ValueError:
-            pass
-    if end_date:
-        try:
-            e_dt = date.fromisoformat(end_date)
-            stmt = stmt.where(Fattura.data_documento <= e_dt)
-        except ValueError:
-            pass
-    if location_ids:
-        loc_list = [int(lid.strip()) for lid in location_ids.split(",") if lid.strip().isdigit()]
-        if loc_list:
-            stmt = stmt.where(Fattura.location_id.in_(loc_list))
-    if fornitore_ids:
-        forn_list = [int(fid.strip()) for fid in fornitore_ids.split(",") if fid.strip().isdigit()]
-        if forn_list:
-            stmt = stmt.where(Fattura.fornitore_id.in_(forn_list))
-
-    stmt = stmt.order_by(Fattura.data_documento.asc())
-    res = await db.execute(stmt)
-    history = res.all()
-
-    # Prepara la risposta raggruppata per ciascun SKU richiesto
-    response_data = {}
-    for sku in sku_list:
-        l_active = contracts.get(sku)
-        prezzo_contratto = float(l_active.prezzo_pattuito) if l_active and l_active.prezzo_pattuito else None
-        prod_name = (l_active.descrizione if l_active and l_active.descrizione else canonical_names.get(sku)) or sku
-        response_data[sku] = {
-            "sku_interno": sku,
-            "prodotto_nome": prod_name,
-            "prezzo_contratto_corrente": prezzo_contratto,
-            "history": []
-        }
-
-    for r in history:
-        r_sku = (r.sku_interno or "").strip().lower()
-        r_desc = (r.descrizione_fornitore_raw or "").strip().lower()
-        r_code = (r.codice_fornitore_raw or "").strip().lower()
-        r_combined = f"{r_sku} {r_desc} {r_code}"
-
-        prezzo = float(r.prezzo_pagato) if r.prezzo_pagato is not None else 0.0
-        qty = float(r.quantita) if r.quantita is not None else 1.0
-
-        for sku in sku_list:
-            syns = sku_synonyms.get(sku, set())
-            kws = sku_keywords.get(sku, [])
-
-            matched = (
-                r_sku in syns or 
-                r_desc in syns or 
-                r_code in syns or 
-                (len(kws) >= 2 and all(kw in r_combined for kw in kws)) or
-                (len(kws) == 1 and kws[0] in r_combined)
-            )
-
-            if matched:
-                target_key = sku
-                if response_data[target_key]["prodotto_nome"] == target_key and r.descrizione_fornitore_raw:
-                    response_data[target_key]["prodotto_nome"] = r.descrizione_fornitore_raw
-
-                l_active = contracts.get(target_key)
-                prezzo_contratto = float(l_active.prezzo_pattuito) if l_active and l_active.prezzo_pattuito else None
-
-                response_data[target_key]["history"].append({
-                    "data": r.data_documento.isoformat() if isinstance(r.data_documento, date) else str(r.data_documento),
-                    "prezzo_pagato": prezzo,
-                    "quantita": qty,
-                    "fornitore": r.fornitore_nome,
-                    "location": r.location_nome,
-                    "prezzo_contratto": prezzo_contratto,
-                    # Lets the UI open the invoice behind each price point.
-                    "fattura_id": r.fattura_id,
-                    "numero_documento": r.numero_documento,
-                })
-
-    return response_data
-
-
-# ─────────────────────────────────────────────
-# 2. Audit & Anomalie Pricing (ConfrontoPrezzi)
-# ─────────────────────────────────────────────
-
-@router.get("/pricing-audit", summary="Audit e Rilevamento Anomalie di Pricing")
-async def get_pricing_audit(
-    location_id: int | None = Query(None),
-    anno: str | None = Query(None),
-    soglia: float = Query(5.0, description="Soglia percentuale minima di rincaro"),
-    limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-    _admin = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    sql = """
-    WITH vendite_mensili AS (
-        SELECT 
-            rf.sku_interno as prodotto_id,
-            rf.descrizione_fornitore_raw as nome_normalizzato,
-            COALESCE(fo.nome_azienda, 'Fornitore ND') as fornitore_ragione_sociale,
-            f.fornitore_id,
-            to_char(f.data_documento, 'YYYY-MM') as mese,
-            AVG(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as prezzo_medio,
-            SUM(rf.quantita) as qta_mese_corrente
-        FROM righe_fattura rf
-        JOIN fatture f ON rf.fattura_id = f.id
-        LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
-        WHERE rf.sku_interno IS NOT NULL
-          AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-          AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
-          AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
-          AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR f.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
-          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
-        GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
-    ),
-    lagged_prezzi AS (
-        SELECT 
-            v.*,
-            LAG(prezzo_medio, 1) OVER (PARTITION BY prodotto_id, fornitore_id ORDER BY mese) as prezzo_precedente_lag
-        FROM vendite_mensili v
-    )
-    SELECT 
-        lp.prodotto_id as sku_interno,
-        lp.nome_normalizzato,
-        lp.fornitore_id,
-        lp.fornitore_ragione_sociale,
-        lp.mese,
-        lp.prezzo_medio,
-        lp.qta_mese_corrente,
-        lp.prezzo_precedente_lag,
-        lc.prezzo_pattuito as prezzo_concordato,
-        COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) as prezzo_precedente,
-        (SELECT MIN(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE AND rf2.id NOT IN (SELECT riga_fattura_id FROM righe_escluse_statistiche)) as hist_prezzo_min,
-        (SELECT MAX(COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0)) FROM righe_fattura rf2 JOIN fatture f2 ON rf2.fattura_id = f2.id WHERE rf2.sku_interno = lp.prodotto_id AND COALESCE(NULLIF(rf2.prezzo_netto_normalizzato, 0), rf2.prezzo_unitario_fatturato, 0) > 0 AND rf2.is_omaggio IS NOT TRUE) as hist_prezzo_max,
-        ap.stato
-    FROM lagged_prezzi lp
-    LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id AND lc.data_inizio_validita <= CURRENT_DATE AND (lc.data_scadenza IS NULL OR lc.data_scadenza >= CURRENT_DATE)
-    LEFT JOIN approvazioni_prezzo ap ON lp.prodotto_id = ap.sku_interno AND lp.nome_normalizzato = ap.descrizione_orig AND lp.mese = ap.mese
-    WHERE COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) IS NOT NULL
-      AND lp.prezzo_medio > COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)
-      AND (((lp.prezzo_medio - COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) / COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) * 100) >= :soglia
-    ORDER BY lp.mese DESC, lp.prodotto_id ASC
-    LIMIT :limit OFFSET :offset
-    """
-    
-    # Run total count query
-    count_sql = f"""
-    SELECT COUNT(*) FROM (
-        WITH vendite_mensili AS (
-            SELECT 
-                rf.sku_interno as prodotto_id,
-                rf.descrizione_fornitore_raw as nome_normalizzato,
-                f.fornitore_id,
-                to_char(f.data_documento, 'YYYY-MM') as mese,
-                AVG(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as prezzo_medio
-            FROM righe_fattura rf
-            JOIN fatture f ON rf.fattura_id = f.id
-            WHERE rf.sku_interno IS NOT NULL
-              AND rf.sku_interno NOT IN (SELECT sku_interno FROM skus_esclusi)
-              AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
-              AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
-              AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR f.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
-              AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
-            GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, to_char(f.data_documento, 'YYYY-MM')
-        ),
-        lagged_prezzi AS (
-            SELECT 
-                v.*,
-                LAG(prezzo_medio, 1) OVER (PARTITION BY prodotto_id, fornitore_id ORDER BY mese) as prezzo_precedente_lag
-            FROM vendite_mensili v
-        )
-        SELECT lp.prodotto_id
-        FROM lagged_prezzi lp
-        LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id AND lc.data_inizio_validita <= CURRENT_DATE AND (lc.data_scadenza IS NULL OR lc.data_scadenza >= CURRENT_DATE)
-        WHERE COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) IS NOT NULL
-          AND lp.prezzo_medio > COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)
-          AND (((lp.prezzo_medio - COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) / COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) * 100) >= :soglia
-    ) as t
-    """
-    
-    params = {
-        "location_id": location_id,
-        "anno": anno,
-        "soglia": soglia,
-        # Only invoices uploaded since the price check restarted count.
-        "check_start": settings.ANOMALY_CHECK_START,
-    }
-    
-    # Counts
-    count_res = await db.execute(text(count_sql), params)
-    total = count_res.scalar() or 0
-    
-    params_with_limits = {**params, "limit": limit, "offset": offset}
-    res = await db.execute(text(sql), params_with_limits)
-    
-    results = []
-    for r in res.all():
-        prezzo_medio = float(r.prezzo_medio)
-        prezzo_precedente = float(r.prezzo_precedente)
-        rincaro_unitario = prezzo_medio - prezzo_precedente
-        spreco_mensile = rincaro_unitario * float(r.qta_mese_corrente)
-        proiezione_annua = spreco_mensile * 12
-        
-        results.append({
-            "sku_interno": r.sku_interno,
-            "nome_normalizzato": r.nome_normalizzato,
-            "fornitore_id": r.fornitore_id,
-            "fornitore_ragione_sociale": r.fornitore_ragione_sociale,
-            "mese": r.mese,
-            "prezzo_medio": prezzo_medio,
-            "qta_mese_corrente": float(r.qta_mese_corrente),
-            "prezzo_precedente": prezzo_precedente,
-            "rincaro_unitario": rincaro_unitario,
-            "spreco_mensile": spreco_mensile,
-            "proiezione_annua": proiezione_annua,
-            "hist_prezzo_min": float(r.hist_prezzo_min) if r.hist_prezzo_min is not None else prezzo_medio,
-            "hist_prezzo_max": float(r.hist_prezzo_max) if r.hist_prezzo_max is not None else prezzo_medio,
-            "stato": r.stato or "PENDING"
-        })
-        
-    return {"total": total, "results": results}
 
 
 # ─────────────────────────────────────────────
@@ -761,165 +335,38 @@ async def get_variance_loss(
 # 4. Esporta Excel di Contestazione (openpyxl)
 # ─────────────────────────────────────────────
 
-@router.get("/export-dispute-excel", summary="Esporta Excel Contestazione")
+@router.get("/export-dispute-excel", summary="Esporta dossier Excel di contestazione")
 async def export_dispute_excel(
     location_id: int | None = Query(None),
-    anno: str | None = Query(None),
-    soglia: float = Query(5.0),
-    _admin = Depends(require_admin),
+    anno: int | None = Query(None, ge=2000, le=2100),
+    stato: str = Query(StatoValidazione.da_verificare.value, description="Stato delle anomalie (default: quelle da verificare)"),
+    _user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    sql = """
-    WITH vendite_mensili AS (
-        SELECT 
-            rf.sku_interno as prodotto_id,
-            rf.descrizione_fornitore_raw as nome_normalizzato,
-            COALESCE(fo.nome_azienda, 'Fornitore ND') as fornitore_ragione_sociale,
-            f.fornitore_id,
-            to_char(f.data_documento, 'YYYY-MM') as mese,
-            AVG(COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0)) as prezzo_medio,
-            SUM(rf.quantita) as qta_mese_corrente
-        FROM righe_fattura rf
-        JOIN fatture f ON rf.fattura_id = f.id
-        LEFT JOIN fornitori fo ON f.fornitore_id = fo.id
-        WHERE rf.sku_interno IS NOT NULL
-          AND (CAST(:location_id AS INTEGER) IS NULL OR f.location_id = CAST(:location_id AS INTEGER))
-          AND (CAST(:anno AS TEXT) IS NULL OR to_char(f.data_documento, 'YYYY') = CAST(:anno AS TEXT))
-          AND (CAST(:check_start AS TIMESTAMPTZ) IS NULL OR f.xml_raw_id IN (SELECT id FROM xml_raw WHERE data_ricezione >= CAST(:check_start AS TIMESTAMPTZ)))
-          AND COALESCE(NULLIF(rf.prezzo_netto_normalizzato, 0), rf.prezzo_unitario_fatturato, 0) > 0
-        GROUP BY rf.sku_interno, rf.descrizione_fornitore_raw, f.fornitore_id, fo.nome_azienda, to_char(f.data_documento, 'YYYY-MM')
-    ),
-    lagged_prezzi AS (
-        SELECT 
-            v.*,
-            LAG(prezzo_medio, 1) OVER (PARTITION BY prodotto_id, fornitore_id ORDER BY mese) as prezzo_precedente_lag
-        FROM vendite_mensili v
-    )
-    SELECT 
-        lp.prodotto_id as sku_interno,
-        lp.nome_normalizzato,
-        lp.fornitore_id,
-        lp.fornitore_ragione_sociale,
-        lp.mese,
-        lp.prezzo_medio,
-        lp.qta_mese_corrente,
-        lp.prezzo_precedente_lag,
-        lc.prezzo_pattuito as prezzo_concordato,
-        COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) as prezzo_precedente
-    FROM lagged_prezzi lp
-    LEFT JOIN listino_master lc ON lp.prodotto_id = lc.sku_interno AND lp.fornitore_id = lc.fornitore_id AND lc.data_inizio_validita <= CURRENT_DATE AND (lc.data_scadenza IS NULL OR lc.data_scadenza >= CURRENT_DATE)
-    WHERE COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag) IS NOT NULL
-      AND lp.prezzo_medio > COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)
-      AND (((lp.prezzo_medio - COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) / COALESCE(lc.prezzo_pattuito, lp.prezzo_precedente_lag)) * 100) >= :soglia
-    ORDER BY lp.mese DESC
-    """
-    params = {
-        "location_id": location_id,
-        "anno": anno,
-        "soglia": soglia,
-        # Only invoices uploaded since the price check restarted count.
-        "check_start": settings.ANOMALY_CHECK_START,
-    }
-    
-    res = await db.execute(text(sql), params)
-    
-    def _build_workbook(rows):
-        # Crea Workbook excel
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Report Rincari"
-    
-        ws.views.sheetView[0].showGridLines = True
-    
-        headers = [
-            "Mese", "SKU Interno", "Prodotto", "Fornitore", 
-            "Prezzo Target (€)", "Prezzo Medio Rilevato (€)", 
-            "Quantità Acquistata", "Rincaro Unitario (€)", "Spreco Rilevato (€)"
-        ]
-    
-        ws.append(headers)
-    
-        header_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
-        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    
-        thin_border = Border(
-            left=Side(style='thin', color='DDDDDD'),
-            right=Side(style='thin', color='DDDDDD'),
-            top=Side(style='thin', color='DDDDDD'),
-            bottom=Side(style='thin', color='DDDDDD')
-        )
-    
-        for col_idx in range(1, len(headers) + 1):
-            cell = ws.cell(row=1, column=col_idx)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = header_align
-            cell.border = thin_border
-    
-        # Aggiungi i dati
-        row_num = 2
-        for r in rows:
-            prezzo_medio = float(r.prezzo_medio)
-            prezzo_precedente = float(r.prezzo_precedente)
-            rincaro_unitario = prezzo_medio - prezzo_precedente
-            quantita = float(r.qta_mese_corrente)
-            spreco = rincaro_unitario * quantita
-        
-            row_data = [
-                r.mese,
-                r.sku_interno,
-                r.nome_normalizzato,
-                r.fornitore_ragione_sociale,
-                prezzo_precedente,
-                prezzo_medio,
-                quantita,
-                rincaro_unitario,
-                spreco
-            ]
-            ws.append(row_data)
-        
-            for col_idx in range(1, len(row_data) + 1):
-                cell = ws.cell(row=row_num, column=col_idx)
-                cell.border = thin_border
-                cell.font = Font(name="Calibri", size=11)
-            
-                if col_idx in (5, 6, 8, 9):
-                    cell.number_format = '€ #,##0.00'
-                    cell.alignment = Alignment(horizontal="right")
-                elif col_idx == 7:
-                    cell.number_format = '#,##0.00'
-                    cell.alignment = Alignment(horizontal="right")
-                else:
-                    cell.alignment = Alignment(horizontal="left")
-                
-            row_num += 1
-        
-        for col in ws.columns:
-            max_len = 0
-            col_letter = get_column_letter(col[0].column)
-            for cell in col:
-                val_str = str(cell.value or '')
-                if cell.column in (5, 6, 8, 9) and type(cell.value) in (int, float):
-                    val_str = f"€ {cell.value:.2f}"
-                if len(val_str) > max_len:
-                    max_len = len(val_str)
-            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
-        
-        stream = BytesIO()
-        wb.save(stream)
-        stream.seek(0)
-        return stream
+    """Dossier dei rincari ricavato dalle anomalie visibili nella ValidationRoom.
 
-    stream = await run_in_threadpool(_build_workbook, res.all())
-    
-    headers = {
-        'Content-Disposition': 'attachment; filename="dossier_contestazione_rincari.xlsx"'
-    }
+    Una riga per anomalia, con prezzi e quantità nell'unità del listino valido
+    alla data della fattura: il totale è SUM(delta_totale) delle stesse anomalie
+    che l'utente vede (stessi filtri di GET /anomalie, sede compresa per i manager).
+    """
+    from app.services.dispute_dossier import build_dossier_workbook, load_dossier_rows
+
+    try:
+        stato_value = StatoValidazione(stato)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Stato anomalia non valido")
+    rows = await load_dossier_rows(
+        db,
+        _user,
+        stato=stato_value,
+        location_id=location_id if isinstance(location_id, int) else None,
+        anno=anno if isinstance(anno, int) else None,
+    )
+    stream = await run_in_threadpool(build_dossier_workbook, rows)
     return StreamingResponse(
         stream,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=headers
+        headers={'Content-Disposition': 'attachment; filename="dossier_contestazione_rincari.xlsx"'},
     )
 
 
