@@ -31,6 +31,9 @@ type MatrixRow = {
   category?: string | null
   subcategory?: string | null
   comparison_unit: string
+  acquisti?: number
+  spesa?: string
+  ultimo_acquisto?: string | null
   offers: Record<string, Offer>
   eligible_supplier_ids: number[]
   absolute_cheapest_supplier_id?: number | null
@@ -93,6 +96,38 @@ const tabs = [
   { id: 'sectors', label: 'Settori fornitori', icon: Building2 },
   { id: 'history', label: 'Storico e audit', icon: History },
 ] as const
+
+type MatrixSort = 'nome' | 'acquisti' | 'spesa'
+type MatrixPeriod = 'tutto' | '12m'
+const MATRIX_SORT_KEY = 'smartPriceSheet.matrixSort'
+
+function readMatrixSort(): MatrixSort {
+  try {
+    const stored = window.localStorage.getItem(MATRIX_SORT_KEY)
+    return stored === 'acquisti' || stored === 'spesa' ? stored : 'nome'
+  } catch {
+    return 'nome'
+  }
+}
+
+function storeMatrixSort(value: MatrixSort) {
+  try {
+    window.localStorage.setItem(MATRIX_SORT_KEY, value)
+  } catch {
+    // storage non disponibile: la scelta vale solo per questa sessione
+  }
+}
+
+function euro(value?: string | null) {
+  const amount = Number(value || 0)
+  return amount ? amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }) : '—'
+}
+
+function italianDate(value?: string | null) {
+  if (!value) return '—'
+  const [year, month, day] = value.slice(0, 10).split('-')
+  return `${day}/${month}/${year}`
+}
 
 function money(value?: string | null) {
   return value ? `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
@@ -281,6 +316,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
   const [offset, setOffset] = useState(0)
+  const [matrixSort, setMatrixSort] = useState<MatrixSort>(readMatrixSort)
+  const [matrixPeriod, setMatrixPeriod] = useState<MatrixPeriod>('tutto')
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -360,6 +397,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
       if (search.trim()) query.set('search', search.trim())
       if (currentCat && currentCat !== 'all') query.set('category', currentCat)
       if (currentSubcat && currentSubcat !== 'all') query.set('subcategory', currentSubcat)
+      query.set('sort', matrixSort)
+      if (matrixPeriod !== 'tutto') query.set('periodo', matrixPeriod)
       const data = await fetchWithAuth(`/smart-price-sheet/matrix?${query}`) as MatrixResponse
       setMatrix(data)
       setSelectedSupplierIds(data.suppliers.map(item => item.id))
@@ -509,7 +548,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
   useEffect(() => {
     void loadMatrix()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offset, selectedMatrixCategory])
+  }, [offset, selectedMatrixCategory, matrixSort, matrixPeriod])
   useEffect(() => {
     if (activeTab === 'paste') void loadProducts()
     if (activeTab === 'sectors') void loadSupplierSectors()
@@ -794,6 +833,21 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
           <div style={{ position: 'relative', flex: '1 1 260px' }}><Search size={16} style={{ position: 'absolute', left: 12, top: 12 }} /><input style={{ ...input, width: '100%', boxSizing: 'border-box', paddingLeft: 36 }} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { setOffset(0); void loadMatrix() } }} placeholder="Cerca prodotto o SKU…" /></div>
           <button className="btn" onClick={() => { setOffset(0); void loadMatrix() }}><RefreshCw size={16} /> Aggiorna</button>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{matrix?.total || 0} prodotti</span>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Ordina per:
+            <select style={{ ...input, padding: '6px 10px' }} value={matrixSort} onChange={event => { const value = event.target.value as MatrixSort; storeMatrixSort(value); setOffset(0); setMatrixSort(value) }}>
+              <option value="nome">Nome</option>
+              <option value="acquisti">Più acquistati</option>
+              <option value="spesa">Spesa</option>
+            </select>
+          </label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
+            Periodo:
+            <select style={{ ...input, padding: '6px 10px' }} value={matrixPeriod} onChange={event => { setOffset(0); setMatrixPeriod(event.target.value as MatrixPeriod) }}>
+              <option value="tutto">Tutto lo storico</option>
+              <option value="12m">Ultimi 12 mesi</option>
+            </select>
+          </label>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', paddingTop: 2 }}>
           <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>Categoria:</span>
@@ -909,7 +963,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({visibleSuppliers.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{(matrix?.suppliers || []).map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table className="ds-table" style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-inset)', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
+          <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-inset)', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th><th style={{ padding: 12, textAlign: 'right' }} title="Fatture d'acquisto che contengono il prodotto (escluse note di credito e omaggi)">Acquisti</th><th style={{ padding: 12, textAlign: 'right', minWidth: 100 }} title="Spesa netta, note di credito sottratte">Spesa</th><th style={{ padding: 12, minWidth: 100 }}>Ultimo acquisto</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
           <tbody>{(matrix?.rows || []).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--line)' }}>
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
@@ -943,6 +997,9 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
               </div>
               {row.requires_manual_selection && <small style={{ color: 'var(--warn)' }}>Scelta manuale richiesta</small>}
             </td>
+            <td style={{ padding: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: row.acquisti ? 600 : 400, color: row.acquisti ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{row.acquisti || 0}</td>
+            <td style={{ padding: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: Number(row.spesa || 0) < 0 ? 'var(--crit)' : 'var(--text-secondary)' }}>{euro(row.spesa)}</td>
+            <td style={{ padding: 12, whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{italianDate(row.ultimo_acquisto)}</td>
             {visibleSuppliers.map(supplier => {
               const offer = row.offers[String(supplier.id)]
               const relevant = row.eligible_supplier_ids.includes(supplier.id)
