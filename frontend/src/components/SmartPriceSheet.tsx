@@ -34,6 +34,9 @@ type MatrixRow = {
   acquisti?: number
   spesa?: string
   ultimo_acquisto?: string | null
+  quantita?: string
+  quantita_unita?: string | null
+  quantita_non_convertita?: Record<string, string>
   offers: Record<string, Offer>
   eligible_supplier_ids: number[]
   absolute_cheapest_supplier_id?: number | null
@@ -97,14 +100,14 @@ const tabs = [
   { id: 'history', label: 'Storico e audit', icon: History },
 ] as const
 
-type MatrixSort = 'nome' | 'acquisti' | 'spesa'
+type MatrixSort = 'nome' | 'acquisti' | 'spesa' | 'quantita'
 type MatrixPeriod = 'tutto' | '12m'
 const MATRIX_SORT_KEY = 'smartPriceSheet.matrixSort'
 
 function readMatrixSort(): MatrixSort {
   try {
     const stored = window.localStorage.getItem(MATRIX_SORT_KEY)
-    return stored === 'acquisti' || stored === 'spesa' ? stored : 'nome'
+    return stored === 'acquisti' || stored === 'spesa' || stored === 'quantita' ? stored : 'nome'
   } catch {
     return 'nome'
   }
@@ -121,6 +124,21 @@ function storeMatrixSort(value: MatrixSort) {
 function euro(value?: string | null) {
   const amount = Number(value || 0)
   return amount ? amount.toLocaleString('it-IT', { style: 'currency', currency: 'EUR' }) : '—'
+}
+
+function italianQuantity(value?: string | number | null) {
+  return Number(value || 0).toLocaleString('it-IT', { maximumFractionDigits: 3 })
+}
+
+function quantityLabel(row: { quantita?: string; quantita_unita?: string | null }) {
+  const amount = Number(row.quantita || 0)
+  if (!amount) return '—'
+  return row.quantita_unita ? `${italianQuantity(amount)} ${row.quantita_unita}` : italianQuantity(amount)
+}
+
+function notConvertedTitle(row: { quantita_non_convertita?: Record<string, string> }) {
+  const parts = Object.entries(row.quantita_non_convertita || {}).map(([unit, qty]) => `${italianQuantity(qty)} ${unit}`)
+  return parts.length ? `${parts.join(' + ')} non convertibili nell'unità del prodotto` : ''
 }
 
 function italianDate(value?: string | null) {
@@ -838,6 +856,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             <select style={{ ...input, padding: '6px 10px' }} value={matrixSort} onChange={event => { const value = event.target.value as MatrixSort; storeMatrixSort(value); setOffset(0); setMatrixSort(value) }}>
               <option value="nome">Nome</option>
               <option value="acquisti">Più acquistati</option>
+              <option value="quantita">Quantità</option>
               <option value="spesa">Spesa</option>
             </select>
           </label>
@@ -963,7 +982,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
         <details><summary style={{ cursor: 'pointer', color: 'var(--text-secondary)' }}>Colonne fornitori ({visibleSuppliers.length}/{matrix?.suppliers.length || 0})</summary><div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 12 }}>{(matrix?.suppliers || []).map(supplier => <label key={supplier.id} style={{ fontSize: 13 }}><input type="checkbox" checked={selectedSupplierIds.includes(supplier.id)} onChange={() => setSelectedSupplierIds(current => current.includes(supplier.id) ? current.filter(id => id !== supplier.id) : [...current, supplier.id])} /> {supplier.name}</label>)}</div></details>
         {loading ? <div style={{ padding: 30, textAlign: 'center' }}>Caricamento…</div> : <div style={{ overflow: 'auto', maxHeight: '65vh' }}><table className="ds-table" style={{ minWidth: 700, width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-inset)', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th><th style={{ padding: 12, textAlign: 'right' }} title="Fatture d'acquisto che contengono il prodotto (escluse note di credito e omaggi)">Acquisti</th><th style={{ padding: 12, textAlign: 'right', minWidth: 100 }} title="Spesa netta, note di credito sottratte">Spesa</th><th style={{ padding: 12, minWidth: 100 }}>Ultimo acquisto</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
+          <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-inset)', zIndex: 2 }}><tr><th style={{ textAlign: 'left', padding: 12, minWidth: 240 }}>Prodotto principale</th><th style={{ padding: 12, textAlign: 'right' }} title="Fatture d'acquisto che contengono il prodotto (escluse note di credito e omaggi)">Acquisti</th><th style={{ padding: 12, textAlign: 'right', minWidth: 110 }} title="Quantità comprata nell'unità del prodotto, note di credito sottratte, omaggi esclusi">Quantità</th><th style={{ padding: 12, textAlign: 'right', minWidth: 100 }} title="Spesa netta, note di credito sottratte">Spesa</th><th style={{ padding: 12, minWidth: 100 }}>Ultimo acquisto</th>{visibleSuppliers.map(supplier => <th key={supplier.id} style={{ padding: 12, minWidth: 155 }}>{supplier.name}</th>)}</tr></thead>
           <tbody>{(matrix?.rows || []).map(row => <tr key={row.product_id} style={{ borderTop: '1px solid var(--line)' }}>
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
@@ -998,6 +1017,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
               {row.requires_manual_selection && <small style={{ color: 'var(--warn)' }}>Scelta manuale richiesta</small>}
             </td>
             <td style={{ padding: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: row.acquisti ? 600 : 400, color: row.acquisti ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{row.acquisti || 0}</td>
+            <td style={{ padding: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: Number(row.quantita || 0) < 0 ? 'var(--crit)' : 'var(--text-secondary)' }} title={notConvertedTitle(row) || undefined}>
+              {quantityLabel(row)}
+              {notConvertedTitle(row) && <div style={{ fontSize: 11, color: 'var(--warn)', cursor: 'help' }}>+ altre unità</div>}
+            </td>
             <td style={{ padding: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: Number(row.spesa || 0) < 0 ? 'var(--crit)' : 'var(--text-secondary)' }}>{euro(row.spesa)}</td>
             <td style={{ padding: 12, whiteSpace: 'nowrap', color: 'var(--text-secondary)' }}>{italianDate(row.ultimo_acquisto)}</td>
             {visibleSuppliers.map(supplier => {
