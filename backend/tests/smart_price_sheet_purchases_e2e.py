@@ -1,6 +1,7 @@
-"""Listino Smart ordinato per acquisti/spesa su PostgreSQL usa e getta.
+"""Listino Smart ordinato per acquisti/spesa/quantita su PostgreSQL usa e getta.
 
-Verifica acquisti, spesa e ultimo acquisto per voce nella matrice (note di credito,
+Verifica acquisti, spesa, ultimo acquisto e quantita (convertita nell'unita della
+voce e non convertibile per unita di fattura) per voce nella matrice (note di credito,
 omaggi, righe e SKU esclusi, tenant, sede) e che l'ordinamento avvenga prima di
 limit/offset. Solo tramite run_ci_disposable_e2e.py; dati sintetici.
 """
@@ -76,7 +77,9 @@ def seed() -> None:
                     (10,4,1,'A','Alfa reso','MAT-A',1,0,1,2,'PZ',false,'matched'),
                     (11,4,2,'C','Gamma reso','MAT-C',5,0,5,3,'PZ',false,'matched'),
                     (12,5,1,'D','Delta','MAT-D',1,0,1,1000,'PZ',false,'matched'),
-                    (13,6,1,'D','Delta','MAT-D',7,0,7,1,'PZ',false,'matched');
+                    (13,6,1,'D','Delta','MAT-D',7,0,7,1,'PZ',false,'matched'),
+                    (14,2,4,'B50','Beta cartone 50 pz','MAT-B',10,0,10,2,'CT',false,'matched'),
+                    (15,2,5,'BK','Beta sfusi','MAT-B',1,0,1,3,'KG',false,'matched');
                 insert into righe_escluse_statistiche(riga_fattura_id,motivo,created_at)
                 values (9,'prezzo anomalo',now());
             """)
@@ -104,9 +107,24 @@ async def run() -> None:
         check("ultimo acquisto C", rows["MAT-C"]["ultimo_acquisto"] == "2026-03-01")
         check("altro tenant escluso", rows["MAT-D"]["acquisti"] == 1 and rows["MAT-D"]["spesa"] == "7.00")
         check("sku escluso", rows["MAT-E"]["acquisti"] == 0 and rows["MAT-E"]["ultimo_acquisto"] is None)
+        # Quantita in Pz: A 10+10+5-2 (omaggio escluso); B 1 + 2 cartoni da 50, i 3 KG a parte.
+        check("quantita A", rows["MAT-A"]["quantita"] == "23" and rows["MAT-A"]["quantita_unita"] == "Pz"
+              and rows["MAT-A"]["quantita_non_convertita"] == {})
+        check("quantita convertita e non convertibile B", rows["MAT-B"]["quantita"] == "101"
+              and rows["MAT-B"]["quantita_non_convertita"] == {"KG": "3"} and rows["MAT-B"]["acquisti"] == 1)
+        check("quantita con nota di credito e riga esclusa", rows["MAT-C"]["quantita"] == "-2")
+        check("quantita altro tenant e sku escluso", rows["MAT-D"]["quantita"] == "1" and rows["MAT-E"]["quantita"] == "0")
 
         response = await client.get(f"{base}&sort=acquisti", headers=admin)
         check("sort=acquisti", [r["sku_interno"] for r in response.json()["rows"]] == ["MAT-A", "MAT-B", "MAT-D", "MAT-C", "MAT-E"])
+        response = await client.get(f"{base}&sort=quantita", headers=admin)
+        check("sort=quantita", [r["sku_interno"] for r in response.json()["rows"]] == ["MAT-B", "MAT-A", "MAT-D", "MAT-E", "MAT-C"])
+        q_first = (await client.get(f"{base}&sort=quantita&limit=1&offset=1", headers=admin)).json()
+        check("quantita ordinata prima della paginazione", [r["sku_interno"] for r in q_first["rows"]] == ["MAT-A"]
+              and q_first["rows"][0]["quantita"] == "23")
+        response = await client.get(f"{base}&sort=quantita&location_id=2", headers=admin)
+        check("quantita con filtro sede", [r["sku_interno"] for r in response.json()["rows"]] == ["MAT-D", "MAT-A", "MAT-B", "MAT-E", "MAT-C"]
+              and by_sku(response.json()["rows"])["MAT-B"]["quantita"] == "0")
         response = await client.get(f"{base}&sort=spesa", headers=admin)
         check("sort=spesa", [r["sku_interno"] for r in response.json()["rows"]] == ["MAT-B", "MAT-A", "MAT-D", "MAT-E", "MAT-C"])
 

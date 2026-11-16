@@ -55,9 +55,10 @@ from app.services.smart_price_spot import SpotLine, compute_spot_offers, spot_li
 from app.services.smart_price_purchases import (
     PERIOD_OPTIONS,
     SORT_OPTIONS,
+    STAT_COLUMNS,
+    load_purchase_stats_select,
     matrix_page_select,
     period_start,
-    purchase_stats_select,
     stats_payload,
 )
 
@@ -178,30 +179,33 @@ async def matrix(
     total = await db.scalar(
         select(func.count()).select_from(Product).where(*product_filter)
     )
-    # Acquisti, spesa e ultimo acquisto per voce (services.smart_price_purchases):
-    # con sort=acquisti/spesa l'ordinamento avviene prima di limit/offset.
+    # Acquisti, spesa, ultimo acquisto e quantita' per voce (services.smart_price_purchases):
+    # con sort=acquisti/spesa/quantita l'ordinamento avviene prima di limit/offset.
     purchase_stats: dict[str, dict] = {}
     if sort == "nome":
         products = (
             await db.scalars(matrix_page_select(product_filter, sort).limit(limit).offset(offset))
         ).all()
-        page_skus = [row.sku_interno for row in products if row.sku_interno]
-        if page_skus:
-            for stat in (await db.execute(
-                purchase_stats_select(user, skus=page_skus, location_id=scope, date_from=purchases_from)
-            )).all():
-                purchase_stats[stat.sku_interno] = stats_payload(stat.acquisti, stat.spesa, stat.ultimo_acquisto)
+        units = {row.sku_interno: row.comparison_unit for row in products if row.sku_interno}
+        if units:
+            stats_select = await load_purchase_stats_select(
+                db, user, skus=list(units), location_id=scope, date_from=purchases_from
+            )
+            for stat in (await db.execute(stats_select)).all():
+                purchase_stats[stat.sku_interno] = stats_payload(
+                    *(getattr(stat, name) for name in STAT_COLUMNS), units.get(stat.sku_interno)
+                )
     else:
-        stats_subquery = purchase_stats_select(
-            user, location_id=scope, date_from=purchases_from
+        stats_subquery = (
+            await load_purchase_stats_select(db, user, location_id=scope, date_from=purchases_from)
         ).subquery("acquisti_voce")
         page = (await db.execute(
             matrix_page_select(product_filter, sort, stats_subquery).limit(limit).offset(offset)
         )).all()
         products = [item[0] for item in page]
-        for product_row, acquisti, spesa, ultimo in page:
+        for product_row, *values in page:
             if product_row.sku_interno:
-                purchase_stats[product_row.sku_interno] = stats_payload(acquisti, spesa, ultimo)
+                purchase_stats[product_row.sku_interno] = stats_payload(*values, product_row.comparison_unit)
     suppliers = (
         await db.scalars(
             select(Fornitore)
@@ -434,7 +438,9 @@ async def matrix(
                 "category": product.category,
                 "subcategory": product.subcategory,
                 "comparison_unit": product.comparison_unit,
-                **purchase_stats.get(product.sku_interno or "", stats_payload(0, 0, None)),
+                **purchase_stats.get(
+                    product.sku_interno or "", stats_payload(0, 0, None, comparison_unit=product.comparison_unit)
+                ),
                 "offers": {str(item["supplier_id"]): item for item in recommendation["offers"]},
                 "variant_offers": variant_offers_by_sku.get(product.sku_interno, []),
                 "eligible_supplier_ids": sorted(eligible_supplier_ids),
