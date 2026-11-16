@@ -39,6 +39,7 @@ CASES = {
     "anomaly_lifecycle": ("anomaly_lifecycle_e2e.py", "ps_ci_disposable_anomaly_lifecycle", True),
     "auth_session": ("auth_session_e2e.py", "ps_ci_disposable_auth_session", True),
     "purchase_lines": ("purchase_lines_e2e.py", "ps_ci_disposable_purchase_lines", True),
+    "smart_price_sheet_purchases": ("smart_price_sheet_purchases_e2e.py", "ps_ci_disposable_smart_sheet_buys", True),
 }
 
 
