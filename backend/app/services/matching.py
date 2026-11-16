@@ -222,7 +222,7 @@ def normalize_price_for_comparison(
     }
     individual_uoms = {
         "piece", "pieces", "pezzo", "pezzi", "pz", "unita", "unit",
-        "bottle", "bottiglia", "bottiglie", "bot", "bt", "btl", "fl",
+        "bottle", "bottiglia", "bottiglie", "bot", "bt", "btl", "fl", "ta", "tn", "tanica", "taniche",
         "coppia", "coppie", "cp", "paio", "paia", "pair", "pairs",
     }
     if strict_pack:
