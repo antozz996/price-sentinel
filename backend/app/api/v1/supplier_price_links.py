@@ -13,7 +13,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
@@ -32,18 +32,35 @@ from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
 from app.models.supplier_price_link import (
     STATI_IN_ATTESA,
+    STATO_APPLICATO,
+    STATO_PROGRAMMATO,
     STATO_SOSTITUITO,
+    STATO_TRATTENUTO,
+    TIPO_AUMENTO,
+    TIPO_RIBASSO,
     SupplierPriceChange,
     SupplierPriceLink,
     offer_key,
 )
 from app.models.utenti import Utente
-from app.services.open_price_list_rules import decide_change, next_fixed_date, offer_lock_key, today_rome
+from app.services.open_price_list_rules import (
+    ROME,
+    annual_impact,
+    decide_change,
+    next_fixed_date,
+    offer_lock_key,
+    previous_fixed_date,
+    reminder_deadline,
+    today_rome,
+)
+from app.services.purchase_lines import purchase_lines_select
 from app.services.smart_price_purchases import load_purchase_stats_select
 
 router = APIRouter()
 
 TOP_PRODUCTS = 50
+RIBASSI_GIORNI = 30
+NON_CONFERMATO_GIORNI = 30
 # I moduli fornitori esistono solo per la prima azienda: la spesa si legge sulle sue fatture.
 _PRIMARY_TENANT = SimpleNamespace(tenant_id=1)
 
@@ -93,6 +110,16 @@ async def _pending_changes(db: AsyncSession, fornitore_id: int) -> dict[str, Sup
 
 def _money(value) -> str | None:
     return None if value is None else str(Decimal(str(value)))
+
+
+async def _spend_by_supplier_sku(db: AsyncSession, skus: set[str], today) -> dict[tuple[int, str], Decimal]:
+    """Spesa netta degli ultimi 12 mesi per fornitore e prodotto (note di credito comprese)."""
+    if not skus:
+        return {}
+    lines = purchase_lines_select(_PRIMARY_TENANT, skus=skus, date_from=today - timedelta(days=365)).subquery()
+    rows = (await db.execute(select(lines.c.fornitore_id, lines.c.sku_interno, func.sum(lines.c.importo_netto))
+                             .group_by(lines.c.fornitore_id, lines.c.sku_interno))).all()
+    return {(fid, sku): Decimal(str(total or 0)) for fid, sku, total in rows}
 
 
 @router.get("/public/{token}", summary="Listino aperto del fornitore")
@@ -272,6 +299,91 @@ async def create_supplier_link(fornitore_id: int, admin: Utente = Depends(requir
     db.add(link)
     await db.commit()
     return {"link": _link_view(link)}
+
+
+@router.get("/overview/count", summary="Contatore del menu: sospese e aumenti in arrivo")
+async def price_changes_count(admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    count = (await db.execute(select(func.count()).select_from(SupplierPriceChange).where(or_(
+        SupplierPriceChange.stato == STATO_TRATTENUTO,
+        and_(SupplierPriceChange.stato == STATO_PROGRAMMATO, SupplierPriceChange.tipo == TIPO_AUMENTO),
+    )))).scalar_one()
+    return {"pending_count": count}
+
+
+@router.get("/overview", summary="Variazioni listini: sospese, aumenti in arrivo, ribassi, solleciti")
+async def price_changes_overview(admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    today = today_rome()
+    now = datetime.now(timezone.utc)
+    pending = (await db.execute(select(SupplierPriceChange).where(or_(
+        SupplierPriceChange.stato == STATO_TRATTENUTO,
+        and_(SupplierPriceChange.stato == STATO_PROGRAMMATO, SupplierPriceChange.tipo == TIPO_AUMENTO),
+        and_(SupplierPriceChange.tipo == TIPO_RIBASSO,
+             SupplierPriceChange.stato.in_((STATO_PROGRAMMATO, STATO_APPLICATO)),
+             SupplierPriceChange.created_at >= now - timedelta(days=RIBASSI_GIORNI)),
+    )))).scalars().all()
+    links = (await db.execute(select(SupplierPriceLink).options(noload("*")).where(
+        SupplierPriceLink.attivo.is_(True)))).scalars().all()
+    supplier_ids = {c.fornitore_id for c in pending} | {link.fornitore_id for link in links}
+    suppliers = {s.id: s for s in (await db.execute(select(Fornitore).options(noload("*")).where(
+        Fornitore.id.in_(supplier_ids)))).scalars().all()} if supplier_ids else {}
+    origin_ids = {c.listino_id_origine for c in pending if c.listino_id_origine}
+    names = dict((await db.execute(select(ListinoMaster.id, ListinoMaster.descrizione).where(
+        ListinoMaster.id.in_(origin_ids)))).all()) if origin_ids else {}
+    spend = await _spend_by_supplier_sku(db, {c.sku_interno for c in pending}, today)
+
+    def view(change: SupplierPriceChange) -> dict:
+        supplier = suppliers.get(change.fornitore_id)
+        return {
+            "id": change.id, "fornitore_id": change.fornitore_id,
+            "fornitore": supplier.nome_azienda if supplier else f"Fornitore {change.fornitore_id}",
+            "prodotto": names.get(change.listino_id_origine) or change.sku_interno,
+            "tipo": change.tipo, "prezzo_vecchio": _money(change.prezzo_vecchio),
+            "prezzo_nuovo": _money(change.prezzo_nuovo), "unita": change.unita_misura,
+            "decorrenza": change.decorrenza.isoformat(), "motivo": change.motivo_trattenuta,
+            "nota": change.nota_fornitore,
+            "impatto_annuo": _money(annual_impact(spend.get((change.fornitore_id, change.sku_interno)),
+                                                  change.prezzo_vecchio, change.prezzo_nuovo)),
+        }
+
+    held = sorted((view(c) for c in pending if c.stato == STATO_TRATTENUTO), key=lambda v: v["decorrenza"])
+    increases = sorted((view(c) for c in pending if c.stato == STATO_PROGRAMMATO and c.tipo == TIPO_AUMENTO),
+                       key=lambda v: -Decimal(v["impatto_annuo"] or 0))
+    decreases = [view(c) for c in pending if c.tipo == TIPO_RIBASSO and c.stato != STATO_TRATTENUTO]
+    saving = sum((-Decimal(v["impatto_annuo"]) for v in decreases if v["impatto_annuo"]), Decimal(0))
+
+    deadline = reminder_deadline(today)
+    since = previous_fixed_date(today)
+    stale_before = now - timedelta(days=NON_CONFERMATO_GIORNI)
+    reminders, stale = [], []
+    for link in links:
+        supplier = suppliers.get(link.fornitore_id)
+        if not supplier or supplier.archived_at or not supplier.attivo_whitelist:
+            continue
+        token = _link_token(link)
+        row = {
+            "fornitore_id": supplier.id, "fornitore": supplier.nome_azienda,
+            "telefono": supplier.telefono_contatto, "path": f"/fornitore/prezzi/{token}" if token else None,
+            "ultima_conferma_at": link.ultima_conferma_at.isoformat() if link.ultima_conferma_at else None,
+        }
+        last = link.ultima_conferma_at
+        if deadline and (last is None or last.astimezone(ROME).date() < since):
+            reminders.append(row)
+        if (last or link.created_at) < stale_before:
+            stale.append(row)
+    reminders.sort(key=lambda r: r["fornitore"].casefold())
+    stale.sort(key=lambda r: r["ultima_conferma_at"] or "")
+    return {
+        "oggi": today.isoformat(),
+        "prossima_data_fissa": next_fixed_date(today).isoformat(),
+        "contatore": len(held) + len(increases),
+        "sospese": held,
+        "aumenti": increases,
+        "ribassi": {"numero": len(decreases), "risparmio_annuo": _money(saving), "giorni": RIBASSI_GIORNI},
+        "solleciti": {"scadenza": deadline.isoformat() if deadline else None, "fornitori": reminders},
+        "non_confermati": {"giorni": NON_CONFERMATO_GIORNI, "fornitori": stale},
+    }
 
 
 @router.post("/supplier/{fornitore_id}/revoke", summary="Disattiva il link fisso del fornitore")

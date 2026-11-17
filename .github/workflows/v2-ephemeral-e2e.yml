@@ -194,6 +194,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_aperto_attivazione.py' -v
 
+      - name: Unit - Open price list changes page (reminders on the 10th and 25th, yearly impact, admin only)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_aperto_variazioni.py' -v
+
       - name: Unit - Listino Smart Excel export
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_smart_price_export.py' -v
