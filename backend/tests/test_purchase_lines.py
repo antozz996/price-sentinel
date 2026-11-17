@@ -157,7 +157,7 @@ class NormalizedUnitTest(unittest.TestCase):
             "CT": "CT", "CRT": "CT", "CF": "CNF", "CNF": "CNF", "conf.": "CNF",
             "BT": "BT", "BTL": "BT",
             "": "N.D.", None: "N.D.", "  ": "N.D.", ".": "N.D.",
-            "COL": "COL", "sc": "SC",
+            "COL": "PZ", "sc": "SC",
         }
         for raw, expected in cases.items():
             self.assertEqual(pl.normalized_unit(raw), expected, raw)
@@ -260,7 +260,7 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual((c.reliable, c.factor), (True, Decimal("1")), uom)
 
     def test_unknown_or_missing_unit_is_not_reliable(self):
-        for uom in ("", None, "OMAGGIO", "COL"):
+        for uom in ("", None, "OMAGGIO", "SCATOLONE"):
             c = pl.line_conversion(product=TANQUERAY, unita_misura=uom, descrizione="GIN TANQUERAY 100 CL")
             self.assertFalse(c.reliable, uom)
 
