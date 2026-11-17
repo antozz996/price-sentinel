@@ -235,5 +235,19 @@ class PurchaseStatsSqlTest(unittest.TestCase):
         self.assertEqual(sql(spp.matrix_page_select(filters, "nome", object())), sql(spp.matrix_page_select(filters, "nome")))
 
 
+class MonthsBeforeTest(unittest.TestCase):
+    """Periodo del pulsante «Solo i più acquistati» nei moduli fornitori."""
+
+    def test_same_day_months_before(self):
+        self.assertEqual(spp.months_before(date(2026, 11, 17), 12), date(2025, 11, 17))
+        self.assertEqual(spp.months_before(date(2026, 11, 17), 3), date(2026, 8, 17))
+        self.assertEqual(spp.months_before(date(2026, 2, 10), 2), date(2025, 12, 10))
+
+    def test_end_of_month_when_day_missing(self):
+        self.assertEqual(spp.months_before(date(2026, 3, 31), 1), date(2026, 2, 28))
+        self.assertEqual(spp.months_before(date(2028, 3, 31), 1), date(2028, 2, 29))
+        self.assertEqual(spp.months_before(date(2026, 12, 31), 1), date(2026, 11, 30))
+
+
 if __name__ == "__main__":
     unittest.main()
