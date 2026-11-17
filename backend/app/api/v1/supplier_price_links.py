@@ -11,8 +11,8 @@ from hashlib import sha256
 from types import SimpleNamespace
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
@@ -24,25 +24,39 @@ from app.api.v1.supplier_price_forms import (
     _encrypt_token,
     _format_label,
     _offer_formats,
+    _check_quantity,
     _require_primary_tenant,
     _token_cipher,
 )
 from app.database import get_db
 from app.models.fornitori import Fornitore
-from app.models.listino import ListinoMaster
+from app.models.listino import ORIGINE_LISTINO_APERTO, ListinoMaster
+from app.models.products import Product, SupplierProductAlias
+from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
 from app.models.supplier_price_link import (
     STATI_IN_ATTESA,
     STATO_APPLICATO,
+    PROPOSTA_APPROVATA,
+    PROPOSTA_IN_ATTESA,
+    PROPOSTA_NOME,
+    PROPOSTA_PRODOTTO_NUOVO,
+    PROPOSTA_RIFIUTATA,
+    PROPOSTA_SOSTITUITA,
     STATO_PROGRAMMATO,
     STATO_RIFIUTATO,
     STATO_SOSTITUITO,
     STATO_TRATTENUTO,
     TIPO_AUMENTO,
     TIPO_RIBASSO,
+    UNITA_CON_CONTENUTO,
+    UNITA_CONTENUTO,
+    UNITA_VENDITA,
     SupplierPriceChange,
     SupplierPriceLink,
+    SupplierProductProposal,
     offer_key,
 )
+from app.services.normalization import normalize_text
 from app.models.utenti import Utente
 from app.services.open_price_list_activation import apply_change_now
 from app.services.open_price_list_rules import (
@@ -56,6 +70,7 @@ from app.services.open_price_list_rules import (
     today_rome,
 )
 from app.services.purchase_lines import purchase_lines_select
+from app.services.variant_price_import import build_variant_preview, commit_variant_preview
 from app.services.smart_price_purchases import load_purchase_stats_select
 
 router = APIRouter()
@@ -130,10 +145,16 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
     today = today_rome()
     rows = await _active_supplier_rows(db, link.fornitore_id)
     formats = await _offer_formats(db, link.fornitore_id, rows)
+    approved_names = await _approved_names(db, link.fornitore_id)
     skus = {row.sku_interno for row in rows}
     spend = await _spend_by_sku(db, skus, today)
     best = await _best_prices(db, link.fornitore_id, skus)
     pending = await _pending_changes(db, link.fornitore_id)
+    proposals = await _pending_proposals(db, link.fornitore_id)
+    pending_names = {p.listino_id_origine: p.nome_fornitore for p in proposals if p.tipo == PROPOSTA_NOME}
+    # Il nome in grassetto è il nostro (nome matriciale del catalogo), non la dicitura del fornitore.
+    our_names = dict((await db.execute(select(Product.sku_interno, Product.canonical_name).where(
+        Product.sku_interno.in_(skus)))).all()) if skus else {}
     ranked = sorted(rows, key=lambda r: (-spend.get(r.sku_interno, Decimal(0)), r.descrizione.casefold()))
     top_skus: list[str] = []
     for row in ranked:
@@ -142,11 +163,13 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
     items = []
     for row in ranked:
         quantity, unit, wording, brand = formats.get(row.id, (None, None, None, None))
+        wording = approved_names.get(offer_key(row.sku_interno, row.supplier_product_alias_id)) or wording
         change = pending.get(offer_key(row.sku_interno, row.supplier_product_alias_id))
         items.append({
             "listino_id": row.id,
-            "descrizione": row.descrizione,
+            "descrizione": our_names.get(row.sku_interno) or row.descrizione,
             "dicitura": wording,
+            "nome_in_attesa": pending_names.get(row.id),
             "marca": brand,
             "formato": _format_label(quantity, unit or (row.unita_misura or "").upper() or None),
             "prezzo": _money(row.prezzo_pattuito),
@@ -168,6 +191,11 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
         "ultima_conferma": link.ultima_conferma_at.isoformat() if link.ultima_conferma_at else None,
         "importanti": len(top_skus),
         "items": items,
+        "prodotti_proposti": [{
+            "id": p.id, "nome": p.nome_fornitore, "unita_vendita": p.unita_vendita,
+            "contenuto_quantita": _money(p.contenuto_quantita), "contenuto_unita": p.contenuto_unita,
+            "prezzo": _money(p.prezzo), "created_at": p.created_at.isoformat(),
+        } for p in proposals if p.tipo == PROPOSTA_PRODOTTO_NUOVO],
     }
 
 
@@ -176,30 +204,137 @@ class PriceUpdate(BaseModel):
     prezzo: Decimal | None = Field(default=None, gt=0, lt=Decimal("100000000"), decimal_places=4)
     non_trattato: bool = False
     nota: str | None = Field(default=None, max_length=500)
+    # Il nome con cui il fornitore chiama il prodotto (il nostro nome non cambia).
+    nome_fornitore: str | None = Field(default=None, max_length=255)
+
+
+class NewProduct(BaseModel):
+    nome: str = Field(min_length=2, max_length=255)
+    unita_vendita: str
+    contenuto_quantita: Decimal | None = Field(default=None, gt=0, lt=Decimal("1000000"), decimal_places=4)
+    contenuto_unita: str | None = None
+    prezzo: Decimal = Field(gt=0, lt=Decimal("100000000"), decimal_places=4)
 
 
 class PriceUpdates(BaseModel):
-    modifiche: list[PriceUpdate] = Field(min_length=1, max_length=2000)
+    modifiche: list[PriceUpdate] = Field(default_factory=list, max_length=2000)
+    nuovi: list[NewProduct] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def at_least_one(self):
+        if not self.modifiche and not self.nuovi:
+            raise ValueError("Nessuna modifica da inviare")
+        return self
+
+
+def _clean_name(value: str | None) -> str:
+    return " ".join((value or "").split())
+
+
+def validate_new_product(product: NewProduct) -> NewProduct:
+    """Controlla i 4 campi del prodotto nuovo: il contenuto serve solo per cartone e cassa."""
+    nome = _clean_name(product.nome)
+    if len(nome) < 2:
+        raise HTTPException(status_code=422, detail="Prodotto nuovo: scrivete il nome")
+    unit = (product.unita_vendita or "").strip().upper()
+    if unit not in UNITA_VENDITA:
+        raise HTTPException(status_code=422, detail=f"{nome}: scegliete come lo vendete")
+    if unit in UNITA_CON_CONTENUTO:
+        content_unit = (product.contenuto_unita or "").strip().upper()
+        if product.contenuto_quantita is None or content_unit not in UNITA_CONTENUTO:
+            raise HTTPException(status_code=422, detail=f"{nome}: indicate quanti pezzi o kg ci sono dentro")
+        _check_quantity(product.contenuto_quantita, content_unit, nome)
+        return product.model_copy(update={"nome": nome, "unita_vendita": unit, "contenuto_unita": content_unit})
+    return product.model_copy(update={"nome": nome, "unita_vendita": unit,
+                                      "contenuto_quantita": None, "contenuto_unita": None})
+
+
+async def _approved_names(db: AsyncSession, fornitore_id: int) -> dict[str, str]:
+    """Ultimo nome approvato dall'ufficio per ogni offerta del fornitore (stesso prodotto e variante)."""
+    rows = (await db.execute(select(SupplierProductProposal).where(
+        SupplierProductProposal.fornitore_id == fornitore_id,
+        SupplierProductProposal.tipo == PROPOSTA_NOME,
+        SupplierProductProposal.stato == PROPOSTA_APPROVATA,
+    ).order_by(SupplierProductProposal.decisione_at, SupplierProductProposal.id))).scalars().all()
+    return {offer_key(p.sku_interno, p.supplier_product_alias_id): p.nome_fornitore for p in rows if p.sku_interno}
+
+
+async def _pending_proposals(db: AsyncSession, fornitore_id: int) -> list[SupplierProductProposal]:
+    return list((await db.execute(select(SupplierProductProposal).where(
+        SupplierProductProposal.fornitore_id == fornitore_id,
+        SupplierProductProposal.stato == PROPOSTA_IN_ATTESA,
+    ).order_by(SupplierProductProposal.id))).scalars().all())
+
+
+async def _save_name_proposal(db: AsyncSession, link: SupplierPriceLink, row: ListinoMaster, current: str | None,
+                              name: str, now: datetime, ip: str | None) -> bool:
+    """Salva il nome proposto per una riga; conta l'ultimo inviato. False se non cambia nulla."""
+    pending = (await db.execute(select(SupplierProductProposal).where(
+        SupplierProductProposal.fornitore_id == link.fornitore_id,
+        SupplierProductProposal.tipo == PROPOSTA_NOME,
+        SupplierProductProposal.listino_id_origine == row.id,
+        SupplierProductProposal.stato == PROPOSTA_IN_ATTESA,
+    ).with_for_update())).scalar_one_or_none()
+    same_as_current = normalize_text(name) == normalize_text(current or "")
+    if pending and normalize_text(pending.nome_fornitore) == normalize_text(name):
+        return False
+    if pending:
+        pending.stato = PROPOSTA_SOSTITUITA
+        pending.decisione_at = now
+        await db.flush()
+    if same_as_current:
+        return pending is not None  # riportato al nome di prima: la proposta in attesa è annullata
+    proposal = SupplierProductProposal(
+        link_id=link.id, fornitore_id=link.fornitore_id, tipo=PROPOSTA_NOME, stato=PROPOSTA_IN_ATTESA,
+        listino_id_origine=row.id, sku_interno=row.sku_interno,
+        supplier_product_alias_id=row.supplier_product_alias_id, nome_precedente=current,
+        nome_fornitore=name, created_at=now, ip=ip,
+    )
+    db.add(proposal)
+    await db.flush()
+    if pending:
+        pending.sostituita_da_id = proposal.id
+    return True
 
 
 @router.post("/public/{token}/submit", summary="Il fornitore invia i prezzi cambiati")
 async def submit_open_price_list(token: str, payload: PriceUpdates, request: Request,
                                  db: AsyncSession = Depends(get_db)):
     link, _ = await _active_link(db, token, for_update=True)
+    new_products = [validate_new_product(product) for product in payload.nuovi]
     ids = [update.listino_id for update in payload.modifiche]
     if len(set(ids)) != len(ids):
         raise HTTPException(status_code=422, detail="Lo stesso prodotto compare due volte")
     rows = {row.id: row for row in await _active_supplier_rows(db, link.fornitore_id)}
+    named_rows = [rows[u.listino_id] for u in payload.modifiche if u.nome_fornitore is not None and u.listino_id in rows]
+    wording: dict[int, str | None] = {}
+    if named_rows:
+        approved_names = await _approved_names(db, link.fornitore_id)
+        named_formats = await _offer_formats(db, link.fornitore_id, named_rows)
+        wording = {row.id: approved_names.get(offer_key(row.sku_interno, row.supplier_product_alias_id))
+                   or named_formats.get(row.id, (None, None, None, None))[2] for row in named_rows}
     now = datetime.now(timezone.utc)
     today = today_rome()
     ip = (request.client.host if request.client else None)
-    summary = {"ribassi": 0, "aumenti": 0, "non_trattati": 0, "sospese": 0, "annullate": 0, "invariati": 0}
+    summary = {"ribassi": 0, "aumenti": 0, "non_trattati": 0, "sospese": 0, "annullate": 0, "invariati": 0,
+               "nomi": 0, "nuovi": 0}
     for update in payload.modifiche:
         row = rows.get(update.listino_id)
         if row is None:
             raise HTTPException(status_code=409, detail="Un prodotto non è più nel vostro listino: ricarica la pagina")
-        if update.non_trattato == (update.prezzo is not None):
+        name = _clean_name(update.nome_fornitore) if update.nome_fornitore is not None else None
+        has_price = update.non_trattato or update.prezzo is not None
+        if update.non_trattato and update.prezzo is not None:
             raise HTTPException(status_code=422, detail=f"{row.descrizione}: indica un prezzo oppure «non lo tratto più»")
+        if not has_price and not name:
+            raise HTTPException(status_code=422,
+                                detail=f"{row.descrizione}: indica un prezzo, «non lo tratto più» o il vostro nome")
+        if name is not None and len(name) < 2:
+            raise HTTPException(status_code=422, detail=f"{row.descrizione}: il vostro nome è troppo corto")
+        if name and await _save_name_proposal(db, link, row, wording.get(row.id), name, now, ip):
+            summary["nomi"] += 1
+        if not has_price:
+            continue
         key = offer_key(row.sku_interno, row.supplier_product_alias_id)
         await db.execute(select(func.pg_advisory_xact_lock(offer_lock_key(link.fornitore_id, key))))
         pending = (await db.execute(select(SupplierPriceChange).where(
@@ -235,6 +370,27 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
         if decision.motivo_trattenuta:
             summary["sospese"] += 1
         summary[{"ribasso": "ribassi", "aumento": "aumenti", "non_trattato": "non_trattati"}[decision.tipo]] += 1
+    if new_products:
+        pending_new = {normalize_text(p.nome_fornitore): p for p in await _pending_proposals(db, link.fornitore_id)
+                       if p.tipo == PROPOSTA_PRODOTTO_NUOVO}
+        for product in new_products:
+            # Stesso prodotto già proposto e in attesa: conta l'ultimo invio.
+            previous = pending_new.get(normalize_text(product.nome))
+            if previous:
+                previous.stato = PROPOSTA_SOSTITUITA
+                previous.decisione_at = now
+            proposal = SupplierProductProposal(
+                link_id=link.id, fornitore_id=link.fornitore_id, tipo=PROPOSTA_PRODOTTO_NUOVO,
+                stato=PROPOSTA_IN_ATTESA, nome_fornitore=product.nome, unita_vendita=product.unita_vendita,
+                contenuto_quantita=product.contenuto_quantita, contenuto_unita=product.contenuto_unita,
+                prezzo=product.prezzo, created_at=now, ip=ip,
+            )
+            db.add(proposal)
+            await db.flush()
+            if previous:
+                previous.sostituita_da_id = proposal.id
+            pending_new[normalize_text(product.nome)] = proposal
+            summary["nuovi"] += 1
     link.ultima_conferma_at = now
     await db.commit()
     return {"status": "ok", "riepilogo": summary, "prossima_data_fissa": next_fixed_date(today).isoformat()}
@@ -310,6 +466,8 @@ async def price_changes_count(admin: Utente = Depends(require_admin), db: AsyncS
         SupplierPriceChange.stato == STATO_TRATTENUTO,
         and_(SupplierPriceChange.stato == STATO_PROGRAMMATO, SupplierPriceChange.tipo == TIPO_AUMENTO),
     )))).scalar_one()
+    count += (await db.execute(select(func.count()).select_from(SupplierProductProposal).where(
+        SupplierProductProposal.stato == PROPOSTA_IN_ATTESA))).scalar_one()
     return {"pending_count": count}
 
 
@@ -327,7 +485,9 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
     )))).scalars().all()
     links = (await db.execute(select(SupplierPriceLink).options(noload("*")).where(
         SupplierPriceLink.attivo.is_(True)))).scalars().all()
-    supplier_ids = {c.fornitore_id for c in pending} | {link.fornitore_id for link in links}
+    proposals = (await db.execute(select(SupplierProductProposal).where(
+        SupplierProductProposal.stato == PROPOSTA_IN_ATTESA).order_by(SupplierProductProposal.id))).scalars().all()
+    supplier_ids = {c.fornitore_id for c in pending} | {link.fornitore_id for link in links} | {p.fornitore_id for p in proposals}
     suppliers = {s.id: s for s in (await db.execute(select(Fornitore).options(noload("*")).where(
         Fornitore.id.in_(supplier_ids)))).scalars().all()} if supplier_ids else {}
     origin_ids = {c.listino_id_origine for c in pending if c.listino_id_origine}
@@ -355,6 +515,18 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
     decreases = [view(c) for c in pending if c.tipo == TIPO_RIBASSO and c.stato != STATO_TRATTENUTO]
     saving = sum((-Decimal(v["impatto_annuo"]) for v in decreases if v["impatto_annuo"]), Decimal(0))
 
+    proposal_skus = {p.sku_interno for p in proposals if p.sku_interno}
+    our_names = dict((await db.execute(select(Product.sku_interno, Product.canonical_name).where(
+        Product.sku_interno.in_(proposal_skus)))).all()) if proposal_skus else {}
+    proposal_views = [{
+        "id": p.id, "tipo": p.tipo, "fornitore_id": p.fornitore_id,
+        "fornitore": suppliers[p.fornitore_id].nome_azienda if p.fornitore_id in suppliers else f"Fornitore {p.fornitore_id}",
+        "nostro_nome": our_names.get(p.sku_interno) if p.sku_interno else None,
+        "nome_precedente": p.nome_precedente, "nome_fornitore": p.nome_fornitore,
+        "unita_vendita": p.unita_vendita, "contenuto_quantita": _money(p.contenuto_quantita),
+        "contenuto_unita": p.contenuto_unita, "prezzo": _money(p.prezzo), "created_at": p.created_at.isoformat(),
+    } for p in proposals]
+
     deadline = reminder_deadline(today)
     since = previous_fixed_date(today)
     stale_before = now - timedelta(days=NON_CONFERMATO_GIORNI)
@@ -379,7 +551,8 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
     return {
         "oggi": today.isoformat(),
         "prossima_data_fissa": next_fixed_date(today).isoformat(),
-        "contatore": len(held) + len(increases),
+        "contatore": len(held) + len(increases) + len(proposal_views),
+        "proposte": proposal_views,
         "sospese": held,
         "aumenti": increases,
         "ribassi": {"numero": len(decreases), "risparmio_annuo": _money(saving), "giorni": RIBASSI_GIORNI},
@@ -496,3 +669,131 @@ async def force_change_price(change_id: int, payload: ForcedPrice, admin: Utente
     await db.commit()
     return {"status": "ok", "stato": forced.stato, "tipo": forced.tipo,
             "decorrenza": forced.decorrenza.isoformat(), "esito": applied}
+
+
+# --- Ufficio acquisti: nomi e prodotti proposti dai fornitori -----------------------------------
+
+
+def new_product_offer(proposal: SupplierProductProposal) -> tuple[Decimal, str]:
+    """Confezione dell'offerta: al kg, al pezzo o al litro vale 1; a cartone o cassa conta il contenuto."""
+    if proposal.unita_vendita in UNITA_CON_CONTENUTO:
+        return Decimal(str(proposal.contenuto_quantita)), proposal.contenuto_unita
+    return Decimal("1"), proposal.unita_vendita
+
+
+async def _proposal_for_decision(db: AsyncSession, proposal_id: int, tipo: str | None = None) -> SupplierProductProposal:
+    proposal = (await db.execute(select(SupplierProductProposal).where(
+        SupplierProductProposal.id == proposal_id).with_for_update())).scalar_one_or_none()
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposta non trovata")
+    if proposal.stato != PROPOSTA_IN_ATTESA or (tipo and proposal.tipo != tipo):
+        raise HTTPException(status_code=409, detail="La proposta è già stata decisa o superata: ricarica la pagina")
+    return proposal
+
+
+def _decide(proposal: SupplierProductProposal, admin: Utente, stato: str) -> None:
+    proposal.stato = stato
+    proposal.decisione_by_id = admin.id
+    proposal.decisione_at = datetime.now(timezone.utc)
+
+
+@router.get("/proposals/catalog-search", summary="Cerca nel catalogo il prodotto a cui collegare una proposta")
+async def search_catalog_for_proposal(q: str = Query(min_length=2, max_length=100),
+                                      admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    pattern = f"%{q.strip()}%"
+    products = (await db.execute(select(Product).options(noload("*")).where(
+        Product.is_active.is_(True), Product.sku_interno.is_not(None),
+        or_(Product.canonical_name.ilike(pattern), Product.sku_interno.ilike(pattern)),
+    ).order_by(Product.canonical_name).limit(20))).scalars().all()
+    return {"prodotti": [{"sku_interno": p.sku_interno, "nome": p.canonical_name, "categoria": p.category,
+                          "unita": p.comparison_unit} for p in products]}
+
+
+@router.post("/proposals/{proposal_id}/approve-name", summary="Via libera al nome del fornitore per un prodotto")
+async def approve_name_proposal(proposal_id: int, admin: Utente = Depends(require_admin),
+                                db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    proposal = await _proposal_for_decision(db, proposal_id, PROPOSTA_NOME)
+    product = await db.scalar(select(Product).options(noload("*")).where(Product.sku_interno == proposal.sku_interno))
+    if product is None:
+        raise HTTPException(status_code=409, detail="Il prodotto non è più nel catalogo")
+    normalized = normalize_text(proposal.nome_fornitore)
+    same_name = (await db.execute(select(SupplierProductAlias).options(noload("*")).where(
+        SupplierProductAlias.supplier_id == proposal.fornitore_id,
+        SupplierProductAlias.normalized_description == normalized,
+        SupplierProductAlias.status == "approved",
+    ))).scalars().all()
+    clash = next((a for a in same_name if a.product_id != product.id), None)
+    if clash:
+        other = await db.get(Product, clash.product_id, options=[noload("*")])
+        raise HTTPException(status_code=409, detail=(
+            f"Questo nome è già collegato a un altro prodotto ({other.canonical_name if other else clash.product_id}): "
+            "rifiuta la proposta oppure sistema prima il collegamento"))
+    alias = next((a for a in same_name if a.product_id == product.id), None)
+    if alias is None:
+        # Si aggiunge il nome nuovo senza togliere il vecchio: le fatture si collegano con entrambi.
+        base = await db.get(SupplierProductAlias, proposal.supplier_product_alias_id, options=[noload("*")]) \
+            if proposal.supplier_product_alias_id else None
+        now = datetime.now(timezone.utc)
+        alias = SupplierProductAlias(
+            supplier_id=proposal.fornitore_id, product_id=product.id, supplier_code=None,
+            raw_description=proposal.nome_fornitore, normalized_description=normalized,
+            brand=getattr(base, "brand", None), pack_qty=getattr(base, "pack_qty", None),
+            fattore_confezione=getattr(base, "fattore_confezione", None),
+            volume_ml=getattr(base, "volume_ml", None), weight_g=getattr(base, "weight_g", None),
+            container_type=getattr(base, "container_type", None),
+            status="approved", confidence_score=Decimal("1.00"), source="listino_aperto",
+            first_seen_at=now, last_seen_at=now, created_at=now, updated_at=now,
+        )
+        db.add(alias)
+        await db.flush()
+    _decide(proposal, admin, PROPOSTA_APPROVATA)
+    proposal.applicato_alias_id = alias.id
+    await db.commit()
+    return {"status": "ok", "stato": proposal.stato}
+
+
+class ProposalProduct(BaseModel):
+    sku_interno: str = Field(min_length=1, max_length=100)
+
+
+@router.post("/proposals/{proposal_id}/approve-product",
+             summary="Via libera a un prodotto nuovo: collegato al catalogo ed entra in listino da oggi")
+async def approve_product_proposal(proposal_id: int, payload: ProposalProduct, admin: Utente = Depends(require_admin),
+                                   db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    proposal = await _proposal_for_decision(db, proposal_id, PROPOSTA_PRODOTTO_NUOVO)
+    product = await db.scalar(select(Product).options(noload("*")).where(
+        Product.sku_interno == payload.sku_interno, Product.is_active.is_(True)))
+    if product is None:
+        raise HTTPException(status_code=404, detail="Prodotto del catalogo non trovato")
+    quantity, unit = new_product_offer(proposal)
+    offer_id = f"LA-{proposal.id}"
+    # Stessa strada dei moduli prezzi: collegamento con la confezione e riga di listino.
+    preview = await build_variant_preview(db, VariantPricePreviewRequest(rows=[VariantPriceRow(
+        product_id=product.id, supplier_id=proposal.fornitore_id, sku=product.sku_interno, offer_id=offer_id,
+        description=proposal.nome_fornitore, quantity=quantity, unit=unit,
+        price=Decimal(str(proposal.prezzo)), package_confirmed=True,
+    )], effective_date=today_rome()), admin.id)
+    errors = preview.preview_payload.get("errors") or []
+    if errors:
+        raise HTTPException(status_code=409, detail="; ".join(error["message"] for error in errors))
+    result = await commit_variant_preview(db, preview, origine=ORIGINE_LISTINO_APERTO)
+    alias_id = await db.scalar(select(SupplierProductAlias.id).where(
+        SupplierProductAlias.supplier_id == proposal.fornitore_id, SupplierProductAlias.supplier_code == offer_id))
+    _decide(proposal, admin, PROPOSTA_APPROVATA)
+    proposal.sku_interno = product.sku_interno
+    proposal.applicato_alias_id = alias_id
+    proposal.applicato_listino_id = (result.get("listino_ids") or [None])[0]
+    await db.commit()
+    return {"status": "ok", "stato": proposal.stato, "listino_id": proposal.applicato_listino_id}
+
+
+@router.post("/proposals/{proposal_id}/reject", summary="Rifiuta un nome o un prodotto proposto dal fornitore")
+async def reject_proposal(proposal_id: int, admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    proposal = await _proposal_for_decision(db, proposal_id)
+    _decide(proposal, admin, PROPOSTA_RIFIUTATA)
+    await db.commit()
+    return {"status": "ok", "stato": proposal.stato}
