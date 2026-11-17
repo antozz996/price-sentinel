@@ -73,6 +73,22 @@ class KilogramInvoiceCodeTest(unittest.TestCase):
             self.assertEqual(normalize_uom(raw), expected, raw)
 
 
+class ColloBottleTest(unittest.TestCase):
+    """Moët Hennessy prices and invoices one bottle as "COL" (collo)."""
+
+    def test_col_is_one_bottle(self):
+        champagne = SimpleNamespace(pack_qty=None, raw_description="MOET ICE IMPERIAL 75CL C6", volume_ml=750, weight_g=None)
+        for strict in (False, True):
+            result = normalize_price_for_comparison(Decimal("36.86"), Decimal("1"), "COL", product("Pz"), champagne,
+                                                    target_comparison_unit="Pz", strict_pack=strict)
+            self.assertTrue(result.reliable, strict)
+            self.assertEqual(result.normalized_unit_price, Decimal("36.86"), strict)
+
+    def test_purchase_lines_count_col_as_pieces(self):
+        from app.services import purchase_lines as pl
+        self.assertEqual(pl.UNIT_LABELS["COL"], "PZ")
+
+
 class WeightPricePerPieceTest(unittest.TestCase):
     """A price per kg/litre on a product compared per piece must not pass as a price per piece."""
 
