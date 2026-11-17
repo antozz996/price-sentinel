@@ -8,6 +8,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/fornitore/prezzi/:path*",
+      "destination": "/index.html"
+    },
+    {
       "source": "/god",
       "destination": "/index.html"
     }
