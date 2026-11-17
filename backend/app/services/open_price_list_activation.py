@@ -180,6 +180,15 @@ async def _apply_one(db: AsyncSession, change_id: int, today: date, now: datetim
     summary["anomalie_nuove"] += checked["anomalie_nuove"]
 
 
+async def apply_change_now(db: AsyncSession, change_id: int, *, today: date | None = None,
+                           now: datetime | None = None) -> dict:
+    """Applica subito una modifica già valida (per esempio appena approvata dall'ufficio),
+    senza aspettare il giro del giorno dopo. Se la decorrenza è futura non fa nulla."""
+    summary = {"applicate": 0, "chiusi": 0, "superate": 0, "righe_ricontrollate": 0, "anomalie_nuove": 0}
+    await _apply_one(db, change_id, today or today_rome(), now or datetime.now(timezone.utc), summary)
+    return summary
+
+
 async def apply_due_price_changes(db: AsyncSession, *, today: date | None = None,
                                   now: datetime | None = None) -> dict:
     """Applica le modifiche programmate con decorrenza fino a oggi (ora di Roma)."""
