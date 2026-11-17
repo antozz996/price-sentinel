@@ -36,9 +36,10 @@ ORIGINE_FATTURA = "fattura"                        # «inserisci a listino» dal
 ORIGINE_MANUALE = "manuale"                        # inserito o corretto a mano
 ORIGINE_APPROVAZIONE_ANOMALIA = "approvazione_anomalia"
 ORIGINE_ORDINE = "ordine"                          # prezzo nato da un ordine/ricevimento merce
+ORIGINE_LISTINO_APERTO = "listino_aperto"          # modifica del fornitore dal link fisso, applicata alla sua data
 ORIGINI_PREZZO = (
     ORIGINE_MODULO_FORNITORE, ORIGINE_FOGLIO_PREZZI, ORIGINE_IMPORT_LISTINO, ORIGINE_FATTURA,
-    ORIGINE_MANUALE, ORIGINE_APPROVAZIONE_ANOMALIA, ORIGINE_ORDINE,
+    ORIGINE_MANUALE, ORIGINE_APPROVAZIONE_ANOMALIA, ORIGINE_ORDINE, ORIGINE_LISTINO_APERTO,
 )
 
 
