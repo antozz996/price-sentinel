@@ -259,6 +259,7 @@ jobs:
           rewrites = vercel.get("rewrites", [])
           allowed_spa_rewrites = {
               ("/fornitore/listino/:path*", "/index.html"),
+              ("/fornitore/prezzi/:path*", "/index.html"),
               ("/god", "/index.html"),
           }
           assert {
