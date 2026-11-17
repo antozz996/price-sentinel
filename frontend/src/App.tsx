@@ -32,6 +32,7 @@ const GodModeControlRoom = lazyPage(() => import('./components/GodModeControlRoo
 const UnlistedProductsResolver = lazyPage(() => import('./components/UnlistedProductsResolver'))
 const SupplierPriceForms = lazyPage(() => import('./components/SupplierPriceForms'))
 const SupplierPricePublicForm = lazyPage(() => import('./components/SupplierPricePublicForm'))
+const SupplierOpenPriceList = lazyPage(() => import('./components/SupplierOpenPriceList'))
 import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession, storeSession } from './api'
 
 type UserProfile = {
@@ -511,6 +512,8 @@ export default function App() {
   const renderContent = () => {
     const supplierFormMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
     if (supplierFormMatch) return <SupplierPricePublicForm token={decodeURIComponent(supplierFormMatch[1])} />;
+    const openPriceListMatch = window.location.pathname.match(/^\/fornitore\/prezzi\/([^/]+)\/?$/);
+    if (openPriceListMatch) return <SupplierOpenPriceList token={decodeURIComponent(openPriceListMatch[1])} />;
     if (isGodMode || activeTab === 'god') {
       return (
         <GodModeControlRoom
@@ -773,6 +776,17 @@ export default function App() {
 
   const isSectorResp = profile?.ruolo_dettagliato && profile.ruolo_dettagliato.startsWith('responsabile_');
   const supplierPublicMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
+  const openPriceListPublicMatch = window.location.pathname.match(/^\/fornitore\/prezzi\/([^/]+)\/?$/);
+
+  if (openPriceListPublicMatch) {
+    return (
+      <PageErrorBoundary>
+        <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: 'var(--bg-app)', color: 'var(--text-primary)' }}>Caricamento listino…</main>}>
+          <SupplierOpenPriceList token={decodeURIComponent(openPriceListPublicMatch[1])} />
+        </Suspense>
+      </PageErrorBoundary>
+    );
+  }
 
   if (supplierPublicMatch) {
     return (
