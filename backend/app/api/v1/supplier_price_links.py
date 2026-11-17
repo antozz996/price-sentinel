@@ -1,7 +1,7 @@
 """Listino sempre aperto: link fisso con cui il fornitore aggiorna i prezzi.
 
-Il fornitore vede i suoi prezzi validi oggi (i 50 su cui spendiamo di piÃ¹ in alto)
-e cambia solo il prezzo: dicitura, marca, formato e unitÃ  restano quelli concordati.
+Il fornitore vede i suoi prezzi validi oggi (i 50 su cui spendiamo di più in alto)
+e cambia solo il prezzo: dicitura, marca, formato e unità restano quelli concordati.
 Ogni modifica diventa una SupplierPriceChange con la sua decorrenza (regole in
 services/open_price_list_rules.py); il listino viene aggiornato dal job di attivazione.
 """
@@ -34,6 +34,7 @@ from app.models.supplier_price_link import (
     STATI_IN_ATTESA,
     STATO_APPLICATO,
     STATO_PROGRAMMATO,
+    STATO_RIFIUTATO,
     STATO_SOSTITUITO,
     STATO_TRATTENUTO,
     TIPO_AUMENTO,
@@ -43,6 +44,7 @@ from app.models.supplier_price_link import (
     offer_key,
 )
 from app.models.utenti import Utente
+from app.services.open_price_list_activation import apply_change_now
 from app.services.open_price_list_rules import (
     ROME,
     annual_impact,
@@ -149,7 +151,7 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
             "formato": _format_label(quantity, unit or (row.unita_misura or "").upper() or None),
             "prezzo": _money(row.prezzo_pattuito),
             "importante": row.sku_interno in top_skus,
-            # Solo "siete / non siete i piÃ¹ convenienti": mai il prezzo degli altri.
+            # Solo "siete / non siete i più convenienti": mai il prezzo degli altri.
             "siete_i_piu_convenienti": best[row.sku_interno][2] if row.sku_interno in best else None,
             "in_attesa": {
                 "tipo": change.tipo, "prezzo": _money(change.prezzo_nuovo),
@@ -195,9 +197,9 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
     for update in payload.modifiche:
         row = rows.get(update.listino_id)
         if row is None:
-            raise HTTPException(status_code=409, detail="Un prodotto non Ã¨ piÃ¹ nel vostro listino: ricarica la pagina")
+            raise HTTPException(status_code=409, detail="Un prodotto non è più nel vostro listino: ricarica la pagina")
         if update.non_trattato == (update.prezzo is not None):
-            raise HTTPException(status_code=422, detail=f"{row.descrizione}: indica un prezzo oppure Â«non lo tratto piÃ¹Â»")
+            raise HTTPException(status_code=422, detail=f"{row.descrizione}: indica un prezzo oppure «non lo tratto più»")
         key = offer_key(row.sku_interno, row.supplier_product_alias_id)
         await db.execute(select(func.pg_advisory_xact_lock(offer_lock_key(link.fornitore_id, key))))
         pending = (await db.execute(select(SupplierPriceChange).where(
@@ -209,9 +211,9 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
         decision = decide_change(today=today, prezzo_vecchio=old_price, prezzo_nuovo=update.prezzo,
                                  non_trattato=update.non_trattato)
         if pending and pending.tipo == decision.tipo and pending.prezzo_nuovo == update.prezzo:
-            continue  # stessa modifica giÃ  in attesa
+            continue  # stessa modifica già in attesa
         if pending:
-            # Conta l'ultimo caricamento: la modifica in attesa Ã¨ superata.
+            # Conta l'ultimo caricamento: la modifica in attesa è superata.
             pending.stato = STATO_SOSTITUITO
             pending.decisione_at = now
             await db.flush()
@@ -397,3 +399,100 @@ async def revoke_supplier_link(fornitore_id: int, admin: Utente = Depends(requir
     link.revocato_at = datetime.now(timezone.utc)
     await db.commit()
     return {"link": None}
+
+
+@router.get("/suppliers", summary="Fornitori attivi con il loro link fisso")
+async def list_supplier_links(admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    suppliers = (await db.execute(select(Fornitore).options(noload("*")).where(
+        Fornitore.archived_at.is_(None), Fornitore.attivo_whitelist.is_(True),
+    ).order_by(Fornitore.nome_azienda))).scalars().all()
+    links = {link.fornitore_id: link for link in (await db.execute(select(SupplierPriceLink).options(noload("*"))
+                                                                   .where(SupplierPriceLink.attivo.is_(True)))).scalars().all()}
+    return {"fornitori": [{"fornitore_id": s.id, "fornitore": s.nome_azienda, "telefono": s.telefono_contatto,
+                           "link": _link_view(links.get(s.id))} for s in suppliers]}
+
+
+# --- Ufficio acquisti: via libera, rifiuto, altro prezzo ---------------------------------------
+
+# Cosa si può fare su una modifica, secondo il suo stato.
+AZIONI_PERMESSE = {
+    "approva": (STATO_TRATTENUTO,),
+    "rifiuta": (STATO_TRATTENUTO, STATO_PROGRAMMATO),
+    "altro_prezzo": (STATO_TRATTENUTO, STATO_PROGRAMMATO),
+}
+
+
+class ForcedPrice(BaseModel):
+    prezzo: Decimal = Field(gt=0, lt=Decimal("100000000"), decimal_places=4)
+
+
+async def _change_for_decision(db: AsyncSession, change_id: int, action: str) -> SupplierPriceChange:
+    change = await db.get(SupplierPriceChange, change_id)
+    if change is None:
+        raise HTTPException(status_code=404, detail="Modifica non trovata")
+    # Stesso ordine della pagina del fornitore e del job: prima il lock dell'offerta, poi la riga.
+    await db.execute(select(func.pg_advisory_xact_lock(offer_lock_key(change.fornitore_id, change.chiave_offerta))))
+    await db.refresh(change, with_for_update=True)
+    if change.stato not in AZIONI_PERMESSE[action]:
+        raise HTTPException(status_code=409, detail="La modifica è già stata decisa o superata: ricarica la pagina")
+    return change
+
+
+@router.post("/changes/{change_id}/approve", summary="Via libera a una modifica sospesa")
+async def approve_change(change_id: int, admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    change = await _change_for_decision(db, change_id, "approva")
+    change.stato = STATO_PROGRAMMATO
+    change.decisione_by_id = admin.id
+    change.decisione_at = datetime.now(timezone.utc)
+    await db.flush()
+    # Un ribasso vale da subito: si applica ora, senza aspettare il giro di domani.
+    applied = await apply_change_now(db, change.id)
+    await db.commit()
+    return {"status": "ok", "stato": change.stato, "decorrenza": change.decorrenza.isoformat(), "esito": applied}
+
+
+@router.post("/changes/{change_id}/reject", summary="Rifiuta una modifica sospesa o un aumento in arrivo")
+async def reject_change(change_id: int, admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    change = await _change_for_decision(db, change_id, "rifiuta")
+    change.stato = STATO_RIFIUTATO
+    change.decisione_by_id = admin.id
+    change.decisione_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"status": "ok", "stato": change.stato}
+
+
+@router.post("/changes/{change_id}/force", summary="L'ufficio decide un altro prezzo al posto di quello inviato")
+async def force_change_price(change_id: int, payload: ForcedPrice, admin: Utente = Depends(require_admin),
+                             db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    change = await _change_for_decision(db, change_id, "altro_prezzo")
+    now = datetime.now(timezone.utc)
+    change.decisione_by_id = admin.id
+    change.decisione_at = now
+    if change.prezzo_vecchio is not None and payload.prezzo == change.prezzo_vecchio:
+        # Stesso prezzo di prima: equivale a non accettare la modifica.
+        change.stato = STATO_RIFIUTATO
+        await db.commit()
+        return {"status": "ok", "stato": change.stato}
+    decision = decide_change(today=today_rome(), prezzo_vecchio=change.prezzo_vecchio, prezzo_nuovo=payload.prezzo)
+    change.stato = STATO_SOSTITUITO
+    await db.flush()
+    forced = SupplierPriceChange(
+        link_id=change.link_id, fornitore_id=change.fornitore_id, sku_interno=change.sku_interno,
+        supplier_product_alias_id=change.supplier_product_alias_id, chiave_offerta=change.chiave_offerta,
+        listino_id_origine=change.listino_id_origine, prezzo_vecchio=change.prezzo_vecchio,
+        prezzo_nuovo=payload.prezzo, unita_misura=change.unita_misura, tipo=decision.tipo,
+        # Deciso dall'ufficio: non resta sospeso. Un aumento vale comunque dalla prossima data fissa.
+        stato=STATO_PROGRAMMATO, decorrenza=decision.decorrenza, created_at=now,
+        decisione_by_id=admin.id, decisione_at=now,
+    )
+    db.add(forced)
+    await db.flush()
+    change.sostituito_da_id = forced.id
+    applied = await apply_change_now(db, forced.id)
+    await db.commit()
+    return {"status": "ok", "stato": forced.stato, "tipo": forced.tipo,
+            "decorrenza": forced.decorrenza.isoformat(), "esito": applied}
