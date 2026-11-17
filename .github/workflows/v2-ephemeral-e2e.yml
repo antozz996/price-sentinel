@@ -178,6 +178,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_smart_acquisti.py' -v
 
+      - name: Unit - Listino Smart Excel export
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_smart_price_export.py' -v
+
       - name: Unit — Invoice XML per-unit discounts
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_xml_discounts.py' -v
