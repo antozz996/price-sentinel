@@ -17,6 +17,7 @@ from app.config import settings
 from app.database import async_session_factory, engine, Base
 from app.schema_guards import ensure_unique_invoice_per_xml
 from app.services.automation import run_operational_monitor
+from app.services.open_price_list_activation import apply_due_price_changes
 
 
 logger = logging.getLogger("price_sentinel.automation")
@@ -32,6 +33,15 @@ async def _automation_loop() -> None:
             raise
         except Exception:
             logger.exception("operational_monitor_failed")
+        # Transazione separata: un errore del listino aperto non ferma il monitor.
+        try:
+            async with async_session_factory() as session:
+                async with session.begin():
+                    await apply_due_price_changes(session)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("open_price_list_activation_failed")
         await asyncio.sleep(settings.AUTOMATION_INTERVAL_SECONDS)
 
 
