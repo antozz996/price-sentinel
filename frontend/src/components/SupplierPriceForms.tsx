@@ -544,10 +544,10 @@ export default function SupplierPriceForms() {
           <small style={{ color: 'var(--text-secondary)' }}>Vengono inclusi i prodotti attivi del catalogo generale per la categoria scelta{categorySections.length ? ', limitati ai reparti abilitati per ciascun fornitore' : ''}. Il fornitore inserirà prezzi e unità; nessun prezzo di altri fornitori viene copiato.</small>
           {activeCategory && <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <label>Primi prodotti
-              <input style={{ ...field, width: 90 }} type="number" min={1} max={2000} value={topN} onChange={e => setTopN(Math.max(1, Math.floor(Number(e.target.value) || 1)))} />
+              <input style={{ ...field, width: 90 }} type="number" min={1} max={2000} value={topN} onChange={e => { setTopN(Math.max(1, Math.floor(Number(e.target.value) || 1))); setTopSummary({}); }} />
             </label>
             <label>per spesa negli ultimi mesi
-              <input style={{ ...field, width: 90 }} type="number" min={1} max={120} value={topMonths} onChange={e => setTopMonths(Math.min(120, Math.max(1, Math.floor(Number(e.target.value) || 1))))} />
+              <input style={{ ...field, width: 90 }} type="number" min={1} max={120} value={topMonths} onChange={e => { setTopMonths(Math.min(120, Math.max(1, Math.floor(Number(e.target.value) || 1)))); setTopSummary({}); }} />
             </label>
             <button className="btn btn-primary" type="button" onClick={() => void selectTopProducts()} disabled={loadingTop || loadingCatalog || !visibleRows.length}>{loadingTop ? 'Calcolo…' : 'Solo i più acquistati'}</button>
           </div>}
