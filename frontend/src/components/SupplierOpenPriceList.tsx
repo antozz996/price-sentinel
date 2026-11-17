@@ -32,13 +32,37 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState<Summary | 'confermato' | null>(null);
+  const [restored, setRestored] = useState(0);
   const base = `${API_BASE}/supplier-price-links/public/${encodeURIComponent(token)}`;
+  const draftKey = `ps-open-price-draft:${token}`;
+
+  useEffect(() => {
+    if (!data) return;
+    try {
+      const filled = Object.fromEntries(Object.entries(edits).filter(([, e]) => e.non_trattato || e.prezzo.trim()));
+      if (Object.keys(filled).length) localStorage.setItem(draftKey, JSON.stringify(filled));
+      else localStorage.removeItem(draftKey);
+    } catch { /* salvataggio non disponibile */ }
+  }, [data, edits, draftKey]);
+
+  const clearDraft = () => { try { localStorage.removeItem(draftKey); } catch { /* niente */ } };
 
   useEffect(() => {
     let active = true;
     fetch(base)
       .then(async r => { const body = await r.json().catch(() => ({})); if (!r.ok) throw new Error(body.detail || 'Link non valido'); return body as Data; })
-      .then(body => { if (active) setData(body); })
+      .then(body => {
+        if (!active) return;
+        setData(body);
+        // Riprende i prezzi scritti e non ancora inviati (solo su questo dispositivo).
+        try {
+          const saved = JSON.parse(localStorage.getItem(draftKey) || '{}') as Record<string, Edit>;
+          const ids = new Set(body.items.map(item => item.listino_id));
+          const kept = Object.fromEntries(Object.entries(saved).filter(([id, e]) =>
+            ids.has(Number(id)) && e && (e.non_trattato || (typeof e.prezzo === 'string' && e.prezzo.trim()))));
+          if (Object.keys(kept).length) { setEdits(kept); setRestored(Object.keys(kept).length); }
+        } catch { /* nessuna bozza */ }
+      })
       .catch(e => { if (active) setError(e.message || 'Impossibile caricare il listino'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -76,6 +100,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(errorText(body.detail, 'Invio non riuscito'));
+      clearDraft();
       setDone(body.riepilogo as Summary);
     } catch (e) { setError(e instanceof Error ? e.message : 'Invio non riuscito'); }
     finally { setSending(false); }
@@ -87,6 +112,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
       const response = await fetch(`${base}/confirm-unchanged`, { method: 'POST' });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(errorText(body.detail, 'Conferma non riuscita'));
+      clearDraft();
       setDone('confermato');
     } catch (e) { setError(e instanceof Error ? e.message : 'Conferma non riuscita'); }
     finally { setSending(false); }
@@ -95,6 +121,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
   const wrap: CSSProperties = { minHeight: '100vh', padding: '24px 14px', boxSizing: 'border-box', background: 'var(--bg-app)', color: 'var(--text-primary)', fontFamily: 'var(--font-family)' };
   const box: CSSProperties = { maxWidth: 900, margin: '0 auto', padding: 20, border: '1px solid var(--line)', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)' };
   const input: CSSProperties = { width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid var(--line)', background: 'var(--bg-inset)', color: 'var(--text-primary)' };
+  const panel: CSSProperties = { padding: 12, border: '1px solid var(--line)', borderRadius: 'var(--radius-md)', background: 'var(--bg-inset)' };
   const note: CSSProperties = { padding: 12, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)' };
 
   if (loading) return <main style={wrap}><div style={box}>Caricamento listino…</div></main>;
@@ -141,40 +168,57 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
   };
 
   return <main style={wrap}><form style={box} onSubmit={send}>
-    <h1 style={{ marginTop: 0 }}>Listino prezzi · {data.fornitore}</h1>
-    <p>
-      Qui trovate <strong>tutti i {total} prodotti</strong> che vi acquistiamo, ciascuno con il prezzo che oggi abbiamo nel nostro listino.
-      {data.importanti > 0 && <> In cima ci sono i {data.importanti} su cui spendiamo di più: controllate prima quelli. Scorrendo la pagina trovate tutti gli altri.</>}
-    </p>
-    <p>
-      Questo link è <strong>sempre lo stesso e non scade</strong>: salvatelo e usatelo ogni volta che i vostri prezzi cambiano.
-      Non serve mandarci listini per email o WhatsApp.
+    <h1 style={{ margin: '0 0 4px' }}>Listino prezzi · {data.fornitore}</h1>
+    <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)' }}>
+      {total} prodotti · link personale, sempre lo stesso, non scade
     </p>
 
-    <h2 style={{ fontSize: '1.1rem' }}>Cosa dovete fare</h2>
-    <ol style={{ paddingLeft: 20, lineHeight: 1.5 }}>
-      <li>Se tutti i prezzi sono ancora giusti, premete <strong>«Confermo tutti i prezzi invariati»</strong>. Basta questo.</li>
-      <li>Se un prezzo è cambiato, scrivete il nuovo prezzo <strong>solo in quella riga</strong>, nella casella «Nuovo prezzo» (per esempio 2,35). Le righe lasciate vuote restano come sono.</li>
-      <li>Se un prodotto non lo trattate più, spuntate <strong>«Non lo tratto più»</strong>.</li>
-      <li>Alla fine premete il pulsante in fondo alla pagina <strong>«Invia modifiche»</strong>.</li>
-    </ol>
-
-    <div style={note}>
-      <strong>Quando valgono i nuovi prezzi</strong>
-      <ul style={{ margin: '6px 0 0', paddingLeft: 20, lineHeight: 1.5 }}>
-        <li><strong>Ribasso</strong>: vale da subito, già dalle prossime consegne.</li>
-        <li><strong>Aumento</strong>: potete inserirlo quando volete, ma vale solo dalla prossima data fissa (il 1° o il 15 del mese).
-          Se lo inserite oggi vale dal <strong>{fixedDay}</strong>: fino ad allora va fatturato il prezzo attuale.</li>
-        <li><strong>Prodotto non più trattato</strong>: il prezzo attuale resta valido fino al {fixedDay}.</li>
-        <li><strong>Variazioni molto forti</strong> (ribassi oltre il 40% o aumenti oltre il 30%) vengono controllate dal nostro ufficio acquisti prima di entrare in listino.</li>
-        <li>Se avete sbagliato un prezzo, rientrate dal link e correggetelo: vale sempre l'ultimo prezzo inviato.</li>
-      </ul>
+    <div style={{ ...panel, marginBottom: 12 }}>
+      <strong>Come si fa</strong>
+      <ol style={{ margin: '6px 0 0', paddingLeft: 20, lineHeight: 1.6 }}>
+        <li><strong>Prezzi tutti uguali?</strong> Premete «Confermo tutti i prezzi invariati». Avete finito.</li>
+        <li><strong>Un prezzo è cambiato?</strong> Scrivetelo solo in quella riga (es. 2,35). Le righe vuote restano come sono.</li>
+        <li><strong>Un prodotto non lo avete più?</strong> Spuntate «Non lo tratto più».</li>
+        <li>Alla fine premete <strong>«Invia modifiche»</strong> in fondo alla pagina.</li>
+      </ol>
     </div>
-    <p><small>
-      Ogni prezzo si riferisce all'unità indicata accanto (per esempio al kg, al pezzo o al cartone).
-      Accanto ad alcuni prodotti vedete se oggi siete il fornitore più conveniente per noi; i prezzi degli altri fornitori non vengono mai mostrati.
-      Descrizione, marca e formato non si possono cambiare da qui: se qualcosa non è corretto, o se volete proporci un prodotto nuovo, contattate il nostro ufficio acquisti.
-    </small></p>
+
+    <div style={{ ...note, marginBottom: 12 }}>
+      <strong>Quando valgono i nuovi prezzi</strong>
+      <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 12px', marginTop: 6, lineHeight: 1.5 }}>
+        <span>⬇ Ribasso</span><span>da subito</span>
+        <span>⬆ Aumento</span><span>dal <strong>{fixedDay}</strong> (si cambia solo il 1° e il 15 del mese); fino ad allora vale il prezzo attuale</span>
+        <span>✕ Non più trattato</span><span>il prezzo resta valido fino al {fixedDay}</span>
+      </div>
+    </div>
+
+    <div style={{ ...panel, marginBottom: 12 }}>
+      <strong>Potete fermarvi e riprendere dopo</strong>
+      <div style={{ marginTop: 4, lineHeight: 1.5 }}>
+        I prezzi che scrivete restano salvati su questo telefono o computer anche se chiudete la pagina: riaprite il link e li ritrovate.
+        Diventano validi solo quando premete «Invia modifiche». Potete anche inviare una parte adesso e il resto un'altra volta.
+      </div>
+    </div>
+
+    {restored > 0 && <p style={{ ...note, margin: '0 0 12px' }}>
+      Avete ancora <strong>{restored} {restored === 1 ? 'prezzo scritto' : 'prezzi scritti'} e non inviati</strong> dall'ultima volta: li trovate già nelle loro righe.
+      Controllateli e premete «Invia modifiche».
+    </p>}
+
+    {data.importanti > 0 && <p style={{ margin: '0 0 12px' }}>
+      In cima trovate i <strong>{data.importanti} prodotti che vi acquistiamo di più</strong>: controllate prima quelli. Scorrendo trovate tutti gli altri.
+    </p>}
+
+    <details style={{ marginBottom: 16 }}>
+      <summary style={{ cursor: 'pointer' }}>Altre informazioni</summary>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 20, lineHeight: 1.5 }}>
+        <li>Ogni prezzo si riferisce all'unità indicata accanto (kg, pezzo, cartone…).</li>
+        <li>Ribassi oltre il 40% e aumenti oltre il 30% vengono controllati dal nostro ufficio acquisti prima di entrare in listino.</li>
+        <li>Avete sbagliato un prezzo già inviato? Rientrate dal link e correggetelo: vale l'ultimo inviato.</li>
+        <li>Accanto ad alcuni prodotti vedete se oggi siete il fornitore più conveniente; i prezzi degli altri non vengono mai mostrati.</li>
+        <li>Descrizione, marca e formato non si cambiano da qui: per correzioni o prodotti nuovi contattate il nostro ufficio acquisti.</li>
+      </ul>
+    </details>
     <p style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
       <button type="button" className="btn-secondary" disabled={sending} onClick={confirmAll}>Confermo tutti i prezzi invariati</button>
       {data.ultima_conferma && <small>Ultimo aggiornamento: {new Date(data.ultima_conferma).toLocaleDateString('it-IT')}</small>}
