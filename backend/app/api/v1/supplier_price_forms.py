@@ -30,6 +30,7 @@ from app.models.supplier_price_form import SupplierPriceFormIdentity, SupplierPr
 from app.models.utenti import Utente
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
 from app.services.matching import normalize_price_for_comparison
+from app.services.smart_price_purchases import load_purchase_stats_select, months_before
 from app.services.supplier_form_pdf import PdfForm, PdfItem, PdfOffer, generate_supplier_form_pdf
 from app.services.variant_price_import import build_variant_preview, commit_variant_preview
 
@@ -786,6 +787,7 @@ async def create_provisional_supplier(
 @router.get("/catalog-products", summary="Elenca i prodotti attivi del catalogo per una nuova richiesta listino")
 async def get_catalog_products(
     category: str = Query(min_length=1, max_length=100),
+    months: int = Query(12, ge=1, le=120, description="Mesi di storico per la spesa di ogni prodotto"),
     admin: Utente = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -795,6 +797,15 @@ async def get_catalog_products(
         .where(func.lower(Product.category) == category.strip().lower(), Product.is_active.is_(True))
         .order_by(Product.canonical_name)
     )).scalars().all()
+    # Spesa per voce da tutti i fornitori nel periodo (stesse regole del Listino
+    # Smart: netto riga, note di credito in negativo): serve a proporre al
+    # fornitore solo i prodotti su cui si spende di più.
+    skus = {product.sku_interno for product in products if product.sku_interno}
+    spend: dict[str, Decimal] = {}
+    if skus:
+        today = datetime.now(ZoneInfo("Europe/Rome")).date()
+        stats = await load_purchase_stats_select(db, admin, skus=skus, date_from=months_before(today, months))
+        spend = {row.sku_interno: Decimal(str(row.spesa or 0)) for row in (await db.execute(stats)).all()}
     return [
         {
             "id": product.id,
@@ -803,6 +814,7 @@ async def get_catalog_products(
             "unita_misura": product.comparison_unit,
             "category": product.category,
             "subcategory": product.subcategory,
+            "spesa": f"{spend.get(product.sku_interno, Decimal('0')):.2f}",
         }
         for product in products
     ]

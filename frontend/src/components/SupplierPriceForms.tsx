@@ -5,7 +5,7 @@ import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession } from '../api'
 type Supplier = { id: number; nome_azienda: string; telefono_contatto?: string | null };
 type CapabilitySupplier = { supplier_id: number; supplier_name: string; categories: Record<string, boolean>; subcategories?: Record<string, string[]> };
 type Category = { nome: string; is_active: boolean };
-type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null };
+type PriceRow = { id: number; sku_interno: string; descrizione: string; prezzo_pattuito?: number | string | null; unita_misura: string; data_inizio_validita?: string | null; data_scadenza?: string | null; category?: string | null; subcategory?: string | null; spesa?: string | null };
 type SubmittedOffer = { id_offerta: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota?: string | null; conferma_prezzo: boolean };
 type FormItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; brand_corrente?: string | null; prezzo_inviato?: string | null; unita_inviata?: string | null; brand_inviata?: string | null; dicitura_inviata?: string | null; quantita_inviata?: string | null; offerte_inviate?: SubmittedOffer[]; conferma_prezzo?: boolean | null; non_trattato?: boolean; nota_fornitore?: string | null; esito: string; best_price?: string | null; best_price_unit?: string | null; recipient_is_best?: boolean | null };
 type SupplierDetails = { ragione_sociale: string; partita_iva: string; telefono_ordini: string };
@@ -59,6 +59,11 @@ export default function SupplierPriceForms() {
   const [rowsBySupplier, setRowsBySupplier] = useState<Record<number, PriceRow[]>>({});
   const [selectedBySupplier, setSelectedBySupplier] = useState<Record<number, number[]>>({});
   const [listinoSection, setListinoSection] = useState('all');
+  // "Solo i più acquistati": first N products by spend in the last M months (all suppliers).
+  const [topN, setTopN] = useState(50);
+  const [topMonths, setTopMonths] = useState(12);
+  const [topSummary, setTopSummary] = useState<Record<number, string>>({});
+  const [loadingTop, setLoadingTop] = useState(false);
   const [days, setDays] = useState(14);
   const [note, setNote] = useState('');
   const [showBestPrice, setShowBestPrice] = useState(false);  // opt-in per form, never on by default
@@ -145,6 +150,7 @@ export default function SupplierPriceForms() {
     let live = true;
     setRowsBySupplier({});
     setSelectedBySupplier({});
+    setTopSummary({});
     setCreatedLinks([]);
     setListinoSection(recipientMode === 'category' && recipientCategory ? 'category:' + recipientCategory : 'all');
     if (!selectedSupplierIds.length) { setLoadingCatalog(false); return; }
@@ -158,7 +164,7 @@ export default function SupplierPriceForms() {
           const products = (Array.isArray(result) ? result : result.items || result.records || []).filter((p: any) => p && p.id);
           const rows: PriceRow[] = products.map((p: any) => ({
             id: p.id, sku_interno: p.sku_interno, descrizione: p.descrizione,
-            unita_misura: p.unita_misura, category: p.category, subcategory: p.subcategory,
+            unita_misura: p.unita_misura, category: p.category, subcategory: p.subcategory, spesa: p.spesa,
           }));
           const sections = sectionsByCategory[category.trim().toLocaleLowerCase()] || [];
           const rowsFor = (id: number) => {
@@ -233,6 +239,8 @@ export default function SupplierPriceForms() {
       return row.category?.trim() === activeGroup.category;
     })];
   })), [selectedSupplierIds, rowsBySupplier, activeGroup, recipientMode, recipientCategory, section]);
+  // A new listino can be trimmed row by row also when sent to a whole category.
+  const canPickRows = recipientMode === 'suppliers' || requestType === 'new_listino';
   const visibleRows = selectedSupplierIds.flatMap(id => visibleRowsBySupplier[id] || []);
   const selectedCount = selectedSupplierIds.reduce((sum, id) => sum + (selectedBySupplier[id]?.length || 0), 0);
   const allVisibleSelected = visibleRows.length > 0 && selectedSupplierIds.every(id =>
@@ -253,6 +261,39 @@ export default function SupplierPriceForms() {
     ...current, [supplierId]: (current[supplierId] || []).includes(id)
       ? current[supplierId].filter(x => x !== id) : [...(current[supplierId] || []), id]
   }));
+
+  // Reloads the spend for the chosen period, then selects for each supplier only the
+  // first N of its visible products by spend (products never bought are left out).
+  const selectTopProducts = async () => {
+    const category = recipientMode === 'category' ? recipientCategory : productCategory;
+    if (!category) return;
+    setLoadingTop(true); setError('');
+    try {
+      const result: any = await fetchWithAuth('/supplier-price-forms/catalog-products?category=' + encodeURIComponent(category) + '&months=' + topMonths);
+      const products = Array.isArray(result) ? result : result.items || result.records || [];
+      const spendById = new Map<number, number>(products.filter((p: any) => p && p.id).map((p: any) => [p.id, Number(p.spesa) || 0]));
+      const spendOf = (row: PriceRow) => spendById.get(row.id) || 0;
+      const selected: Record<number, number[]> = {};
+      const summary: Record<number, string> = {};
+      for (const id of selectedSupplierIds) {
+        const bought = (visibleRowsBySupplier[id] || []).filter(row => spendOf(row) > 0)
+          .sort((a, b) => spendOf(b) - spendOf(a) || a.descrizione.localeCompare(b.descrizione, 'it'));
+        const top = bought.slice(0, topN);
+        const total = bought.reduce((sum, row) => sum + spendOf(row), 0);
+        const share = total > 0 ? Math.round(top.reduce((sum, row) => sum + spendOf(row), 0) / total * 100) : 0;
+        selected[id] = top.map(row => row.id);
+        summary[id] = bought.length
+          ? `primi ${top.length} prodotti = ${share}% della spesa degli ultimi ${topMonths} mesi (${bought.length} prodotti acquistati)`
+          : `nessun acquisto negli ultimi ${topMonths} mesi`;
+      }
+      setRowsBySupplier(current => Object.fromEntries(Object.entries(current).map(([id, rows]) =>
+        [id, rows.map(row => ({ ...row, spesa: String(spendOf(row)) }))])));
+      setSelectedBySupplier(selected);
+      setTopSummary(summary);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Impossibile calcolare i prodotti più acquistati'); }
+    finally { setLoadingTop(false); }
+  };
+  const euro = (value?: string | null) => (Number(value) || 0).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
 
   const sectionSelect = categorySections.length > 0 && <label>Reparto
     <select style={field} value={section} onChange={e => setSection(e.target.value)}>
@@ -501,6 +542,16 @@ export default function SupplierPriceForms() {
               </label>}
           {recipientMode === 'suppliers' && sectionSelect}
           <small style={{ color: 'var(--text-secondary)' }}>Vengono inclusi i prodotti attivi del catalogo generale per la categoria scelta{categorySections.length ? ', limitati ai reparti abilitati per ciascun fornitore' : ''}. Il fornitore inserirà prezzi e unità; nessun prezzo di altri fornitori viene copiato.</small>
+          {activeCategory && <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <label>Primi prodotti
+              <input style={{ ...field, width: 90 }} type="number" min={1} max={2000} value={topN} onChange={e => { setTopN(Math.max(1, Math.floor(Number(e.target.value) || 1))); setTopSummary({}); }} />
+            </label>
+            <label>per spesa negli ultimi mesi
+              <input style={{ ...field, width: 90 }} type="number" min={1} max={120} value={topMonths} onChange={e => { setTopMonths(Math.min(120, Math.max(1, Math.floor(Number(e.target.value) || 1)))); setTopSummary({}); }} />
+            </label>
+            <button className="btn btn-primary" type="button" onClick={() => void selectTopProducts()} disabled={loadingTop || loadingCatalog || !visibleRows.length}>{loadingTop ? 'Calcolo…' : 'Solo i più acquistati'}</button>
+          </div>}
+          <small style={{ color: 'var(--text-secondary)' }}>La spesa conta gli acquisti da tutti i fornitori, al netto delle note di credito. I prodotti mai acquistati restano fuori: puoi aggiungerli a mano.</small>
         </> : <>
           <label>Listino / sezione da inviare
             <select style={field} value={listinoSection} onChange={e => setListinoSection(e.target.value)} disabled={recipientMode === 'category'}>
@@ -512,8 +563,8 @@ export default function SupplierPriceForms() {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <strong>Fornitori {selectedSuppliers.length} · righe visibili {visibleRows.length} · selezionate {selectedCount}</strong>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {selectedCount > 0 && recipientMode === 'suppliers' && <button className="btn" type="button" onClick={() => setSelectedBySupplier({})}>Azzera selezione</button>}
-            {recipientMode === 'suppliers' && <button className="btn" type="button" onClick={toggleVisibleRows} disabled={!visibleRows.length}>{allVisibleSelected ? 'Deseleziona righe visibili' : 'Seleziona righe visibili'}</button>}
+            {selectedCount > 0 && canPickRows && <button className="btn" type="button" onClick={() => setSelectedBySupplier({})}>Azzera selezione</button>}
+            {canPickRows && <button className="btn" type="button" onClick={toggleVisibleRows} disabled={!visibleRows.length}>{allVisibleSelected ? 'Deseleziona righe visibili' : 'Seleziona righe visibili'}</button>}
           </div>
         </div>
         {loadingCatalog ? <p>Caricamento listini dei fornitori…</p> : <div style={{ maxHeight: 360, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--radius-md)' }}>
@@ -521,10 +572,10 @@ export default function SupplierPriceForms() {
             const supplier = suppliers.find(s => s.id === id)!;
             const supplierRows = visibleRowsBySupplier[id] || [];
             return <div key={id}>
-              <div style={{ position: 'sticky', top: 0, padding: 9, background: 'var(--bg-inset)', borderBottom: '1px solid var(--line)' }}><strong>{supplier.nome_azienda}</strong> · {supplierRows.length} righe</div>
+              <div style={{ position: 'sticky', top: 0, padding: 9, background: 'var(--bg-inset)', borderBottom: '1px solid var(--line)' }}><strong>{supplier.nome_azienda}</strong> · {supplierRows.length} righe{canPickRows ? ` · selezionate ${(selectedBySupplier[id] || []).length}` : ''}{topSummary[id] ? <small style={{ display: 'block', color: 'var(--text-secondary)' }}>{topSummary[id]}</small> : null}</div>
               {supplierRows.map(r => <label key={r.id} style={{ display: 'grid', gridTemplateColumns: '24px 1fr auto', gap: 10, padding: 10, borderBottom: '1px solid var(--line)', alignItems: 'center' }}>
-                <input type="checkbox" disabled={recipientMode === 'category'} checked={recipientMode === 'category' || (selectedBySupplier[id] || []).includes(r.id)} onChange={() => toggleRow(id, r.id)} />
-                <span>{r.descrizione}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{r.sku_interno}{r.category ? ` · ${r.category}${r.subcategory ? ' / ' + r.subcategory : ''}` : ' · Senza categoria'}</small></span>
+                <input type="checkbox" disabled={!canPickRows} checked={!canPickRows || (selectedBySupplier[id] || []).includes(r.id)} onChange={() => toggleRow(id, r.id)} />
+                <span>{r.descrizione}<small style={{ display: 'block', color: 'var(--text-secondary)' }}>{r.sku_interno}{r.category ? ` · ${r.category}${r.subcategory ? ' / ' + r.subcategory : ''}` : ' · Senza categoria'}{requestType === 'new_listino' ? ` · spesa ${euro(r.spesa)}` : ''}</small></span>
                 <span>{requestType === 'new_listino' ? `Da quotare / ${r.unita_misura}` : `€ ${r.prezzo_pattuito} / ${r.unita_misura}`}</span>
               </label>)}
               {!supplierRows.length && <p style={{ padding: 10, color: 'var(--text-secondary)' }}>Nessuna riga disponibile per questa sezione.</p>}
