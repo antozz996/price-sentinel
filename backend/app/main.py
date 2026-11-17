@@ -79,6 +79,13 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE supplier_product_aliases "
                 "ADD COLUMN IF NOT EXISTS fattore_confezione NUMERIC(10, 4)"
             ))
+            await conn.execute(text(
+                "ALTER TABLE listino_master ADD COLUMN IF NOT EXISTS origine VARCHAR(30)"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_listino_fornitore_sku_inizio "
+                "ON listino_master (fornitore_id, sku_interno, data_inizio_validita)"
+            ))
     except Exception as e:
         logger.warning("Schema create_all notice: %s", e)
 

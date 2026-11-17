@@ -15,7 +15,7 @@ from app.api.deps import get_current_user, require_admin
 from app.database import get_db
 from app.models.utenti import Utente
 from app.models.products import Product, SupplierProductAlias, MatchCandidate, ProductEquivalenceGroupItem, ProductFeedback
-from app.models.listino import ListinoMaster
+from app.models.listino import ORIGINE_FATTURA, ListinoMaster
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
 from app.models.fornitori import Fornitore
 from app.models.anomalie import Anomalia, StatoValidazione
@@ -1380,6 +1380,7 @@ async def _resolve_single_work_item(
                 unita_misura=str(uom_val)[:20],
                 data_inizio_validita=valid_from,
                 supplier_product_alias_id=alias.id,
+                origine=ORIGINE_FATTURA,
             )
             db.add(listino_entry)
             await db.flush()
@@ -1414,6 +1415,7 @@ async def _resolve_single_work_item(
                 unita_misura=str(uom_val)[:20],
                 data_inizio_validita=valid_from,
                 supplier_product_alias_id=alias.id,
+                origine=ORIGINE_FATTURA,
             )
             db.add(listino_entry)
             await db.flush()

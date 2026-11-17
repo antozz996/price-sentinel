@@ -27,6 +27,21 @@ class PFATipo(str, enum.Enum):
     scaglioni = "scaglioni"
 
 
+# Origine di un prezzo in listino_master. I prezzi nati prima della colonna
+# restano NULL: la loro origine non è ricostruibile con certezza.
+ORIGINE_MODULO_FORNITORE = "modulo_fornitore"      # risposta approvata a un modulo prezzi
+ORIGINE_FOGLIO_PREZZI = "foglio_prezzi"            # Listino Smart / foglio prezzi precaricato
+ORIGINE_IMPORT_LISTINO = "import_listino"          # caricamento Excel/CSV del listino fornitore
+ORIGINE_FATTURA = "fattura"                        # «inserisci a listino» dalla coda prodotti
+ORIGINE_MANUALE = "manuale"                        # inserito o corretto a mano
+ORIGINE_APPROVAZIONE_ANOMALIA = "approvazione_anomalia"
+ORIGINE_ORDINE = "ordine"                          # prezzo nato da un ordine/ricevimento merce
+ORIGINI_PREZZO = (
+    ORIGINE_MODULO_FORNITORE, ORIGINE_FOGLIO_PREZZI, ORIGINE_IMPORT_LISTINO, ORIGINE_FATTURA,
+    ORIGINE_MANUALE, ORIGINE_APPROVAZIONE_ANOMALIA, ORIGINE_ORDINE,
+)
+
+
 class ListinoMaster(Base):
     """
     Listino prezzi concordati — APPEND-ONLY.
@@ -74,6 +89,11 @@ class ListinoMaster(Base):
         ForeignKey("supplier_product_aliases.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    origine: Mapped[str | None] = mapped_column(
+        String(30),
+        nullable=True,
+        comment="Da dove nasce il prezzo (ORIGINI_PREZZO); NULL = prezzo nato prima della colonna",
     )
 
     # ── Relationships ────────────────────────

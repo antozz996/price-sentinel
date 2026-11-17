@@ -178,6 +178,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_smart_acquisti.py' -v
 
+      - name: Unit - Price origin and single valid price without supplier
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_origine.py' -v
+
       - name: Unit - Listino Smart Excel export
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_smart_price_export.py' -v

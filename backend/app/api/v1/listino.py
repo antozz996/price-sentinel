@@ -23,7 +23,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import get_current_user, require_admin
 from app.config import settings
 from app.database import get_db
-from app.models.listino import ListinoMaster, PFAScaglione, PFATipo, UoMConversione
+from app.models.listino import ORIGINE_IMPORT_LISTINO, ListinoMaster, PFAScaglione, PFATipo, UoMConversione
 from app.models.purchase_policy import SmartPriceSheetPreview
 from app.models.utenti import Utente
 from app.schemas.listino import (
@@ -586,6 +586,7 @@ async def import_multi_supplier(
                 data_scadenza=None,
                 pfa_tipo=None,
                 pfa_valore=None,
+                origine=ORIGINE_IMPORT_LISTINO,
             ))
 
     preview.status = "committed"
