@@ -170,7 +170,7 @@ NO_UNIT = "N.D."
 UNIT_LABELS: dict[str, str] = {}
 for _label, _spellings in {
     "PZ": ("PZ", "PZZ", "PEZZO", "PEZZI", "N", "NR", "NUM", "NUMERO", "PC", "PCE", "PIECE", "PIECES",
-           "UNITA", "UNIT", "UN", "H87", "C62", "TA", "TN", "TANICA", "TANICHE"),
+           "UNITA", "UNIT", "UN", "H87", "C62", "TA", "TN", "TANICA", "TANICHE", "COL"),
     "KG": ("KG", "K", "KGM", "KGS", "KGR", "KILO", "KILOGRAMMI", "CHILO", "CHILI", "CHILOGRAMMI"),
     "LT": ("LT", "L", "LTR", "LITRO", "LITRI", "LITER", "LITRE"),
     "CT": ("CT", "CRT", "CARTONE", "CARTONI"),
