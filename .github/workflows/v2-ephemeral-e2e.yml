@@ -182,6 +182,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_origine.py' -v
 
+      - name: Unit - Open price list rules (fixed dates, held changes, one pending change per offer)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_aperto_regole.py' -v
+
       - name: Unit - Listino Smart Excel export
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_smart_price_export.py' -v
