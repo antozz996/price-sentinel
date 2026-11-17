@@ -30,6 +30,7 @@ from app.api.v1.supplier_price_forms import (
 from app.database import get_db
 from app.models.fornitori import Fornitore
 from app.models.listino import ListinoMaster
+from app.models.products import Product
 from app.models.supplier_price_link import (
     STATI_IN_ATTESA,
     STATO_APPLICATO,
@@ -145,6 +146,9 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
     pending = await _pending_changes(db, link.fornitore_id)
     proposals = await _pending_proposals(db, link.fornitore_id)
     pending_names = {p.listino_id_origine: p.nome_fornitore for p in proposals if p.tipo == PROPOSTA_NOME}
+    # Il nome in grassetto è il nostro (nome matriciale del catalogo), non la dicitura del fornitore.
+    our_names = dict((await db.execute(select(Product.sku_interno, Product.canonical_name).where(
+        Product.sku_interno.in_(skus)))).all()) if skus else {}
     ranked = sorted(rows, key=lambda r: (-spend.get(r.sku_interno, Decimal(0)), r.descrizione.casefold()))
     top_skus: list[str] = []
     for row in ranked:
@@ -156,7 +160,7 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
         change = pending.get(offer_key(row.sku_interno, row.supplier_product_alias_id))
         items.append({
             "listino_id": row.id,
-            "descrizione": row.descrizione,
+            "descrizione": our_names.get(row.sku_interno) or row.descrizione,
             "dicitura": wording,
             "nome_in_attesa": pending_names.get(row.id),
             "marca": brand,
