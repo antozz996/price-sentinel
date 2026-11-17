@@ -60,6 +60,15 @@ def period_start(periodo: str, today: date) -> Optional[date]:
     return None
 
 
+def months_before(today: date, months: int) -> date:
+    """Stesso giorno di `months` mesi prima (fine mese se il giorno non esiste): 31/03 - 1 = 28/02."""
+    total = today.year * 12 + (today.month - 1) - months
+    year, month = divmod(total, 12)
+    month += 1
+    next_month = date(year + (month == 12), month % 12 + 1, 1)
+    return date(year, month, min(today.day, (next_month - timedelta(days=1)).day))
+
+
 def purchase_lines_subquery(
     user,
     *,
