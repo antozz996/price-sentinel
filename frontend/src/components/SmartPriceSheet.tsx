@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Building2, Check, ClipboardPaste, History, Pencil, Plus, RefreshCw, RotateCcw, Search, Table2, Trash2 } from 'lucide-react'
-import { fetchWithAuth } from '../api'
+import { AlertTriangle, Building2, Check, ClipboardPaste, Download, History, Pencil, Plus, RefreshCw, RotateCcw, Search, Table2, Trash2 } from 'lucide-react'
+import { API_BASE, fetchWithAuth, getHeaders } from '../api'
 
 type Supplier = { id: number; name: string; vat: string }
 type Product = { id: number; sku_interno?: string | null; canonical_name: string; order_name?: string | null }
@@ -427,6 +427,35 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
+  const [exporting, setExporting] = useState(false)
+  async function exportMatrix() {
+    setExporting(true)
+    setError(null)
+    try {
+      const query = new URLSearchParams()
+      if (search.trim()) query.set('search', search.trim())
+      if (selectedMatrixCategory && selectedMatrixCategory !== 'all') query.set('category', selectedMatrixCategory)
+      if (selectedMatrixSubcategory && selectedMatrixSubcategory !== 'all') query.set('subcategory', selectedMatrixSubcategory)
+      query.set('sort', matrixSort)
+      if (matrixPeriod !== 'tutto') query.set('periodo', matrixPeriod)
+      const response = await fetch(`${API_BASE}/smart-price-sheet/matrix/export?${query}`, { headers: getHeaders() })
+      if (!response.ok) throw new Error(`Export non riuscito (${response.status})`)
+      const name = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') || '')?.[1] || 'listino_smart.xlsx'
+      const url = URL.createObjectURL(await response.blob())
+      const link = document.createElement('a')
+      link.href = url
+      link.download = name
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const subcategoriesForSelectedMatrix = useMemo(() => {
     if (selectedMatrixCategory === 'all') return []
     return allSubcategories.filter(s => s.categoria_nome.toLowerCase() === selectedMatrixCategory.toLowerCase())
@@ -850,6 +879,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: '1 1 260px' }}><Search size={16} style={{ position: 'absolute', left: 12, top: 12 }} /><input style={{ ...input, width: '100%', boxSizing: 'border-box', paddingLeft: 36 }} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { setOffset(0); void loadMatrix() } }} placeholder="Cerca prodotto o SKU…" /></div>
           <button className="btn" onClick={() => { setOffset(0); void loadMatrix() }}><RefreshCw size={16} /> Aggiorna</button>
+            <button className="btn" disabled={exporting} onClick={() => void exportMatrix()} title="Scarica in Excel tutti i prodotti della vista attuale (categoria, reparto, ricerca, ordinamento e periodo)"><Download size={16} /> {exporting ? 'Esporto…' : 'Esporta Excel'}</button>
           <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{matrix?.total || 0} prodotti</span>
           <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
             Ordina per:

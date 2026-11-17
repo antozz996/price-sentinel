@@ -4,7 +4,8 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
@@ -46,6 +47,7 @@ from app.services.purchase_recommendation import (
     rank_supplier_offers,
 )
 from app.services.smart_price_sheet import build_price_preview, commit_price_preview
+from app.services.smart_price_export import build_matrix_workbook
 from app.services.variant_price_import import build_variant_preview
 from app.services.sheet_sync_dry_run import stage_snapshot
 from app.services.normalized_price_workbook import parse_normalized_price_workbook, parse_normalized_sheet_values
@@ -540,6 +542,43 @@ async def matrix(
         "supplier_names": [s.nome_azienda for s in filtered_suppliers],
         "rows": rows,
     }
+
+
+@router.get("/matrix/export")
+async def matrix_export(
+    search: str | None = Query(default=None, max_length=150),
+    category: str | None = Query(default=None, max_length=100),
+    subcategory: str | None = Query(default=None, max_length=100),
+    location_id: int | None = Query(default=None, gt=0),
+    sort: str = Query(default="nome", pattern="^(" + "|".join(SORT_OPTIONS) + ")$"),
+    periodo: str = Query(default="tutto", pattern="^(" + "|".join(PERIOD_OPTIONS) + ")$"),
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    """Tutte le righe della matrice con i filtri della schermata, in un file Excel."""
+    rows: list[dict] = []
+    suppliers: list[dict] = []
+    offset = 0
+    while True:
+        page = await matrix(
+            search=search, category=category, subcategory=subcategory, location_id=location_id,
+            limit=500, offset=offset, sort=sort, periodo=periodo, db=db, user=user,
+        )
+        rows.extend(page["rows"])
+        suppliers.extend(page["suppliers"])
+        offset += 500
+        if not page["rows"] or offset >= page["total"]:
+            break
+    title = " - ".join(part for part in (category if category and category != "all" else "Tutte",
+                                         subcategory if subcategory and subcategory != "all" else None) if part)
+    content = await run_in_threadpool(build_matrix_workbook, rows, suppliers, title)
+    slug = "".join(ch if ch.isalnum() else "_" for ch in title).strip("_").lower() or "listino"
+    filename = f"listino_smart_{slug}_{date.today():%Y-%m-%d}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 async def _load_all_categories(db: AsyncSession) -> list[str]:
