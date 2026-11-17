@@ -22,7 +22,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.company_settings import CompanySettings
 from app.models.fornitori import Fornitore
-from app.models.listino import ListinoMaster
+from app.models.listino import ORIGINE_MODULO_FORNITORE, ListinoMaster
 from app.models.categories import MasterSubcategory
 from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import SupplierSubcategoryCapability
@@ -995,7 +995,7 @@ async def approve_form_request(
             supplier.nome_azienda = identity.ragione_sociale
             supplier.partita_iva = identity.partita_iva
             supplier.telefono_contatto = identity.telefono_ordini
-    result = await commit_variant_preview(db, preview)
+    result = await commit_variant_preview(db, preview, origine=ORIGINE_MODULO_FORNITORE)
     if request.validita_inviata_a and result.get("listino_ids"):
         approved_rows = (await db.execute(select(ListinoMaster).where(
             ListinoMaster.id.in_(result["listino_ids"])

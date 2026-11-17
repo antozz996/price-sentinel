@@ -20,6 +20,7 @@ from sqlalchemy.orm import noload, selectinload
 from app.database import get_db
 from app.api.deps import require_admin, get_current_user
 from app.models.listino import ListinoMaster
+from app.services.variant_price_import import sole_active_price
 from app.models.fatture import RigaFattura, Fattura
 from app.models.fornitori import Fornitore
 from app.models.location import Location
@@ -266,14 +267,16 @@ async def ottimizza_ordine(
         descrizione = listino_item.descrizione if listino_item else f"Prodotto {clean_sku}"
 
         # 2. REGOLA A: Verifica se c'è un contratto a prezzo fisso attivo (data_scadenza IS NULL)
-        contract_stmt = select(ListinoMaster).where(
-            and_(
+        # Solo prezzi validi oggi, e solo se la voce ne ha uno: con più fornitori
+        # «la prima riga aperta» era casuale (e poteva essere un prezzo futuro).
+        today = date.today()
+        active_contract = sole_active_price((await db.execute(
+            select(ListinoMaster).where(
                 ListinoMaster.sku_interno == clean_sku,
-                ListinoMaster.data_scadenza.is_(None)
+                ListinoMaster.data_inizio_validita <= today,
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
             )
-        ).limit(1)
-        contract_res = await db.execute(contract_stmt)
-        active_contract = contract_res.scalar_one_or_none()
+        )).scalars().all())
 
         if active_contract:
             # Recupera dettagli fornitore

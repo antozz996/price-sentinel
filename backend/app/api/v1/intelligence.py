@@ -4,7 +4,9 @@ Espone gli endpoint per la Dashboard Admin, KPI e Cross-Location Tracker.
 """
 
 from datetime import date, timedelta, datetime, timezone
+from decimal import Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, Query, HTTPException, status
@@ -20,7 +22,7 @@ from app.database import get_db
 from app.models.anomalie import Anomalia, NotaDiCredito, StatoValidazione, ApprovazionePrezzo
 from app.models.fatture import RigaFattura, Fattura, StatoMatching
 from app.models.location import Location
-from app.models.listino import ListinoMaster
+from app.models.listino import ORIGINE_APPROVAZIONE_ANOMALIA, ORIGINE_FATTURA, ListinoMaster
 from app.models.fornitori import Fornitore
 from fastapi.responses import Response, StreamingResponse
 from app.services.pdf_generator import generate_consumption_invoices_pdf
@@ -138,57 +140,37 @@ async def create_approvazione(
 
     # ── SPEC §5.1: Aggiornamento Automatico ListinoMaster ──
     if data.stato.upper() in ("APPROVATO", "ACCETTATO"):
-        # Cerca listino master attivo
-        listino_stmt = select(ListinoMaster).where(
-            and_(
+        # L'approvazione non indica il fornitore: il listino si aggiorna solo se
+        # la voce ha UN solo prezzo valido oggi (un fornitore, un'offerta).
+        # Prima si prendeva la prima riga aperta di qualunque fornitore e si
+        # poteva chiudere il prezzo di un altro; e senza listino si creava un
+        # prezzo dal fornitore di una fattura qualsiasi. Ora in quei casi non
+        # si tocca il listino.
+        from app.services.variant_price_import import previous_price_end, sole_active_price
+        today = datetime.now(ZoneInfo("Europe/Rome")).date()
+        active_rows = (await db.execute(
+            select(ListinoMaster).where(
                 ListinoMaster.sku_interno == data.sku_interno,
-                ListinoMaster.data_scadenza.is_(None)
+                ListinoMaster.data_inizio_validita <= today,
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
             )
-        ).limit(1)
-        listino_res = await db.execute(listino_stmt)
-        listino_active = listino_res.scalar_one_or_none()
+        )).scalars().all()
+        listino_active = sole_active_price(active_rows)
 
-        if listino_active:
-            if float(listino_active.prezzo_pattuito) != float(data.prezzo_approvato):
-                # Chiude la validita' del record corrente (Append-Only)
-                # Finisce il giorno prima del nuovo: un solo prezzo valido per giorno.
-                from app.services.variant_price_import import previous_price_end
-                listino_active.data_scadenza = previous_price_end(
-                    listino_active.data_inizio_validita, date.today()
-                )
-                
-                # Crea nuovo record con prezzo aggiornato
-                new_list = ListinoMaster(
-                    fornitore_id=listino_active.fornitore_id,
-                    sku_interno=data.sku_interno,
-                    descrizione=listino_active.descrizione,
-                    prezzo_pattuito=data.prezzo_approvato,
-                    unita_misura=listino_active.unita_misura,
-                    data_inizio_validita=date.today(),
-                    data_scadenza=None
-                )
-                db.add(new_list)
-        else:
-            # Fallback: cerca una riga fattura recente per ottenere il fornitore_id e dettagli omologhi
-            rf_stmt = (
-                select(RigaFattura)
-                .join(Fattura)
-                .where(RigaFattura.sku_interno == data.sku_interno)
-                .limit(1)
-            )
-            rf_res = await db.execute(rf_stmt)
-            rf_item = rf_res.scalar_one_or_none()
-            if rf_item and rf_item.fattura:
-                new_list = ListinoMaster(
-                    fornitore_id=rf_item.fattura.fornitore_id,
-                    sku_interno=data.sku_interno,
-                    descrizione=rf_item.descrizione_fornitore_raw or data.descrizione_orig,
-                    prezzo_pattuito=data.prezzo_approvato,
-                    unita_misura=rf_item.unita_misura_fattura or "Pz",
-                    data_inizio_validita=date.today(),
-                    data_scadenza=None
-                )
-                db.add(new_list)
+        if listino_active is not None and Decimal(str(listino_active.prezzo_pattuito)) != Decimal(str(data.prezzo_approvato)):
+            # Append-only: il vecchio finisce il giorno prima del nuovo.
+            listino_active.data_scadenza = previous_price_end(listino_active.data_inizio_validita, today)
+            db.add(ListinoMaster(
+                fornitore_id=listino_active.fornitore_id,
+                sku_interno=data.sku_interno,
+                descrizione=listino_active.descrizione,
+                prezzo_pattuito=data.prezzo_approvato,
+                unita_misura=listino_active.unita_misura,
+                data_inizio_validita=today,
+                data_scadenza=None,
+                supplier_product_alias_id=listino_active.supplier_product_alias_id,
+                origine=ORIGINE_APPROVAZIONE_ANOMALIA,
+            ))
         
     await db.flush()
     await db.refresh(appr)
@@ -794,7 +776,8 @@ async def auto_catalog_initialize(
                 prezzo_pattuito=min_price,
                 unita_misura=uom,
                 data_inizio_validita=date(2025, 1, 1),
-                data_scadenza=None
+                data_scadenza=None,
+                origine=ORIGINE_FATTURA,
             ))
             created_listino += 1
             

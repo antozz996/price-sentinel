@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
 from app.models.fornitori import Fornitore
-from app.models.listino import ListinoMaster
+from app.models.listino import ORIGINE_FOGLIO_PREZZI, ListinoMaster
 from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import SmartPriceSheetPreview
 from app.services.normalization import infer_new_product_category, normalize_text, unit_family
@@ -933,6 +933,7 @@ async def commit_price_preview(
             data_inizio_validita=effective_date,
             data_scadenza=None,
             supplier_product_alias_id=alias_id,
+            origine=ORIGINE_FOGLIO_PREZZI,
         )
         db.add(new_price)
         await db.flush()

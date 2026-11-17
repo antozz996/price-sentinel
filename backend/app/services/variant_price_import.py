@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload
 
 from app.models.fornitori import Fornitore
-from app.models.listino import ListinoMaster
+from app.models.listino import ORIGINE_FOGLIO_PREZZI, ListinoMaster
 from app.models.products import Product, SupplierProductAlias
 from app.models.purchase_policy import SmartPriceSheetPreview
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest
@@ -79,6 +79,17 @@ def previous_price_end(row_start: date, new_start: date) -> date:
     stesso giorno o dopo, non si crea un intervallo invertito: dura il suo primo giorno.
     """
     return max(new_start - timedelta(days=1), row_start)
+
+
+def sole_active_price(rows):
+    """L'unico prezzo valido di una voce, oppure None se ce ne sono zero o più di uno.
+
+    Serve dove non si sa a quale fornitore ci si riferisce (approvazione prezzi
+    per voce): con due fornitori, o due offerte dello stesso, scegliere «il
+    primo» chiuderebbe il prezzo sbagliato.
+    """
+    rows = list(rows)
+    return rows[0] if len(rows) == 1 else None
 
 
 def cut_other_supplier_rows_at(rows, effective_date: date) -> None:
@@ -208,7 +219,10 @@ async def build_variant_preview(db: AsyncSession, request: VariantPricePreviewRe
     return preview
 
 
-async def commit_variant_preview(db: AsyncSession, preview: SmartPriceSheetPreview) -> dict:
+async def commit_variant_preview(
+    db: AsyncSession, preview: SmartPriceSheetPreview, origine: str = ORIGINE_FOGLIO_PREZZI,
+) -> dict:
+    """Scrive i prezzi dell'anteprima; origine = da dove arrivano (foglio prezzi o modulo fornitore)."""
     payload = preview.preview_payload
     effective_date = date.fromisoformat(payload["effective_date"])
     now = datetime.now(timezone.utc)
@@ -298,7 +312,7 @@ async def commit_variant_preview(db: AsyncSession, preview: SmartPriceSheetPrevi
             fornitore_id=supplier.id, sku_interno=product.sku_interno,
             descrizione=change["description"], prezzo_pattuito=Decimal(change["price"]),
             unita_misura=change["price_unit"], data_inizio_validita=effective_date,
-            data_scadenza=None, supplier_product_alias_id=alias.id,
+            data_scadenza=None, supplier_product_alias_id=alias.id, origine=origine,
         )
         db.add(price)
         await db.flush()

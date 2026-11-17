@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.products import Product, SupplierProductAlias, MatchCandidate
-from app.models.listino import ListinoMaster
+from app.models.listino import ORIGINE_IMPORT_LISTINO, ListinoMaster
 from app.services.normalization import KG_UNITS, normalize_text, extract_volume_ml, infer_category, infer_new_product_category, extract_pack_qty, extract_weight_g
 from app.services.matching import resolve_invoice_line_product
 from app.services.variant_price_import import previous_price_end
@@ -152,7 +152,8 @@ async def save_append_only_price(
                 unita_misura=unita_misura,
                 data_inizio_validita=data_inizio,
                 data_scadenza=None,
-                supplier_product_alias_id=supplier_product_alias_id
+                supplier_product_alias_id=supplier_product_alias_id,
+                origine=ORIGINE_IMPORT_LISTINO,
             )
             db.add(nuovo)
             return "updated"
@@ -165,7 +166,8 @@ async def save_append_only_price(
             unita_misura=unita_misura,
             data_inizio_validita=data_inizio,
             data_scadenza=None,
-            supplier_product_alias_id=supplier_product_alias_id
+            supplier_product_alias_id=supplier_product_alias_id,
+            origine=ORIGINE_IMPORT_LISTINO,
         )
         db.add(nuovo)
         return "created"

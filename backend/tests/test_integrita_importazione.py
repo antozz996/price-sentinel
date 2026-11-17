@@ -211,7 +211,7 @@ class UniqueIndexTest(unittest.TestCase):
 
     def test_ci_expects_new_alembic_head(self):
         script = (BACKEND / "scripts" / "run_ci_disposable_e2e.py").read_text(encoding="utf-8")
-        self.assertIn('("fatture_xml_raw_unico",)', script)
+        self.assertIn('("listino_aperto_tabelle",)', script)
 
 
 class InvoicedNetPriceIsNeverRewrittenTest(unittest.TestCase):

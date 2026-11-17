@@ -10,6 +10,7 @@ from app.models.location import Location  # noqa: F401
 from app.models.fornitori import Fornitore  # noqa: F401
 from app.models.supplier_price_form import SupplierPriceFormRequest, SupplierPriceFormItem, SupplierPriceFormIdentity  # noqa: F401
 from app.models.listino import ListinoMaster, PFAScaglione, UoMConversione  # noqa: F401
+from app.models.supplier_price_link import SupplierPriceLink, SupplierPriceChange  # noqa: F401
 from app.models.fatture import XMLRaw, Fattura, RigaFattura  # noqa: F401
 from app.models.anomalie import Anomalia, NotaDiCredito, ApprovazionePrezzo  # noqa: F401
 from app.models.alias import AliasProdotto  # noqa: F401
