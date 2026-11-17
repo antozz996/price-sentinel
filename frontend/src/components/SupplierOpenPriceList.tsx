@@ -119,10 +119,13 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
 
   const query = search.trim().toLowerCase();
   const visible = data.items.filter(item => !query || `${item.descrizione} ${item.dicitura || ''} ${item.marca || ''}`.toLowerCase().includes(query));
+  const total = data.items.length;
+  const others = total - data.importanti;
   const groups = [
-    { title: `I prodotti più importanti per noi (${data.importanti})`, items: visible.filter(i => i.importante) },
-    { title: 'Altri prodotti', items: visible.filter(i => !i.importante) },
+    { title: `Da controllare per primi: i ${data.importanti} prodotti che vi acquistiamo di più`, items: visible.filter(i => i.importante) },
+    { title: data.importanti ? `Tutti gli altri prodotti (${others})` : `I vostri prodotti (${total})`, items: visible.filter(i => !i.importante) },
   ].filter(group => group.items.length);
+  const fixedDay = day(data.prossima_data_fissa);
 
   const hint = (item: Item) => {
     const edit = edits[item.listino_id];
@@ -139,13 +142,39 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
 
   return <main style={wrap}><form style={box} onSubmit={send}>
     <h1 style={{ marginTop: 0 }}>Listino prezzi · {data.fornitore}</h1>
-    <p>Questo è il vostro listino con noi. Potete aggiornare i prezzi quando volete, dallo stesso link.</p>
-    <p style={note}>
-      <strong>Ribassi</strong>: valgono da subito.<br />
-      <strong>Aumenti</strong>: potete inserirli quando volete, ma valgono solo dalla prossima data fissa (il 1° o il 15 del mese).
-      Un aumento inserito oggi vale dal <strong>{day(data.prossima_data_fissa)}</strong>.<br />
-      Descrizione, marca e formato non si possono cambiare: se qualcosa non è corretto, contattate il nostro ufficio acquisti.
+    <p>
+      Qui trovate <strong>tutti i {total} prodotti</strong> che vi acquistiamo, ciascuno con il prezzo che oggi abbiamo nel nostro listino.
+      {data.importanti > 0 && <> In cima ci sono i {data.importanti} su cui spendiamo di più: controllate prima quelli. Scorrendo la pagina trovate tutti gli altri.</>}
     </p>
+    <p>
+      Questo link è <strong>sempre lo stesso e non scade</strong>: salvatelo e usatelo ogni volta che i vostri prezzi cambiano.
+      Non serve mandarci listini per email o WhatsApp.
+    </p>
+
+    <h2 style={{ fontSize: '1.1rem' }}>Cosa dovete fare</h2>
+    <ol style={{ paddingLeft: 20, lineHeight: 1.5 }}>
+      <li>Se tutti i prezzi sono ancora giusti, premete <strong>«Confermo tutti i prezzi invariati»</strong>. Basta questo.</li>
+      <li>Se un prezzo è cambiato, scrivete il nuovo prezzo <strong>solo in quella riga</strong>, nella casella «Nuovo prezzo» (per esempio 2,35). Le righe lasciate vuote restano come sono.</li>
+      <li>Se un prodotto non lo trattate più, spuntate <strong>«Non lo tratto più»</strong>.</li>
+      <li>Alla fine premete il pulsante in fondo alla pagina <strong>«Invia modifiche»</strong>.</li>
+    </ol>
+
+    <div style={note}>
+      <strong>Quando valgono i nuovi prezzi</strong>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 20, lineHeight: 1.5 }}>
+        <li><strong>Ribasso</strong>: vale da subito, già dalle prossime consegne.</li>
+        <li><strong>Aumento</strong>: potete inserirlo quando volete, ma vale solo dalla prossima data fissa (il 1° o il 15 del mese).
+          Se lo inserite oggi vale dal <strong>{fixedDay}</strong>: fino ad allora va fatturato il prezzo attuale.</li>
+        <li><strong>Prodotto non più trattato</strong>: il prezzo attuale resta valido fino al {fixedDay}.</li>
+        <li><strong>Variazioni molto forti</strong> (ribassi oltre il 40% o aumenti oltre il 30%) vengono controllate dal nostro ufficio acquisti prima di entrare in listino.</li>
+        <li>Se avete sbagliato un prezzo, rientrate dal link e correggetelo: vale sempre l'ultimo prezzo inviato.</li>
+      </ul>
+    </div>
+    <p><small>
+      Ogni prezzo si riferisce all'unità indicata accanto (per esempio al kg, al pezzo o al cartone).
+      Accanto ad alcuni prodotti vedete se oggi siete il fornitore più conveniente per noi; i prezzi degli altri fornitori non vengono mai mostrati.
+      Descrizione, marca e formato non si possono cambiare da qui: se qualcosa non è corretto, o se volete proporci un prodotto nuovo, contattate il nostro ufficio acquisti.
+    </small></p>
     <p style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
       <button type="button" className="btn-secondary" disabled={sending} onClick={confirmAll}>Confermo tutti i prezzi invariati</button>
       {data.ultima_conferma && <small>Ultimo aggiornamento: {new Date(data.ultima_conferma).toLocaleDateString('it-IT')}</small>}
