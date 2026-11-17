@@ -33,7 +33,7 @@ python-dateutil==2.9.0
 httpx==0.27.2
 
 # Read-only Google Sheets connector (service-account OAuth)
-google-auth==2.40.3
+google-auth==2.62.1
 requests==2.34.2
 
 # PDF Generation (Sprint 4)
