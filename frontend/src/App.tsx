@@ -32,6 +32,8 @@ const GodModeControlRoom = lazyPage(() => import('./components/GodModeControlRoo
 const UnlistedProductsResolver = lazyPage(() => import('./components/UnlistedProductsResolver'))
 const SupplierPriceForms = lazyPage(() => import('./components/SupplierPriceForms'))
 const SupplierPricePublicForm = lazyPage(() => import('./components/SupplierPricePublicForm'))
+const SupplierOpenPriceList = lazyPage(() => import('./components/SupplierOpenPriceList'))
+const PriceListChanges = lazyPage(() => import('./components/PriceListChanges'))
 import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession, storeSession } from './api'
 
 type UserProfile = {
@@ -82,6 +84,7 @@ const NAV_SECTIONS: NavSection[] = [
       { id: 'orderregistry', label: 'Registro ordini', icon: ClipboardList },
       { id: 'productreviews', label: 'Recensioni prodotti', icon: Star },
       { id: 'supplierforms', label: 'Moduli fornitori', icon: ClipboardList, adminOnly: true },
+      { id: 'pricechanges', label: 'Variazioni listini', icon: TrendingUp, adminOnly: true },
     ],
   },
   {
@@ -197,6 +200,7 @@ export default function App() {
   const [recentOrdersCount, setRecentOrdersCount] = useState(0);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [unlistedProductsCount, setUnlistedProductsCount] = useState(0);
+  const [priceChangesCount, setPriceChangesCount] = useState(0);
   const [pendingSupplierResponsesCount, setPendingSupplierResponsesCount] = useState(0);
 
   // White-Label & Company Branding
@@ -240,7 +244,8 @@ export default function App() {
         promises.push(
           fetch(`${API_BASE}/feedbacks/pending-count`, { headers: getHeaders() }),
           fetch(`${API_BASE}/product-identity/match-candidates/work-queue/count`, { headers: getHeaders() }),
-          fetch(`${API_BASE}/supplier-price-forms/notifications/pending`, { headers: getHeaders() })
+          fetch(`${API_BASE}/supplier-price-forms/notifications/pending`, { headers: getHeaders() }),
+          fetch(`${API_BASE}/supplier-price-links/overview/count`, { headers: getHeaders() })
         );
       }
 
@@ -267,6 +272,11 @@ export default function App() {
         if (supplierFormsRes.ok) {
           const supplierFormsData = await supplierFormsRes.json();
           setPendingSupplierResponsesCount(supplierFormsData.pending_count || 0);
+        }
+        const priceChangesRes = results[4];
+        if (priceChangesRes?.ok) {
+          const priceChangesData = await priceChangesRes.json();
+          setPriceChangesCount(priceChangesData.pending_count || 0);
         }
       }
     } catch {
@@ -511,6 +521,8 @@ export default function App() {
   const renderContent = () => {
     const supplierFormMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
     if (supplierFormMatch) return <SupplierPricePublicForm token={decodeURIComponent(supplierFormMatch[1])} />;
+    const openPriceListMatch = window.location.pathname.match(/^\/fornitore\/prezzi\/([^/]+)\/?$/);
+    if (openPriceListMatch) return <SupplierOpenPriceList token={decodeURIComponent(openPriceListMatch[1])} />;
     if (isGodMode || activeTab === 'god') {
       return (
         <GodModeControlRoom
@@ -672,6 +684,7 @@ export default function App() {
       case 'validation': return <ValidationRoom />;
       case 'listini': return <PriceListManager />;
       case 'supplierforms': return <SupplierPriceForms />;
+      case 'pricechanges': return <PriceListChanges />;
       case 'topproducts': return <TopProductsPriceList />;
       case 'crosssupplier': return <SmartPriceSheet isAdmin={profile.ruolo === 'admin'} />;
       case 'productconsumption': return <ProductConsumptionReport />;
@@ -746,6 +759,7 @@ export default function App() {
       case 'validation': return { title: 'Anomalie da validare', sub: 'Controllo anomalie e gestione rincari' };
       case 'listini': return { title: 'Gestione Listini Master', sub: 'Importazione e versioning prezzi concordati' };
       case 'supplierforms': return { title: 'Moduli fornitori', sub: 'Raccogli conferme e proposte senza modificare il listino ufficiale' };
+      case 'pricechanges': return { title: 'Variazioni listini', sub: 'Cosa cambiano i fornitori dal link fisso, e chi va sollecitato' };
       case 'topproducts': return { title: 'Top prodotti', sub: 'Analizza prezzi e volumi dei prodotti più acquistati' };
       case 'crosssupplier': return { title: 'Listino Smart', sub: 'Prezzi, qualità fornitori e regole di acquisto in un’unica matrice' };
       case 'productconsumption': return { title: 'Analisi Consumi per Prodotto', sub: 'Rapporto di consumo aggregato e andamento storico dei volumi di acquisto' };
@@ -773,6 +787,17 @@ export default function App() {
 
   const isSectorResp = profile?.ruolo_dettagliato && profile.ruolo_dettagliato.startsWith('responsabile_');
   const supplierPublicMatch = window.location.pathname.match(/^\/fornitore\/listino\/([^/]+)\/?$/);
+  const openPriceListPublicMatch = window.location.pathname.match(/^\/fornitore\/prezzi\/([^/]+)\/?$/);
+
+  if (openPriceListPublicMatch) {
+    return (
+      <PageErrorBoundary>
+        <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: 'var(--bg-app)', color: 'var(--text-primary)' }}>Caricamento listino…</main>}>
+          <SupplierOpenPriceList token={decodeURIComponent(openPriceListPublicMatch[1])} />
+        </Suspense>
+      </PageErrorBoundary>
+    );
+  }
 
   if (supplierPublicMatch) {
     return (
@@ -862,6 +887,14 @@ export default function App() {
                           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Icon size={17} /> {item.label}
                           </span>
+                          {item.id === 'pricechanges' && priceChangesCount > 0 && (
+                            <span style={{
+                              background: 'var(--warn)', color: 'var(--bg-app)', fontSize: '0.72rem', fontWeight: 700,
+                              fontFamily: 'var(--font-mono)', padding: '2px 7px', borderRadius: '999px', lineHeight: 1,
+                            }}>
+                              {priceChangesCount}
+                            </span>
+                          )}
                           {item.id === 'unlistedproducts' && unlistedProductsCount > 0 && (
                             <span style={{
                               background: 'var(--warn)',
