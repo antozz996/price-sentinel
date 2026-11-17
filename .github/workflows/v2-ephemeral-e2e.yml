@@ -210,6 +210,10 @@ jobs:
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_aperto_proposte_ufficio.py' -v
 
+      - name: Unit - Open price list unit change (supplier proposal, office approval, weekly expiry kept)
+        working-directory: backend
+        run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_listino_aperto_unita.py' -v
+
       - name: Unit - Listino Smart Excel export
         working-directory: backend
         run: PYTHONPATH=. python -m unittest discover -s tests -p 'test_smart_price_export.py' -v
