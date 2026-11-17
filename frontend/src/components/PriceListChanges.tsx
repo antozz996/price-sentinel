@@ -17,7 +17,8 @@ type Overview = {
   proposte?: Proposal[];
 };
 type Proposal = {
-  id: number; tipo: 'nome' | 'prodotto_nuovo'; fornitore_id: number; fornitore: string; nostro_nome?: string | null;
+  id: number; tipo: 'nome' | 'prodotto_nuovo' | 'unita'; fornitore_id: number; fornitore: string; nostro_nome?: string | null;
+  prezzo_attuale?: string | null; formato_attuale?: string | null;
   nome_precedente?: string | null; nome_fornitore: string; unita_vendita?: string | null;
   contenuto_quantita?: string | null; contenuto_unita?: string | null; prezzo?: string | null;
 };
@@ -126,16 +127,17 @@ function ProposalLine({ proposal, onDone }: { proposal: Proposal; onDone: (msg: 
   const [results, setResults] = useState<CatalogProduct[]>([]);
   const [chosen, setChosen] = useState<CatalogProduct | null>(null);
   const isName = proposal.tipo === 'nome';
+  const isUnit = proposal.tipo === 'unita';
 
   useEffect(() => {
-    if (isName || chosen || query.trim().length < 2) { setResults([]); return; }
+    if (isName || isUnit || chosen || query.trim().length < 2) { setResults([]); return; }
     const timer = window.setTimeout(() => {
       fetchWithAuth(`${BASE}/proposals/catalog-search?q=${encodeURIComponent(query.trim())}`)
         .then(data => setResults(data.prodotti || []))
         .catch(() => setResults([]));
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [query, chosen, isName]);
+  }, [query, chosen, isName, isUnit]);
 
   const run = async (path: string, body: unknown, message: string) => {
     setBusy(true); setError('');
@@ -148,7 +150,12 @@ function ProposalLine({ proposal, onDone }: { proposal: Proposal; onDone: (msg: 
   return (
     <div style={row}>
       <div style={{ minWidth: 240, flex: 1 }}>
-        {isName ? <>
+        {isUnit ? <>
+          <strong>{proposal.nostro_nome || proposal.nome_fornitore}</strong>
+          <div style={muted}>{proposal.fornitore} cambia l'unità di vendita</div>
+          <div>da {euro(proposal.prezzo_attuale)} per {proposal.formato_attuale || '—'} a <strong>{euro(proposal.prezzo)} {UNITA_VENDITA[proposal.unita_vendita || ''] || ''}{content}</strong></div>
+          <div style={muted}>Con il via libera il vecchio prezzo si chiude e il nuovo vale da oggi.</div>
+        </> : isName ? <>
           <strong>{proposal.nostro_nome || 'Prodotto'}</strong>
           <div style={muted}>{proposal.fornitore} cambia il suo nome</div>
           <div>da «{proposal.nome_precedente || 'non indicato'}» a <strong>«{proposal.nome_fornitore}»</strong></div>
@@ -160,7 +167,13 @@ function ProposalLine({ proposal, onDone }: { proposal: Proposal; onDone: (msg: 
         {error && <div style={{ ...muted, color: 'var(--danger, #c0392b)' }}>{error}</div>}
       </div>
       <div style={{ minWidth: 240, flex: '0 1 340px' }}>
-        {isName ? (
+        {isUnit ? (
+          <div style={buttons}>
+            <button className="btn" disabled={busy} onClick={() => run(`/proposals/${proposal.id}/approve-unit`, undefined,
+              'Fatto: da oggi il prodotto ha la nuova unità e il nuovo prezzo.')}>Via libera</button>
+            <button className="btn" disabled={busy} onClick={() => run(`/proposals/${proposal.id}/reject`, undefined, "Rifiutata: resta l'unità di prima.")}>Rifiuta</button>
+          </div>
+        ) : isName ? (
           <div style={buttons}>
             <button className="btn" disabled={busy} onClick={() => run(`/proposals/${proposal.id}/approve-name`, undefined,
               'Fatto: il nome nuovo è collegato al prodotto. Le fatture si collegano sia col nome vecchio sia col nuovo.')}>Via libera</button>
@@ -325,7 +338,7 @@ export default function PriceListChanges() {
 
       {(data.proposte || []).length > 0 && (
         <div style={{ ...card, borderColor: 'var(--warn)' }}>
-          <h3 style={{ margin: 0 }}>Nomi e prodotti proposti dai fornitori</h3>
+          <h3 style={{ margin: 0 }}>Nomi, unità e prodotti proposti dai fornitori</h3>
           <div style={muted}>Il nostro nome dei prodotti non cambia: qui decidi se accettare il nome del fornitore o un prodotto nuovo, e a quale nostro prodotto collegarlo.</div>
           {(data.proposte || []).map(p => <ProposalLine key={p.id} proposal={p} onDone={done} />)}
         </div>

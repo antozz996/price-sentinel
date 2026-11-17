@@ -122,6 +122,7 @@ class SupplierPriceChange(Base):
 # Il nostro nome (nome matriciale) non cambia mai da qui: decide l'ufficio.
 PROPOSTA_NOME = "nome"
 PROPOSTA_PRODOTTO_NUOVO = "prodotto_nuovo"
+PROPOSTA_UNITA = "unita"               # cambio dell'unità di vendita di un prodotto in listino
 PROPOSTA_IN_ATTESA = "in_attesa"
 PROPOSTA_APPROVATA = "approvata"
 PROPOSTA_RIFIUTATA = "rifiutata"

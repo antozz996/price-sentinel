@@ -42,6 +42,7 @@ from app.models.supplier_price_link import (
     PROPOSTA_PRODOTTO_NUOVO,
     PROPOSTA_RIFIUTATA,
     PROPOSTA_SOSTITUITA,
+    PROPOSTA_UNITA,
     STATO_PROGRAMMATO,
     STATO_RIFIUTATO,
     STATO_SOSTITUITO,
@@ -58,7 +59,7 @@ from app.models.supplier_price_link import (
 )
 from app.services.normalization import normalize_text
 from app.models.utenti import Utente
-from app.services.open_price_list_activation import apply_change_now
+from app.services.open_price_list_activation import _newer_row_exists, apply_change_now
 from app.services.open_price_list_rules import (
     ROME,
     annual_impact,
@@ -152,6 +153,10 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
     pending = await _pending_changes(db, link.fornitore_id)
     proposals = await _pending_proposals(db, link.fornitore_id)
     pending_names = {p.listino_id_origine: p.nome_fornitore for p in proposals if p.tipo == PROPOSTA_NOME}
+    pending_units = {p.listino_id_origine: {
+        "unita_vendita": p.unita_vendita, "contenuto_quantita": _money(p.contenuto_quantita),
+        "contenuto_unita": p.contenuto_unita, "prezzo": _money(p.prezzo),
+    } for p in proposals if p.tipo == PROPOSTA_UNITA}
     # Il nome in grassetto è il nostro (nome matriciale del catalogo), non la dicitura del fornitore.
     our_names = dict((await db.execute(select(Product.sku_interno, Product.canonical_name).where(
         Product.sku_interno.in_(skus)))).all()) if skus else {}
@@ -170,6 +175,7 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
             "descrizione": our_names.get(row.sku_interno) or row.descrizione,
             "dicitura": wording,
             "nome_in_attesa": pending_names.get(row.id),
+            "unita_in_attesa": pending_units.get(row.id),
             "marca": brand,
             "formato": _format_label(quantity, unit or (row.unita_misura or "").upper() or None),
             "prezzo": _money(row.prezzo_pattuito),
@@ -206,6 +212,18 @@ class PriceUpdate(BaseModel):
     nota: str | None = Field(default=None, max_length=500)
     # Il nome con cui il fornitore chiama il prodotto (il nostro nome non cambia).
     nome_fornitore: str | None = Field(default=None, max_length=255)
+    # Nuova unità di vendita, con il prezzo in quella unità: va all'ufficio prima di valere.
+    unita: "UnitChange | None" = None
+
+
+class UnitChange(BaseModel):
+    unita_vendita: str
+    contenuto_quantita: Decimal | None = Field(default=None, gt=0, lt=Decimal("1000000"), decimal_places=4)
+    contenuto_unita: str | None = None
+    prezzo: Decimal = Field(gt=0, lt=Decimal("100000000"), decimal_places=4)
+
+
+PriceUpdate.model_rebuild()
 
 
 class NewProduct(BaseModel):
@@ -236,17 +254,52 @@ def validate_new_product(product: NewProduct) -> NewProduct:
     nome = _clean_name(product.nome)
     if len(nome) < 2:
         raise HTTPException(status_code=422, detail="Prodotto nuovo: scrivete il nome")
-    unit = (product.unita_vendita or "").strip().upper()
-    if unit not in UNITA_VENDITA:
-        raise HTTPException(status_code=422, detail=f"{nome}: scegliete come lo vendete")
-    if unit in UNITA_CON_CONTENUTO:
-        content_unit = (product.contenuto_unita or "").strip().upper()
-        if product.contenuto_quantita is None or content_unit not in UNITA_CONTENUTO:
-            raise HTTPException(status_code=422, detail=f"{nome}: indicate quanti pezzi o kg ci sono dentro")
-        _check_quantity(product.contenuto_quantita, content_unit, nome)
-        return product.model_copy(update={"nome": nome, "unita_vendita": unit, "contenuto_unita": content_unit})
+    unit, quantity, content_unit = validate_sale_unit(product.unita_vendita, product.contenuto_quantita,
+                                                      product.contenuto_unita, nome)
     return product.model_copy(update={"nome": nome, "unita_vendita": unit,
-                                      "contenuto_quantita": None, "contenuto_unita": None})
+                                      "contenuto_quantita": quantity, "contenuto_unita": content_unit})
+
+
+def validate_sale_unit(unita_vendita: str | None, contenuto_quantita: Decimal | None, contenuto_unita: str | None,
+                       label: str) -> tuple[str, Decimal | None, str | None]:
+    """Come si vende: al kg, al pezzo, al litro, oppure a cartone o cassa con quello che c'è dentro."""
+    unit = (unita_vendita or "").strip().upper()
+    if unit not in UNITA_VENDITA:
+        raise HTTPException(status_code=422, detail=f"{label}: scegliete come lo vendete")
+    if unit not in UNITA_CON_CONTENUTO:
+        return unit, None, None
+    content_unit = (contenuto_unita or "").strip().upper()
+    if contenuto_quantita is None or content_unit not in UNITA_CONTENUTO:
+        raise HTTPException(status_code=422, detail=f"{label}: indicate quanti pezzi o kg ci sono dentro")
+    _check_quantity(contenuto_quantita, content_unit, label)
+    return unit, contenuto_quantita, content_unit
+
+
+async def _save_unit_proposal(db: AsyncSession, link: SupplierPriceLink, row: ListinoMaster, change: UnitChange,
+                              label: str, now: datetime, ip: str | None) -> None:
+    """Salva la nuova unità proposta per una riga; conta l'ultima inviata."""
+    unit, quantity, content_unit = validate_sale_unit(change.unita_vendita, change.contenuto_quantita,
+                                                      change.contenuto_unita, label)
+    pending = (await db.execute(select(SupplierProductProposal).where(
+        SupplierProductProposal.fornitore_id == link.fornitore_id,
+        SupplierProductProposal.tipo == PROPOSTA_UNITA,
+        SupplierProductProposal.listino_id_origine == row.id,
+        SupplierProductProposal.stato == PROPOSTA_IN_ATTESA,
+    ).with_for_update())).scalars().all()
+    for old in pending:
+        old.stato = PROPOSTA_SOSTITUITA
+        old.decisione_at = now
+    proposal = SupplierProductProposal(
+        link_id=link.id, fornitore_id=link.fornitore_id, tipo=PROPOSTA_UNITA, stato=PROPOSTA_IN_ATTESA,
+        listino_id_origine=row.id, sku_interno=row.sku_interno,
+        supplier_product_alias_id=row.supplier_product_alias_id, nome_fornitore=label[:255],
+        unita_vendita=unit, contenuto_quantita=quantity, contenuto_unita=content_unit, prezzo=change.prezzo,
+        created_at=now, ip=ip,
+    )
+    db.add(proposal)
+    await db.flush()
+    for old in pending:
+        old.sostituita_da_id = proposal.id
 
 
 async def _approved_names(db: AsyncSession, fornitore_id: int) -> dict[str, str]:
@@ -306,7 +359,8 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
     if len(set(ids)) != len(ids):
         raise HTTPException(status_code=422, detail="Lo stesso prodotto compare due volte")
     rows = {row.id: row for row in await _active_supplier_rows(db, link.fornitore_id)}
-    named_rows = [rows[u.listino_id] for u in payload.modifiche if u.nome_fornitore is not None and u.listino_id in rows]
+    named_rows = [rows[u.listino_id] for u in payload.modifiche
+                  if (u.nome_fornitore is not None or u.unita is not None) and u.listino_id in rows]
     wording: dict[int, str | None] = {}
     if named_rows:
         approved_names = await _approved_names(db, link.fornitore_id)
@@ -317,7 +371,7 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
     today = today_rome()
     ip = (request.client.host if request.client else None)
     summary = {"ribassi": 0, "aumenti": 0, "non_trattati": 0, "sospese": 0, "annullate": 0, "invariati": 0,
-               "nomi": 0, "nuovi": 0}
+               "nomi": 0, "nuovi": 0, "unita": 0}
     for update in payload.modifiche:
         row = rows.get(update.listino_id)
         if row is None:
@@ -326,9 +380,15 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
         has_price = update.non_trattato or update.prezzo is not None
         if update.non_trattato and update.prezzo is not None:
             raise HTTPException(status_code=422, detail=f"{row.descrizione}: indica un prezzo oppure «non lo tratto più»")
-        if not has_price and not name:
+        if update.unita is not None and has_price:
+            raise HTTPException(status_code=422, detail=(
+                f"{row.descrizione}: se cambiate l'unità, scrivete il prezzo nella nuova unità e non nella casella del prezzo"))
+        if not has_price and not name and update.unita is None:
             raise HTTPException(status_code=422,
-                                detail=f"{row.descrizione}: indica un prezzo, «non lo tratto più» o il vostro nome")
+                                detail=f"{row.descrizione}: indica un prezzo, «non lo tratto più», il vostro nome o l'unità")
+        if update.unita is not None:
+            await _save_unit_proposal(db, link, row, update.unita, wording.get(row.id) or row.descrizione, now, ip)
+            summary["unita"] += 1
         if name is not None and len(name) < 2:
             raise HTTPException(status_code=422, detail=f"{row.descrizione}: il vostro nome è troppo corto")
         if name and await _save_name_proposal(db, link, row, wording.get(row.id), name, now, ip):
@@ -518,7 +578,19 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
     proposal_skus = {p.sku_interno for p in proposals if p.sku_interno}
     our_names = dict((await db.execute(select(Product.sku_interno, Product.canonical_name).where(
         Product.sku_interno.in_(proposal_skus)))).all()) if proposal_skus else {}
+    unit_rows = {p.listino_id_origine for p in proposals if p.tipo == PROPOSTA_UNITA and p.listino_id_origine}
+    current_prices = {row.id: row for row in (await db.execute(select(ListinoMaster).options(noload("*")).where(
+        ListinoMaster.id.in_(unit_rows)))).scalars().all()} if unit_rows else {}
+    # Il formato attuale come lo vede il fornitore (es. «cassa 5 KG»), non l'unità interna «conf».
+    current_formats: dict[int, str] = {}
+    for supplier_id in {row.fornitore_id for row in current_prices.values()}:
+        supplier_rows = [row for row in current_prices.values() if row.fornitore_id == supplier_id]
+        for row_id, (quantity, unit, _w, _b) in (await _offer_formats(db, supplier_id, supplier_rows)).items():
+            current_formats[row_id] = _format_label(quantity, unit or (current_prices[row_id].unita_misura or "").upper() or None)
     proposal_views = [{
+        "prezzo_attuale": _money(current_prices[p.listino_id_origine].prezzo_pattuito)
+        if p.listino_id_origine in current_prices else None,
+        "formato_attuale": current_formats.get(p.listino_id_origine),
         "id": p.id, "tipo": p.tipo, "fornitore_id": p.fornitore_id,
         "fornitore": suppliers[p.fornitore_id].nome_azienda if p.fornitore_id in suppliers else f"Fornitore {p.fornitore_id}",
         "nostro_nome": our_names.get(p.sku_interno) if p.sku_interno else None,
@@ -786,6 +858,72 @@ async def approve_product_proposal(proposal_id: int, payload: ProposalProduct, a
     proposal.sku_interno = product.sku_interno
     proposal.applicato_alias_id = alias_id
     proposal.applicato_listino_id = (result.get("listino_ids") or [None])[0]
+    await db.commit()
+    return {"status": "ok", "stato": proposal.stato, "listino_id": proposal.applicato_listino_id}
+
+
+MOTIVO_UNITA_CAMBIATA = "unita_cambiata"
+
+
+@router.post("/proposals/{proposal_id}/approve-unit",
+             summary="Via libera alla nuova unità di vendita: il vecchio prezzo si chiude, il nuovo vale da oggi")
+async def approve_unit_proposal(proposal_id: int, admin: Utente = Depends(require_admin),
+                                db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    proposal = await _proposal_for_decision(db, proposal_id, PROPOSTA_UNITA)
+    row = await db.get(ListinoMaster, proposal.listino_id_origine, options=[noload("*")]) \
+        if proposal.listino_id_origine else None
+    if row is None or row.fornitore_id != proposal.fornitore_id:
+        raise HTTPException(status_code=409, detail="La riga di listino non c'è più: rifiuta la proposta")
+    today = today_rome()
+    if (row.data_scadenza is not None and row.data_scadenza < today) or await _newer_row_exists(db, row):
+        raise HTTPException(status_code=409, detail=(
+            "Il prezzo di partenza è già cambiato o scaduto: rifiuta e chiedi al fornitore di reinviare l'unità"))
+    if row.data_inizio_validita >= today:
+        raise HTTPException(status_code=409, detail="Il prezzo attuale è partito oggi: dai il via libera da domani")
+    key = offer_key(row.sku_interno, row.supplier_product_alias_id)
+    await db.execute(select(func.pg_advisory_xact_lock(offer_lock_key(proposal.fornitore_id, key))))
+    product = await db.scalar(select(Product).options(noload("*")).where(
+        Product.sku_interno == row.sku_interno, Product.is_active.is_(True)))
+    if product is None:
+        raise HTTPException(status_code=409, detail="Il prodotto non è più nel catalogo")
+    base = await db.get(SupplierProductAlias, row.supplier_product_alias_id, options=[noload("*")]) \
+        if row.supplier_product_alias_id else None
+    # Stessa offerta se viene dai moduli prezzi (il collegamento prende la nuova confezione), altrimenti una nuova.
+    reuse = base is not None and base.source == "normalized_sheet_offer" and bool(base.supplier_code)
+    offer_id = base.supplier_code if reuse else f"LA-U-{proposal.id}"
+    quantity, unit = new_product_offer(proposal)
+    preview = await build_variant_preview(db, VariantPricePreviewRequest(rows=[VariantPriceRow(
+        product_id=product.id, supplier_id=proposal.fornitore_id, sku=product.sku_interno, offer_id=offer_id,
+        description=(base.raw_description if base and base.raw_description else row.descrizione)[:255],
+        brand=getattr(base, "brand", None), quantity=quantity, unit=unit,
+        price=Decimal(str(proposal.prezzo)), package_confirmed=True,
+    )], effective_date=today), admin.id)
+    errors = preview.preview_payload.get("errors") or []
+    if errors:
+        raise HTTPException(status_code=409, detail="; ".join(error["message"] for error in errors))
+    result = await commit_variant_preview(db, preview, origine=ORIGINE_LISTINO_APERTO)
+    new_ids = result.get("listino_ids") or []
+    if row.data_scadenza is not None and new_ids:
+        # Un prezzo a scadenza (es. frutta settimanale) resta a scadenza anche con la nuova unità.
+        for new_row in (await db.execute(select(ListinoMaster).where(ListinoMaster.id.in_(new_ids)))).scalars():
+            new_row.data_scadenza = row.data_scadenza
+    # Il vecchio prezzo si chiude a ieri dentro commit_variant_preview: stessa offerta (riga sostituita)
+    # oppure riga generica dello stesso prodotto (tagliata alla nuova decorrenza).
+    now = datetime.now(timezone.utc)
+    # Le modifiche di prezzo in attesa sulla vecchia unità non hanno più senso.
+    for change in (await db.execute(select(SupplierPriceChange).where(
+        SupplierPriceChange.fornitore_id == proposal.fornitore_id,
+        SupplierPriceChange.chiave_offerta == key,
+        SupplierPriceChange.stato.in_(STATI_IN_ATTESA),
+    ).with_for_update())).scalars():
+        change.stato = STATO_SOSTITUITO
+        change.motivo_trattenuta = MOTIVO_UNITA_CAMBIATA
+        change.decisione_at = now
+    _decide(proposal, admin, PROPOSTA_APPROVATA)
+    proposal.applicato_listino_id = new_ids[0] if new_ids else None
+    proposal.applicato_alias_id = await db.scalar(select(SupplierProductAlias.id).where(
+        SupplierProductAlias.supplier_id == proposal.fornitore_id, SupplierProductAlias.supplier_code == offer_id))
     await db.commit()
     return {"status": "ok", "stato": proposal.stato, "listino_id": proposal.applicato_listino_id}
 

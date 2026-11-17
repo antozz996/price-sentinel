@@ -9,6 +9,7 @@ import { API_BASE } from '../api';
 type Pending = { tipo: string; prezzo: string | null; decorrenza: string; sospesa: boolean };
 type Item = {
   listino_id: number; descrizione: string; dicitura?: string | null; nome_in_attesa?: string | null;
+  unita_in_attesa?: { unita_vendita: string; contenuto_quantita?: string | null; contenuto_unita?: string | null; prezzo: string } | null;
   marca?: string | null; formato: string; prezzo: string; importante: boolean;
   siete_i_piu_convenienti: boolean | null; in_attesa: Pending | null;
 };
@@ -18,9 +19,11 @@ type Data = {
   importanti: number; items: Item[]; prodotti_proposti?: Proposed[];
 };
 // nome: undefined = non lo sta correggendo.
-type Edit = { prezzo: string; non_trattato: boolean; nome?: string };
+type UnitDraft = { unita_vendita: string; contenuto_quantita: string; contenuto_unita: string; prezzo: string };
+// nome / unita: undefined = non li sta cambiando.
+type Edit = { prezzo: string; non_trattato: boolean; nome?: string; unita?: UnitDraft };
 type NewDraft = { key: string; nome: string; unita_vendita: string; contenuto_quantita: string; contenuto_unita: string; prezzo: string };
-type Summary = { ribassi: number; aumenti: number; non_trattati: number; sospese: number; annullate: number; invariati: number; nomi?: number; nuovi?: number };
+type Summary = { ribassi: number; aumenti: number; non_trattati: number; sospese: number; annullate: number; invariati: number; nomi?: number; nuovi?: number; unita?: number };
 
 const UNITA: Record<string, string> = { KG: 'al kg', PZ: 'al pezzo', L: 'al litro', CT: 'a cartone', CASSA: 'a cassa' };
 const CON_CONTENUTO = ['CT', 'CASSA'];
@@ -43,6 +46,11 @@ const priceChanged = (item: Item, edit?: Edit) => !!edit && (edit.non_trattato
 const nameChanged = (item: Item, edit?: Edit) => !!edit && edit.nome !== undefined
   && clean(edit.nome).length >= 2 && clean(edit.nome).toLowerCase() !== clean(currentName(item)).toLowerCase();
 const newFilled = (n: NewDraft) => !!(clean(n.nome) || n.unita_vendita || n.prezzo.trim() || n.contenuto_quantita.trim());
+const unitFilled = (u?: UnitDraft) => !!u && !!(u.unita_vendita || u.prezzo.trim() || u.contenuto_quantita.trim());
+const unitValid = (u?: UnitDraft) => !!u && !!UNITA[u.unita_vendita] && parsePrice(u.prezzo) > 0
+  && (!CON_CONTENUTO.includes(u.unita_vendita) || parsePrice(u.contenuto_quantita) > 0);
+const unitLabel = (unit: string, quantity?: string | null, contentUnit?: string | null) =>
+  `${UNITA[unit] || unit}${quantity ? ` da ${Number(String(quantity).replace(',', '.')).toLocaleString('it-IT')} ${contentUnit === 'KG' ? 'kg' : 'pezzi'}` : ''}`;
 const newValid = (n: NewDraft) => clean(n.nome).length >= 2 && !!UNITA[n.unita_vendita] && parsePrice(n.prezzo) > 0
   && (!CON_CONTENUTO.includes(n.unita_vendita) || parsePrice(n.contenuto_quantita) > 0);
 
@@ -69,7 +77,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
   useEffect(() => {
     if (!data) return;
     try {
-      const filled = Object.fromEntries(Object.entries(edits).filter(([, e]) => e.non_trattato || e.prezzo.trim() || e.nome !== undefined));
+      const filled = Object.fromEntries(Object.entries(edits).filter(([, e]) => e.non_trattato || e.prezzo.trim() || e.nome !== undefined || e.unita !== undefined));
       const filledNew = nuovi.filter(newFilled);
       if (Object.keys(filled).length || filledNew.length) localStorage.setItem(draftKey, JSON.stringify({ edits: filled, nuovi: filledNew }));
       else localStorage.removeItem(draftKey);
@@ -91,8 +99,8 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
           const savedNew: NewDraft[] = Array.isArray(raw?.nuovi) ? raw.nuovi.filter((n: NewDraft) => n && typeof n.nome === 'string') : [];
           const ids = new Set(body.items.map(item => item.listino_id));
           const kept = Object.fromEntries(Object.entries(saved).filter(([id, e]) => ids.has(Number(id)) && e
-            && (e.non_trattato || (typeof e.prezzo === 'string' && e.prezzo.trim()) || typeof e.nome === 'string'))
-            .map(([id, e]) => [id, { prezzo: typeof e.prezzo === 'string' ? e.prezzo : '', non_trattato: !!e.non_trattato, nome: e.nome }]));
+            && (e.non_trattato || (typeof e.prezzo === 'string' && e.prezzo.trim()) || typeof e.nome === 'string' || (e.unita && typeof e.unita === 'object')))
+            .map(([id, e]) => [id, { prezzo: typeof e.prezzo === 'string' ? e.prezzo : '', non_trattato: !!e.non_trattato, nome: e.nome, unita: e.unita }]));
           if (Object.keys(kept).length) setEdits(kept);
           if (savedNew.length) setNuovi(savedNew);
           setRestored(Object.keys(kept).length + savedNew.length);
@@ -104,7 +112,12 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
   }, [base]);
 
   const changed = useMemo(() => (data?.items || []).filter(item =>
-    priceChanged(item, edits[item.listino_id]) || nameChanged(item, edits[item.listino_id])), [data, edits]);
+    priceChanged(item, edits[item.listino_id]) || nameChanged(item, edits[item.listino_id])
+    || unitValid(edits[item.listino_id]?.unita)), [data, edits]);
+  const incompleteUnits = (data?.items || []).filter(item => {
+    const unit = edits[item.listino_id]?.unita;
+    return unitFilled(unit) && !unitValid(unit);
+  });
   const invalid = (data?.items || []).filter(item => {
     const edit = edits[item.listino_id];
     return edit && !edit.non_trattato && edit.prezzo.trim() !== '' && !(parsePrice(edit.prezzo) > 0);
@@ -119,7 +132,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
 
   const send = async (event: FormEvent) => {
     event.preventDefault();
-    if (!toSend || invalid.length || incompleteNew.length) return;
+    if (!toSend || invalid.length || incompleteNew.length || incompleteUnits.length) return;
     setSending(true); setError('');
     try {
       const modifiche = changed.map(item => {
@@ -130,6 +143,12 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
           else row.prezzo = String(parsePrice(edit.prezzo));
         }
         if (nameChanged(item, edit)) row.nome_fornitore = clean(edit.nome);
+        if (unitValid(edit.unita) && edit.unita) {
+          const u = edit.unita;
+          delete row.prezzo; delete row.non_trattato;
+          row.unita = { unita_vendita: u.unita_vendita, prezzo: String(parsePrice(u.prezzo)),
+            ...(CON_CONTENUTO.includes(u.unita_vendita) ? { contenuto_quantita: String(parsePrice(u.contenuto_quantita)), contenuto_unita: u.contenuto_unita } : {}) };
+        }
         return row;
       });
       const nuoviPayload = readyNew.map(n => ({
@@ -182,6 +201,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
           {done.annullate > 0 && <li>{done.annullate} modifiche in attesa annullate (prezzo riportato a quello attuale).</li>}
           {done.sospese > 0 && <li>{done.sospese} variazioni molto forti saranno verificate dal nostro ufficio acquisti prima di diventare valide.</li>}
           {!!done.nomi && <li>{done.nomi} {done.nomi === 1 ? 'nome corretto' : 'nomi corretti'}: li controlla il nostro ufficio acquisti.</li>}
+          {!!done.unita && <li>{done.unita} {done.unita === 1 ? 'cambio di unità' : 'cambi di unità'}: li controlla il nostro ufficio acquisti; fino al via libera resta il prezzo attuale.</li>}
           {!!done.nuovi && <li>{done.nuovi} {done.nuovi === 1 ? 'prodotto nuovo proposto' : 'prodotti nuovi proposti'}: li controlla il nostro ufficio acquisti prima di metterli in listino.</li>}
         </ul>
       </>}
@@ -194,8 +214,8 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
   const total = data.items.length;
   const others = total - data.importanti;
   const groups = [
-    { title: `Da controllare per primi: i ${data.importanti} prodotti che vi acquistiamo di più`, items: visible.filter(i => i.importante) },
-    { title: data.importanti ? `Tutti gli altri prodotti (${others})` : `I vostri prodotti (${total})`, items: visible.filter(i => !i.importante) },
+    { top: true, title: `★ I ${data.importanti} prodotti che vi acquistiamo di più`, subtitle: 'Controllate prima questi: sono quelli che contano di più per noi.', items: visible.filter(i => i.importante) },
+    { top: false, title: data.importanti ? `Tutti gli altri prodotti (${others})` : `I vostri prodotti (${total})`, subtitle: data.importanti ? 'Li acquistiamo meno spesso: controllateli quando avete tempo.' : 'Controllate i prezzi e cambiate solo quelli diversi.', items: visible.filter(i => !i.importante) },
   ].filter(group => group.items.length);
   const fixedDay = day(data.prossima_data_fissa);
   const lastDay = dayBefore(data.prossima_data_fissa);
@@ -242,6 +262,22 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
     </div>
 
     <div style={{ ...panel, marginBottom: 12 }}>
+      <strong>Come indicare l'unità di misura</strong>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 20, lineHeight: 1.6 }}>
+        <li>Usate <strong>la stessa unità che scrivete in fattura</strong>: se fatturate a kg, il prezzo è al kg.</li>
+        <li>Se vendete <strong>a cassa o a cartone</strong>, indicate cosa c'è dentro: così confrontiamo il prezzo al kg o al pezzo.</li>
+        <li>L'unità indicata per un prodotto è sbagliata? Premete <strong>«Cambia unità»</strong> sotto il prezzo e scrivete il prezzo nella nuova unità.</li>
+      </ul>
+      <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '2px 12px', marginTop: 8, lineHeight: 1.5 }}>
+        <span>Zucchine</span><span>al kg · 1,80</span>
+        <span>Meloni</span><span>al pezzo · 2,50 &nbsp;oppure&nbsp; a cassa da 6 pezzi · 15,00</span>
+        <span>Fragole</span><span>a cartone da 8 pezzi (vaschette) · 16,00</span>
+        <span>Patate</span><span>sacco da 10 kg: scegliete «a cassa», 10 kg · 9,00</span>
+      </div>
+      <small style={{ display: 'block', marginTop: 6 }}>Se l'unità in fattura è diversa da quella del listino non riusciamo a controllare i prezzi e dovremo contattarvi.</small>
+    </div>
+
+    <div style={{ ...panel, marginBottom: 12 }}>
       <strong>Potete fermarvi e riprendere dopo</strong>
       <div style={{ marginTop: 4, lineHeight: 1.5 }}>
         Quello che scrivete resta salvato su questo telefono o computer anche se chiudete la pagina: riaprite il link e lo ritrovate.
@@ -275,8 +311,13 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
     </p>
     <input style={{ ...input, marginBottom: 16 }} placeholder="Cerca un prodotto" value={search} onChange={e => setSearch(e.target.value)} />
 
-    {groups.map(group => <section key={group.title}>
-      <h2 style={{ fontSize: '1.1rem' }}>{group.title}</h2>
+    {groups.map(group => <section key={group.title} style={{
+      margin: '0 0 20px', padding: '0 12px 4px', borderRadius: 'var(--radius-md)',
+      border: group.top ? '2px solid var(--accent, #2563eb)' : '1px solid var(--line)',
+      background: group.top ? 'var(--accent-bg, rgba(37, 99, 235, 0.06))' : 'transparent',
+    }}>
+      <h2 style={{ fontSize: '1.1rem', margin: 0, padding: '12px 0 4px' }}>{group.title}</h2>
+      <small style={{ display: 'block', paddingBottom: 8 }}>{group.subtitle}</small>
       {group.items.map(item => {
         const edit = edits[item.listino_id];
         const message = hint(item);
@@ -297,7 +338,42 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
                   value={edit?.nome || ''} onChange={e => setEdit(item.listino_id, { nome: e.target.value })} />
                 <button type="button" className="btn-secondary" onClick={() => setEdit(item.listino_id, { nome: undefined })}>Annulla</button>
               </div>}
-              <div><small>Prezzo attuale: <strong>{euro(item.prezzo)}</strong> per {item.formato}</small></div>
+              <div><small>Prezzo attuale: <strong>{euro(item.prezzo)}</strong> per {item.formato}
+                {!edit?.unita && <button type="button" style={linkButton}
+                  onClick={() => setEdit(item.listino_id, { unita: { unita_vendita: '', contenuto_quantita: '', contenuto_unita: 'PZ', prezzo: '' }, prezzo: '', non_trattato: false })}>Cambia unità</button>}
+              </small></div>
+              {item.unita_in_attesa && !edit?.unita && <div><small>
+                Nuova unità già inviata: {euro(item.unita_in_attesa.prezzo)} {unitLabel(item.unita_in_attesa.unita_vendita, item.unita_in_attesa.contenuto_quantita, item.unita_in_attesa.contenuto_unita)} (in verifica)
+              </small></div>}
+              {edit?.unita && (() => {
+                const u = edit.unita;
+                const needsContent = CON_CONTENUTO.includes(u.unita_vendita);
+                const setUnit = (change: Partial<UnitDraft>) => setEdit(item.listino_id, { unita: { ...u, ...change } });
+                return <div style={{ ...panel, marginTop: 6, display: 'grid', gap: 6 }}>
+                  <small><strong>Nuova unità</strong> · fino al via libera del nostro ufficio resta il prezzo attuale</small>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <select style={{ ...input, flex: '1 1 140px', width: 'auto' }} value={u.unita_vendita} onChange={e => setUnit({ unita_vendita: e.target.value })}>
+                      <option value="">Come lo vendete?</option>
+                      {Object.entries(UNITA).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                    {needsContent && <>
+                      <input style={{ ...input, flex: '1 1 100px', width: 'auto' }} inputMode="decimal" placeholder="Quanti dentro?"
+                        value={u.contenuto_quantita} onChange={e => setUnit({ contenuto_quantita: e.target.value })} />
+                      <select style={{ ...input, flex: '0 1 90px', width: 'auto' }} value={u.contenuto_unita} onChange={e => setUnit({ contenuto_unita: e.target.value })}>
+                        <option value="PZ">pezzi</option>
+                        <option value="KG">kg</option>
+                      </select>
+                    </>}
+                    <input style={{ ...input, flex: '1 1 130px', width: 'auto' }} inputMode="decimal"
+                      placeholder={u.unita_vendita ? `Prezzo ${UNITA[u.unita_vendita]}` : 'Prezzo'}
+                      value={u.prezzo} onChange={e => setUnit({ prezzo: e.target.value })} />
+                    <button type="button" className="btn-secondary" onClick={() => setEdit(item.listino_id, { unita: undefined })}>Annulla</button>
+                  </div>
+                  {unitFilled(u) && !unitValid(u) && <small style={{ color: 'var(--danger, #b91c1c)' }}>
+                    Mancano: {[!UNITA[u.unita_vendita] && 'come lo vendete', needsContent && !(parsePrice(u.contenuto_quantita) > 0) && 'quanti dentro', !(parsePrice(u.prezzo) > 0) && 'prezzo'].filter(Boolean).join(', ')}
+                  </small>}
+                </div>;
+              })()}
               {item.siete_i_piu_convenienti !== null && <div><small style={{ color: item.siete_i_piu_convenienti ? 'var(--ok, green)' : 'var(--warn-text, #b45309)' }}>
                 {item.siete_i_piu_convenienti ? 'Siete i più convenienti' : 'Non siete i più convenienti'}
               </small></div>}
@@ -309,11 +385,11 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
               </small></div>}
             </div>
             <div style={{ flex: '0 1 220px' }}>
-              <input style={input} inputMode="decimal" placeholder="Nuovo prezzo" disabled={edit?.non_trattato}
+              <input style={input} inputMode="decimal" placeholder={edit?.unita ? 'Prezzo nella nuova unità, a sinistra' : 'Nuovo prezzo'} disabled={edit?.non_trattato || !!edit?.unita}
                 aria-label={`Nuovo prezzo per ${item.descrizione}`}
                 value={edit?.prezzo || ''} onChange={e => setEdit(item.listino_id, { prezzo: e.target.value })} />
               <label style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <input type="checkbox" checked={!!edit?.non_trattato}
+                <input type="checkbox" checked={!!edit?.non_trattato} disabled={!!edit?.unita}
                   onChange={e => setEdit(item.listino_id, { non_trattato: e.target.checked, prezzo: '' })} />
                 <small>Non lo tratto più</small>
               </label>
@@ -372,10 +448,11 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
     {error && <p style={{ color: 'var(--danger, #b91c1c)' }}>{error}</p>}
     {invalid.length > 0 && <p style={{ color: 'var(--danger, #b91c1c)' }}>Controlla i prezzi di: {invalid.map(i => i.descrizione).join(', ')}</p>}
     <div style={{ position: 'sticky', bottom: 0, padding: '12px 0', background: 'var(--bg-card)' }}>
-      <button type="submit" className="btn-primary" disabled={sending || !toSend || invalid.length > 0 || incompleteNew.length > 0}>
+      <button type="submit" className="btn-primary" disabled={sending || !toSend || invalid.length > 0 || incompleteNew.length > 0 || incompleteUnits.length > 0}>
         {sending ? 'Invio…' : toSend ? `Invia ${toSend} ${toSend === 1 ? 'modifica' : 'modifiche'}` : 'Nessuna modifica da inviare'}
       </button>
       {incompleteNew.length > 0 && <small style={{ marginLeft: 8 }}>Completate o togliete i prodotti nuovi incompleti.</small>}
+      {incompleteUnits.length > 0 && <small style={{ marginLeft: 8 }}>Completate o annullate il cambio di unità di: {incompleteUnits.map(i => i.descrizione).join(', ')}.</small>}
     </div>
   </form></main>;
 }
