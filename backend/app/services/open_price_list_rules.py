@@ -46,6 +46,31 @@ def next_fixed_date(today: date) -> date:
     return date(today.year, today.month + 1, 1)
 
 
+def previous_fixed_date(today: date) -> date:
+    """Ultima data fissa (1 o 15) non successiva a oggi."""
+    return today.replace(day=15 if today.day >= 15 else 1)
+
+
+def reminder_deadline(today: date) -> date | None:
+    """Dal 10 e dal 25 si sollecita chi non ha confermato: restituisce la data fissa in arrivo."""
+    if 10 <= today.day < 15 or today.day >= 25:
+        return next_fixed_date(today)
+    return None
+
+
+def annual_impact(spesa_annua: Decimal | None, prezzo_vecchio, prezzo_nuovo) -> Decimal | None:
+    """Euro in più (o in meno, se negativo) in un anno, a parità di acquisti degli ultimi 12 mesi.
+
+    Si usa la spesa e non la quantità: la variazione in percentuale non dipende dall'unità
+    con cui arriva la fattura (cartoni, pezzi, kg)."""
+    if not spesa_annua or spesa_annua <= 0 or not prezzo_vecchio or prezzo_nuovo is None:
+        return None
+    vecchio, nuovo = Decimal(str(prezzo_vecchio)), Decimal(str(prezzo_nuovo))
+    if vecchio <= 0:
+        return None
+    return (Decimal(str(spesa_annua)) * (nuovo - vecchio) / vecchio).quantize(Decimal("0.01"))
+
+
 @dataclass(frozen=True)
 class ChangeDecision:
     tipo: str
