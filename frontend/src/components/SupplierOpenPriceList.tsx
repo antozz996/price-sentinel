@@ -27,7 +27,13 @@ const CON_CONTENUTO = ['CT', 'CASSA'];
 
 const euro = (value: string | number) => `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
 const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
-const parsePrice = (text: string) => Number(text.trim().replace(',', '.'));
+// Ultimo giorno del prezzo attuale: il giorno prima della prossima data fissa (calcolata dal server a ogni apertura).
+const dayBefore = (iso: string) => {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
+};
+const parsePrice =(text: string) => Number(text.trim().replace(',', '.'));
 const clean = (text?: string | null) => (text || '').replace(/\s+/g, ' ').trim();
 const emptyNew = (): NewDraft => ({ key: `${Date.now()}-${Math.random()}`, nome: '', unita_vendita: '', contenuto_quantita: '', contenuto_unita: 'PZ', prezzo: '' });
 
@@ -172,7 +178,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
         <ul>
           {done.ribassi > 0 && <li>{done.ribassi} ribassi: valgono da subito.</li>}
           {done.aumenti > 0 && <li>{done.aumenti} aumenti: valgono dal {day(data.prossima_data_fissa)}.</li>}
-          {done.non_trattati > 0 && <li>{done.non_trattati} prodotti non più trattati: il prezzo resta valido fino al {day(data.prossima_data_fissa)}.</li>}
+          {done.non_trattati > 0 && <li>{done.non_trattati} prodotti non più trattati: il prezzo resta valido fino al {dayBefore(data.prossima_data_fissa)} compreso.</li>}
           {done.annullate > 0 && <li>{done.annullate} modifiche in attesa annullate (prezzo riportato a quello attuale).</li>}
           {done.sospese > 0 && <li>{done.sospese} variazioni molto forti saranno verificate dal nostro ufficio acquisti prima di diventare valide.</li>}
           {!!done.nomi && <li>{done.nomi} {done.nomi === 1 ? 'nome corretto' : 'nomi corretti'}: li controlla il nostro ufficio acquisti.</li>}
@@ -192,12 +198,13 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
     { title: data.importanti ? `Tutti gli altri prodotti (${others})` : `I vostri prodotti (${total})`, items: visible.filter(i => !i.importante) },
   ].filter(group => group.items.length);
   const fixedDay = day(data.prossima_data_fissa);
+  const lastDay = dayBefore(data.prossima_data_fissa);
   const proposed = data.prodotti_proposti || [];
 
   const hint = (item: Item) => {
     const edit = edits[item.listino_id];
     if (!edit) return null;
-    if (edit.non_trattato) return `Il prezzo resta valido fino al ${fixedDay}, poi il prodotto esce dal listino.`;
+    if (edit.non_trattato) return `Il prezzo resta valido fino al ${lastDay} compreso; dal ${fixedDay} il prodotto esce dal listino.`;
     const value = parsePrice(edit.prezzo), old = Number(item.prezzo);
     if (!(value > 0) || value === old) return null;
     const change = (value - old) / old;
@@ -230,7 +237,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 12px', marginTop: 6, lineHeight: 1.5 }}>
         <span>⬇ Ribasso</span><span>da subito</span>
         <span>⬆ Aumento</span><span>dal <strong>{fixedDay}</strong> (si cambia solo il 1° e il 15 del mese); fino ad allora vale il prezzo attuale</span>
-        <span>✕ Non più trattato</span><span>il prezzo resta valido fino al {fixedDay}</span>
+        <span>✕ Non più trattato</span><span>il prezzo resta valido fino al {lastDay} compreso, poi il prodotto esce dal listino</span>
       </div>
     </div>
 
