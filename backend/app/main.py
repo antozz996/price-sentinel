@@ -6,6 +6,7 @@ Sistema di Audit Automatizzato degli Acquisti.
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
+from datetime import date
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +25,9 @@ logger = logging.getLogger("price_sentinel.automation")
 
 
 async def _automation_loop() -> None:
+    # Il listino aperto gira una volta al giorno (al primo giro dopo mezzanotte);
+    # se fallisce riprova al giro successivo.
+    last_activation_day: date | None = None
     while True:
         try:
             async with async_session_factory() as session:
@@ -34,14 +38,16 @@ async def _automation_loop() -> None:
         except Exception:
             logger.exception("operational_monitor_failed")
         # Transazione separata: un errore del listino aperto non ferma il monitor.
-        try:
-            async with async_session_factory() as session:
-                async with session.begin():
-                    await apply_due_price_changes(session)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("open_price_list_activation_failed")
+        if last_activation_day != date.today():
+            try:
+                async with async_session_factory() as session:
+                    async with session.begin():
+                        await apply_due_price_changes(session)
+                last_activation_day = date.today()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("open_price_list_activation_failed")
         await asyncio.sleep(settings.AUTOMATION_INTERVAL_SECONDS)
 
 

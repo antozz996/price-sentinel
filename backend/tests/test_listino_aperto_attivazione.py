@@ -88,6 +88,11 @@ class WiringTest(unittest.TestCase):
         self.assertIn("apply_due_price_changes(session)", source)
         self.assertLess(source.index("run_operational_monitor"), source.index("apply_due_price_changes"))
 
+    def test_activation_runs_once_a_day(self):
+        source = inspect.getsource(main._automation_loop)
+        self.assertIn("if last_activation_day != date.today():", source)
+        self.assertLess(source.index("apply_due_price_changes"), source.index("last_activation_day = date.today()"))
+
     def test_offer_lock_taken_before_row_lock(self):
         source = inspect.getsource(act._apply_one)
         self.assertLess(source.index("pg_advisory_xact_lock"), source.index("with_for_update=True"))
