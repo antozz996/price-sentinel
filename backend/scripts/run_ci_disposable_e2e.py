@@ -302,7 +302,7 @@ def execute_v1_migration_rehearsal(admin_dsn: str) -> bool:
     try:
         with connection.cursor() as cursor:
             cursor.execute("select version_num from alembic_version")
-            if cursor.fetchone() != ("listino_aperto_proposte",):
+            if cursor.fetchone() != ("listino_aperto_assenti",):
                 print("FAIL: unexpected V2 Alembic head", flush=True)
                 return False
             cursor.execute(

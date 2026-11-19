@@ -22,7 +22,7 @@ type Overview = {
   listini_da_rinnovare?: Renewal[];
 };
 type Proposal = {
-  id: number; tipo: 'nome' | 'prodotto_nuovo' | 'unita'; fornitore_id: number; fornitore: string; nostro_nome?: string | null;
+  id: number; tipo: 'nome' | 'prodotto_nuovo' | 'unita'; fornitore_id: number; fornitore: string; nostro_nome?: string | null; sku_interno?: string | null;
   prezzo_attuale?: string | null; formato_attuale?: string | null;
   nome_precedente?: string | null; nome_fornitore: string; unita_vendita?: string | null;
   contenuto_quantita?: string | null; contenuto_unita?: string | null; prezzo?: string | null;
@@ -138,7 +138,9 @@ function ProposalLine({ proposal, onDone }: { proposal: Proposal; onDone: (msg: 
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CatalogProduct[]>([]);
-  const [chosen, setChosen] = useState<CatalogProduct | null>(null);
+  // Prezzo per un prodotto della lista di settore: è già collegato al nostro prodotto.
+  const [chosen, setChosen] = useState<CatalogProduct | null>(
+    proposal.tipo === 'prodotto_nuovo' && proposal.sku_interno ? { sku_interno: proposal.sku_interno, nome: proposal.nostro_nome || proposal.sku_interno } : null);
   const isName = proposal.tipo === 'nome';
   const isUnit = proposal.tipo === 'unita';
 
@@ -174,7 +176,9 @@ function ProposalLine({ proposal, onDone }: { proposal: Proposal; onDone: (msg: 
           <div>da «{proposal.nome_precedente || 'non indicato'}» a <strong>«{proposal.nome_fornitore}»</strong></div>
         </> : <>
           <strong>{proposal.nome_fornitore}</strong>
-          <div style={muted}>Prodotto nuovo proposto da {proposal.fornitore}</div>
+          <div style={muted}>{proposal.sku_interno
+            ? <>Prezzo di {proposal.fornitore} per un prodotto della nostra lista: <strong>{proposal.nostro_nome}</strong> (nome in fattura qui sopra)</>
+            : <>Prodotto nuovo proposto da {proposal.fornitore}</>}</div>
           <div>{euro(proposal.prezzo)} {UNITA_VENDITA[proposal.unita_vendita || ''] || ''}{content}</div>
         </>}
         {error && <div style={{ ...muted, color: 'var(--danger, #c0392b)' }}>{error}</div>}

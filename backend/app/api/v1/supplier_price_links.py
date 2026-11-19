@@ -55,9 +55,11 @@ from app.models.supplier_price_link import (
     UNITA_VENDITA,
     SupplierPriceChange,
     SupplierPriceLink,
+    SupplierProductAbsence,
     SupplierProductProposal,
     offer_key,
 )
+from app.services.open_price_list_sector import sector_products, skus_in_use
 from app.services.normalization import normalize_text
 from app.models.utenti import Utente
 from app.services.open_price_list_activation import _newer_row_exists, apply_change_now
@@ -150,7 +152,10 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
     formats = await _offer_formats(db, link.fornitore_id, rows)
     approved_names = await _approved_names(db, link.fornitore_id)
     skus = {row.sku_interno for row in rows}
-    spend = await _spend_by_sku(db, skus, today)
+    sector = {p.sku_interno: p for p in await sector_products(db, link.fornitore_id, skus, today)}
+    spend = await _spend_by_sku(db, skus | set(sector), today)
+    in_use = await skus_in_use(db, set(sector) - skus, today)
+    sector = {sku: p for sku, p in sector.items() if sku in skus or sku in in_use or spend.get(sku, 0) > 0}
     best = await _best_prices(db, link.fornitore_id, skus)
     pending = await _pending_changes(db, link.fornitore_id)
     proposals = await _pending_proposals(db, link.fornitore_id)
@@ -160,19 +165,38 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
         "contenuto_unita": p.contenuto_unita, "prezzo": _money(p.prezzo),
     } for p in proposals if p.tipo == PROPOSTA_UNITA}
     # Il nome in grassetto è il nostro (nome matriciale del catalogo), non la dicitura del fornitore.
-    our_names = dict((await db.execute(select(Product.sku_interno, Product.canonical_name).where(
-        Product.sku_interno.in_(skus)))).all()) if skus else {}
+    our_names = {sku: name for sku, name in (await db.execute(select(Product.sku_interno, Product.canonical_name).where(
+        Product.sku_interno.in_(skus)))).all() if name} if skus else {}
     ranked = sorted(rows, key=lambda r: (-spend.get(r.sku_interno, Decimal(0)), r.descrizione.casefold()))
-    top_skus: list[str] = []
-    for row in ranked:
-        if spend.get(row.sku_interno, 0) > 0 and row.sku_interno not in top_skus and len(top_skus) < TOP_PRODUCTS:
-            top_skus.append(row.sku_interno)
+    # I più acquistati si contano sulla lista del settore: sono gli stessi per tutti i fornitori.
+    top_skus = top_products(sector.keys() if sector else skus, spend)
+    absent = set((await db.scalars(select(SupplierProductAbsence.sku_interno).where(
+        SupplierProductAbsence.fornitore_id == link.fornitore_id))).all())
+    pending_quotes = {p.sku_interno: p for p in proposals if p.tipo == PROPOSTA_PRODOTTO_NUOVO and p.sku_interno}
+    names = {**{sku: p.canonical_name or "" for sku, p in sector.items()}, **our_names}
+    order = {sku: i for i, sku in enumerate(sorted(skus | set(sector), key=lambda s: (
+        -spend.get(s, Decimal(0)), (names.get(s) or s).casefold())))}
+    missing = sorted((p for sku, p in sector.items() if sku not in skus), key=lambda p: order[p.sku_interno])
+    quotes = [{
+        "ordine": order[p.sku_interno],
+        "sku_interno": p.sku_interno,
+        "descrizione": p.canonical_name,
+        "unita_confronto": p.comparison_unit,
+        "importante": p.sku_interno in top_skus,
+        "non_presente": p.sku_interno in absent,
+        "in_attesa": {
+            "nome": q.nome_fornitore, "unita_vendita": q.unita_vendita,
+            "contenuto_quantita": _money(q.contenuto_quantita), "contenuto_unita": q.contenuto_unita,
+            "prezzo": _money(q.prezzo),
+        } if (q := pending_quotes.get(p.sku_interno)) else None,
+    } for p in missing]
     items = []
     for row in ranked:
         quantity, unit, wording, brand = formats.get(row.id, (None, None, None, None))
         wording = approved_names.get(offer_key(row.sku_interno, row.supplier_product_alias_id)) or wording
         change = pending.get(offer_key(row.sku_interno, row.supplier_product_alias_id))
         items.append({
+            "ordine": order[row.sku_interno],
             "listino_id": row.id,
             "descrizione": our_names.get(row.sku_interno) or row.descrizione,
             "dicitura": wording,
@@ -199,12 +223,19 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
         "ultima_conferma": link.ultima_conferma_at.isoformat() if link.ultima_conferma_at else None,
         "importanti": len(top_skus),
         "items": items,
+        "da_quotare": quotes,
         "prodotti_proposti": [{
             "id": p.id, "nome": p.nome_fornitore, "unita_vendita": p.unita_vendita,
             "contenuto_quantita": _money(p.contenuto_quantita), "contenuto_unita": p.contenuto_unita,
             "prezzo": _money(p.prezzo), "created_at": p.created_at.isoformat(),
-        } for p in proposals if p.tipo == PROPOSTA_PRODOTTO_NUOVO],
+        } for p in proposals if p.tipo == PROPOSTA_PRODOTTO_NUOVO and not p.sku_interno],
     }
+
+
+def top_products(skus, spend: dict[str, Decimal], limit: int = TOP_PRODUCTS) -> set[str]:
+    """I prodotti su cui spendiamo di più (solo quelli con acquisti)."""
+    ranked = sorted((s for s in set(skus) if spend.get(s, 0) > 0), key=lambda s: (-spend[s], s))
+    return set(ranked[:limit])
 
 
 class PriceUpdate(BaseModel):
@@ -236,14 +267,26 @@ class NewProduct(BaseModel):
     prezzo: Decimal = Field(gt=0, lt=Decimal("100000000"), decimal_places=4)
 
 
+class Quote(NewProduct):
+    """Prezzo per un prodotto della lista di settore che il fornitore non aveva a listino.
+    nome = come il fornitore lo chiama in fattura."""
+    sku_interno: str = Field(min_length=1, max_length=100)
+
+
 class PriceUpdates(BaseModel):
     modifiche: list[PriceUpdate] = Field(default_factory=list, max_length=2000)
     nuovi: list[NewProduct] = Field(default_factory=list, max_length=200)
+    quotazioni: list[Quote] = Field(default_factory=list, max_length=2000)
+    # Prodotti della lista segnati «non lo abbiamo», e quelli da cui si toglie il segno.
+    assenti: list[str] = Field(default_factory=list, max_length=2000)
+    presenti: list[str] = Field(default_factory=list, max_length=2000)
 
     @model_validator(mode="after")
     def at_least_one(self):
-        if not self.modifiche and not self.nuovi:
+        if not (self.modifiche or self.nuovi or self.quotazioni or self.assenti or self.presenti):
             raise ValueError("Nessuna modifica da inviare")
+        if set(self.assenti) & ({q.sku_interno for q in self.quotazioni} | set(self.presenti)):
+            raise ValueError("Un prodotto è segnato sia «non lo abbiamo» sia con un prezzo")
         return self
 
 
@@ -352,6 +395,66 @@ async def _save_name_proposal(db: AsyncSession, link: SupplierPriceLink, row: Li
     return True
 
 
+async def _save_sector_answers(db: AsyncSession, link: SupplierPriceLink, payload: "PriceUpdates", own_skus: set[str],
+                               today, now: datetime, ip: str | None, summary: dict) -> None:
+    """Risposte sui prodotti della lista di settore che il fornitore non ha a listino.
+
+    Un prezzo diventa una proposta già collegata al nostro prodotto: entra in listino
+    quando l'ufficio dà il via libera. «Non lo abbiamo» resta segnato finché il
+    fornitore non lo toglie o scrive un prezzo.
+    """
+    sector = {p.sku_interno: p for p in await sector_products(db, link.fornitore_id, own_skus, today)}
+    asked = [q.sku_interno for q in payload.quotazioni] + payload.assenti + payload.presenti
+    if len(set(q.sku_interno for q in payload.quotazioni)) != len(payload.quotazioni):
+        raise HTTPException(status_code=422, detail="Lo stesso prodotto compare due volte")
+    if any(sku not in sector for sku in asked):
+        raise HTTPException(status_code=409, detail="Un prodotto non è più nella lista: ricarica la pagina")
+    absences = {a.sku_interno: a for a in (await db.execute(select(SupplierProductAbsence).where(
+        SupplierProductAbsence.fornitore_id == link.fornitore_id,
+        SupplierProductAbsence.sku_interno.in_(asked),
+    ).with_for_update())).scalars().all()} if asked else {}
+    pending = {p.sku_interno: p for p in await _pending_proposals(db, link.fornitore_id)
+               if p.tipo == PROPOSTA_PRODOTTO_NUOVO and p.sku_interno}
+    for quote in payload.quotazioni:
+        product = sector[quote.sku_interno]
+        if quote.sku_interno in own_skus:
+            raise HTTPException(status_code=409, detail=f"{product.canonical_name}: è già nel vostro listino, ricarica la pagina")
+        checked = validate_new_product(quote)
+        previous = pending.get(quote.sku_interno)
+        if previous:
+            previous.stato = PROPOSTA_SOSTITUITA
+            previous.decisione_at = now
+        proposal = SupplierProductProposal(
+            link_id=link.id, fornitore_id=link.fornitore_id, tipo=PROPOSTA_PRODOTTO_NUOVO,
+            stato=PROPOSTA_IN_ATTESA, sku_interno=quote.sku_interno, nome_fornitore=checked.nome,
+            unita_vendita=checked.unita_vendita, contenuto_quantita=checked.contenuto_quantita,
+            contenuto_unita=checked.contenuto_unita, prezzo=checked.prezzo, created_at=now, ip=ip,
+        )
+        db.add(proposal)
+        await db.flush()
+        if previous:
+            previous.sostituita_da_id = proposal.id
+        if quote.sku_interno in absences:
+            await db.delete(absences.pop(quote.sku_interno))
+        summary["quotati"] += 1
+    for sku in payload.presenti:
+        if sku in absences:
+            await db.delete(absences.pop(sku))
+            summary["di_nuovo_presenti"] += 1
+    for sku in payload.assenti:
+        if sku in own_skus:
+            raise HTTPException(status_code=409, detail=(
+                f"{sector[sku].canonical_name}: è nel vostro listino, usate «non lo tratto più»"))
+        if sku not in absences:
+            db.add(SupplierProductAbsence(fornitore_id=link.fornitore_id, sku_interno=sku, link_id=link.id, created_at=now))
+            summary["non_presenti"] += 1
+        previous = pending.get(sku)
+        if previous:  # un prezzo mandato prima e non ancora approvato non vale più
+            previous.stato = PROPOSTA_SOSTITUITA
+            previous.decisione_at = now
+    await db.flush()
+
+
 @router.post("/public/{token}/submit", summary="Il fornitore invia i prezzi cambiati")
 async def submit_open_price_list(token: str, payload: PriceUpdates, request: Request,
                                  db: AsyncSession = Depends(get_db)):
@@ -373,7 +476,7 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
     today = today_rome()
     ip = (request.client.host if request.client else None)
     summary = {"ribassi": 0, "aumenti": 0, "non_trattati": 0, "sospese": 0, "annullate": 0, "invariati": 0,
-               "nomi": 0, "nuovi": 0, "unita": 0}
+               "nomi": 0, "nuovi": 0, "unita": 0, "quotati": 0, "non_presenti": 0, "di_nuovo_presenti": 0}
     for update in payload.modifiche:
         row = rows.get(update.listino_id)
         if row is None:
@@ -457,6 +560,8 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
                 previous.sostituita_da_id = proposal.id
             pending_new[normalize_text(product.nome)] = proposal
             summary["nuovi"] += 1
+    if payload.quotazioni or payload.assenti or payload.presenti:
+        await _save_sector_answers(db, link, payload, {r.sku_interno for r in rows.values()}, today, now, ip, summary)
     link.ultima_conferma_at = now
     await db.commit()
     return {"status": "ok", "riepilogo": summary, "prossima_data_fissa": next_fixed_date(today).isoformat()}
@@ -651,6 +756,7 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
         "id": p.id, "tipo": p.tipo, "fornitore_id": p.fornitore_id,
         "fornitore": suppliers[p.fornitore_id].nome_azienda if p.fornitore_id in suppliers else f"Fornitore {p.fornitore_id}",
         "nostro_nome": our_names.get(p.sku_interno) if p.sku_interno else None,
+        "sku_interno": p.sku_interno,
         "nome_precedente": p.nome_precedente, "nome_fornitore": p.nome_fornitore,
         "unita_vendita": p.unita_vendita, "contenuto_quantita": _money(p.contenuto_quantita),
         "contenuto_unita": p.contenuto_unita, "prezzo": _money(p.prezzo), "created_at": p.created_at.isoformat(),
