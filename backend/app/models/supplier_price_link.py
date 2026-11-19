@@ -185,3 +185,27 @@ class SupplierProductProposal(Base):
         Index("uq_supplier_product_proposal_nome", "fornitore_id", "listino_id_origine", unique=True,
               postgresql_where=text("tipo = 'nome' AND stato = 'in_attesa'")),
     )
+
+
+class SupplierProductAbsence(Base):
+    """Prodotto della lista di settore che il fornitore ha segnato «non lo abbiamo».
+
+    Resta segnato finché il fornitore non lo toglie (per esempio quando inizia a
+    trattarlo e scrive il prezzo).
+    """
+
+    __tablename__ = "supplier_product_absences"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fornitore_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("fornitori.id", ondelete="CASCADE"), nullable=False
+    )
+    sku_interno: Mapped[str] = mapped_column(String(100), nullable=False)
+    link_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("supplier_price_links.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("uq_supplier_product_absence", "fornitore_id", "sku_interno", unique=True),
+    )

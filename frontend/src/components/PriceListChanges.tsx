@@ -6,6 +6,10 @@ type Change = {
   id: number; fornitore_id: number; fornitore: string; prodotto: string; tipo: string;
   prezzo_vecchio?: string | null; prezzo_nuovo?: string | null; unita?: string | null;
   decorrenza: string; motivo?: string | null; nota?: string | null; impatto_annuo?: string | null;
+  dopo?: {
+    resta_il_migliore: boolean; migliore_fornitore: string; migliore_prezzo?: string | null;
+    prezzo_fornitore?: string | null; unita_confronto?: string | null; risparmio_annuo?: string | null;
+  } | null;
 };
 type SupplierRow = { fornitore_id: number; fornitore: string; telefono?: string | null; path?: string | null; ultima_conferma_at?: string | null };
 type Overview = {
@@ -15,9 +19,10 @@ type Overview = {
   solleciti: { scadenza?: string | null; fornitori: SupplierRow[] };
   non_confermati: { giorni: number; fornitori: SupplierRow[] };
   proposte?: Proposal[];
+  listini_da_rinnovare?: Renewal[];
 };
 type Proposal = {
-  id: number; tipo: 'nome' | 'prodotto_nuovo' | 'unita'; fornitore_id: number; fornitore: string; nostro_nome?: string | null;
+  id: number; tipo: 'nome' | 'prodotto_nuovo' | 'unita'; fornitore_id: number; fornitore: string; nostro_nome?: string | null; sku_interno?: string | null;
   prezzo_attuale?: string | null; formato_attuale?: string | null;
   nome_precedente?: string | null; nome_fornitore: string; unita_vendita?: string | null;
   contenuto_quantita?: string | null; contenuto_unita?: string | null; prezzo?: string | null;
@@ -97,6 +102,13 @@ function ChangeLine({ change, canApprove, onDone }: { change: Change; canApprove
         <div style={muted}>{change.fornitore} · {TIPI[change.tipo] || change.tipo} · dal {day(change.decorrenza)}</div>
         {change.motivo && <div style={{ ...muted, color: 'var(--warn)' }}>{change.motivo}</div>}
         {change.nota && <div style={muted}>Nota del fornitore: {change.nota}</div>}
+        {change.dopo && (change.dopo.resta_il_migliore
+          ? <div style={{ ...muted, color: 'var(--ok, green)' }}>Dal {day(change.decorrenza)} resta il più conveniente.</div>
+          : <div style={{ fontWeight: 600, color: 'var(--warn)' }}>
+              Dal {day(change.decorrenza)} conviene {change.dopo.migliore_fornitore} ({euro(change.dopo.migliore_prezzo)}
+              {change.dopo.unita_confronto ? ` al ${change.dopo.unita_confronto.toLowerCase()}` : ''} contro {euro(change.dopo.prezzo_fornitore)})
+              {change.dopo.risparmio_annuo ? ` · risparmio ${euro(change.dopo.risparmio_annuo)} l'anno` : ''}
+            </div>)}
       </div>
       <div style={{ textAlign: 'right' }}>
         <div>{euro(change.prezzo_vecchio)} → <strong>{change.tipo === 'non_trattato' ? 'chiuso' : euro(change.prezzo_nuovo)}</strong>{change.unita ? ` / ${change.unita}` : ''}</div>
@@ -110,7 +122,8 @@ function ChangeLine({ change, canApprove, onDone }: { change: Change; canApprove
         ) : (
           <div style={buttons}>
             {canApprove && <button className="btn" disabled={busy} onClick={() => run(() => post(`/changes/${change.id}/approve`), 'Fatto.')}>Via libera</button>}
-            <button className="btn" disabled={busy} onClick={() => run(() => post(`/changes/${change.id}/reject`), 'Rifiutata: il prezzo resta quello di prima.')}>Rifiuta</button>
+            {/* Un aumento normale non si rifiuta: il fornitore è libero, noi compriamo da chi conviene. */}
+            {canApprove && <button className="btn" disabled={busy} onClick={() => run(() => post(`/changes/${change.id}/reject`), 'Rifiutata: il prezzo resta quello di prima.')}>Rifiuta</button>}
             <button className="btn" disabled={busy} onClick={() => setForcing(true)}>Altro prezzo</button>
           </div>
         )}
@@ -125,7 +138,9 @@ function ProposalLine({ proposal, onDone }: { proposal: Proposal; onDone: (msg: 
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<CatalogProduct[]>([]);
-  const [chosen, setChosen] = useState<CatalogProduct | null>(null);
+  // Prezzo per un prodotto della lista di settore: è già collegato al nostro prodotto.
+  const [chosen, setChosen] = useState<CatalogProduct | null>(
+    proposal.tipo === 'prodotto_nuovo' && proposal.sku_interno ? { sku_interno: proposal.sku_interno, nome: proposal.nostro_nome || proposal.sku_interno } : null);
   const isName = proposal.tipo === 'nome';
   const isUnit = proposal.tipo === 'unita';
 
@@ -161,7 +176,9 @@ function ProposalLine({ proposal, onDone }: { proposal: Proposal; onDone: (msg: 
           <div>da «{proposal.nome_precedente || 'non indicato'}» a <strong>«{proposal.nome_fornitore}»</strong></div>
         </> : <>
           <strong>{proposal.nome_fornitore}</strong>
-          <div style={muted}>Prodotto nuovo proposto da {proposal.fornitore}</div>
+          <div style={muted}>{proposal.sku_interno
+            ? <>Prezzo di {proposal.fornitore} per un prodotto della nostra lista: <strong>{proposal.nostro_nome}</strong> (nome in fattura qui sopra)</>
+            : <>Prodotto nuovo proposto da {proposal.fornitore}</>}</div>
           <div>{euro(proposal.prezzo)} {UNITA_VENDITA[proposal.unita_vendita || ''] || ''}{content}</div>
         </>}
         {error && <div style={{ ...muted, color: 'var(--danger, #c0392b)' }}>{error}</div>}
@@ -214,6 +231,25 @@ function SupplierLine({ supplier, deadline }: { supplier: SupplierRow; deadline?
       {url
         ? <a className="btn" href={url} target="_blank" rel="noopener noreferrer">Sollecita su WhatsApp</a>
         : <span style={muted}>{supplier.path ? 'manca il telefono' : 'link da rigenerare'}</span>}
+    </div>
+  );
+}
+
+type Renewal = { fornitore_id: number; fornitore: string; telefono?: string | null; path?: string | null; fino_al: string };
+
+function RenewalLine({ supplier }: { supplier: Renewal }) {
+  const phone = phoneForWhatsApp(supplier.telefono);
+  const text = `Buongiorno, il vostro listino era valido fino al ${day(supplier.fino_al)}: ci mandate i prezzi nuovi?`
+    + (supplier.path ? ` Basta aprire il link, cambiare solo quelli diversi oppure premere «confermo tutto invariato»: ${publicOrigin}${supplier.path}` : '');
+  return (
+    <div style={row}>
+      <div>
+        <strong>{supplier.fornitore}</strong>
+        <div style={muted}>Listino valido fino al {day(supplier.fino_al)} · intanto restano i prezzi a sistema</div>
+      </div>
+      {phone
+        ? <a className="btn" href={`https://wa.me/${phone}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">Sollecita su WhatsApp</a>
+        : <span style={muted}>manca il telefono</span>}
     </div>
   );
 }
@@ -346,7 +382,7 @@ export default function PriceListChanges() {
 
       <div style={card}>
         <h3 style={{ margin: 0 }}>Aumenti in arrivo</h3>
-        <div style={muted}>In alto quelli che costano di più, calcolati sugli acquisti degli ultimi 12 mesi. Se non lo accetti, premi «Rifiuta» prima della data.</div>
+        <div style={muted}>In alto quelli dopo i quali conviene un altro fornitore, poi quelli che costano di più (sugli acquisti degli ultimi 12 mesi). Dalla data dell'aumento il sistema indica da solo il fornitore più conveniente.</div>
         {aumenti.length === 0
           ? <div style={{ ...row, ...muted }}>Nessun aumento programmato.</div>
           : aumenti.map(change => <ChangeLine key={change.id} change={change} canApprove={false} onDone={done} />)}
@@ -356,6 +392,14 @@ export default function PriceListChanges() {
         <strong>Ribassi negli ultimi {ribassi.giorni} giorni: {ribassi.numero}</strong>
         {ribassi.numero > 0 && <span> · risparmio stimato {euro(ribassi.risparmio_annuo)} l'anno</span>}
       </div>
+
+      {(data.listini_da_rinnovare || []).length > 0 && (
+        <div style={{ ...card, borderColor: 'var(--warn)' }}>
+          <h3 style={{ margin: 0 }}>Listini da rinnovare</h3>
+          <div style={muted}>La data «valido fino al» del loro ultimo listino è passata. I prezzi non scadono: il sistema continua a usare quelli a sistema finché il fornitore non manda il listino nuovo. Basta sollecitarlo.</div>
+          {(data.listini_da_rinnovare || []).map(s => <RenewalLine key={s.fornitore_id} supplier={s} />)}
+        </div>
+      )}
 
       {solleciti.scadenza && (
         <div style={card}>

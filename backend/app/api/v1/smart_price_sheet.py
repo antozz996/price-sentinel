@@ -26,7 +26,9 @@ from app.models.purchase_policy import (
     PurchasePolicyDeviation,
     SupplierCategoryCapability,
 )
+from app.models.supplier_price_link import STATO_PROGRAMMATO, SupplierPriceChange
 from app.models.utenti import Utente
+from app.services.open_price_list_forecast import forecast_on, with_scheduled
 from app.schemas.smart_price_sheet import (
     AssessmentUpsertRequest,
     CellPreviewRequest,
@@ -149,6 +151,42 @@ async def _validate_entities(
             raise HTTPException(404, "Sede non trovata")
 
 
+async def _mark_upcoming_best_change(db: AsyncSession, rows: list[dict], price_on: date,
+                                     supplier_names: dict[int, str]) -> None:
+    """Segna i prodotti per cui un aumento già programmato cambierà il fornitore più conveniente.
+
+    Per ogni voce si guarda la prima data dopo price_on in cui entra una modifica programmata:
+    se a quella data il più conveniente non è più quello di oggi, la riga riceve «cambio_migliore».
+    """
+    skus = {row["sku_interno"] for row in rows if row.get("sku_interno")}
+    if not skus:
+        return
+    first_change = dict((await db.execute(
+        select(SupplierPriceChange.sku_interno, func.min(SupplierPriceChange.decorrenza)).where(
+            SupplierPriceChange.sku_interno.in_(skus),
+            SupplierPriceChange.stato == STATO_PROGRAMMATO,
+            SupplierPriceChange.decorrenza > price_on,
+        ).group_by(SupplierPriceChange.sku_interno)
+    )).all())
+    by_day: dict[date, set[str]] = {}
+    for sku, day in first_change.items():
+        by_day.setdefault(day, set()).add(sku)
+    future = {}
+    for day, day_skus in by_day.items():
+        for sku, forecast in (await forecast_on(db, day_skus, day)).items():
+            future[sku] = forecast
+    for row in rows:
+        forecast = future.get(row.get("sku_interno"))
+        if forecast is None or forecast.migliore is None or forecast.migliore == row["absolute_cheapest_supplier_id"]:
+            continue
+        row["cambio_migliore"] = {
+            "dal": forecast.giorno.isoformat(),
+            "fornitore_id": forecast.migliore,
+            "fornitore": supplier_names.get(forecast.migliore) or f"Fornitore {forecast.migliore}",
+            "prezzo_confronto": f"{forecast.prezzi[forecast.migliore]:.4f}",
+        }
+
+
 @router.get("/matrix")
 async def matrix(
     search: str | None = Query(default=None, max_length=150),
@@ -159,6 +197,7 @@ async def matrix(
     offset: int = Query(default=0, ge=0),
     sort: str = Query(default="nome", pattern="^(" + "|".join(SORT_OPTIONS) + ")$"),
     periodo: str = Query(default="tutto", pattern="^(" + "|".join(PERIOD_OPTIONS) + ")$"),
+    data: date | None = Query(default=None, description="Giorno a cui leggere i prezzi (es. consegna); mai prima di oggi"),
     db: AsyncSession = Depends(get_db),
     user: Utente = Depends(get_current_user),
 ):
@@ -223,6 +262,8 @@ async def matrix(
         db, supplier_ids=set(supplier_ids)
     )
     today = date.today()
+    # Prezzi al giorno richiesto (consegna), con gli aumenti già programmati dai fornitori.
+    price_on = max(data, today) if data else today
 
     active_prices = []
     spot_prices: dict[tuple[str, int], dict] = {}
@@ -236,10 +277,10 @@ async def matrix(
                 .where(
                     ListinoMaster.sku_interno.in_(skus),
                     ListinoMaster.fornitore_id.in_(supplier_ids),
-                    ListinoMaster.data_inizio_validita <= today,
+                    ListinoMaster.data_inizio_validita <= price_on,
                     or_(
                         ListinoMaster.data_scadenza.is_(None),
-                        ListinoMaster.data_scadenza >= today,
+                        ListinoMaster.data_scadenza >= price_on,
                     ),
                 )
                 .order_by(
@@ -250,6 +291,7 @@ async def matrix(
                 )
             )
         ).all()
+        active_prices = await with_scheduled(db, active_prices, price_on)
         # Spot = ultimo prezzo fatturato per sede, convertito nell'unità di
         # confronto (services.smart_price_spot). Righe dalla base comune: niente
         # note di credito, omaggi, righe/SKU esclusi; tenant e sede filtrati.
@@ -466,6 +508,7 @@ async def matrix(
                 "policy": recommendation["policy"],
             }
         )
+    await _mark_upcoming_best_change(db, rows, price_on, supplier_names)
     category_counts_res = await db.execute(
         select(Product.category, func.count(Product.id))
         .where(Product.is_active.is_(True))
@@ -562,7 +605,7 @@ async def matrix_export(
     while True:
         page = await matrix(
             search=search, category=category, subcategory=subcategory, location_id=location_id,
-            limit=500, offset=offset, sort=sort, periodo=periodo, db=db, user=user,
+            limit=500, offset=offset, sort=sort, periodo=periodo, data=None, db=db, user=user,
         )
         rows.extend(page["rows"])
         suppliers.extend(page["suppliers"])

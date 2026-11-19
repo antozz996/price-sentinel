@@ -996,12 +996,9 @@ async def approve_form_request(
             supplier.partita_iva = identity.partita_iva
             supplier.telefono_contatto = identity.telefono_ordini
     result = await commit_variant_preview(db, preview, origine=ORIGINE_MODULO_FORNITORE)
-    if request.validita_inviata_a and result.get("listino_ids"):
-        approved_rows = (await db.execute(select(ListinoMaster).where(
-            ListinoMaster.id.in_(result["listino_ids"])
-        ))).scalars().all()
-        for row in approved_rows:
-            row.data_scadenza = request.validita_inviata_a
+    # «Valido fino al» non chiude il prezzo: resta quello a sistema finché il fornitore
+    # non manda il listino nuovo. La data serve solo a sapere quando sollecitarlo
+    # (Variazioni listini → Listini da rinnovare).
     # Only rows the form asked about (items with a listino row) are replaced.
     await _close_confirmed_rows(db, request, set(result.get("listino_ids") or []))
     request.status = "approved"
