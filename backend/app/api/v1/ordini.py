@@ -31,6 +31,7 @@ from app.models.categories import MasterCategory
 from app.models.utenti import Utente
 from app.services.normalization import normalize_text
 from app.services.order_quantities import order_quantity_summary
+from app.services.open_price_list_forecast import price_day, with_scheduled
 from app.services.purchase_recommendation import cheapest_comparable_listino
 
 router = APIRouter()
@@ -648,6 +649,9 @@ async def elabora_ordine_settore(
     product_map: Dict[int, Product] = {}
     
     today = date.today()
+    # I prezzi si leggono al giorno di consegna, con gli aumenti già programmati dai fornitori:
+    # un ordine per dopo la data fissa va già al fornitore che allora sarà il più conveniente.
+    price_on = price_day(data.data_consegna, today)
     for it in data.items:
         product = await db.get(Product, it.product_id)
         if not product:
@@ -697,9 +701,10 @@ async def elabora_ordine_settore(
                 ListinoMaster.supplier_product_alias_id == chosen_alias.id,
                 ListinoMaster.sku_interno == product.sku_interno,
                 ListinoMaster.fornitore_id == chosen_supplier_id,
-                ListinoMaster.data_inizio_validita <= today,
-                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+                ListinoMaster.data_inizio_validita <= price_on,
+                or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= price_on),
             ).order_by(ListinoMaster.id.desc()).limit(1))
+            chosen_price = next(iter(await with_scheduled(db, [chosen_price] if chosen_price else [], price_on)), None)
             if not chosen_price:
                 raise HTTPException(422, "Prezzo dell’offerta selezionata non più attivo")
             unit_price = float(chosen_price.prezzo_pattuito)
@@ -712,10 +717,11 @@ async def elabora_ordine_settore(
                 listino_query = select(ListinoMaster).where(
                     ListinoMaster.sku_interno == product.sku_interno,
                     ListinoMaster.fornitore_id == chosen_supplier_id,
-                    ListinoMaster.data_inizio_validita <= today,
-                    or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today)
-                ).order_by(ListinoMaster.prezzo_pattuito.asc())
-                sup_listino = (await db.execute(listino_query)).scalars().first()
+                    ListinoMaster.data_inizio_validita <= price_on,
+                    or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= price_on)
+                ).order_by(ListinoMaster.prezzo_pattuito.asc(), ListinoMaster.id)
+                sup_rows = await with_scheduled(db, (await db.execute(listino_query)).scalars().all(), price_on)
+                sup_listino = min(sup_rows, key=lambda r: (Decimal(str(r.prezzo_pattuito)), r.id)) if sup_rows else None
                 if sup_listino:
                     unit_price = float(sup_listino.prezzo_pattuito)
                     if not it.comparison_unit and sup_listino.unita_misura:
@@ -732,15 +738,15 @@ async def elabora_ordine_settore(
                     .where(
                         ListinoMaster.sku_interno == product.sku_interno,
                         Fornitore.attivo_whitelist.is_(True),
-                        ListinoMaster.data_inizio_validita <= today,
-                        or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today)
+                        ListinoMaster.data_inizio_validita <= price_on,
+                        or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= price_on)
                     )
                     .order_by(ListinoMaster.id)
                 )
                 # Il più conveniente si sceglie sul prezzo nell'unità di confronto della
                 # voce, non sul prezzo grezzo: 0,22 al pezzo non batte 5,27 al cartone
                 # se il cartone ha 30 pezzi. I listini non confrontabili restano fuori.
-                candidate_rows = (await db.execute(listino_query)).scalars().all()
+                candidate_rows = await with_scheduled(db, (await db.execute(listino_query)).scalars().all(), price_on)
                 alias_ids = {r.supplier_product_alias_id for r in candidate_rows if r.supplier_product_alias_id}
                 aliases_by_id = {}
                 if alias_ids:
@@ -941,7 +947,8 @@ async def salva_ordini_settore(
     # inserting any order. WhatsApp text must be regenerated, not trusted.
     validated_messages: dict[int, str] = {}
     seen_suppliers: set[int] = set()
-    today = date.today()
+    # Stesso giorno della bozza: prezzi alla consegna, con gli aumenti già programmati.
+    price_on = price_day(data.data_consegna, date.today())
     for bundle in data.bundles:
         if bundle.fornitore_id in seen_suppliers or not bundle.items:
             raise HTTPException(status_code=422, detail="Fornitore duplicato o ordine vuoto")
@@ -986,12 +993,11 @@ async def salva_ordini_settore(
                     .where(
                         ListinoMaster.fornitore_id == bundle.fornitore_id,
                         ListinoMaster.sku_interno == product.sku_interno,
-                        ListinoMaster.data_inizio_validita <= today,
-                        or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+                        ListinoMaster.data_inizio_validita <= price_on,
+                        or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= price_on),
                     )
-                    .order_by(ListinoMaster.prezzo_pattuito.asc())
-                    .limit(1)
                 )
+                pick = lambda rows: min(rows, key=lambda r: (Decimal(str(r.prezzo_pattuito)), r.id))  # noqa: E731
                 if it.codice_fornitore and it.codice_fornitore.startswith(("OFF-", "SG-")):
                     contract_stmt = (
                         select(ListinoMaster)
@@ -1000,13 +1006,15 @@ async def salva_ordini_settore(
                             ListinoMaster.fornitore_id == bundle.fornitore_id,
                             ListinoMaster.sku_interno == product.sku_interno,
                             SupplierProductAlias.supplier_code == it.codice_fornitore,
-                            ListinoMaster.data_inizio_validita <= today,
-                            or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= today),
+                            ListinoMaster.data_inizio_validita <= price_on,
+                            or_(ListinoMaster.data_scadenza.is_(None), ListinoMaster.data_scadenza >= price_on),
                         )
                         .order_by(ListinoMaster.id.desc())
                         .limit(1)
                     )
-                contract = (await db.execute(contract_stmt)).scalar_one_or_none()
+                    pick = lambda rows: rows[0]  # noqa: E731
+                contract_rows = await with_scheduled(db, (await db.execute(contract_stmt)).scalars().all(), price_on)
+                contract = pick(contract_rows) if contract_rows else None
                 if contract is None or Decimal(str(it.prezzo_unitario)) != Decimal(str(contract.prezzo_pattuito)):
                     raise HTTPException(status_code=422, detail="Prezzo concordato differente dal listino")
             expected_total += subtotal

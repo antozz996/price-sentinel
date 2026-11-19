@@ -6,6 +6,10 @@ type Change = {
   id: number; fornitore_id: number; fornitore: string; prodotto: string; tipo: string;
   prezzo_vecchio?: string | null; prezzo_nuovo?: string | null; unita?: string | null;
   decorrenza: string; motivo?: string | null; nota?: string | null; impatto_annuo?: string | null;
+  dopo?: {
+    resta_il_migliore: boolean; migliore_fornitore: string; migliore_prezzo?: string | null;
+    prezzo_fornitore?: string | null; unita_confronto?: string | null; risparmio_annuo?: string | null;
+  } | null;
 };
 type SupplierRow = { fornitore_id: number; fornitore: string; telefono?: string | null; path?: string | null; ultima_conferma_at?: string | null };
 type Overview = {
@@ -97,6 +101,13 @@ function ChangeLine({ change, canApprove, onDone }: { change: Change; canApprove
         <div style={muted}>{change.fornitore} · {TIPI[change.tipo] || change.tipo} · dal {day(change.decorrenza)}</div>
         {change.motivo && <div style={{ ...muted, color: 'var(--warn)' }}>{change.motivo}</div>}
         {change.nota && <div style={muted}>Nota del fornitore: {change.nota}</div>}
+        {change.dopo && (change.dopo.resta_il_migliore
+          ? <div style={{ ...muted, color: 'var(--ok, green)' }}>Dal {day(change.decorrenza)} resta il più conveniente.</div>
+          : <div style={{ fontWeight: 600, color: 'var(--warn)' }}>
+              Dal {day(change.decorrenza)} conviene {change.dopo.migliore_fornitore} ({euro(change.dopo.migliore_prezzo)}
+              {change.dopo.unita_confronto ? ` al ${change.dopo.unita_confronto.toLowerCase()}` : ''} contro {euro(change.dopo.prezzo_fornitore)})
+              {change.dopo.risparmio_annuo ? ` · risparmio ${euro(change.dopo.risparmio_annuo)} l'anno` : ''}
+            </div>)}
       </div>
       <div style={{ textAlign: 'right' }}>
         <div>{euro(change.prezzo_vecchio)} → <strong>{change.tipo === 'non_trattato' ? 'chiuso' : euro(change.prezzo_nuovo)}</strong>{change.unita ? ` / ${change.unita}` : ''}</div>
@@ -110,7 +121,8 @@ function ChangeLine({ change, canApprove, onDone }: { change: Change; canApprove
         ) : (
           <div style={buttons}>
             {canApprove && <button className="btn" disabled={busy} onClick={() => run(() => post(`/changes/${change.id}/approve`), 'Fatto.')}>Via libera</button>}
-            <button className="btn" disabled={busy} onClick={() => run(() => post(`/changes/${change.id}/reject`), 'Rifiutata: il prezzo resta quello di prima.')}>Rifiuta</button>
+            {/* Un aumento normale non si rifiuta: il fornitore è libero, noi compriamo da chi conviene. */}
+            {canApprove && <button className="btn" disabled={busy} onClick={() => run(() => post(`/changes/${change.id}/reject`), 'Rifiutata: il prezzo resta quello di prima.')}>Rifiuta</button>}
             <button className="btn" disabled={busy} onClick={() => setForcing(true)}>Altro prezzo</button>
           </div>
         )}
@@ -346,7 +358,7 @@ export default function PriceListChanges() {
 
       <div style={card}>
         <h3 style={{ margin: 0 }}>Aumenti in arrivo</h3>
-        <div style={muted}>In alto quelli che costano di più, calcolati sugli acquisti degli ultimi 12 mesi. Se non lo accetti, premi «Rifiuta» prima della data.</div>
+        <div style={muted}>In alto quelli dopo i quali conviene un altro fornitore, poi quelli che costano di più (sugli acquisti degli ultimi 12 mesi). Dalla data dell'aumento il sistema indica da solo il fornitore più conveniente.</div>
         {aumenti.length === 0
           ? <div style={{ ...row, ...muted }}>Nessun aumento programmato.</div>
           : aumenti.map(change => <ChangeLine key={change.id} change={change} canApprove={false} onDone={done} />)}

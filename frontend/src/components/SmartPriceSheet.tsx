@@ -41,6 +41,7 @@ type MatrixRow = {
   eligible_supplier_ids: number[]
   absolute_cheapest_supplier_id?: number | null
   recommended_supplier_id?: number | null
+  cambio_migliore?: { dal: string; fornitore_id: number; fornitore: string; prezzo_confronto: string } | null
   selected_supplier_id?: number | null
   recommendation_reason: string
   requires_manual_selection: boolean
@@ -1017,6 +1018,10 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             <td style={{ padding: 12 }}>
               <strong>{row.order_name || row.canonical_name}</strong>
               {row.order_name && <div style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{row.canonical_name}</div>}
+              {row.cambio_migliore && <div style={{ color: 'var(--warn, #b45309)', fontSize: 11, fontWeight: 600 }}
+                title="Un aumento già programmato cambia il fornitore più conveniente da quella data">
+                Dal {new Date(`${row.cambio_migliore.dal}T12:00:00`).toLocaleDateString('it-IT')} il più conveniente diventa {row.cambio_migliore.fornitore}
+              </div>}
               <div style={{ color: 'var(--text-secondary)', fontSize: 11, display: 'flex', gap: 6, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
                 <span>{row.sku_interno || 'SKU mancante'}</span>
                 <span>·</span>

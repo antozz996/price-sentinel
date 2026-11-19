@@ -60,6 +60,7 @@ from app.models.supplier_price_link import (
 from app.services.normalization import normalize_text
 from app.models.utenti import Utente
 from app.services.open_price_list_activation import _newer_row_exists, apply_change_now
+from app.services.open_price_list_forecast import Forecast, forecast_on
 from app.services.open_price_list_rules import (
     ROME,
     annual_impact,
@@ -427,6 +428,10 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
         await db.flush()
         if pending:
             pending.sostituito_da_id = change.id
+        if decision.stato == STATO_PROGRAMMATO and decision.decorrenza <= today:
+            # Un ribasso vale da subito: entra ora nel listino, così gli ordini lo usano dal minuto dopo
+            # (senza aspettare il giro automatico del giorno).
+            await apply_change_now(db, change.id, today=today, now=now)
         if decision.motivo_trattenuta:
             summary["sospese"] += 1
         summary[{"ribasso": "ribassi", "aumento": "aumenti", "non_trattato": "non_trattati"}[decision.tipo]] += 1
@@ -519,7 +524,41 @@ async def create_supplier_link(fornitore_id: int, admin: Utente = Depends(requir
     return {"link": _link_view(link)}
 
 
-@router.get("/overview/count", summary="Contatore del menu: sospese e aumenti in arrivo")
+async def _forecasts_for(db: AsyncSession, changes: list[SupplierPriceChange]) -> dict[tuple, Forecast]:
+    """Prezzi di tutti i fornitori nel giorno in cui ciascun aumento entra, per quella voce."""
+    by_day: dict = {}
+    for change in changes:
+        by_day.setdefault(change.decorrenza, set()).add(change.sku_interno)
+    result: dict[tuple, Forecast] = {}
+    for day, skus in by_day.items():
+        for sku, forecast in (await forecast_on(db, skus, day)).items():
+            result[(day, sku)] = forecast
+    return result
+
+
+def after_increase(forecast: Forecast | None, change: SupplierPriceChange, spesa_annua: Decimal | None,
+                   suppliers: dict) -> dict | None:
+    """Dopo l'aumento: resta il più conveniente? Se no, chi conviene e quanto si risparmia in un anno."""
+    if forecast is None or not forecast.prezzi:
+        return None
+    best = forecast.migliore
+    own = forecast.prezzi.get(change.fornitore_id)
+    supplier = suppliers.get(best)
+    result = {
+        "resta_il_migliore": best == change.fornitore_id,
+        "migliore_fornitore_id": best,
+        "migliore_fornitore": supplier.nome_azienda if supplier else f"Fornitore {best}",
+        "migliore_prezzo": _money(forecast.prezzi[best]),
+        "prezzo_fornitore": _money(own),
+        "unita_confronto": forecast.unita_confronto,
+        "risparmio_annuo": None,
+    }
+    if own and own > 0 and best != change.fornitore_id and spesa_annua and spesa_annua > 0:
+        result["risparmio_annuo"] = _money((spesa_annua * (own - forecast.prezzi[best]) / own).quantize(Decimal("0.01")))
+    return result
+
+
+@router.get("/overview/count",summary="Contatore del menu: sospese e aumenti in arrivo")
 async def price_changes_count(admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     _require_primary_tenant(admin)
     count = (await db.execute(select(func.count()).select_from(SupplierPriceChange).where(or_(
@@ -570,8 +609,23 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
         }
 
     held = sorted((view(c) for c in pending if c.stato == STATO_TRATTENUTO), key=lambda v: v["decorrenza"])
-    increases = sorted((view(c) for c in pending if c.stato == STATO_PROGRAMMATO and c.tipo == TIPO_AUMENTO),
-                       key=lambda v: -Decimal(v["impatto_annuo"] or 0))
+    increase_changes = [c for c in pending if c.stato == STATO_PROGRAMMATO and c.tipo == TIPO_AUMENTO]
+    forecasts = await _forecasts_for(db, increase_changes)
+    best_ids = {f.migliore for f in forecasts.values() if f.migliore and f.migliore not in suppliers}
+    if best_ids:
+        suppliers.update({s.id: s for s in (await db.execute(select(Fornitore).options(noload("*")).where(
+            Fornitore.id.in_(best_ids)))).scalars().all()})
+
+    def increase_view(change: SupplierPriceChange) -> dict:
+        result = view(change)
+        result["dopo"] = after_increase(forecasts.get((change.decorrenza, change.sku_interno)), change,
+                                        spend.get((change.fornitore_id, change.sku_interno)), suppliers)
+        return result
+
+    # In cima gli aumenti dopo i quali conviene un altro fornitore, poi quelli che costano di più.
+    increases = sorted((increase_view(c) for c in increase_changes),
+                       key=lambda v: (not (v["dopo"] and not v["dopo"]["resta_il_migliore"]),
+                                      -Decimal(v["impatto_annuo"] or 0)))
     decreases = [view(c) for c in pending if c.tipo == TIPO_RIBASSO and c.stato != STATO_TRATTENUTO]
     saving = sum((-Decimal(v["impatto_annuo"]) for v in decreases if v["impatto_annuo"]), Decimal(0))
 

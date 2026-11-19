@@ -335,6 +335,8 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
     d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
   });
+  // Giorno su cui sono stati calcolati prezzi e fornitori consigliati (vedi loadData).
+  const [pricesDate, setPricesDate] = useState<string>('');
   const [orderNotes, setOrderNotes] = useState<string>('');
   
   const [products, setProducts] = useState<ProductItem[]>([]);
@@ -450,13 +452,16 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
   }, []);
 
   async function loadData() {
+    // Fornitori consigliati calcolati sui prezzi del giorno di consegna (aumenti programmati compresi).
+    const matrixDate = encodeURIComponent(deliveryDate);
+    setPricesDate(deliveryDate);
     setLoading(true);
     setErrorMsg(null);
     try {
       const [locRes, prodRes, matrixRes, fornitoriRes] = await Promise.all([
         fetch(`${API_BASE}/location/`, { headers }),
         fetch(`${API_BASE}/products`, { headers }),
-        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500`, { headers }),
+        fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500&data=${matrixDate}`, { headers }),
         fetch(`${API_BASE}/fornitori?attivi=true`, { headers }).catch(() => null)
       ]);
 
@@ -494,7 +499,7 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
             nextOffsets.push(offset);
           }
           const nextPages = await Promise.all(nextOffsets.map(async offset => {
-            const page = await fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500&offset=${offset}`, { headers });
+            const page = await fetch(`${API_BASE}/smart-price-sheet/matrix?limit=500&offset=${offset}&data=${matrixDate}`, { headers });
             if (!page.ok) throw new Error('Pagina listino non disponibile');
             return (await page.json()).rows || [];
           }));
@@ -1111,6 +1116,11 @@ export default function SectorOrderBuilder({ userProfile }: SectorOrderBuilderPr
                   boxSizing: 'border-box'
                 }}
               />
+              {pricesDate && deliveryDate !== pricesDate && (
+                <span style={{ fontSize: '0.7rem', color: 'var(--status-amber, #b45309)' }}>
+                  Fornitori consigliati calcolati per il {new Date(`${pricesDate}T12:00:00`).toLocaleDateString('it-IT')}: ricarica la pagina per la nuova data.
+                </span>
+              )}
             </div>
 
             <div style={{ flex: '1 1 56%', display: 'flex', flexDirection: 'column', gap: '3px' }}>
