@@ -16,24 +16,22 @@ from sqlalchemy import and_, select
 
 from app.database import async_session_factory, engine
 from app.models.fornitori import Fornitore
-from app.models.listino import ORIGINE_MODULO_FORNITORE, ListinoMaster
+from app.models.listino import ListinoMaster
 from app.models.supplier_price_form import SupplierPriceFormRequest
 
 
 async def run(commit: bool) -> None:
     async with async_session_factory() as db:
         windows = set((await db.execute(select(
-            SupplierPriceFormRequest.supplier_id, SupplierPriceFormRequest.validita_inviata_da,
-            SupplierPriceFormRequest.validita_inviata_a,
+            SupplierPriceFormRequest.supplier_id, SupplierPriceFormRequest.validita_inviata_a,
         ).where(
             SupplierPriceFormRequest.status == "approved",
             SupplierPriceFormRequest.validita_inviata_a.is_not(None),
         ))).all())
         rows = (await db.execute(select(ListinoMaster).where(
-            ListinoMaster.origine == ORIGINE_MODULO_FORNITORE,
             ListinoMaster.data_scadenza.is_not(None),
         ).with_for_update())).scalars().all()
-        candidates = [r for r in rows if (r.fornitore_id, r.data_inizio_validita, r.data_scadenza) in windows]
+        candidates = [r for r in rows if (r.fornitore_id, r.data_scadenza) in windows and r.data_inizio_validita <= r.data_scadenza]
         reopened = []
         for row in candidates:
             newer = await db.scalar(select(ListinoMaster.id).where(
@@ -53,7 +51,7 @@ async def run(commit: bool) -> None:
             reopened.append((row.fornitore_id, row.data_scadenza))
             row.data_scadenza = None
         names = dict((await db.execute(select(Fornitore.id, Fornitore.nome_azienda))).all())
-        print(f"Prezzi da moduli con scadenza: {len(rows)} · legati a «valido fino al»: {len(candidates)} · da riaprire: {len(reopened)}")
+        print(f"Prezzi con scadenza: {len(rows)} · legati a «valido fino al»: {len(candidates)} · da riaprire: {len(reopened)}")
         for (supplier_id, end), count in sorted(Counter(reopened).items(), key=lambda kv: kv[0][1]):
             print(f"  {names.get(supplier_id, supplier_id)}: {count} prezzi che scadevano il {end:%d/%m/%Y}")
         if commit:
