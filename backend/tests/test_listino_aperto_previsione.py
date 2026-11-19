@@ -150,5 +150,26 @@ class DecreaseIsImmediateTest(unittest.TestCase):
         self.assertIn("apply_change_now(db, change.id", source)
 
 
+class PricesDoNotExpireTest(unittest.TestCase):
+    def test_form_approval_keeps_prices_open(self):
+        from app.api.v1 import supplier_price_forms as forms
+        self.assertNotIn("data_scadenza = request.validita_inviata_a", inspect.getsource(forms.approve_form_request))
+
+    def test_suppliers_to_remind(self):
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock
+        today = date(2026, 12, 2)
+        result = MagicMock()
+        result.all.return_value = [
+            (1, "approved", date(2026, 11, 22)), (1, "approved", date(2026, 11, 29)),  # scaduto: sollecitare
+            (2, "approved", date(2026, 11, 29)), (2, "submitted", None),            # risposta in attesa
+            (3, "approved", date(2026, 12, 6)),                                      # ancora valido
+            (4, "approved", None),                                                   # senza data di fine
+        ]
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=result)
+        self.assertEqual(asyncio.run(links.expired_form_suppliers(db, today)), {1: date(2026, 11, 29)})
+
+
 if __name__ == "__main__":
     unittest.main()

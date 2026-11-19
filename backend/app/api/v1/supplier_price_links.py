@@ -5,7 +5,7 @@ e cambia solo il prezzo: dicitura, marca, formato e unità restano quelli concor
 Ogni modifica diventa una SupplierPriceChange con la sua decorrenza (regole in
 services/open_price_list_rules.py); il listino viene aggiornato dal job di attivazione.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from hashlib import sha256
 from types import SimpleNamespace
@@ -32,6 +32,7 @@ from app.database import get_db
 from app.models.fornitori import Fornitore
 from app.models.listino import ORIGINE_LISTINO_APERTO, ListinoMaster
 from app.models.products import Product, SupplierProductAlias
+from app.models.supplier_price_form import SupplierPriceFormRequest
 from app.schemas.smart_price_sheet import VariantPricePreviewRequest, VariantPriceRow
 from app.models.supplier_price_link import (
     STATI_IN_ATTESA,
@@ -586,7 +587,9 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
         SupplierPriceLink.attivo.is_(True)))).scalars().all()
     proposals = (await db.execute(select(SupplierProductProposal).where(
         SupplierProductProposal.stato == PROPOSTA_IN_ATTESA).order_by(SupplierProductProposal.id))).scalars().all()
-    supplier_ids = {c.fornitore_id for c in pending} | {link.fornitore_id for link in links} | {p.fornitore_id for p in proposals}
+    form_ends = await expired_form_suppliers(db, today)
+    supplier_ids = ({c.fornitore_id for c in pending} | {link.fornitore_id for link in links}
+                    | {p.fornitore_id for p in proposals} | set(form_ends))
     suppliers = {s.id: s for s in (await db.execute(select(Fornitore).options(noload("*")).where(
         Fornitore.id.in_(supplier_ids)))).scalars().all()} if supplier_ids else {}
     origin_ids = {c.listino_id_origine for c in pending if c.listino_id_origine}
@@ -674,6 +677,13 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
             stale.append(row)
     reminders.sort(key=lambda r: r["fornitore"].casefold())
     stale.sort(key=lambda r: r["ultima_conferma_at"] or "")
+    link_paths = {link.fornitore_id: _link_token(link) for link in links}
+    renewals = sorted((
+        {"fornitore_id": sid, "fornitore": suppliers[sid].nome_azienda, "telefono": suppliers[sid].telefono_contatto,
+         "path": f"/fornitore/prezzi/{link_paths[sid]}" if link_paths.get(sid) else None, "fino_al": end.isoformat()}
+        for sid, end in form_ends.items()
+        if sid in suppliers and not suppliers[sid].archived_at and suppliers[sid].attivo_whitelist
+    ), key=lambda r: (r["fino_al"], r["fornitore"].casefold()))
     return {
         "oggi": today.isoformat(),
         "prossima_data_fissa": next_fixed_date(today).isoformat(),
@@ -684,7 +694,29 @@ async def price_changes_overview(admin: Utente = Depends(require_admin), db: Asy
         "ribassi": {"numero": len(decreases), "risparmio_annuo": _money(saving), "giorni": RIBASSI_GIORNI},
         "solleciti": {"scadenza": deadline.isoformat() if deadline else None, "fornitori": reminders},
         "non_confermati": {"giorni": NON_CONFERMATO_GIORNI, "fornitori": stale},
+        "listini_da_rinnovare": renewals,
     }
+
+
+async def expired_form_suppliers(db: AsyncSession, today) -> dict[int, "date"]:
+    """Fornitori il cui ultimo modulo prezzi indicava «valido fino al» una data già passata.
+
+    I prezzi non scadono: restano quelli a sistema finché il fornitore non manda il
+    listino nuovo. Qui si raccoglie solo chi va sollecitato. Non compare chi ha già
+    una risposta in attesa di approvazione o un modulo approvato ancora valido.
+    """
+    requests = (await db.execute(select(
+        SupplierPriceFormRequest.supplier_id, SupplierPriceFormRequest.status,
+        SupplierPriceFormRequest.validita_inviata_a,
+    ).where(SupplierPriceFormRequest.status.in_(("approved", "submitted"))))).all()
+    ends: dict[int, date] = {}
+    still_valid: set[int] = set()
+    for supplier_id, status, valid_to in requests:
+        if status == "submitted" or valid_to is None or valid_to >= today:
+            still_valid.add(supplier_id)
+        elif valid_to > ends.get(supplier_id, date.min):
+            ends[supplier_id] = valid_to
+    return {sid: end for sid, end in ends.items() if sid not in still_valid}
 
 
 @router.post("/supplier/{fornitore_id}/revoke", summary="Disattiva il link fisso del fornitore")

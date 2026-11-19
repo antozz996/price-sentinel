@@ -19,6 +19,7 @@ type Overview = {
   solleciti: { scadenza?: string | null; fornitori: SupplierRow[] };
   non_confermati: { giorni: number; fornitori: SupplierRow[] };
   proposte?: Proposal[];
+  listini_da_rinnovare?: Renewal[];
 };
 type Proposal = {
   id: number; tipo: 'nome' | 'prodotto_nuovo' | 'unita'; fornitore_id: number; fornitore: string; nostro_nome?: string | null;
@@ -230,6 +231,25 @@ function SupplierLine({ supplier, deadline }: { supplier: SupplierRow; deadline?
   );
 }
 
+type Renewal = { fornitore_id: number; fornitore: string; telefono?: string | null; path?: string | null; fino_al: string };
+
+function RenewalLine({ supplier }: { supplier: Renewal }) {
+  const phone = phoneForWhatsApp(supplier.telefono);
+  const text = `Buongiorno, il vostro listino era valido fino al ${day(supplier.fino_al)}: ci mandate i prezzi nuovi?`
+    + (supplier.path ? ` Basta aprire il link, cambiare solo quelli diversi oppure premere «confermo tutto invariato»: ${publicOrigin}${supplier.path}` : '');
+  return (
+    <div style={row}>
+      <div>
+        <strong>{supplier.fornitore}</strong>
+        <div style={muted}>Listino valido fino al {day(supplier.fino_al)} · intanto restano i prezzi a sistema</div>
+      </div>
+      {phone
+        ? <a className="btn" href={`https://wa.me/${phone}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">Sollecita su WhatsApp</a>
+        : <span style={muted}>manca il telefono</span>}
+    </div>
+  );
+}
+
 function LinkLine({ supplier, onChanged }: { supplier: SupplierLink; onChanged: (s: SupplierLink) => void }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
@@ -368,6 +388,14 @@ export default function PriceListChanges() {
         <strong>Ribassi negli ultimi {ribassi.giorni} giorni: {ribassi.numero}</strong>
         {ribassi.numero > 0 && <span> · risparmio stimato {euro(ribassi.risparmio_annuo)} l'anno</span>}
       </div>
+
+      {(data.listini_da_rinnovare || []).length > 0 && (
+        <div style={{ ...card, borderColor: 'var(--warn)' }}>
+          <h3 style={{ margin: 0 }}>Listini da rinnovare</h3>
+          <div style={muted}>La data «valido fino al» del loro ultimo listino è passata. I prezzi non scadono: il sistema continua a usare quelli a sistema finché il fornitore non manda il listino nuovo. Basta sollecitarlo.</div>
+          {(data.listini_da_rinnovare || []).map(s => <RenewalLine key={s.fornitore_id} supplier={s} />)}
+        </div>
+      )}
 
       {solleciti.scadenza && (
         <div style={card}>
