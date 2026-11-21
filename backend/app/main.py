@@ -17,6 +17,7 @@ from app.api.v1.router import api_router
 from app.config import settings
 from app.database import async_session_factory, engine, Base
 from app.schema_guards import ensure_unique_invoice_per_xml
+from app.services import matrix_cache
 from app.services.automation import run_operational_monitor
 from app.services.open_price_list_activation import apply_due_price_changes
 
@@ -41,7 +42,8 @@ async def _automation_leader() -> None:
                 conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
                 if await conn.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": _AUTOMATION_LOCK_KEY}):
                     logger.info("automation_leader_acquired")
-                    await _automation_loop()
+                    from app.api.v1.smart_price_sheet import matrix_computer
+                    await asyncio.gather(_automation_loop(), matrix_cache.warm_loop(matrix_computer))
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -87,6 +89,7 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _SCHEMA_LOCK_KEY})
             await conn.run_sync(Base.metadata.create_all)
+            await matrix_cache.ensure_table(conn)
             # create_all creates the supplier-form table when absent; these
             # idempotent ALTERs also upgrade it safely on existing databases.
             await conn.execute(text(
