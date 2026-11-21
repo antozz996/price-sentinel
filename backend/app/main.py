@@ -23,6 +23,31 @@ from app.services.open_price_list_activation import apply_due_price_changes
 
 logger = logging.getLogger("price_sentinel.automation")
 
+# PostgreSQL advisory lock keys. The server runs several uvicorn workers: schema setup
+# is serialized, and only the worker holding the automation lock runs the loop.
+_SCHEMA_LOCK_KEY = 72_310_001
+_AUTOMATION_LOCK_KEY = 72_310_002
+
+
+async def _automation_leader() -> None:
+    """Run _automation_loop in exactly one worker: the one holding the advisory lock.
+
+    The lock lives on a dedicated AUTOCOMMIT connection kept open for the whole loop,
+    so it is released automatically if the worker dies; the other workers retry.
+    """
+    while True:
+        try:
+            async with engine.connect() as conn:
+                conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+                if await conn.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": _AUTOMATION_LOCK_KEY}):
+                    logger.info("automation_leader_acquired")
+                    await _automation_loop()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("automation_leader_failed")
+        await asyncio.sleep(settings.AUTOMATION_INTERVAL_SECONDS)
+
 
 async def _automation_loop() -> None:
     # Il listino aperto gira una volta al giorno (al primo giro dopo mezzanotte);
@@ -60,6 +85,7 @@ async def lifespan(app: FastAPI):
     # Safe table creation for new models (CREATE TABLE IF NOT EXISTS)
     try:
         async with engine.begin() as conn:
+            await conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _SCHEMA_LOCK_KEY})
             await conn.run_sync(Base.metadata.create_all)
             # create_all creates the supplier-form table when absent; these
             # idempotent ALTERs also upgrade it safely on existing databases.
@@ -109,12 +135,13 @@ async def lifespan(app: FastAPI):
     # database that still has them starts anyway (with a warning).
     try:
         async with engine.begin() as conn:
+            await conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _SCHEMA_LOCK_KEY})
             await ensure_unique_invoice_per_xml(conn)
     except Exception as e:
         logger.warning("Unique invoice-per-XML index notice: %s", e)
 
     automation_task = (
-        asyncio.create_task(_automation_loop())
+        asyncio.create_task(_automation_leader())
         if settings.AUTOMATION_ENABLED
         else None
     )

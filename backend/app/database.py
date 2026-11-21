@@ -20,7 +20,8 @@ engine = create_async_engine(
     settings.database_url,
     echo=settings.DEBUG,
     pool_size=10,
-    max_overflow=20,
+    # Per worker: production runs 3 uvicorn workers, 3 x 20 stays well under max_connections=100.
+    max_overflow=10,
     pool_pre_ping=True,
 )
 
