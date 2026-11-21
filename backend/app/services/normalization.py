@@ -5,6 +5,7 @@ Fase 2: Funzioni helper per la normalizzazione di descrizioni grezze di fattura.
 
 import re
 import unicodedata
+from functools import lru_cache
 from typing import Optional
 
 
@@ -20,6 +21,18 @@ KG_UOM_CODES = frozenset({"k", "k.", "kgm", "kgs"})
 
 
 def normalize_text(text: str) -> str:
+    """Cached front of _normalize_text: pure function, called thousands of times per request on the same units."""
+    if isinstance(text, str):
+        return _normalize_text_cached(text)
+    return _normalize_text(text)
+
+
+@lru_cache(maxsize=65536)
+def _normalize_text_cached(text: str) -> str:
+    return _normalize_text(text)
+
+
+def _normalize_text(text: str) -> str:
     """
     Normalizza una descrizione di testo:
     - Converte in lowercase

@@ -102,7 +102,7 @@ def purchase_stats_select(
     """
     if lines is None:
         lines = purchase_lines_subquery(user, skus=skus, location_id=location_id, date_from=date_from)
-    conv = conversion_table(conversions or {}, "conv_acquisti")
+    conv = conversion_table(conversions or {}, "conv_acquisti", as_cte=True)  # joined twice below
     c = lines.c
     joined = lines.outerjoin(conv, conversion_join(lines, conv))
     paid_or_credit = c.is_omaggio.is_(False)  # omaggi esclusi dalla quantita'

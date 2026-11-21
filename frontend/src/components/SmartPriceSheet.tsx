@@ -870,7 +870,8 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
 
   return <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
     <div className="glass-panel" style={{ padding: '4px 12px', display: 'flex', gap: 6, overflowX: 'auto' }}>
-      {tabs.filter(tab => isAdmin || tab.id === 'matrix' || tab.id === 'history').map(tab => { const Icon = tab.icon; return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setPreview(null); setError(null) }} style={{ padding: '13px 16px', border: 0, borderBottom: activeTab === tab.id ? '2px solid var(--accent-blue)' : '2px solid transparent', background: 'transparent', color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}><Icon size={17} />{tab.label}</button> })}
+      {/* 'paste' (Foglio prezzi) is archived: hidden from the tabs, code kept. */}
+      {tabs.filter(tab => tab.id !== 'paste' && (isAdmin || tab.id === 'matrix' || tab.id === 'history')).map(tab => { const Icon = tab.icon; return <button key={tab.id} onClick={() => { setActiveTab(tab.id); setPreview(null); setError(null) }} style={{ padding: '13px 16px', border: 0, borderBottom: activeTab === tab.id ? '2px solid var(--accent-blue)' : '2px solid transparent', background: 'transparent', color: activeTab === tab.id ? 'var(--text-primary)' : 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}><Icon size={17} />{tab.label}</button> })}
     </div>
     {error && <div className="glass-panel" style={{ padding: 14, color: 'var(--crit)' }}><AlertTriangle size={16} /> {error}</div>}
     {notice && <div className="glass-panel" style={{ padding: 14, color: 'var(--ok)' }}><Check size={16} /> {notice}</div>}
