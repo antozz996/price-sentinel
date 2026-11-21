@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { lazyPage, PageErrorBoundary, rememberActiveTab, restoreTabAfterUpdate } from './lazyPage'
-import { Activity, AlertTriangle, FileSpreadsheet, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, PackageCheck, Star, Loader2 } from 'lucide-react'
+import { Activity, AlertTriangle, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, Star, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import NotificationCenterModal from './components/NotificationCenterModal'
@@ -80,7 +80,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Acquisti',
     items: [
       { id: 'sectororders', label: 'Sviluppo ordini settore', icon: ShoppingCart },
-      { id: 'goodsreceipt', label: 'Ricezione merci', icon: PackageCheck },
+      // 'goodsreceipt' (Ricezione merci) is archived: hidden from the menu, page code kept.
       { id: 'orderregistry', label: 'Registro ordini', icon: ClipboardList },
       { id: 'productreviews', label: 'Recensioni prodotti', icon: Star },
       { id: 'supplierforms', label: 'Moduli fornitori', icon: ClipboardList, adminOnly: true },
@@ -92,7 +92,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Prezzi e analisi',
     items: [
       { id: 'crosssupplier', label: 'Listino Smart', icon: Grid },
-      { id: 'listini', label: 'Listini master', icon: FileSpreadsheet, adminOnly: true },
+      // 'listini' (Listini master) is archived: hidden from the menu, page code kept.
       { id: 'accordicommerciali', label: 'Accordi commerciali', icon: Percent, adminOnly: true },
       { id: 'priceanalysis', label: 'Analisi prezzi', icon: TrendingUp, members: [
         { id: 'priceanalysis', label: 'Oscillazioni prezzi' },

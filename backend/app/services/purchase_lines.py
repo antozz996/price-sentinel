@@ -463,7 +463,7 @@ async def load_conversions(db, lines_subquery) -> dict[ConversionKey, LineConver
     return compute_conversions(keys, products, AliasIndex(aliases))
 
 
-def conversion_table(conversions: Mapping[ConversionKey, LineConversion], name: str = "conv"):
+def conversion_table(conversions: Mapping[ConversionKey, LineConversion], name: str = "conv", *, as_cte: bool = False):
     """Subquery SQL (VALUES) con le conversioni, da unire alle righe con conversion_join().
 
     Colonne: fornitore_id, product_id, codice_fornitore, descrizione, unita_misura,
@@ -493,7 +493,9 @@ def conversion_table(conversions: Mapping[ConversionKey, LineConversion], name: 
         literal_binds=True,
     ).data(rows)
     # Explicit casts: a column with only NULLs would otherwise be typed as text.
-    return select(
+    # as_cte: for queries that join the table more than once, so the (large) VALUES
+    # list is rendered and compiled once instead of once per reference.
+    stmt = select(
         cast(data.c.fornitore_id, Integer).label("fornitore_id"),
         cast(data.c.product_id, Integer).label("product_id"),
         cast(data.c.codice_fornitore, String).label("codice_fornitore"),
@@ -502,14 +504,25 @@ def conversion_table(conversions: Mapping[ConversionKey, LineConversion], name: 
         cast(data.c.factor, Numeric(20, 8)).label("factor"),
         cast(data.c.reliable, Boolean).label("reliable"),
         cast(data.c.comparison_unit, String).label("comparison_unit"),
-    ).select_from(data).subquery(name)
+    ).select_from(data)
+    return stmt.cte(name) if as_cte else stmt.subquery(name)
 
 
 def conversion_join(lines_subquery, conv):
     """Condizione di join (LEFT OUTER) tra la subquery delle righe e conversion_table()."""
     pl = lines_subquery.c
+    # The COALESCE equalities are implied by IS NOT DISTINCT FROM (same result), but unlike it
+    # PostgreSQL can hash on them: without them it hashed on fornitore_id only and checked
+    # millions of row pairs (seconds per query on the Smart Price Sheet).
+    hashable = [
+        func.coalesce(getattr(pl, name), sentinel) == func.coalesce(getattr(conv.c, name), sentinel)
+        for name, sentinel in (
+            ("product_id", -1), ("codice_fornitore", ""), ("descrizione", ""), ("unita_misura", ""),
+        )
+    ]
     return and_(
         pl.fornitore_id == conv.c.fornitore_id,
+        *hashable,
         pl.product_id.is_not_distinct_from(conv.c.product_id),
         pl.codice_fornitore.is_not_distinct_from(conv.c.codice_fornitore),
         pl.descrizione.is_not_distinct_from(conv.c.descrizione),

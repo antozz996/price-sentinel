@@ -82,7 +82,8 @@ test('admin can log in and render the main dashboard without API errors', async 
   expect(errors).toEqual([])
 })
 
-test('comparative price import previews data and requires explicit confirmation before writes', async ({ page }) => {
+// Listini master is archived (hidden from the menu), so this flow cannot be reached from the sidebar.
+test.skip('comparative price import previews data and requires explicit confirmation before writes', async ({ page }) => {
   const dryRunModes: string[] = []
   await page.route('**/api/v1/listino/import-multi-supplier**', async route => {
     dryRunModes.push(new URL(route.request().url()).searchParams.get('dry_run') || '')

@@ -237,9 +237,11 @@ async def matrix(
                     *(getattr(stat, name) for name in STAT_COLUMNS), units.get(stat.sku_interno)
                 )
     else:
+        # MATERIALIZED: computed once. As a plain subquery PostgreSQL misestimated the
+        # filtered products (1 row) and re-aggregated every purchase line for each product.
         stats_subquery = (
             await load_purchase_stats_select(db, user, location_id=scope, date_from=purchases_from)
-        ).subquery("acquisti_voce")
+        ).cte("acquisti_voce").prefix_with("MATERIALIZED")
         page = (await db.execute(
             matrix_page_select(product_filter, sort, stats_subquery).limit(limit).offset(offset)
         )).all()
