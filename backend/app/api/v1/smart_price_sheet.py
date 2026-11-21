@@ -28,7 +28,9 @@ from app.models.purchase_policy import (
 )
 from app.models.supplier_price_link import STATO_PROGRAMMATO, SupplierPriceChange
 from app.models.utenti import Utente
+from app.services import matrix_cache
 from app.services.open_price_list_forecast import forecast_on, with_scheduled
+from app.services.tenant_scope import user_tenant_id
 from app.schemas.smart_price_sheet import (
     AssessmentUpsertRequest,
     CellPreviewRequest,
@@ -187,7 +189,43 @@ async def _mark_upcoming_best_change(db: AsyncSession, rows: list[dict], price_o
         }
 
 
+def matrix_computer(user):
+    """compute(db, params) for services.matrix_cache: the matrix for cached params, as `user`."""
+    async def compute(db: AsyncSession, params: dict) -> dict:
+        return await matrix(
+            search=params["search"], category=params["category"], subcategory=params["subcategory"],
+            location_id=params["location_id"], limit=params["limit"], offset=params["offset"],
+            sort=params["sort"], periodo=params["periodo"], data=date.fromisoformat(params["price_on"]),
+            db=db, user=user,
+        )
+    return compute
+
+
 @router.get("/matrix")
+async def matrix_endpoint(
+    search: str | None = Query(default=None, max_length=150),
+    category: str | None = Query(default=None, max_length=100),
+    subcategory: str | None = Query(default=None, max_length=100),
+    location_id: int | None = Query(default=None, gt=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    sort: str = Query(default="nome", pattern="^(" + "|".join(SORT_OPTIONS) + ")$"),
+    periodo: str = Query(default="tutto", pattern="^(" + "|".join(PERIOD_OPTIONS) + ")$"),
+    data: date | None = Query(default=None, description="Giorno a cui leggere i prezzi (es. consegna); mai prima di oggi"),
+    db: AsyncSession = Depends(get_db),
+    user: Utente = Depends(get_current_user),
+):
+    """Same result as matrix(), served from services.matrix_cache while the data is unchanged."""
+    today = date.today()
+    params = matrix_cache.make_params(
+        tenant_id=user_tenant_id(user), search=search, category=category, subcategory=subcategory,
+        location_id=_scope_location(user, location_id), limit=limit, offset=offset, sort=sort,
+        periodo=periodo, price_on=max(data, today) if data else today, today=today,
+    )
+    body = await matrix_cache.get_or_compute(db, params, matrix_computer(user))
+    return Response(content=body, media_type="application/json")
+
+
 async def matrix(
     search: str | None = Query(default=None, max_length=150),
     category: str | None = Query(default=None, max_length=100),
