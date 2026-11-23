@@ -32,13 +32,13 @@ class MatrixCacheTest(unittest.TestCase):
 
     def test_heavy_views_are_cached_and_warmable(self):
         from app.api.v1 import intelligence, product_identity
-        served = {
-            (intelligence.router, "/variance-loss"): intelligence.variance_loss_endpoint,
-            (intelligence.router, "/efficiency-leaderboard"): intelligence.efficiency_leaderboard_endpoint,
-            (intelligence.router, "/product-consumption"): intelligence.product_consumption_endpoint,
-            (product_identity.router, "/products"): product_identity.list_products_endpoint,
-        }
-        for (router, path), endpoint in served.items():
+        served = (
+            (intelligence.router, "/variance-loss", intelligence.variance_loss_endpoint),
+            (intelligence.router, "/efficiency-leaderboard", intelligence.efficiency_leaderboard_endpoint),
+            (intelligence.router, "/product-consumption", intelligence.product_consumption_endpoint),
+            (product_identity.router, "/products", product_identity.list_products_endpoint),
+        )
+        for router, path, endpoint in served:
             route = next(r for r in router.routes if getattr(r, "path", None) == path and "GET" in r.methods)
             self.assertIs(route.endpoint, endpoint, path)
         for kind in ("matrix", "variance-loss", "efficiency-leaderboard", "product-consumption", "products"):
