@@ -29,7 +29,7 @@ from app.services.pdf_generator import generate_consumption_invoices_pdf
 from app.schemas.approvazioni import ApprovazionePrezzoCreate, ApprovazionePrezzoResponse
 from app.services.anomaly_policy import operational_anomaly_filter
 from app.services.anomaly_kpi import kpi_anomalies_statement, kpi_recovered_statement
-from app.services import consumption_report
+from app.services import consumption_report, matrix_cache
 from app.services.variance_loss import efficiency_leaderboard_select, load_variance_loss
 
 import openpyxl
@@ -271,7 +271,22 @@ async def get_price_trends(
 # 3. Classifica Efficienza Locali
 # ─────────────────────────────────────────────
 
+@matrix_cache.view("efficiency-leaderboard")
+def _leaderboard_computer(user):
+    async def compute(db: AsyncSession, params: dict):
+        return await get_efficiency_leaderboard(_admin=user, db=db)
+    return compute
+
+
 @router.get("/efficiency-leaderboard", summary="Classifica Efficienza Locali")
+async def efficiency_leaderboard_endpoint(
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """get_efficiency_leaderboard served from services.matrix_cache while the data is unchanged."""
+    return await matrix_cache.cached_response(db, _admin, "efficiency-leaderboard")
+
+
 async def get_efficiency_leaderboard(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -299,7 +314,24 @@ async def get_efficiency_leaderboard(
     return leaderboard
 
 
+@matrix_cache.view("variance-loss")
+def _variance_loss_computer(user):
+    async def compute(db: AsyncSession, params: dict):
+        return await get_variance_loss(_admin=user, db=db)
+    return compute
+
+
 @router.get("/variance-loss", summary="Analisi Sprechi per Mancata Ottimizzazione")
+async def variance_loss_endpoint(
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """get_variance_loss served from services.matrix_cache while the data is unchanged."""
+    return await matrix_cache.cached_response(
+        db, _admin, "variance-loss", check_start=str(settings.ANOMALY_CHECK_START)
+    )
+
+
 async def get_variance_loss(
     _admin = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -453,7 +485,34 @@ def _selection_filters(selection: ConsumptionSelection) -> dict:
     }
 
 
+@matrix_cache.view("product-consumption")
+def _consumption_computer(user):
+    async def compute(db: AsyncSession, params: dict):
+        return await get_product_consumption(
+            location_ids=params["location_ids"], fornitore_id=params["fornitore_id"],
+            data_da=date.fromisoformat(params["data_da"]) if params["data_da"] else None,
+            data_a=date.fromisoformat(params["data_a"]) if params["data_a"] else None,
+            _admin=user, db=db,
+        )
+    return compute
+
+
 @router.get("/product-consumption", summary="Report Consumo per Prodotto")
+async def product_consumption_endpoint(
+    location_ids: str | None = Query(None),
+    fornitore_id: int | None = Query(None),
+    data_da: date | None = Query(None),
+    data_a: date | None = Query(None),
+    _admin = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """get_product_consumption served from services.matrix_cache while the data is unchanged."""
+    return await matrix_cache.cached_response(
+        db, _admin, "product-consumption",
+        location_ids=location_ids, fornitore_id=fornitore_id, data_da=data_da, data_a=data_a,
+    )
+
+
 async def get_product_consumption(
     location_ids: str | None = Query(None),
     fornitore_id: int | None = Query(None),

@@ -189,6 +189,7 @@ async def _mark_upcoming_best_change(db: AsyncSession, rows: list[dict], price_o
         }
 
 
+@matrix_cache.view("matrix")
 def matrix_computer(user):
     """compute(db, params) for services.matrix_cache: the matrix for cached params, as `user`."""
     async def compute(db: AsyncSession, params: dict) -> dict:
