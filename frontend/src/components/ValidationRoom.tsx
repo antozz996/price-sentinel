@@ -289,7 +289,7 @@ export default function ValidationRoom() {
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Differenza Unitaria</span>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--crit)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                      + € {Number(ano.delta_prezzo).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ {unit}</span>
+                      + € {Number(ano.delta_prezzo).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style={{ fontSize: '0.8rem', fontWeight: 400 }}>/ {unit}</span>
                     </div>
                   </div>
                   <div>

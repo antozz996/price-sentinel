@@ -47,7 +47,7 @@ export function isLinePoint(point: PriceTrendPoint): boolean {
   return point.confrontabile && !point.is_reso && point.prezzo_pagato !== null;
 }
 
-const euro = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+const euro = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export function formatEuro(value: number | null | undefined): string {
   return value === null || value === undefined ? '-' : `€ ${euro.format(value)}`;

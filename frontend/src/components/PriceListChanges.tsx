@@ -41,7 +41,7 @@ const buttons: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6, marg
 const publicOrigin = (((import.meta as any).env?.VITE_PUBLIC_APP_URL || '').trim() || window.location.origin).replace(/\/$/, '');
 
 const euro = (value?: string | null) =>
-  value == null ? '—' : `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  value == null ? '—' : `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const day = (iso?: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('it-IT') : 'mai');
 const TIPI: Record<string, string> = { aumento: 'Aumento', ribasso: 'Ribasso', non_trattato: 'Non lo tratta più', nuova_offerta: 'Offerta nuova' };
 

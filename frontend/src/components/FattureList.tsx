@@ -506,7 +506,7 @@ export default function FattureList({ focus }: { focus?: { id: number; numero: s
                                           )}
                                         </td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                                          {Number(r.quantita).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
+                                          {Number(r.quantita).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                           {r.unita_misura_fattura && <span style={{ marginLeft: '4px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{r.unita_misura_fattura}</span>}
                                         </td>
                                         <td style={{ ...tdStyle, fontSize: '0.85rem', textAlign: 'right', fontWeight: 600, fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{formatEuro(lineAmount(r, f.tipo_documento))}</td>

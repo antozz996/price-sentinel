@@ -128,7 +128,7 @@ function euro(value?: string | null) {
 }
 
 function italianQuantity(value?: string | number | null) {
-  return Number(value || 0).toLocaleString('it-IT', { maximumFractionDigits: 3 })
+  return Number(value || 0).toLocaleString('it-IT', { maximumFractionDigits: 2 })
 }
 
 function quantityLabel(row: { quantita?: string; quantita_unita?: string | null }) {

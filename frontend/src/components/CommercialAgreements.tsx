@@ -581,7 +581,7 @@ export default function CommercialAgreements() {
                         {ag.rientro_accumulato === null ? '—' : `€ ${Number(ag.rientro_accumulato).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600, color: 'var(--accent-text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                        {ag.netto_rientro_medio === null ? '—' : `€ ${Number(ag.netto_rientro_medio).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`}
+                        {ag.netto_rientro_medio === null ? '—' : `€ ${Number(ag.netto_rientro_medio).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>
                         <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>

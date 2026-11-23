@@ -11,7 +11,7 @@ type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fo
 // Best comparable market price chosen by the buyer to be shown (no competitor names).
 const BASE_UNIT_LABELS: Record<string, string> = { kg: 'kg', liter: 'litro', piece: 'pezzo', box: 'confezione', bottle: 'bottiglia' };
 const bestPriceLabel = (price: string, unit: string) =>
-  `€ ${Number(price).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}/${BASE_UNIT_LABELS[unit] || unit}`;
+  `€ ${Number(price).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/${BASE_UNIT_LABELS[unit] || unit}`;
 
 // KG/L accept fractions down to 10 g/10 ml; every other unit is a whole count (mirrors the backend check).
 const quantityLimits = (unit: string) =>
@@ -27,7 +27,7 @@ const formatLabel = (quantita: string | null | undefined, unita: string) => {
 function UnitPriceHint({ prezzo, quantita, unita }: { prezzo: string; quantita: string; unita: string }) {
   const p = Number(prezzo), q = Number(quantita);
   if (!unita || !(p > 0) || !(q > 0)) return null;
-  const fmt = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const fmt = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return <small style={{ display: 'block', color: 'var(--text-primary)', fontWeight: 600 }}>
     {q === 1 ? `= € ${fmt(p)} per 1 ${unita}` : `${fmt(q)} ${unita} a € ${fmt(p)} = € ${fmt(p / q)} per 1 ${unita}`}
   </small>;

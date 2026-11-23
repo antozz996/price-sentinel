@@ -41,7 +41,7 @@ interface OrderItemSummary {
 // Unità che contano come colli (stesso elenco del backend, services/order_quantities.py)
 const PACK_UNITS = new Set(['CT', 'CNF', 'CS', 'COL', 'COLLI', 'COLLO', 'BOX', 'CASSA', 'CASSE']);
 
-const formatQty = (value: number) => value.toLocaleString('it-IT', { maximumFractionDigits: 3 });
+const formatQty = (value: number) => value.toLocaleString('it-IT', { maximumFractionDigits: 2 });
 
 // "30 KG · 24 PZ": quantità delle righe non a collo, ognuna nella sua unità
 const otherUnitsLabel = (perUom: Record<string, number> | undefined) =>
