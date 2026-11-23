@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { lazyPage, PageErrorBoundary, rememberActiveTab, restoreTabAfterUpdate } from './lazyPage'
-import { Activity, AlertTriangle, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, Star, Loader2 } from 'lucide-react'
+import { AlertTriangle, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, Star, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import NotificationCenterModal from './components/NotificationCenterModal'
@@ -567,17 +567,7 @@ export default function App() {
             border: '1px solid var(--line)'
           }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{
-                display: 'inline-flex',
-                padding: '12px',
-                borderRadius: 'var(--radius-lg)',
-                background: 'var(--accent-bg)',
-                color: 'var(--accent-text)',
-                marginBottom: '16px',
-                border: '1px solid var(--accent-border)'
-              }}>
-                <Activity size={32} />
-              </div>
+              <img src="/logo.svg" alt="" width={64} height={64} style={{ display: 'inline-block', marginBottom: '16px' }} />
               <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '8px', letterSpacing: '-0.03em' }}>{companySettings.company_name}</h2>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{companySettings.app_subtitle || 'Accedi con le tue credenziali operatore'}</p>
             </div>
@@ -823,9 +813,7 @@ export default function App() {
       <aside className={`sidebar ${mobileSidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-header" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-sm)', background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Activity color="var(--text-on-accent)" size={20} />
-            </div>
+            <img src="/logo.svg" alt="" width={32} height={32} style={{ display: 'block', flexShrink: 0 }} />
             <h2 style={{ fontSize: '1.1rem', margin: 0, fontWeight: 700, letterSpacing: '0.5px' }}>
               {accountName.toUpperCase()}
             </h2>
