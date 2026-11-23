@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Price Sentinel">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="rgb(91, 155, 255)"/><stop offset="1" stop-color="rgb(37, 84, 204)"/></linearGradient></defs>
+  <rect width="512" height="512" rx="116" fill="url(#g)"/>
+  <path d="M256 96 L388 142 V250 C388 334 332 394 256 424 C180 394 124 334 124 250 V142 Z" fill="rgba(255,255,255,0.12)" stroke="#fff" stroke-width="32" stroke-linejoin="round"/>
+  <polyline points="160,268 204,268 234,200 276,330 308,244 352,244" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
