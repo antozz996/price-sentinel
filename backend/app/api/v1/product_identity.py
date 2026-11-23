@@ -5,7 +5,7 @@ import re
 from decimal import Decimal
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, File, UploadFile
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, TypeAdapter, field_validator
 from sqlalchemy import select, delete, and_, or_, text, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import noload, selectinload
@@ -21,6 +21,7 @@ from app.models.fornitori import Fornitore
 from app.models.anomalie import Anomalia, StatoValidazione
 from app.models.purchase_policy import SupplierCategoryCapability
 from app.models.categories import MasterCategory
+from app.services import matrix_cache
 from app.services.normalization import (
     canonical_unit,
     extract_candidate_attributes,
@@ -369,7 +370,27 @@ async def bootstrap_santo_graal_catalog(
     }
 
 
+_PRODUCT_LIST = TypeAdapter(List[ProductResponse])
+
+
+@matrix_cache.view("products")
+def _products_computer(user):
+    async def compute(db: AsyncSession, params: dict):
+        # Same JSON as response_model=List[ProductResponse] (validated from the ORM rows).
+        rows = await list_products(db=db, _user=user)
+        return _PRODUCT_LIST.dump_python(_PRODUCT_LIST.validate_python(rows, from_attributes=True), mode="json", by_alias=True)
+    return compute
+
+
 @router.get("/products", response_model=List[ProductResponse], summary="Ottiene tutti i prodotti canonici")
+async def list_products_endpoint(
+    db: AsyncSession = Depends(get_db),
+    _user: Utente = Depends(get_current_user)
+):
+    """list_products served from services.matrix_cache while the data is unchanged (4 MB of JSON)."""
+    return await matrix_cache.cached_response(db, _user, "products")
+
+
 async def list_products(
     db: AsyncSession = Depends(get_db),
     _user: Utente = Depends(get_current_user)

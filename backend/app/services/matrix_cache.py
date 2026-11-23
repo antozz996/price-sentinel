@@ -16,6 +16,11 @@ the cache can only be bypassed, never stale.
 The automation leader worker also re-computes the pages used in the last hours
 as soon as the fingerprint changes (warm_loop), so the first visit after an
 invoice import or a price change is fast too.
+
+Other heavy read-only views built on the same tables (dashboard waste,
+consumption report, product list) use the same cache through view() and
+cached_response(): params carry their "kind" (entries without it are matrix
+pages) and warm_loop finds their compute in COMPUTERS.
 """
 
 from __future__ import annotations
@@ -30,7 +35,7 @@ from types import SimpleNamespace
 from typing import Awaitable, Callable
 
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import event, text
 
 from app.database import Base, async_session_factory, engine
@@ -41,6 +46,7 @@ SOURCE_TABLES = (
     "fatture",
     "fornitori",
     "listino_master",
+    "location",
     "product_purchase_policies",
     "product_supplier_assessments",
     "products",
@@ -51,6 +57,7 @@ SOURCE_TABLES = (
     "supplier_price_changes",
     "supplier_product_aliases",
     "supplier_subcategory_capabilities",
+    "xml_raw",
 )
 
 CACHE_DDL = (
@@ -77,6 +84,34 @@ _TOUCHED = "matrix_cache_touched"
 _locks: dict[str, asyncio.Lock] = {}
 
 Compute = Callable[..., Awaitable[dict]]
+ComputeFactory = Callable[[object], Compute]
+# kind -> factory(user) -> compute(db, params); filled by view() at import time.
+COMPUTERS: dict[str, ComputeFactory] = {}
+
+
+def view(kind: str):
+    """Register a cached view: decorates factory(user) -> compute(db, params)."""
+    def register(factory: ComputeFactory) -> ComputeFactory:
+        COMPUTERS[kind] = factory
+        return factory
+    return register
+
+
+def view_params(kind: str, user, **extra) -> dict:
+    """Cache params of a view: kind, tenant, today's date and the request filters."""
+    from app.services.tenant_scope import user_tenant_id
+
+    return {
+        "kind": kind, "tenant_id": user_tenant_id(user), "today": date.today().isoformat(),
+        **{name: value.isoformat() if isinstance(value, date) else value for name, value in extra.items()},
+    }
+
+
+async def cached_response(db, user, kind: str, **extra) -> Response:
+    """JSON response of a registered view, from the cache while the data is unchanged."""
+    params = view_params(kind, user, **extra)
+    body = await get_or_compute(db, params, COMPUTERS[kind](user))
+    return Response(content=body, media_type="application/json")
 
 
 @event.listens_for(engine.sync_engine, "after_cursor_execute")
@@ -174,7 +209,7 @@ async def ensure_table(conn) -> None:
     await conn.execute(text(CACHE_DDL))
 
 
-async def warm_once(compute_factory: Callable[[object], Compute]) -> int:
+async def warm_once(computers: dict[str, ComputeFactory] = COMPUTERS) -> int:
     """Re-compute the recently used pages whose fingerprint is outdated. Returns how many."""
     async with async_session_factory() as db:
         await db.execute(text(
@@ -193,10 +228,13 @@ async def warm_once(compute_factory: Callable[[object], Compute]) -> int:
     for key, params in stale:
         if params.get("today") != today:
             continue  # yesterday's key: today's pages get new keys when first opened
+        factory = computers.get(params.get("kind", "matrix"))
+        if factory is None:
+            continue
         async with async_session_factory() as db:
             fp = await fingerprint(db)
             user = SimpleNamespace(tenant_id=params["tenant_id"], ruolo="admin", location_id=None)
-            body, cacheable = await _compute_body(db, compute_factory(user), params)
+            body, cacheable = await _compute_body(db, factory(user), params)
             if cacheable:
                 await _store(db, key, params, fp, body)
             await db.commit()
@@ -205,11 +243,11 @@ async def warm_once(compute_factory: Callable[[object], Compute]) -> int:
     return done
 
 
-async def warm_loop(compute_factory: Callable[[object], Compute]) -> None:
+async def warm_loop() -> None:
     while True:
         await asyncio.sleep(WARM_INTERVAL_SECONDS)
         try:
-            done = await warm_once(compute_factory)
+            done = await warm_once()
             if done:
                 logger.info("matrix_cache_warmed pages=%s", done)
         except asyncio.CancelledError:

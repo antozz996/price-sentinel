@@ -42,8 +42,8 @@ async def _automation_leader() -> None:
                 conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
                 if await conn.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": _AUTOMATION_LOCK_KEY}):
                     logger.info("automation_leader_acquired")
-                    from app.api.v1.smart_price_sheet import matrix_computer
-                    await asyncio.gather(_automation_loop(), matrix_cache.warm_loop(matrix_computer))
+                    # The cached views registered themselves in matrix_cache.COMPUTERS when api_router was imported.
+                    await asyncio.gather(_automation_loop(), matrix_cache.warm_loop())
         except asyncio.CancelledError:
             raise
         except Exception:
