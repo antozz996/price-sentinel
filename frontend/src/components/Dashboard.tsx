@@ -46,7 +46,7 @@ const REFERENCE_LABELS: Record<string, string> = {
 
 function formatUnitPrice(value: number | null): string {
   if (value === null || value === undefined) return 'n.d.';
-  return `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  return `€ ${value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatPeriodStart(isoDate: string | null): string {

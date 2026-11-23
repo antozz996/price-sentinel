@@ -485,7 +485,7 @@ export default function ProductReviewPage({ userProfile }: { userProfile?: UserP
                         <span style={{ color: 'var(--text-muted)' }}>•</span>
                         <span style={{ color: 'var(--text-secondary)' }}>
                           Miglior listino: <strong style={{ color: 'var(--text-primary)' }}>{prod.miglior_listino_fornitore}</strong>{' '}
-                          € {prod.prezzo_riferimento.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                          € {prod.prezzo_riferimento.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           {prod.prezzo_riferimento_unita ? ` / ${prod.prezzo_riferimento_unita}` : ''}
                         </span>
                       </>

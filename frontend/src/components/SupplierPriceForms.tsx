@@ -23,7 +23,7 @@ const FORM_STATUS_LABELS: Record<string, string> = {
 const formStatusLabel = (status: string) => FORM_STATUS_LABELS[status] ?? status;
 const BASE_UNIT_LABELS: Record<string, string> = { kg: 'kg', liter: 'litro', piece: 'pezzo', box: 'confezione', bottle: 'bottiglia' };
 const bestPriceText = (price: string, unit?: string | null) =>
-  `€ ${Number(price).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}/${BASE_UNIT_LABELS[unit || ''] || unit || ''}`;
+  `€ ${Number(price).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/${BASE_UNIT_LABELS[unit || ''] || unit || ''}`;
 type CreatedLink = { supplier: Supplier; url: string; publicPath: string };
 type MatrixResponse = { categories?: Category[]; suppliers?: CapabilitySupplier[] };
 

@@ -521,7 +521,7 @@ export default function PriceListManager() {
                               <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>SKU: {it.sku_interno}</div>
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: 'var(--ok)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
-                              € {it.prezzo_pattuito.toFixed(4)}
+                              € {it.prezzo_pattuito.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </td>
                             <td style={{ padding: '8px 8px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                               {it.unita_misura}
