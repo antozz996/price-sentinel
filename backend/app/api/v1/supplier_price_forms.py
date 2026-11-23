@@ -169,7 +169,7 @@ async def _offer_formats(db: AsyncSession, supplier_id: int, rows: list[ListinoM
         offer = approved.get(alias.supplier_code)
         if offer:
             formats[row.id] = (Decimal(offer["quantita_confezione"]), offer["unita_misura"],
-                               offer.get("dicitura_fornitore"), offer.get("marca"))
+                               _supplier_wording(offer.get("dicitura_fornitore")), offer.get("marca"))
             continue
         product = products.get(row.sku_interno)
         if alias.weight_g:
@@ -181,10 +181,19 @@ async def _offer_formats(db: AsyncSession, supplier_id: int, rows: list[ListinoM
             unit = _PACK_UNIT_BY_COMPARISON.get((product.comparison_unit or "").strip().lower()) if product else None
         else:
             quantity, unit = None, None
-        # Imported aliases may carry our internal code as description: never show it as the supplier's wording.
-        wording = alias.raw_description if alias.raw_description and alias.raw_description.strip() != row.sku_interno else None
-        formats[row.id] = (quantity if unit else None, unit, wording, alias.brand)
+        formats[row.id] = (quantity if unit else None, unit, _supplier_wording(alias.raw_description), alias.brand)
     return formats
+
+
+# Our internal product codes (SG3-..., CAN-...). Imported aliases and old forms may carry one,
+# even the code of a since-merged product, as the supplier's wording.
+_INTERNAL_CODE = re.compile(r"^(SG3|CAN)-[0-9A-Z-]+$")
+
+
+def _supplier_wording(text: str | None) -> str | None:
+    """Supplier's own wording to show back to them; never one of our internal codes."""
+    text = (text or "").strip()
+    return text if text and not _INTERNAL_CODE.match(text) else None
 
 
 async def _active_supplier_rows(db: AsyncSession, supplier_id: int) -> list[ListinoMaster]:
