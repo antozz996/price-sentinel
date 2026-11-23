@@ -191,7 +191,11 @@ async def build_variant_preview(db: AsyncSession, request: VariantPricePreviewRe
         current = active.get(alias.id) if alias else None
         price = f"{r.price.quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP):.4f}"
         unit = "conf" if r.package_confirmed and pack_qty is not None and product.comparison_unit else None
-        same = bool(current and _price_state(current)["price"] == price
+        if unit is None and current is not None and current.unita_misura:
+            # Same offer, new price: keep the unit already set (often by hand) instead of
+            # dropping it, which would hide the offer from the Listino Smart again.
+            unit = current.unita_misura
+        same =bool(current and _price_state(current)["price"] == price
                     and current.unita_misura == unit)
         changes.append({
             "product_id": product.id, "supplier_id": supplier.id, "sku": r.sku,
@@ -204,6 +208,9 @@ async def build_variant_preview(db: AsyncSession, request: VariantPricePreviewRe
         })
     counts = {name: sum(c["action"] == name for c in changes) for name in ("create", "update", "unchanged")}
     counts["errors"] = len(errors)
+    # Prices without a unit are saved but not comparable: the Listino Smart leaves them out
+    # of the supplier column. Counted so the preview says so before saving.
+    counts["without_unit"] = sum(c["price_unit"] is None for c in changes)
     payload = {"version": 3, "effective_date": request.effective_date.isoformat(),
                "changes": changes, "errors": errors, "counts": counts,
                "can_commit": bool(changes) and not errors}
