@@ -38,7 +38,7 @@ interface ProductOffer {
   uom?: string | null;
 }
 
-interface VariantOffer {
+export interface VariantOffer {
   offer_id: string;
   supplier_id: number;
   supplier_name: string;
@@ -90,7 +90,7 @@ export interface SectorPriceQuoteResponse {
   fornitori: SectorPriceQuoteSupplierDetail[];
 }
 
-interface ProductItem {
+export interface ProductItem {
   id: number;
   sku_interno: string | null;
   canonical_name: string;
@@ -107,7 +107,7 @@ interface ProductItem {
   variant_offers?: VariantOffer[];
 }
 
-interface LocationItem {
+export interface LocationItem {
   id: number;
   nome_struttura: string;
   indirizzo?: string | null;
@@ -129,7 +129,7 @@ interface SupplierOrderItemDetail {
   note_omaggio?: string | null;
 }
 
-interface SupplierOrderBundle {
+export interface SupplierOrderBundle {
   fornitore_id: number;
   fornitore_nome: string;
   partita_iva?: string | null;
@@ -143,7 +143,7 @@ interface SupplierOrderBundle {
   whatsapp_url: string;
 }
 
-interface SectorOrderDraftResponse {
+export interface SectorOrderDraftResponse {
   location_id: number;
   location_nome: string;
   location_indirizzo?: string | null;
@@ -163,7 +163,7 @@ const MACRO_CATEGORIES = [
   { id: 'Materiali di consumo', label: 'Materiali di consumo', icon: '📦', color: 'var(--ok)' }
 ];
 
-function orderSector(category?: string | null): string {
+export function orderSector(category?: string | null): string {
   return category?.trim().toLowerCase() === 'materiali'
     ? 'Materiali di consumo'
     : category?.trim() || '';

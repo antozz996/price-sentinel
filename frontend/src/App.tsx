@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { lazyPage, PageErrorBoundary, rememberActiveTab, restoreTabAfterUpdate } from './lazyPage'
-import { AlertTriangle, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, Star, Loader2 } from 'lucide-react'
+import { AlertTriangle, LogOut, LayoutDashboard, Settings, FileUp, FileText, Lock, Mail, Grid, Menu, X, TrendingUp, Percent, Layers, HandCoins, BellRing, ChevronDown, Boxes, ShoppingCart, Bell, ClipboardList, Star, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import Dashboard from './components/Dashboard'
 import NotificationCenterModal from './components/NotificationCenterModal'
@@ -25,6 +25,7 @@ const DisputeManagement = lazyPage(() => import('./components/DisputeManagement'
 const OperationalAlerts = lazyPage(() => import('./components/OperationalAlerts'))
 const ClientOnboarding = lazyPage(() => import('./components/ClientOnboarding'))
 const SectorOrderBuilder = lazyPage(() => import('./components/SectorOrderBuilder'))
+const SimpleOrderFlow = lazyPage(() => import('./components/SimpleOrderFlow'))
 const OrderRegistry = lazyPage(() => import('./components/OrderRegistry'))
 const GoodsReceipt = lazyPage(() => import('./components/GoodsReceipt'))
 const ProductReviewPage = lazyPage(() => import('./components/ProductReviewPage'))
@@ -34,7 +35,7 @@ const SupplierPriceForms = lazyPage(() => import('./components/SupplierPriceForm
 const SupplierPricePublicForm = lazyPage(() => import('./components/SupplierPricePublicForm'))
 const SupplierOpenPriceList = lazyPage(() => import('./components/SupplierOpenPriceList'))
 const PriceListChanges = lazyPage(() => import('./components/PriceListChanges'))
-import { API_BASE, fetchWithAuth, getHeaders, refreshAuthSession, storeSession } from './api'
+import { API_BASE, fetchWithAuth, getHeaders, logoutSession, refreshAuthSession, storeSession } from './api'
 
 type UserProfile = {
   id: number
@@ -508,6 +509,11 @@ export default function App() {
     }
   }
 
+  const handleLogout = async () => {
+    await logoutSession();
+    window.location.reload();
+  };
+
   const getRoleLabel = () => {
     if (!profile) return 'Operatore';
     if (profile.ruolo === 'admin') return '👑 Amministratore';
@@ -789,6 +795,17 @@ export default function App() {
     );
   }
 
+  // Sector managers (responsabile_*) only place orders: they get the simple flow, full screen.
+  if (isAuth && profile && isSectorResp && !isGodMode) {
+    return (
+      <PageErrorBoundary>
+        <Suspense fallback={<main style={{ minHeight: '100vh', padding: 24, background: 'var(--bg-app)', color: 'var(--text-primary)' }}>Caricamento…</main>}>
+          <SimpleOrderFlow userProfile={profile} accountName={companySettings.company_name || 'Price Sentinel'} onLogout={handleLogout} />
+        </Suspense>
+      </PageErrorBoundary>
+    );
+  }
+
   if (supplierPublicMatch) {
     return (
       <PageErrorBoundary>
@@ -912,6 +929,9 @@ export default function App() {
             <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{getRoleLabel()}</span>
             <small>{profile?.nome_completo || profile?.email || 'Profilo in caricamento…'}</small>
           </div>
+          <button type="button" className="sidebar-nav-item" onClick={handleLogout} style={{ marginTop: 8, width: '100%' }}>
+            <LogOut size={17} /> Esci
+          </button>
         </div>
       </aside>
 
