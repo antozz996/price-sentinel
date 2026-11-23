@@ -65,7 +65,7 @@ type Preview = {
   status: string
   expires_at: string
   can_commit: boolean
-  counts: { create: number; update: number; unchanged: number; errors: number }
+  counts: { create: number; update: number; unchanged: number; errors: number; without_unit?: number }
   changes: Array<{
     row: number
     product_name: string
@@ -807,6 +807,7 @@ export default function SmartPriceSheet({ isAdmin }: { isAdmin: boolean }) {
             {preview.counts.create} prezzi nuovi · {preview.counts.update} aggiornati · {preview.counts.unchanged} invariati · {preview.order_name_changes?.length || 0} nomi rapidi
             {autoCreateCount > 0 && <span style={{ color: 'var(--accent-text)', fontWeight: 600 }}> · {autoCreateCount} nuovi prodotti da creare</span>}
             {autoSuppliersCount > 0 && <span style={{ color: 'var(--info)', fontWeight: 600 }}> · {autoSuppliersCount} nuovi fornitori provvisori</span>}
+            {(preview.counts.without_unit || 0) > 0 && <span style={{ color: 'var(--warning, #d97706)', fontWeight: 600 }}> · {preview.counts.without_unit} senza unità: non compariranno nel Listino Smart</span>}
             {' · '}{preview.counts.errors > 0 ? `${preview.counts.errors} errori` : 'Nessun errore'}
           </span>
         </div>
