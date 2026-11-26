@@ -429,7 +429,16 @@ async def get_public_form(
         .where(Product.sku_interno.in_(skus), Product.supplier_form_note.is_not(None))
     )).all()) if skus else {}
     needs_details = _needs_supplier_details(request.supplier)
+    # Settori dei prodotti chiesti: gli esempi di unità si adattano (niente frutta a chi vende detersivi).
+    categories = (await db.execute(select(Product.category, func.count()).where(
+        Product.sku_interno.in_(skus)).group_by(Product.category))).all() if skus else []
+    sector_of = {"beverage": "beverage", "materiali": "materiali", "materiali di consumo": "materiali", "attrezzatura": "materiali"}
+    weights: dict[str, int] = {}
+    for category, count in categories:
+        key = sector_of.get((category or "").strip().casefold(), "food")
+        weights[key] = weights.get(key, 0) + count
     return {
+        "settori": sorted(weights, key=lambda k: -weights[k]),
         # Un fornitore nuovo ha un nome provvisorio interno (es. «Caseificio da contattare»): non glielo mostriamo.
         "supplier_name": None if needs_details else request.supplier.nome_azienda,
         "validita_min": (datetime.now(ZoneInfo("Europe/Rome")).date() - timedelta(days=VALIDITY_PAST_DAYS)).isoformat(),
