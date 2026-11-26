@@ -164,6 +164,22 @@ async def _apply_one(db: AsyncSession, change_id: int, today: date, now: datetim
         change.decisione_at = now
         summary["superate"] += 1
         return
+    if (plan.nuova_dal is not None and plan.nuova_dal == origin.data_inizio_validita
+            and origin.origine == ORIGINE_LISTINO_APERTO):
+        # Correzione nello stesso giorno di un prezzo nato dal listino aperto: si corregge la riga.
+        # Chiuderla «il giorno prima» non si può (finirebbe dove inizia) e lascerebbe due prezzi
+        # validi lo stesso giorno, cioè nessun prezzo per il controllo fatture.
+        origin.prezzo_pattuito = Decimal(str(change.prezzo_nuovo))
+        await db.flush()
+        change.stato = STATO_APPLICATO
+        change.applicato_at = now
+        change.applicato_listino_id = origin.id
+        summary["applicate"] += 1
+        checked = await recheck_invoices(db, fornitore_id=change.fornitore_id, sku_interno=change.sku_interno,
+                                         dal=change.decorrenza)
+        summary["righe_ricontrollate"] += checked["righe"]
+        summary["anomalie_nuove"] += checked["anomalie_nuove"]
+        return
     origin.data_scadenza = plan.chiudi_al
     new_row = None
     if plan.nuova_dal is not None:
@@ -199,14 +215,30 @@ async def apply_due_price_changes(db: AsyncSession, *, today: date | None = None
         return {**summary, "saltato": True}
     # Solo gli id, senza lock: il lock per offerta si prende prima della riga
     # (stesso ordine della pagina del fornitore, niente stallo).
-    ids = (await db.scalars(
-        select(SupplierPriceChange.id)
-        .where(SupplierPriceChange.stato == STATO_PROGRAMMATO, SupplierPriceChange.decorrenza <= today)
-        .order_by(SupplierPriceChange.decorrenza, SupplierPriceChange.id)
-        .limit(MAX_PER_RUN)
-    )).all()
-    for change_id in ids:
-        await _apply_one(db, change_id, today, now, summary)
-    if ids:
+    # Una modifica che va in errore non blocca le altre (savepoint per modifica) e non si
+    # riprova in questo giro; alle date fisse si continua a blocchi finché resta qualcosa.
+    failed: list[int] = []
+    any_done = False
+    while True:
+        query = (select(SupplierPriceChange.id)
+                 .where(SupplierPriceChange.stato == STATO_PROGRAMMATO, SupplierPriceChange.decorrenza <= today)
+                 .order_by(SupplierPriceChange.decorrenza, SupplierPriceChange.id)
+                 .limit(MAX_PER_RUN))
+        if failed:
+            query = query.where(SupplierPriceChange.id.not_in(failed))
+        ids = (await db.scalars(query)).all()
+        for change_id in ids:
+            try:
+                async with db.begin_nested():
+                    await _apply_one(db, change_id, today, now, summary)
+            except Exception:
+                logger.exception("listino_aperto_errore modifica %s", change_id)
+                failed.append(change_id)
+        any_done = any_done or bool(ids)
+        if len(ids) < MAX_PER_RUN:
+            break
+    if failed:
+        summary["errori"] = len(failed)
+    if any_done:
         logger.info("listino_aperto_applicato %s", summary)
     return summary

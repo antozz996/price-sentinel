@@ -4,7 +4,7 @@ import { API_BASE } from '../api';
 import { normalizeSupplierUnit, SUPPLIER_UNIT_OPTIONS } from '../constants/units';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; dicitura_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null; istruzioni?: string | null; miglior_prezzo?: { prezzo: string; unita: string; siete_i_migliori: boolean } | null };
-type FormData = { supplier_name: string; requires_supplier_details?: boolean; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
+type FormData = { supplier_name: string | null; validita_min?: string; validita_max?: string; requires_supplier_details?: boolean; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
 type ExtraOffer = { key: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota: string };
 type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string; extraOffers: ExtraOffer[] };
 
@@ -15,7 +15,8 @@ const bestPriceLabel = (price: string, unit: string) =>
 
 // KG/L accept fractions down to 10 g/10 ml; every other unit is a whole count (mirrors the backend check).
 const quantityLimits = (unit: string) =>
-  ['KG', 'L'].includes((unit || '').toUpperCase()) ? { min: '0.01', step: '0.01' } : { min: '1', step: '1' };
+  // step "any": formati precompilati come 0,125 KG o 0,375 L devono passare il controllo del browser.
+  ['KG', 'L'].includes((unit || '').toUpperCase()) ? { min: '0.001', step: 'any' } : { min: '1', step: '1' };
 
 // "€ 3,00 per 0,25 KG" or "€ 1,00 / KG" for the agreed offer format.
 const formatLabel = (quantita: string | null | undefined, unita: string) => {
@@ -69,7 +70,8 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
           const saved = JSON.parse(localStorage.getItem(draftKey) || 'null');
           setAnswers(saved?.answers && form.items.every(i => saved.answers[i.id]) ? Object.fromEntries(form.items.map(i => [i.id, { ...initial[i.id], ...saved.answers[i.id], extraOffers: saved.answers[i.id].extraOffers || [] }])) : initial);
           if (saved?.answers) { setValiditaDa(saved.validitaDa || ''); setValiditaA(saved.validitaA || ''); setDraftNotice('Bozza recuperata da questo browser.'); }
-        } catch { setAnswers(initial); }
+          else setValiditaDa(new Date().toLocaleDateString('sv-SE'));
+        } catch { setAnswers(initial); setValiditaDa(new Date().toLocaleDateString('sv-SE')); }
       })
       .catch(e => { if (active) setError(e.message || 'Impossibile caricare il modulo'); })
       .finally(() => { if (active) setLoading(false); });
@@ -88,9 +90,18 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   const removeExtraOffer = (id: number, key: string) => setAnswers(prev => ({ ...prev, [id]: { ...prev[id], extraOffers: prev[id].extraOffers.filter(offer => offer.key !== key) } }));
 
   const saveDraft = () => {
-    localStorage.setItem(draftKey, JSON.stringify({ answers, validitaDa, validitaA }));
+    try { localStorage.setItem(draftKey, JSON.stringify({ answers, validitaDa, validitaA })); } catch { /* salvataggio non disponibile */ }
     setDraftNotice('Bozza salvata in questo browser. Puoi tornare usando lo stesso link.');
   };
+
+  // Salvataggio automatico: sul telefono passare a WhatsApp e tornare non deve far perdere quanto scritto.
+  useEffect(() => {
+    if (!data || done || !Object.keys(answers).length) return;
+    const timer = window.setTimeout(() => {
+      try { localStorage.setItem(draftKey, JSON.stringify({ answers, validitaDa, validitaA })); } catch { /* salvataggio non disponibile */ }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [data, done, answers, validitaDa, validitaA, draftKey]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!data) return;
@@ -110,7 +121,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(apiErrorMessage(body.detail, 'Invio non riuscito'));
-      localStorage.removeItem(draftKey);
+      try { localStorage.removeItem(draftKey); } catch { /* niente */ }
       setDone(true);
     } catch (e) { setError(e instanceof Error ? e.message : 'Invio non riuscito'); }
     finally { setSending(false); }
@@ -125,7 +136,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
   if (!data) return null;
 
   return <main style={wrap}><form style={box} onSubmit={submit}>
-    <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'} · {data.supplier_name}</h1>
+    <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'}{data.supplier_name ? ` · ${data.supplier_name}` : ''}</h1>
     <p>Per ogni prodotto trattato indica il prezzo e a cosa si riferisce (di solito 1 kg o 1 pezzo). Marca e vostra denominazione sono facoltative: compilale solo se diverse dalla nostra descrizione (per frutta e verdura sfusa di solito puoi lasciarle vuote). La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>
     <p style={{ padding: 12, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Come indicare il prezzo:</strong> scrivi il prezzo e per quanto vale: <strong>€ … per 1 KG</strong> oppure <strong>€ … per 1 PZ</strong>.<br />
       • <strong>Venduto a peso (sfuso)</strong>: melanzane a € 1,50 al kg → € 1,50 per 1 KG.<br />
@@ -147,7 +158,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
       <h2 style={{ fontSize: '1.1rem', marginTop: 0 }}>Periodo di validità del listino</h2>
       <p style={{ color: 'var(--text-secondary)' }}>Indica da quando vale la tua offerta. La data di fine è facoltativa; un prezzo approvato resta operativo fino alla successiva approvazione.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10 }}>
-        <label>Valido dal<input style={input} type="date" required value={validitaDa} onChange={e => setValiditaDa(e.target.value)} /></label>
+        <label>Valido dal<input style={input} type="date" required min={data.validita_min || undefined} max={data.validita_max || undefined} value={validitaDa} onChange={e => setValiditaDa(e.target.value)} /></label>
         <label>Valido fino al (facoltativo)<input style={input} type="date" min={validitaDa || undefined} value={validitaA} onChange={e => setValiditaA(e.target.value)} /></label>
       </div>
     </section>
