@@ -35,7 +35,8 @@ type Summary = { ribassi: number; aumenti: number; non_trattati: number; sospese
 const UNITA: Record<string, string> = { KG: 'al kg', PZ: 'al pezzo', L: 'al litro', CT: 'a cartone', CASSA: 'a cassa' };
 const CON_CONTENUTO = ['CT', 'CASSA'];
 
-const euro = (value: string | number) => `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Sotto 1 € fino a 4 decimali: un fornitore che ricopia «0,05» al posto di 0,045 farebbe un aumento dell'11%.
+const euro = (value: string | number) => `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: Math.abs(Number(value)) < 1 ? 4 : 2 })}`;
 const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('it-IT', { day: 'numeric', month: 'long' });
 // Ultimo giorno del prezzo attuale: il giorno prima della prossima data fissa (calcolata dal server a ogni apertura).
 const dayBefore = (iso: string) => {

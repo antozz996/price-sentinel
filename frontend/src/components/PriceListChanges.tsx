@@ -41,7 +41,8 @@ const buttons: CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: 6, marg
 const publicOrigin = (((import.meta as any).env?.VITE_PUBLIC_APP_URL || '').trim() || window.location.origin).replace(/\/$/, '');
 
 const euro = (value?: string | null) =>
-  value == null ? '—' : `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  // Sotto 1 € fino a 4 decimali (bustine a 0,045): arrotondato, 0,045 → 0,048 sembrerebbe «0,05 → 0,05».
+  value == null ? '—' : `€ ${Number(value).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: Math.abs(Number(value)) < 1 ? 4 : 2 })}`;
 const day = (iso?: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString('it-IT') : 'mai');
 const TIPI: Record<string, string> = { aumento: 'Aumento', ribasso: 'Ribasso', non_trattato: 'Non lo tratta più', nuova_offerta: 'Offerta nuova' };
 
