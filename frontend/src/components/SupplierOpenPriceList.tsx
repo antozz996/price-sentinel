@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { API_BASE } from '../api';
+import NewSystemNotice from './NewSystemNotice';
 
 // Listino sempre aperto: il fornitore cambia i prezzi quando vuole, corregge il suo nome
 // per un prodotto e propone prodotti nuovi. Il nostro nome (in grassetto) lo decidiamo noi.
@@ -368,6 +369,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
     <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)' }}>
       {total} prodotti{quoteList.length ? `, di cui ${quoteList.length} non ancora nel vostro listino` : ''} · link personale, sempre lo stesso, non scade
     </p>
+    <NewSystemNotice />
 
     <div style={{ ...panel, marginBottom: 12 }}>
       <strong>Come si fa</strong>
