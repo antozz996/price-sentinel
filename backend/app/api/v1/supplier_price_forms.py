@@ -184,6 +184,11 @@ async def _offer_formats(db: AsyncSession, supplier_id: int, rows: list[ListinoM
             unit = _PACK_UNIT_BY_COMPARISON.get((product.comparison_unit or "").strip().lower()) if product else None
         else:
             quantity, unit = None, None
+        if not unit:
+            # Collegamento senza confezione: vale l'unità scritta sulla riga di listino (PZ, CT, CF...).
+            row_unit = (row.unita_misura or "").strip().upper()
+            unit = row_unit if row_unit in ALLOWED_UNITS and row_unit != "CONF" else None
+            quantity = None
         formats[row.id] = (quantity if unit else None, unit, _supplier_wording(alias.raw_description), alias.brand)
     return formats
 
