@@ -216,10 +216,17 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
                 "sospesa": change.stato == "trattenuto",
             } if change else None,
         })
+    # Settori del fornitore (dai prodotti che vede), per mostrargli esempi di unità del suo mestiere.
+    all_skus = skus | set(sector)
+    categories = (await db.execute(select(Product.category, func.count()).where(
+        Product.sku_interno.in_(all_skus)).group_by(Product.category))).all() if all_skus else []
+    settori = sorted({_SETTORE_ESEMPI.get((c or "").strip().casefold(), "food") for c, _n in categories if c},
+                     key=lambda s: -sum(n for c, n in categories if _SETTORE_ESEMPI.get((c or "").strip().casefold(), "food") == s))
     link.ultimo_accesso_at = datetime.now(timezone.utc)
     await db.commit()
     return {
         "fornitore": supplier_name,
+        "settori": settori,
         "oggi": today.isoformat(),
         "prossima_data_fissa": next_fixed_date(today).isoformat(),
         "ultima_conferma": link.ultima_conferma_at.isoformat() if link.ultima_conferma_at else None,
@@ -232,6 +239,12 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
             "prezzo": _money(p.prezzo), "created_at": p.created_at.isoformat(),
         } for p in proposals if p.tipo == PROPOSTA_PRODOTTO_NUOVO and not p.sku_interno],
     }
+
+
+_SETTORE_ESEMPI = {
+    "food": "food", "beverage": "beverage", "materiali": "materiali", "materiali di consumo": "materiali",
+    "attrezzatura": "materiali", "gelati confezionati": "food",
+}
 
 
 def top_products(skus, spend: dict[str, Decimal], limit: int = TOP_PRODUCTS) -> set[str]:

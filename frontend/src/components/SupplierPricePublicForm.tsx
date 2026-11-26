@@ -4,7 +4,24 @@ import { API_BASE } from '../api';
 import { normalizeSupplierUnit, SUPPLIER_UNIT_OPTIONS } from '../constants/units';
 
 type PublicItem = { id: number; sku_interno: string; descrizione: string; prezzo_corrente?: string | null; unita_corrente?: string | null; quantita_corrente?: string | null; dicitura_corrente?: string | null; brand_corrente?: string | null; validita_corrente_da?: string | null; validita_corrente_a?: string | null; istruzioni?: string | null; miglior_prezzo?: { prezzo: string; unita: string; siete_i_migliori: boolean } | null };
-type FormData = { supplier_name: string | null; validita_min?: string; validita_max?: string; requires_supplier_details?: boolean; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
+// Esempi per settore dei prodotti chiesti: a chi vende detersivi non si parla di melanzane.
+const FORM_EXAMPLES: Record<string, [string, string][]> = {
+  food: [
+    ['Venduto a peso (sfuso)', 'melanzane a € 1,50 al kg → € 1,50 per 1 KG.'],
+    ['Venduto a pezzo', 'ananas a € 3,00 l’uno → € 3,00 per 1 PZ.'],
+    ['Solo se vendi una confezione chiusa', 'sacco di patate da 2 kg a € 2,00 → € 2,00 per 2 KG; cartone da 6 pezzi a € 12,00 → € 12,00 per 6 PZ.'],
+  ],
+  beverage: [
+    ['Bottiglia singola', 'vodka 70 cl a € 10,25 → € 10,25 per 1 BT.'],
+    ['Cartone o cassa', 'cartone da 24 lattine a € 19,67 → € 19,67 per 24 PZ.'],
+  ],
+  materiali: [
+    ['Venduto a pezzo', 'tanica detersivo piatti 10 L a € 12,50 → € 12,50 per 1 PZ.'],
+    ['Confezione chiusa', 'bicchieri in confezione da 50 a € 1,65 → € 1,65 per 50 PZ; cartone sacchi rifiuti da 18 kg a € 28,00 → € 28,00 per 18 KG.'],
+  ],
+};
+
+type FormData = { settori?: string[]; supplier_name: string | null; validita_min?: string; validita_max?: string; requires_supplier_details?: boolean; request_type: 'confirmation' | 'new_listino'; expires_at: string; note?: string | null; items: PublicItem[] };
 type ExtraOffer = { key: string; prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; nota: string };
 type Answer = { prezzo: string; unita_misura: string; marca: string; dicitura_fornitore: string; quantita_confezione: string; conferma_prezzo: boolean; non_trattato: boolean; nota: string; extraOffers: ExtraOffer[] };
 
@@ -139,9 +156,7 @@ export default function SupplierPricePublicForm({ token }: { token: string }) {
     <h1 style={{ marginTop: 0 }}>{data.request_type === 'new_listino' ? 'Nuova offerta listino' : 'Conferma listino'}{data.supplier_name ? ` · ${data.supplier_name}` : ''}</h1>
     <p>Per ogni prodotto trattato indica il prezzo e a cosa si riferisce (di solito 1 kg o 1 pezzo). Marca e vostra denominazione sono facoltative: compilale solo se diverse dalla nostra descrizione (per frutta e verdura sfusa di solito puoi lasciarle vuote). La risposta sarà revisionata dall’azienda prima di aggiornare il listino.</p>
     <p style={{ padding: 12, border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-md)', background: 'var(--warn-bg)', color: 'var(--text-primary)' }}><strong>Come indicare il prezzo:</strong> scrivi il prezzo e per quanto vale: <strong>€ … per 1 KG</strong> oppure <strong>€ … per 1 PZ</strong>.<br />
-      • <strong>Venduto a peso (sfuso)</strong>: melanzane a € 1,50 al kg → € 1,50 per 1 KG.<br />
-      • <strong>Venduto a pezzo</strong>: ananas a € 3,00 l’uno → € 3,00 per 1 PZ.<br />
-      • <strong>Solo se vendi una confezione chiusa</strong> (sacco, vaschetta, cartone) e non il singolo kg o pezzo, indica quanto contiene: sacco di patate da 2 kg a € 2,00 → € 2,00 per 2 KG; cartone da 6 pezzi a € 12,00 → € 12,00 per 6 PZ.<br />
+      {(data.settori?.length ? data.settori : ['food']).map(settore => <span key={settore}>{(FORM_EXAMPLES[settore] || FORM_EXAMPLES.food).map(([label, text]) => <span key={label}>• <strong>{label}</strong>: {text}<br /></span>)}</span>)}
       Sotto ogni prezzo vedi il valore per unità calcolato: controlla che sia corretto. Se un prodotto ha un’indicazione specifica, segui quella.</p>
     {data.note && <p><strong>Nota dell’azienda:</strong> {data.note}</p>}
     <p style={{ color: 'var(--text-secondary)' }}>Link valido fino al {new Date(data.expires_at).toLocaleString('it-IT')}</p>

@@ -20,7 +20,7 @@ type Quote = {
   non_presente: boolean; in_attesa: { nome: string; unita_vendita: string; contenuto_quantita?: string | null; contenuto_unita?: string | null; prezzo: string } | null;
 };
 type Data = {
-  fornitore: string; oggi: string; prossima_data_fissa: string; ultima_conferma: string | null;
+  fornitore: string; settori?: string[]; oggi: string; prossima_data_fissa: string; ultima_conferma: string | null;
   importanti: number; items: Item[]; prodotti_proposti?: Proposed[]; da_quotare?: Quote[];
 };
 // assente: spuntato «non lo abbiamo»; presente: tolto il segno messo in passato.
@@ -32,7 +32,28 @@ type Edit = { prezzo: string; non_trattato: boolean; nome?: string; unita?: Unit
 type NewDraft = { key: string; nome: string; unita_vendita: string; contenuto_quantita: string; contenuto_unita: string; prezzo: string };
 type Summary = { ribassi: number; aumenti: number; non_trattati: number; sospese: number; annullate: number; invariati: number; nomi?: number; nuovi?: number; unita?: number; quotati?: number; non_presenti?: number; di_nuovo_presenti?: number; saltati?: string[] };
 
-const UNITA: Record<string, string> = { KG: 'al kg', PZ: 'al pezzo', L: 'al litro', CT: 'a cartone', CASSA: 'a cassa' };
+// Esempi di unità per il settore del fornitore (un fornitore di materiali non deve vedere la frutta).
+const ESEMPI: Record<string, [string, string][]> = {
+  food: [
+    ['Zucchine', 'al kg · 1,80'],
+    ['Meloni', 'al pezzo · 2,50  oppure  a cassa da 6 pezzi · 15,00'],
+    ['Fragole', 'a cartone da 8 pezzi (vaschette) · 16,00'],
+    ['Patate', 'sacco da 10 kg: scegliete «a cassa», 10 kg · 9,00'],
+  ],
+  beverage: [
+    ['Vodka 70 cl', 'al pezzo (bottiglia) · 10,25'],
+    ['Energy drink lattina', 'a cartone da 24 pezzi · 19,67'],
+    ['Acqua 0,5 L', 'a cassa da 24 pezzi · 6,00'],
+  ],
+  materiali: [
+    ['Sacchi rifiuti', 'a cartone da 18 kg · 28,00'],
+    ['Detersivo piatti tanica 10 L', 'al pezzo · 12,50'],
+    ['Bicchieri 200 ml', 'a cartone da 50 pezzi · 1,65'],
+    ['Carta igienica', 'a cartone da 12 pezzi (rotoli) · 12,00'],
+  ],
+};
+
+const UNITA: Record<string, string> ={ KG: 'al kg', PZ: 'al pezzo', L: 'al litro', CT: 'a cartone', CASSA: 'a cassa' };
 const CON_CONTENUTO = ['CT', 'CASSA'];
 
 // Sotto 1 € fino a 4 decimali: un fornitore che ricopia «0,05» al posto di 0,045 farebbe un aumento dell'11%.
@@ -378,10 +399,9 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
         <li>L'unità indicata per un prodotto è sbagliata? Premete <strong>«Cambia unità»</strong> sotto il prezzo e scrivete il prezzo nella nuova unità.</li>
       </ul>
       <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '2px 12px', marginTop: 8, lineHeight: 1.5 }}>
-        <span>Zucchine</span><span>al kg · 1,80</span>
-        <span>Meloni</span><span>al pezzo · 2,50 &nbsp;oppure&nbsp; a cassa da 6 pezzi · 15,00</span>
-        <span>Fragole</span><span>a cartone da 8 pezzi (vaschette) · 16,00</span>
-        <span>Patate</span><span>sacco da 10 kg: scegliete «a cassa», 10 kg · 9,00</span>
+        {(data.settori?.length ? data.settori : ['food']).flatMap(settore => (ESEMPI[settore] || ESEMPI.food).map(([nome, esempio]) => [
+          <span key={`${settore}-${nome}-n`}>{nome}</span>, <span key={`${settore}-${nome}-e`}>{esempio}</span>,
+        ]))}
       </div>
       <small style={{ display: 'block', marginTop: 6 }}>Se l'unità in fattura è diversa da quella del listino non riusciamo a controllare i prezzi e dovremo contattarvi.</small>
     </div>
