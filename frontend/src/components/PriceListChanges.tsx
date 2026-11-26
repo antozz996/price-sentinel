@@ -29,7 +29,7 @@ type Proposal = {
 };
 type CatalogProduct = { sku_interno: string; nome: string; categoria?: string | null; unita?: string | null };
 const UNITA_VENDITA: Record<string, string> = { KG: 'al kg', PZ: 'al pezzo', L: 'al litro', CT: 'a cartone', CASSA: 'a cassa' };
-type LinkView = { id: number; attivo: boolean; path?: string | null; created_at: string; ultima_conferma_at?: string | null };
+type LinkView = { id: number; attivo: boolean; path?: string | null; created_at: string; ultima_conferma_at?: string | null; mostra_convenienza?: boolean };
 type SupplierLink = { fornitore_id: number; fornitore: string; telefono?: string | null; link: LinkView | null };
 type Outcome = { applicate: number; chiusi: number; superate: number };
 
@@ -262,11 +262,11 @@ function LinkLine({ supplier, onChanged }: { supplier: SupplierLink; onChanged: 
   const fullUrl = link?.path ? `${publicOrigin}${link.path}` : '';
   const wa = whatsAppUrl(supplier.telefono, link?.path, newLinkText);
 
-  const act = async (path: string, confirmText?: string) => {
+  const act = async (path: string, confirmText?: string, body?: unknown) => {
     if (confirmText && !window.confirm(confirmText)) return;
     setBusy(true); setNote('');
     try {
-      const res = await post(path);
+      const res = await post(path, body);
       onChanged({ ...supplier, link: res?.link ?? null });
     } catch (err: any) { setNote(err.message || 'Operazione non riuscita'); }
     setBusy(false);
@@ -283,6 +283,11 @@ function LinkLine({ supplier, onChanged }: { supplier: SupplierLink; onChanged: 
         <div style={muted}>
           {link ? `Link attivo dal ${day(link.created_at)} · ultima conferma: ${day(link.ultima_conferma_at)}` : 'Nessun link'}
         </div>
+        {link && <label style={{ ...muted, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, cursor: 'pointer' }}>
+          <input type="checkbox" disabled={busy} checked={!!link.mostra_convenienza}
+            onChange={e => act(`/supplier/${supplier.fornitore_id}/convenienza`, undefined, { mostra: e.target.checked })} />
+          Mostra al fornitore se è il più conveniente (mai i prezzi degli altri)
+        </label>}
         {note && <div style={{ ...muted, wordBreak: 'break-all' }}>{note}</div>}
       </div>
       <div style={buttons}>

@@ -128,6 +128,10 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE listino_master ADD COLUMN IF NOT EXISTS origine VARCHAR(30)"
             ))
             await conn.execute(text(
+                "ALTER TABLE supplier_price_links "
+                "ADD COLUMN IF NOT EXISTS mostra_convenienza BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            await conn.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_listino_fornitore_sku_inizio "
                 "ON listino_master (fornitore_id, sku_interno, data_inizio_validita)"
             ))

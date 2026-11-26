@@ -38,6 +38,8 @@ def sql(query: str, *params):
 
 
 def seed() -> None:
+    # Colonna aggiunta dall'avvio dell'app (main.py); lo schema copiato può non averla ancora.
+    sql("alter table supplier_price_links add column if not exists mostra_convenienza boolean not null default false")
     sql("""
         insert into location(id,nome_struttura,piva_riferimento,tipologia,tenant_id)
         values (1,'Open list CI venue','00000000001','ristorante',1);
@@ -82,6 +84,15 @@ async def run() -> None:
 
         page = (await c.get(base)).json()
         check("supplier sees the offer with its stable key", [(i["listino_id"], i["chiave"]) for i in page["items"]] == [(1, "OPL-1#1")])
+        check("by default the supplier is not told whether it is the cheapest",
+              page["mostra_convenienza"] is False and all(i["siete_i_piu_convenienti"] is None for i in page["items"]))
+        toggled = await c.post("/api/v1/supplier-price-links/supplier/1/convenienza", headers=admin, json={"mostra": True})
+        check("the office can turn it on for this supplier", toggled.status_code == 200 and toggled.json()["link"]["mostra_convenienza"] is True)
+        renewed = await c.post("/api/v1/supplier-price-links/supplier/1", headers=admin)
+        check("renewing the link keeps the choice", renewed.json()["link"]["mostra_convenienza"] is True)
+        token = renewed.json()["link"]["path"].rsplit("/", 1)[1]
+        base = f"/api/v1/supplier-price-links/public/{token}"
+        check("the supplier page reports the choice", (await c.get(base)).json()["mostra_convenienza"] is True)
 
         first = await c.post(f"{base}/submit", json={"modifiche": [{"listino_id": 1, "prezzo": "9"}]})
         check("a decrease is accepted", first.status_code == 200 and first.json()["riepilogo"]["ribassi"] == 1)
