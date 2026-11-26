@@ -134,6 +134,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Schema create_all notice: %s", e)
 
+    # Sconto riga fino al 100% (omaggi): NUMERIC(6,4) arrivava a 99,9999 e scartava l'intera fattura.
+    # Solo se la colonna è ancora stretta; più precisione con la stessa scala non riscrive la tabella.
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _SCHEMA_LOCK_KEY})
+            narrow = await conn.scalar(text(
+                "SELECT numeric_precision < 7 FROM information_schema.columns "
+                "WHERE table_name = 'righe_fattura' AND column_name = 'sconto_percentuale'"
+            ))
+            if narrow:
+                await conn.execute(text("ALTER TABLE righe_fattura ALTER COLUMN sconto_percentuale TYPE NUMERIC(7, 4)"))
+    except Exception as e:
+        logger.warning("Schema sconto_percentuale notice: %s", e)
+
     # One invoice per XML: created only when no duplicates remain, so a
     # database that still has them starts anyway (with a warning).
     try:

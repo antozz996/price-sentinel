@@ -282,7 +282,8 @@ class RigaFattura(Base):
         comment="PrezzoUnitario da XML",
     )
     sconto_percentuale: Mapped[float] = mapped_column(
-        Numeric(6, 4),
+        # 7 cifre: deve stare anche lo sconto del 100% delle righe in omaggio (6,4 arrivava a 99,9999).
+        Numeric(7, 4),
         nullable=False,
         default=0,
         server_default="0",
