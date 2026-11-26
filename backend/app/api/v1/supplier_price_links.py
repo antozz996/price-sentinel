@@ -198,6 +198,8 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
         items.append({
             "ordine": order[row.sku_interno],
             "listino_id": row.id,
+            # Identità stabile dell'offerta: la riga cambia id alle date fisse, la bozza del fornitore no.
+            "chiave": offer_key(row.sku_interno, row.supplier_product_alias_id),
             "descrizione": our_names.get(row.sku_interno) or row.descrizione,
             "dicitura": wording,
             "nome_in_attesa": pending_names.get(row.id),
@@ -476,11 +478,27 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
     today = today_rome()
     ip = (request.client.host if request.client else None)
     summary = {"ribassi": 0, "aumenti": 0, "non_trattati": 0, "sospese": 0, "annullate": 0, "invariati": 0,
-               "nomi": 0, "nuovi": 0, "unita": 0, "quotati": 0, "non_presenti": 0, "di_nuovo_presenti": 0}
+               "nomi": 0, "nuovi": 0, "unita": 0, "quotati": 0, "non_presenti": 0, "di_nuovo_presenti": 0,
+               "saltati": []}
+    # Pagina aperta prima di una data fissa e inviata dopo: le righe hanno cambiato id. Si ritrova la
+    # riga attuale della stessa offerta invece di rifiutare tutto l'invio.
+    stale_ids = [u.listino_id for u in payload.modifiche if u.listino_id not in rows]
+    current_by_key = {offer_key(r.sku_interno, r.supplier_product_alias_id): r for r in rows.values()}
+    remapped: dict[int, ListinoMaster | None] = {}
+    old_names: dict[int, str] = {}
+    if stale_ids:
+        for old in (await db.execute(select(ListinoMaster).options(noload("*")).where(
+                ListinoMaster.id.in_(stale_ids), ListinoMaster.fornitore_id == link.fornitore_id))).scalars():
+            remapped[old.id] = current_by_key.get(offer_key(old.sku_interno, old.supplier_product_alias_id))
+            old_names[old.id] = old.descrizione
+    seen_rows: set[int] = set()
     for update in payload.modifiche:
-        row = rows.get(update.listino_id)
-        if row is None:
-            raise HTTPException(status_code=409, detail="Un prodotto non è più nel vostro listino: ricarica la pagina")
+        row = rows.get(update.listino_id) or remapped.get(update.listino_id)
+        if row is None or row.id in seen_rows:
+            # Prodotto uscito dal listino nel frattempo: gli altri prodotti dell'invio passano lo stesso.
+            summary["saltati"].append(old_names.get(update.listino_id) or update.nome_fornitore or f"riga {update.listino_id}")
+            continue
+        seen_rows.add(row.id)
         name = _clean_name(update.nome_fornitore) if update.nome_fornitore is not None else None
         has_price = update.non_trattato or update.prezzo is not None
         if update.non_trattato and update.prezzo is not None:
@@ -535,7 +553,11 @@ async def submit_open_price_list(token: str, payload: PriceUpdates, request: Req
         if decision.stato == STATO_PROGRAMMATO and decision.decorrenza <= today:
             # Un ribasso vale da subito: entra ora nel listino, così gli ordini lo usano dal minuto dopo
             # (senza aspettare il giro automatico del giorno).
-            await apply_change_now(db, change.id, today=today, now=now)
+            esito = await apply_change_now(db, change.id, today=today, now=now)
+            if esito["superate"]:
+                # Il prezzo di partenza era già stato cambiato: niente «vale da subito» non vero.
+                summary["saltati"].append(row.descrizione)
+                continue
         if decision.motivo_trattenuta:
             summary["sospese"] += 1
         summary[{"ribasso": "ribassi", "aumento": "aumenti", "non_trattato": "non_trattati"}[decision.tipo]] += 1

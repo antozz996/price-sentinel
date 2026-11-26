@@ -37,6 +37,9 @@ from app.services.variant_price_import import build_variant_preview, commit_vari
 router = APIRouter()
 
 ALLOWED_UNITS = {"KG", "G", "L", "CL", "ML", "PZ", "BT", "CT", "CF", "SC", "BX", "CONF"}
+# «Valido dal» accettato dal fornitore: da un mese fa a quattro mesi avanti.
+VALIDITY_PAST_DAYS = 31
+VALIDITY_FUTURE_DAYS = 120
 
 
 def _normalized_unit(value: str | None) -> str:
@@ -420,9 +423,13 @@ async def get_public_form(
         select(Product.sku_interno, Product.supplier_form_note)
         .where(Product.sku_interno.in_(skus), Product.supplier_form_note.is_not(None))
     )).all()) if skus else {}
+    needs_details = _needs_supplier_details(request.supplier)
     return {
-        "supplier_name": request.supplier.nome_azienda,
-        "requires_supplier_details": _needs_supplier_details(request.supplier),
+        # Un fornitore nuovo ha un nome provvisorio interno (es. «Caseificio da contattare»): non glielo mostriamo.
+        "supplier_name": None if needs_details else request.supplier.nome_azienda,
+        "validita_min": (datetime.now(ZoneInfo("Europe/Rome")).date() - timedelta(days=VALIDITY_PAST_DAYS)).isoformat(),
+        "validita_max": (datetime.now(ZoneInfo("Europe/Rome")).date() + timedelta(days=VALIDITY_FUTURE_DAYS)).isoformat(),
+        "requires_supplier_details": needs_details,
         "request_type": request.request_type,
         "expires_at": request.expires_at.isoformat(),
         "note": request.note,
@@ -478,6 +485,13 @@ async def submit_public_form(
         details = (name, _clean_vat(payload.anagrafica.partita_iva), _clean_phone(payload.anagrafica.telefono_ordini))
     if payload.validita_inviata_da is None:
         raise HTTPException(status_code=422, detail="Indica la data di inizio dell'offerta")
+    # Un anno sbagliato (2025 invece di 2026) riscriverebbe lo storico dei prezzi: si accetta
+    # da un mese fa (listino «dal 1° del mese») a quattro mesi avanti.
+    today = datetime.now(ZoneInfo("Europe/Rome")).date()
+    if not (today - timedelta(days=VALIDITY_PAST_DAYS) <= payload.validita_inviata_da <= today + timedelta(days=VALIDITY_FUTURE_DAYS)):
+        raise HTTPException(status_code=422, detail=(
+            f"La data di inizio deve essere tra il {(today - timedelta(days=VALIDITY_PAST_DAYS)).strftime('%d/%m/%Y')} "
+            f"e il {(today + timedelta(days=VALIDITY_FUTURE_DAYS)).strftime('%d/%m/%Y')}: controlla l'anno"))
     if (
         payload.validita_inviata_da
         and payload.validita_inviata_a
@@ -652,6 +666,9 @@ async def create_form_request(
             rows_by_sku.setdefault(row.sku_interno, []).append(row)
         form_items = []
         for product in products:
+            if not product.sku_interno:
+                # Senza codice interno l'approvazione non trova il prodotto e bloccherebbe tutta la risposta.
+                continue
             # pop: two catalog products sharing a SKU must not ask the same row twice
             own_rows = rows_by_sku.pop(product.sku_interno, []) if product.sku_interno else []
             if not own_rows:
@@ -674,10 +691,14 @@ async def create_form_request(
                     unita_corrente=formats[row.id][1],
                     quantita_corrente=formats[row.id][0],
                     dicitura_corrente=formats[row.id][2],
-                    brand_corrente=formats[row.id][3] or product.brand,
+                    # Solo la marca dell'offerta: quella del prodotto cambierebbe l'identità dell'offerta
+                    # e ogni conferma creerebbe una riga nuova invece di risultare invariata.
+                    brand_corrente=formats[row.id][3],
                     validita_corrente_da=row.data_inizio_validita,
                     validita_corrente_a=row.data_scadenza,
                 ))
+        if not form_items:
+            raise HTTPException(status_code=422, detail="I prodotti scelti non hanno un codice interno: completali a catalogo prima di inviare il modulo")
     else:
         if not payload.listino_ids or payload.product_ids or payload.category:
             raise HTTPException(status_code=422, detail="Per confermare un listino seleziona solo le sue righe attive")
@@ -699,9 +720,6 @@ async def create_form_request(
                 status_code=422,
                 detail="Una o più righe non appartengono al fornitore o non sono attive oggi",
             )
-        sku_values = {row.sku_interno for row in rows if row.sku_interno}
-        products = (await db.execute(select(Product).where(Product.sku_interno.in_(sku_values)))).scalars().all() if sku_values else []
-        brand_by_sku = {product.sku_interno: product.brand for product in products}
         formats = await _offer_formats(db, payload.supplier_id, rows)
         form_items = [
             SupplierPriceFormItem(
@@ -712,7 +730,7 @@ async def create_form_request(
                 unita_corrente=formats[row.id][1],
                 quantita_corrente=formats[row.id][0],
                 dicitura_corrente=formats[row.id][2],
-                brand_corrente=formats[row.id][3] or brand_by_sku.get(row.sku_interno),
+                brand_corrente=formats[row.id][3],
                 validita_corrente_da=row.data_inizio_validita,
                 validita_corrente_a=row.data_scadenza,
             )
@@ -908,7 +926,32 @@ async def pending_supplier_form_notifications(
     return {"pending_count": int(count or 0)}
 
 
-async def _close_confirmed_rows(db: AsyncSession, request: SupplierPriceFormRequest, new_ids: set[int]) -> None:
+async def _effective_date(db: AsyncSession, request: SupplierPriceFormRequest, changes: list[dict]) -> date:
+    """Decorrenza dei prezzi approvati: la data del fornitore, ma sempre dopo l'inizio dei prezzi che sostituisce.
+
+    Se il fornitore ricopia la «validità dal» della riga attuale (o una data precedente), il nuovo prezzo
+    non potrebbe entrare e l'unica scelta sarebbe rifiutare la risposta: lo facciamo partire il giorno dopo.
+    Contano solo i prezzi che cambiano davvero (le offerte invariate restano dove sono) e le righe
+    chieste nel modulo che verranno chiuse.
+    """
+    starts = [date.fromisoformat(c["old"]["start"]) for c in changes if c.get("action") == "update" and c.get("old")]
+    codes = {offer["id_offerta"] for item in request.items if not item.non_trattato for offer in item.offerte_inviate or []}
+    asked = {item.listino_id for item in request.items if item.listino_id and not item.non_trattato}
+    if asked:
+        replaced = (await db.execute(
+            select(ListinoMaster.data_inizio_validita, SupplierProductAlias.supplier_code)
+            .outerjoin(SupplierProductAlias, SupplierProductAlias.id == ListinoMaster.supplier_product_alias_id)
+            .where(ListinoMaster.id.in_(asked))
+        )).all()
+        starts += [start for start, code in replaced if code not in codes]
+    latest = max(starts, default=None)
+    if latest and request.validita_inviata_da <= latest:
+        return latest + timedelta(days=1)
+    return request.validita_inviata_da
+
+
+async def _close_confirmed_rows(db: AsyncSession, request: SupplierPriceFormRequest, new_ids: set[int],
+                                effective_date: date) -> None:
     """A confirmation response replaces the rows it was asked about.
 
     Rows from older imports keep their own alias, so without closing them the old
@@ -920,7 +963,7 @@ async def _close_confirmed_rows(db: AsyncSession, request: SupplierPriceFormRequ
     if not asked_ids:
         return
     offer_ids = {offer["id_offerta"] for item in request.items for offer in item.offerte_inviate or []}
-    cutoff = request.validita_inviata_da - timedelta(days=1)
+    cutoff = effective_date - timedelta(days=1)
     rows = (await db.execute(
         select(ListinoMaster, SupplierProductAlias.supplier_code)
         .outerjoin(SupplierProductAlias, SupplierProductAlias.id == ListinoMaster.supplier_product_alias_id)
@@ -984,6 +1027,11 @@ async def approve_form_request(
     preview = await build_variant_preview(db, VariantPricePreviewRequest(
         rows=rows, effective_date=request.validita_inviata_da
     ), admin.id)
+    effective_date = await _effective_date(db, request, preview.preview_payload.get("changes") or [])
+    if effective_date != request.validita_inviata_da:
+        preview = await build_variant_preview(db, VariantPricePreviewRequest(
+            rows=rows, effective_date=effective_date
+        ), admin.id)
     errors = preview.preview_payload.get("errors") or []
     if errors:
         raise HTTPException(status_code=409, detail="; ".join(error["message"] for error in errors))
@@ -1009,10 +1057,12 @@ async def approve_form_request(
     # non manda il listino nuovo. La data serve solo a sapere quando sollecitarlo
     # (Variazioni listini → Listini da rinnovare).
     # Only rows the form asked about (items with a listino row) are replaced.
-    await _close_confirmed_rows(db, request, set(result.get("listino_ids") or []))
+    await _close_confirmed_rows(db, request, set(result.get("listino_ids") or []), effective_date)
     request.status = "approved"
     await db.commit()
-    return {"id": request.id, "status": request.status, "result": result}
+    return {"id": request.id, "status": request.status, "result": result,
+            "decorrenza": effective_date.isoformat(),
+            "decorrenza_spostata": effective_date != request.validita_inviata_da}
 
 
 @router.post("/{request_id}/reject", summary="Rifiuta una risposta del fornitore")

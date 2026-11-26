@@ -8,7 +8,7 @@ import { API_BASE } from '../api';
 
 type Pending = { tipo: string; prezzo: string | null; decorrenza: string; sospesa: boolean };
 type Item = {
-  listino_id: number; descrizione: string; dicitura?: string | null; nome_in_attesa?: string | null;
+  listino_id: number; chiave?: string; descrizione: string; dicitura?: string | null; nome_in_attesa?: string | null;
   unita_in_attesa?: { unita_vendita: string; contenuto_quantita?: string | null; contenuto_unita?: string | null; prezzo: string } | null;
   marca?: string | null; formato: string; prezzo: string; importante: boolean; ordine?: number;
   siete_i_piu_convenienti: boolean | null; in_attesa: Pending | null;
@@ -30,7 +30,7 @@ type UnitDraft = { unita_vendita: string; contenuto_quantita: string; contenuto_
 // nome / unita: undefined = non li sta cambiando.
 type Edit = { prezzo: string; non_trattato: boolean; nome?: string; unita?: UnitDraft };
 type NewDraft = { key: string; nome: string; unita_vendita: string; contenuto_quantita: string; contenuto_unita: string; prezzo: string };
-type Summary = { ribassi: number; aumenti: number; non_trattati: number; sospese: number; annullate: number; invariati: number; nomi?: number; nuovi?: number; unita?: number; quotati?: number; non_presenti?: number; di_nuovo_presenti?: number };
+type Summary = { ribassi: number; aumenti: number; non_trattati: number; sospese: number; annullate: number; invariati: number; nomi?: number; nuovi?: number; unita?: number; quotati?: number; non_presenti?: number; di_nuovo_presenti?: number; saltati?: string[] };
 
 const UNITA: Record<string, string> = { KG: 'al kg', PZ: 'al pezzo', L: 'al litro', CT: 'a cartone', CASSA: 'a cassa' };
 const CON_CONTENUTO = ['CT', 'CASSA'];
@@ -97,7 +97,9 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
       const filledNew = nuovi.filter(newFilled);
       const filledQuotes = Object.fromEntries(Object.entries(quotes).filter(([, q]) => q.assente || q.presente || quoteFilled(q)));
       if (Object.keys(filled).length || filledNew.length || Object.keys(filledQuotes).length) {
-        localStorage.setItem(draftKey, JSON.stringify({ edits: filled, nuovi: filledNew, quotes: filledQuotes }));
+        // chiavi: alle date fisse le righe cambiano id; la bozza si ritrova dall'offerta.
+        const chiavi = Object.fromEntries(data.items.filter(i => i.chiave && filled[i.listino_id]).map(i => [i.listino_id, i.chiave]));
+        localStorage.setItem(draftKey, JSON.stringify({ edits: filled, chiavi, nuovi: filledNew, quotes: filledQuotes }));
       } else localStorage.removeItem(draftKey);
     } catch { /* salvataggio non disponibile */ }
   }, [data, edits, nuovi, quotes, draftKey]);
@@ -116,7 +118,10 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
           const saved: Record<string, Edit> = raw && typeof raw === 'object' && 'edits' in raw ? raw.edits || {} : raw || {};
           const savedNew: NewDraft[] = Array.isArray(raw?.nuovi) ? raw.nuovi.filter((n: NewDraft) => n && typeof n.nome === 'string') : [];
           const ids = new Set(body.items.map(item => item.listino_id));
-          const kept = Object.fromEntries(Object.entries(saved).filter(([id, e]) => ids.has(Number(id)) && e
+          const savedKeys: Record<string, string> = raw?.chiavi && typeof raw.chiavi === 'object' ? raw.chiavi : {};
+          const idByKey = new Map(body.items.filter(item => item.chiave).map(item => [item.chiave as string, item.listino_id]));
+          const currentId = (id: string) => ids.has(Number(id)) ? id : String(idByKey.get(savedKeys[id]) ?? id);
+          const kept = Object.fromEntries(Object.entries(saved).map(([id, e]) => [currentId(id), e] as [string, Edit]).filter(([id, e]) => ids.has(Number(id)) && e
             && (e.non_trattato || (typeof e.prezzo === 'string' && e.prezzo.trim()) || typeof e.nome === 'string' || (e.unita && typeof e.unita === 'object')))
             .map(([id, e]) => [id, { prezzo: typeof e.prezzo === 'string' ? e.prezzo : '', non_trattato: !!e.non_trattato, nome: e.nome, unita: e.unita }]));
           const skus = new Set((body.da_quotare || []).map(q => q.sku_interno));
@@ -248,6 +253,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
           {!!done.quotati && <li>{done.quotati} {done.quotati === 1 ? 'prezzo per un prodotto della nostra lista' : 'prezzi per prodotti della nostra lista'}: li controlla il nostro ufficio acquisti prima di metterli in listino.</li>}
           {!!done.non_presenti && <li>{done.non_presenti} {done.non_presenti === 1 ? 'prodotto segnato' : 'prodotti segnati'} «non lo abbiamo». Se in futuro li avrete, tornate sul link e scrivete il prezzo.</li>}
           {!!done.di_nuovo_presenti && <li>{done.di_nuovo_presenti} {done.di_nuovo_presenti === 1 ? 'prodotto tolto' : 'prodotti tolti'} da «non lo abbiamo».</li>}
+          {!!done.saltati?.length && <li><strong>Non registrati</strong> perché il prezzo era appena cambiato o il prodotto non è più nel listino: {done.saltati.join(', ')}. Riaprite il link per controllarli.</li>}
           {!!done.nuovi && <li>{done.nuovi} {done.nuovi === 1 ? 'prodotto nuovo proposto' : 'prodotti nuovi proposti'}: li controlla il nostro ufficio acquisti prima di metterli in listino.</li>}
         </ul>
       </>}
@@ -409,7 +415,10 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
     </details>
 
     <p style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-      <button type="button" className="btn-secondary" disabled={sending} onClick={confirmAll}>Confermo tutti i prezzi invariati</button>
+      {/* Con modifiche scritte e non inviate «tutto invariato» non è vero: prima si inviano. */}
+      <button type="button" className="btn-secondary" disabled={sending || toSend > 0} onClick={confirmAll}
+        title={toSend > 0 ? 'Avete modifiche scritte: inviatele con il pulsante in fondo' : undefined}>Confermo tutti i prezzi invariati</button>
+      {toSend > 0 && <small>Avete {toSend} {toSend === 1 ? 'modifica' : 'modifiche'} da inviare: usate il pulsante in fondo alla pagina.</small>}
       {data.ultima_conferma && <small>Ultimo aggiornamento: {new Date(data.ultima_conferma).toLocaleDateString('it-IT')}</small>}
     </p>
     <input style={{ ...input, marginBottom: 16 }} placeholder="Cerca un prodotto" value={search} onChange={e => setSearch(e.target.value)} />

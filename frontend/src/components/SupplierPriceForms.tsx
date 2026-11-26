@@ -305,23 +305,33 @@ export default function SupplierPriceForms() {
   const createForms = async () => {
     setBusy(true); setError(''); setNotice(''); setCreatedLinks([]);
     const results: CreatedLink[] = [];
+    const failures: string[] = [];
     try {
       for (const supplier of selectedSuppliers) {
         const listinoIds = selectedBySupplier[supplier.id] || [];
         if (!listinoIds.length) continue;
-        const result = await fetchWithAuth('/supplier-price-forms/', { method: 'POST', body: JSON.stringify({
-          supplier_id: supplier.id,
-          request_type: requestType,
-          ...(requestType === 'new_listino'
-            ? { category: recipientMode === 'category' ? recipientCategory : productCategory, subcategory: section || null, product_ids: listinoIds }
-            : { listino_ids: listinoIds }),
-          expires_in_days: days, note: note.trim() || null, show_best_price: showBestPrice
-        }) }) as CreateResult;
-        results.push({ supplier, url: publicOrigin + result.public_path, publicPath: result.public_path });
-        setCreatedLinks([...results]);
+        // Un fornitore che non va (es. nessun prodotto nei suoi reparti) non ferma gli altri.
+        try {
+          const result = await fetchWithAuth('/supplier-price-forms/', { method: 'POST', body: JSON.stringify({
+            supplier_id: supplier.id,
+            request_type: requestType,
+            ...(requestType === 'new_listino'
+              ? { category: recipientMode === 'category' ? recipientCategory : productCategory, subcategory: section || null, product_ids: listinoIds }
+              : { listino_ids: listinoIds }),
+            expires_in_days: days, note: note.trim() || null, show_best_price: showBestPrice
+          }) }) as CreateResult;
+          results.push({ supplier, url: publicOrigin + result.public_path, publicPath: result.public_path });
+          setCreatedLinks([...results]);
+        } catch (e) {
+          failures.push(`${supplier.nome_azienda}: ${e instanceof Error ? e.message : 'errore'}`);
+        }
       }
-      if (!results.length) throw new Error('Seleziona almeno una riga per ciascun fornitore a cui vuoi inviare il modulo.');
-      setNotice(results.length === selectedSuppliers.length ? `Creati ${results.length} moduli. Premi WhatsApp sul fornitore da contattare; il messaggio è precompilato e dovrai confermare l’invio in WhatsApp.` : `Creati ${results.length} moduli su ${selectedSuppliers.length}. Alcuni fornitori non avevano righe selezionate o si è verificato un errore.`);
+      if (failures.length) setError(`Modulo non creato per ${failures.join(' · ')}`);
+      if (!results.length) {
+        if (!failures.length) throw new Error('Seleziona almeno una riga per ciascun fornitore a cui vuoi inviare il modulo.');
+        return;
+      }
+      setNotice(results.length === selectedSuppliers.length ? `Creati ${results.length} moduli. Premi WhatsApp sul fornitore da contattare; il messaggio è precompilato e dovrai confermare l’invio in WhatsApp.` : `Creati ${results.length} moduli su ${selectedSuppliers.length}. Gli altri fornitori non avevano righe selezionate o hanno dato errore (vedi sopra).`);
       await loadForms();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Creazione non riuscita');
@@ -395,7 +405,10 @@ export default function SupplierPriceForms() {
     setBusy(true); setError(''); setNotice('');
     try {
       const result = await fetchWithAuth('/supplier-price-forms/' + id + '/approve', { method: 'POST' });
-      setNotice(`Risposta approvata: ${result.result?.created || 0} nuove varianti e ${result.result?.updated || 0} prezzi aggiornati nel listino V2.`);
+      const moved = result.decorrenza_spostata && result.decorrenza
+        ? ` La data indicata dal fornitore non era successiva ai prezzi attuali: i nuovi valgono dal ${new Date(`${result.decorrenza}T12:00:00`).toLocaleDateString('it-IT')}.`
+        : '';
+      setNotice(`Risposta approvata: ${result.result?.created || 0} nuove varianti e ${result.result?.updated || 0} prezzi aggiornati nel listino V2.${moved}`);
       setDetail(await fetchWithAuth('/supplier-price-forms/' + id));
       await loadForms();
     } catch (e) { setError(e instanceof Error ? e.message : 'Approvazione non riuscita'); }
