@@ -20,7 +20,7 @@ type Quote = {
   non_presente: boolean; in_attesa: { nome: string; unita_vendita: string; contenuto_quantita?: string | null; contenuto_unita?: string | null; prezzo: string } | null;
 };
 type Data = {
-  fornitore: string; settori?: string[]; oggi: string; prossima_data_fissa: string; ultima_conferma: string | null;
+  fornitore: string; settori?: string[]; mostra_convenienza?: boolean; oggi: string; prossima_data_fissa: string; ultima_conferma: string | null;
   importanti: number; items: Item[]; prodotti_proposti?: Proposed[]; da_quotare?: Quote[];
 };
 // assente: spuntato «non lo abbiamo»; presente: tolto il segno messo in passato.
@@ -430,7 +430,7 @@ export default function SupplierOpenPriceList({ token }: { token: string }) {
         <li>Ogni prezzo si riferisce all'unità indicata accanto (kg, pezzo, cartone…).</li>
         <li>Ribassi oltre il 40% e aumenti oltre il 30% vengono controllati dal nostro ufficio acquisti prima di entrare in listino.</li>
         <li>Avete sbagliato un prezzo già inviato? Rientrate dal link e correggetelo: vale l'ultimo inviato.</li>
-        <li>Accanto ad alcuni prodotti vedete se oggi siete il fornitore più conveniente; i prezzi degli altri non vengono mai mostrati.</li>
+        {data.mostra_convenienza && <li>Accanto ad alcuni prodotti vedete se oggi siete il fornitore più conveniente; i prezzi degli altri non vengono mai mostrati.</li>}
         <li>Il nome in grassetto è il nostro e lo scegliamo noi. Voi potete correggere il vostro nome del prodotto: lo controlla il nostro ufficio acquisti.</li>
       </ul>
     </details>

@@ -57,6 +57,8 @@ class SupplierPriceLink(Base):
     ultimo_accesso_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Ultimo invio o "confermo tutto invariato": oltre 30 giorni il listino va segnalato.
     ultima_conferma_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Scelta dell'ufficio, fornitore per fornitore: mostrargli se è il più conveniente (mai i prezzi altrui).
+    mostra_convenienza: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     supplier = relationship("Fornitore", lazy="selectin")
 

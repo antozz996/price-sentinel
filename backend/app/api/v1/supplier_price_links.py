@@ -209,7 +209,8 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
             "prezzo": _money(row.prezzo_pattuito),
             "importante": row.sku_interno in top_skus,
             # Solo "siete / non siete i più convenienti": mai il prezzo degli altri.
-            "siete_i_piu_convenienti": best[row.sku_interno][2] if row.sku_interno in best else None,
+            "siete_i_piu_convenienti": (best[row.sku_interno][2]
+                                        if link.mostra_convenienza and row.sku_interno in best else None),
             "in_attesa": {
                 "tipo": change.tipo, "prezzo": _money(change.prezzo_nuovo),
                 "decorrenza": change.decorrenza.isoformat(),
@@ -227,6 +228,7 @@ async def get_open_price_list(token: str, db: AsyncSession = Depends(get_db)):
     return {
         "fornitore": supplier_name,
         "settori": settori,
+        "mostra_convenienza": link.mostra_convenienza,
         "oggi": today.isoformat(),
         "prossima_data_fissa": next_fixed_date(today).isoformat(),
         "ultima_conferma": link.ultima_conferma_at.isoformat() if link.ultima_conferma_at else None,
@@ -624,6 +626,7 @@ def _link_view(link: SupplierPriceLink | None) -> dict | None:
         "created_at": link.created_at.isoformat(),
         "ultimo_accesso_at": link.ultimo_accesso_at.isoformat() if link.ultimo_accesso_at else None,
         "ultima_conferma_at": link.ultima_conferma_at.isoformat() if link.ultima_conferma_at else None,
+        "mostra_convenienza": link.mostra_convenienza,
     }
 
 
@@ -659,7 +662,9 @@ async def create_supplier_link(fornitore_id: int, admin: Utente = Depends(requir
         await db.flush()
     token = secrets.token_urlsafe(32)
     link = SupplierPriceLink(fornitore_id=fornitore_id, token_hash=_hash(token), token_encrypted=_encrypt_token(token),
-                             attivo=True, created_by_id=admin.id, created_at=now)
+                             attivo=True, created_by_id=admin.id, created_at=now,
+                             # Rinnovare il link non cambia la scelta fatta per il fornitore.
+                             mostra_convenienza=bool(old and old.mostra_convenienza))
     db.add(link)
     await db.commit()
     return {"link": _link_view(link)}
@@ -858,6 +863,22 @@ async def expired_form_suppliers(db: AsyncSession, today) -> dict[int, "date"]:
         elif valid_to > ends.get(supplier_id, date.min):
             ends[supplier_id] = valid_to
     return {sid: end for sid, end in ends.items() if sid not in still_valid}
+
+
+class ConvenienceChoice(BaseModel):
+    mostra: bool
+
+
+@router.post("/supplier/{fornitore_id}/convenienza", summary="Mostra o nasconde al fornitore se è il più conveniente")
+async def set_supplier_convenience(fornitore_id: int, payload: ConvenienceChoice,
+                                   admin: Utente = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    _require_primary_tenant(admin)
+    link = await _current_link(db, fornitore_id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="Nessun link attivo")
+    link.mostra_convenienza = payload.mostra
+    await db.commit()
+    return {"link": _link_view(link)}
 
 
 @router.post("/supplier/{fornitore_id}/revoke", summary="Disattiva il link fisso del fornitore")
