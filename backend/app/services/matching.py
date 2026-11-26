@@ -219,6 +219,8 @@ def normalize_price_for_comparison(
     package_uoms = {
         "cassa", "casse", "cartone", "cartoni", "box", "conf", "confezione",
         "confezioni", "cf", "cnf", "crt", "css", "ct", "cs",
+        # Fatture elettroniche in inglese (Illy: "Package" = cartone da N).
+        "package", "packages", "pack", "pkg",
     }
     individual_uoms = {
         "piece", "pieces", "pezzo", "pezzi", "pz", "unita", "unit",
